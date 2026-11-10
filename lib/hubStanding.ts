@@ -11,7 +11,7 @@
 
 import type { SessionMatchResult } from './sessions'
 import { overallRows } from './overallRows'
-import { supabase } from './supabase'
+import type { Reads } from './eventReader'
 import { type Leaderboard } from './leaderboards'
 import { type TeamScoring } from './teamScoring'
 import {
@@ -39,8 +39,8 @@ import { readRoundCards } from './golfIrelandCards'
  * none, a database without migration 047 has no column, and either way
  * every card counts and none is read in, which is the right answer.
  */
-async function fetchLeague(tripId: string): Promise<LeagueSetup | null> {
-  const { data, error } = await supabase
+async function fetchLeague(db: Reads, tripId: string): Promise<LeagueSetup | null> {
+  const { data, error } = await db
     .from('trips')
     .select('bracket_setup')
     .eq('id', tripId)
@@ -51,9 +51,9 @@ async function fetchLeague(tripId: string): Promise<LeagueSetup | null> {
 
 /** The setup, and its Golf Ireland cards on these rounds — one hop more only for a league reading them. */
 async function fetchLeagueCards(
-  tripId: string, rounds: readonly { id: string; scheduled_date?: string | null; course_id?: string | null }[],
+  db: Reads, tripId: string, rounds: readonly { id: string; scheduled_date?: string | null; course_id?: string | null }[],
 ): Promise<{ cardsOff: string[]; roundCards: RoundCard[]; periods?: LeaguePeriod[]; periodRule?: PeriodRule }> {
-  const setup = await fetchLeague(tripId)
+  const setup = await fetchLeague(db, tripId)
   return {
     cardsOff: setup?.cardsOff ?? [],
     roundCards: await readRoundCards(tripId, setup, rounds),
@@ -78,7 +78,7 @@ const NONE: PlacingResult = { placing: null, error: null }
  * zero.
  */
 export async function fetchPlacing(
-  tripId: string,
+  db: Reads, tripId: string,
   lead: Leaderboard | null,
   playerId: string,
   /**
@@ -108,15 +108,15 @@ export async function fetchPlacing(
   if (!lead || lead.competition === 'matchplay' || lead.competition === 'matches') return NONE
   if (lead.competition === 'overall') {
     if (!overall) return NONE
-    const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring)
+    const { ctx, error } = await fetchTripContext(db, tripId, legacyTeamScoring)
     if (error || !ctx) return { placing: null, error }
     const rows = overallRows(lead, overall.boards, { ...ctx, sessionMatches: overall.sessionMatches })
     return { placing: placingFromRows([playerId], rows), error: null }
   }
 
   return usesSimpleStandings(lead) && !periods
-    ? simplePlacing(tripId, lead, playerId)
-    : fullPlacing(tripId, lead, playerId, legacyTeamScoring)
+    ? simplePlacing(db, tripId, lead, playerId)
+    : fullPlacing(db, tripId, lead, playerId, legacyTeamScoring)
 }
 
 /**
@@ -137,7 +137,7 @@ export async function fetchPlacing(
  * path's nine.
  */
 async function simplePlacing(
-  tripId: string,
+  db: Reads, tripId: string,
   lead: Leaderboard,
   playerId: string,
 ): Promise<PlacingResult> {
@@ -147,16 +147,16 @@ async function simplePlacing(
   // 031 is run by hand, and this query serves most trips' hubs. A league's
   // switched-off cards come in the same breath, for the same reason.
   const [{ data: rounds, error: roundsError }, setup] = await Promise.all([
-    supabase
+    db
       .from('rounds')
       .select('*')
       .eq('trip_id', tripId),
-    fetchLeague(tripId),
+    fetchLeague(db, tripId),
   ])
   const cardsOff = setup?.cardsOff ?? []
   // Golf Ireland cards are totals beside the holes, read by `buildRows` —
   // a league reading them takes the full path, so the two cannot disagree.
-  if (readsGolfIreland(setup?.scoreSource)) return fullPlacing(tripId, lead, playerId, null)
+  if (readsGolfIreland(setup?.scoreSource)) return fullPlacing(db, tripId, lead, playerId, null)
 
   if (roundsError) {
     console.error('fetchPlacing rounds query failed:', roundsError)
@@ -176,7 +176,7 @@ async function simplePlacing(
   // which is what lets a read in pages drop a row it was handed twice.
   const { data, error } = await readScores<{
     player_id: string; round_id: string; hole_id: string; stableford_points: number | null
-  }>(supabase, 'player_id, round_id, hole_id, stableford_points', roundIds)
+  }>(db, 'player_id, round_id, hole_id, stableford_points', roundIds)
 
   if (error) {
     console.error('fetchPlacing scores query failed:', error)
@@ -211,12 +211,12 @@ async function simplePlacing(
  * which sheet the board is on.
  */
 async function fullPlacing(
-  tripId: string,
+  db: Reads, tripId: string,
   lead: Leaderboard,
   playerId: string,
   legacyTeamScoring: TeamScoring | null,
 ): Promise<PlacingResult> {
-  const { rows, error } = await fetchBoardRows(tripId, lead, legacyTeamScoring)
+  const { rows, error } = await fetchBoardRows(db, tripId, lead, legacyTeamScoring)
   if (error) return { placing: null, error }
   return { placing: placingFromRows([playerId], rows), error: null }
 }
@@ -238,7 +238,7 @@ async function fullPlacing(
  * `buildRows` drops anyone with no holes on it.
  */
 export async function fetchRoundRows(
-  tripId: string,
+  db: Reads, tripId: string,
   roundId: string,
   lead: Leaderboard | null,
   legacyTeamScoring: TeamScoring | null,
@@ -246,7 +246,7 @@ export async function fetchRoundRows(
   // A knockout is not a table, so it has no podium — nor are the Overall
   // and a session's matches, which read results rather than cards.
   if (!lead || lead.competition === 'matchplay' || lead.competition === 'matches' || lead.competition === 'overall') return { rows: [], error: null }
-  const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring, [roundId])
+  const { ctx, error } = await fetchTripContext(db, tripId, legacyTeamScoring, [roundId])
   if (error || !ctx) return { rows: [], error }
   // The casual flag is cleared for the same reason the discard rule is
   // dropped: a round's result is that round's result, whether or not the
@@ -266,12 +266,12 @@ export async function fetchRoundRows(
  * in which rounds they ask about.
  */
 async function fetchBoardRows(
-  tripId: string,
+  db: Reads, tripId: string,
   lead: Leaderboard,
   legacyTeamScoring: TeamScoring | null,
   onlyRoundIds?: string[],
 ): Promise<{ rows: BoardRow[]; error: string | null }> {
-  const { ctx, error } = await fetchTripContext(tripId, legacyTeamScoring, onlyRoundIds)
+  const { ctx, error } = await fetchTripContext(db, tripId, legacyTeamScoring, onlyRoundIds)
   if (error || !ctx) return { rows: [], error }
   return { rows: buildRows(lead, ctx), error: null }
 }
@@ -289,7 +289,7 @@ async function fetchBoardRows(
  * twice is one set of eighteen holes with twice the evidence.
  */
 export async function fetchTripContext(
-  tripId: string,
+  db: Reads, tripId: string,
   legacyTeamScoring: TeamScoring | null,
   onlyRoundIds?: string[],
   /**
@@ -319,7 +319,7 @@ export async function fetchTripContext(
   const statCols = withStats ? ', putts, fairway_hit' : ''
   // `*` so the casual flags ride along without being named — migration 031
   // is run by hand, and this query is under every board and standing line.
-  const { data: rounds, error: roundsError } = await supabase
+  const { data: rounds, error: roundsError } = await db
     .from('rounds')
     .select('*')
     .eq('trip_id', tripId)
@@ -344,22 +344,22 @@ export async function fetchTripContext(
   const [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, coursesRes,
          openRes, memberships, league] =
     await Promise.all([
-      supabase.from('players')
+      db.from('players')
         .select('id, name, handicap, gender')
         .eq('trip_id', tripId).eq('is_composite', false).order('name'),
-      supabase.from('teams')
+      db.from('teams')
         .select('id, name, color, team_set').eq('trip_id', tripId).order('created_at'),
-      supabase.from('holes')
+      db.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', someCourses).order('hole_number'),
       // The three that grow with every hole, read whole — lib/scoreReads.ts.
-      readScores<ScoreRow>(supabase,
+      readScores<ScoreRow>(db,
         'player_id, round_id, hole_id, gross_score, stableford_points, no_return' + statCols, roundIds),
-      readLiveScores<LiveScoreRow>(supabase,
+      readLiveScores<LiveScoreRow>(db,
         'player_id, round_id, hole_number, gross_score, stableford_points' + statCols, roundIds),
-      readRoundHandicaps<HandicapRow>(supabase,
+      readRoundHandicaps<HandicapRow>(db,
         'round_id, player_id, playing_handicap, tee_id', roundIds),
-      supabase.from('tees')
+      db.from('tees')
         .select('id, slope, course_rating, par').in('course_id', someCourses),
       // The names of those courses, in the same breath as their tees and
       // holes rather than after them.
@@ -370,12 +370,12 @@ export async function fetchTripContext(
       // does not: the ids are `someCourses`, worked out above, and they are
       // already being handed to two other queries in this very list. That
       // was a fourth serial round trip on a page that makes four.
-      supabase.from('courses').select('id, name').in('id', someCourses),
-      supabase.from('live_rounds')
+      db.from('courses').select('id, name').in('id', someCourses),
+      db.from('live_rounds')
         .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active').in('round_id', roundIds),
-      fetchMemberships(tripId),
-      fetchLeagueCards(tripId, roundRows as { id: string; scheduled_date?: string | null; course_id?: string | null }[]),
+      fetchMemberships(tripId, db),
+      fetchLeagueCards(db, tripId, roundRows as { id: string; scheduled_date?: string | null; course_id?: string | null }[]),
     ])
 
   const failed = [playersRes, teamsRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
@@ -439,7 +439,7 @@ export async function fetchTripContext(
  * `legacyTeamScoring` is null because nothing here builds a team row.
  */
 export async function fetchTripStats(
-  tripId: string,
+  db: Reads, tripId: string,
   onlyRoundIds?: string[],
 ): Promise<{
   stats: HoleStat[]
@@ -452,7 +452,7 @@ export async function fetchTripStats(
   error: string | null
 }> {
   const { ctx, holes, courseByRound, courseNames, error } =
-    await fetchTripContext(tripId, null, onlyRoundIds, true)
+    await fetchTripContext(db, tripId, null, onlyRoundIds, true)
   if (error || !ctx) {
     return {
       stats: [], holes: [], players: [], rounds: [],

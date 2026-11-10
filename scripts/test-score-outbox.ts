@@ -441,7 +441,7 @@ section('Nothing loads on the scoring path that the screen does not draw')
   // league's only, in the batch the live cards already wait for.
   ok(!/activity_name|stay_name|tee_time/.test(picker), 'the tab fetches no itinerary')
   ok((picker.match(/itinerary_items/g) ?? []).length === 1
-    && /series\n\s*\? supabase\.from\('itinerary_items'\)/.test(picker),
+    && /series\n\s*\? db\.from\('itinerary_items'\)/.test(picker),
     '  …beyond a league\'s golf items, and only for a league')
   // A match play event is the other narrow exception: its portal names the
   // matches and works out the live ones' shots, so the field's names,
@@ -450,8 +450,8 @@ section('Nothing loads on the scoring path that the screen does not draw')
   // And, the same exception again, a Dynamic Overall Leaderboard's Matches
   // sessions: their portal names each side and works out where it stands.
   ok((picker.match(/from\('players'\)/g) ?? []).length === 2
-    && /knockout\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker)
-    && /hasMatchSessions\n\s*\? Promise\.all\(\[\n\s*supabase\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker),
+    && /knockout\n\s*\? Promise\.all\(\[\n\s*db\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker)
+    && /hasMatchSessions\n\s*\? Promise\.all\(\[\n\s*db\.from\('players'\)\.select\('id, name, handicap, gender'\)/.test(picker),
     'and no players — beyond a match play event\'s names, and a Matches session\'s, for their portals')
   ok(/usePlatformCourses\(open\)/.test(sheet),
     'and the course catalogue waits for the sheet to be opened')

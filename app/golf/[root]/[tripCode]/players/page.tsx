@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import PlayersClient from './PlayersClient'
 import BackButton from '@/app/components/BackButton'
 import SupportLink from '@/app/components/SupportLink'
@@ -16,6 +16,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function PlayersPage({ params }: { params: Promise<{ root: string; tripCode: string }> }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The kind and the permissions ride alongside the page's own query, each
@@ -23,19 +24,19 @@ export default async function PlayersPage({ params }: { params: Promise<{ root: 
   // a trip with open access, which is what it can only hold.
   const [kind, { data: trip, error: tripError }, permsResult, setupResult, cookieId] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, name')
       .eq('trip_code', tripCode)
       .single(),
-    supabase
+    db
       .from('trips')
       .select('event_permissions')
       .eq('trip_code', tripCode)
       .single(),
     // A league's setup, for its Golf Ireland answer — its own query, fail
     // soft, like the permissions.
-    supabase
+    db
       .from('trips')
       .select('bracket_setup')
       .eq('trip_code', tripCode)
@@ -67,7 +68,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ root: 
   // a name does when it is tapped is now the thing that differs, not whether
   // it is offered.
   const [playersResult, roundsResult] = await Promise.all([
-    supabase
+    db
       .from('players')
       .select('id, name, handicap, gender, claimed')
       .eq('trip_id', trip.id)
@@ -79,7 +80,7 @@ export default async function PlayersPage({ params }: { params: Promise<{ root: 
       .order('name'),
     // A player adding themselves after the rounds exist needs a handicap
     // snapshot for each of them, so the ids come down with the page.
-    supabase
+    db
       .from('rounds')
       .select('id')
       .eq('trip_id', trip.id)

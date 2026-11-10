@@ -8,7 +8,7 @@ import { boardNames } from '@/lib/displayNames'
 import SessionMatchList from '../leaderboard/SessionMatchList'
 import { readSessionResults } from '../session/sessionMatches'
 import { notFound } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
@@ -40,6 +40,7 @@ export default async function TripCoursePortalPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The trip and its rounds in one request rather than two, one after the
@@ -62,9 +63,9 @@ export default async function TripCoursePortalPage({
   // either failing costs that door and nothing else.
   const [kind, { data: trip, error: tripError }, setupRes, permsRes] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
-      // One string, not two joined: supabase-js reads the select as a literal
+      // One string, not two joined: db-js reads the select as a literal
       // type to work out the row shape, and a `+` between two halves leaves it
       // with nothing to read — every field on `trip` then fails to typecheck.
       // `*` on the rounds so the casual flag rides along without being named:
@@ -74,12 +75,12 @@ export default async function TripCoursePortalPage({
       .eq('trip_code', tripCode)
       .order('round_number', { referencedTable: 'rounds' })
       .single(),
-    supabase
+    db
       .from('trips')
       .select('bracket_setup, settings_passcode_hash')
       .eq('trip_code', tripCode)
       .maybeSingle(),
-    supabase
+    db
       .from('trips')
       .select('event_permissions')
       .eq('trip_code', tripCode)
@@ -150,11 +151,11 @@ export default async function TripCoursePortalPage({
   const hasMatchSessions = !!overall && sessionBoards.some(b => b.competition === 'matches')
   const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead, sessionRead] = await Promise.all([
     roundIds.length > 0
-      ? supabase.from('live_rounds').select('round_id, live_player_locks(player_id)')
+      ? db.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
       : Promise.resolve({ data: [], error: null }),
     series
-      ? supabase.from('itinerary_items').select('id, day_index, position, kind, course_id')
+      ? db.from('itinerary_items').select('id, day_index, position, kind, course_id')
           .eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
     series ? readRoundCards(trip.id, leagueSetup, rounds) : Promise.resolve([]),
@@ -162,20 +163,20 @@ export default async function TripCoursePortalPage({
     // and the matches being played now, off their cards.
     knockout
       ? Promise.all([
-          supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
+          db.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
           linkedPlayerId(tripCode),
         ]).then(async ([playersRes, meId]) => {
           const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
           const me = roster.some(p => p.id === meId) ? meId : null
-          const view = await readKnockout(trip, setupRow?.bracket_setup, me, roster)
+          const view = await readKnockout(db, trip, setupRow?.bracket_setup, me, roster)
           // The matches being played now, every match's card for the
           // viewer's scorecard, and which matches are arranged (a course
           // chosen — their card is ready to score), the last fail-soft.
           const [live, details, arrangedRes] = view
             ? await Promise.all([
-                readLiveMatches(trip, view, roster),
-                readMatchDetails(trip, view, roster),
-                supabase.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
+                readLiveMatches(db, trip, view, roster),
+                readMatchDetails(db, trip, view, roster),
+                db.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
               ])
             : [[], {}, { data: [], error: null }]
           const arranged = ((arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[])
@@ -185,15 +186,15 @@ export default async function TripCoursePortalPage({
       : Promise.resolve(null),
     hasMatchSessions
       ? Promise.all([
-          supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
-          supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-          supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+          db.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
+          db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
+          db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
           linkedPlayerId(tripCode),
         ]).then(async ([playersRes, teamsRes, membersRes, meId]) => {
           const roster = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
           const teams = (teamsRes.data ?? []) as { id: string; name: string; color: string; team_set: string | null }[]
           const memberships = (membersRes.data ?? []) as { team_id: string; team_set: string; player_id: string }[]
-          const results = await readSessionResults(trip, sessionBoards, roster, { teams, memberships })
+          const results = await readSessionResults(db, trip, sessionBoards, roster, { teams, memberships })
           return { roster, teams, memberships, results, me: roster.some(p => p.id === meId) ? meId : null }
         }).catch(e => { console.error('TripCoursePortal session read failed:', e); return null })
       : Promise.resolve(null),
@@ -243,7 +244,7 @@ export default async function TripCoursePortalPage({
   )
 
   const anyRows = async (table: 'scores' | 'live_scores', roundId: string) => {
-    const { count, error } = await supabase
+    const { count, error } = await db
       .from(table)
       .select('round_id', { count: 'exact', head: true })
       .eq('round_id', roundId)

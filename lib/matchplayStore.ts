@@ -6,6 +6,7 @@
 // than reimplementing any bracket logic.
 
 import { supabase } from '@/lib/supabase'
+import type { Reads } from './eventReader'
 import {
   generateBracket, bracketToRows, rowsInInsertOrder, sortPlayersBySeed,
   bracketBlockedReason, MatchplayError,
@@ -159,18 +160,20 @@ export async function fetchEntrants(
    * would put four players on one side of a match.
    */
   teamSet: string = MAIN_SET,
+  /** The server passes its event reader (lib/eventReader.ts); the browser reads on its own client. */
+  db: Reads = supabase,
 ): Promise<Entrant[]> {
   // Nicknames ride in their own fail-soft query — naming the column in the
   // roster select would fail the whole draw on a database that has not run
   // migration 047 (lib/displayNames.ts holds the rule).
   const [{ data: players, error: playersError }, nicknamesRes] = await Promise.all([
-    supabase
+    db
       .from('players')
       .select('id, name, handicap, created_at')
       .eq('trip_id', tripId)
       .eq('is_composite', false)
       .order('created_at'),
-    supabase.from('players').select('id, nickname').eq('trip_id', tripId),
+    db.from('players').select('id, nickname').eq('trip_id', tripId),
   ])
 
   if (playersError) throw new MatchplayError('Could not read the player list. Please try again.')
@@ -185,13 +188,13 @@ export async function fetchEntrants(
   }
 
   const [teamsRes, memberships] = await Promise.all([
-    supabase
+    db
       .from('teams')
       .select('id, name, created_at, team_set')
       .eq('trip_id', tripId)
       .eq('team_set', teamSet)
       .order('created_at'),
-    fetchMemberships(tripId),
+    fetchMemberships(tripId, db),
   ])
 
   if (teamsRes.error) throw new MatchplayError('Could not read the pairings. Please try again.')

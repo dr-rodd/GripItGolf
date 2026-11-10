@@ -7,7 +7,7 @@ import RoundOrganiser from './RoundOrganiser'
 import { placeClass } from '@/lib/leaderboardStyle'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { primary } from '@/lib/leaderboards'
 import { boardsForTrip, isLegacy } from '@/lib/leaderboardsCompat'
 import { parseLeaderboards } from '@/lib/leaderboards'
@@ -52,6 +52,7 @@ export default async function RoundSummaryPage({
   params: Promise<{ root: string; tripCode: string; roundNumber: string }>
 }) {
   const { root, tripCode, roundNumber } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   const roundNum = parseInt(roundNumber, 10)
   if (!Number.isFinite(roundNum)) notFound()
@@ -60,7 +61,7 @@ export default async function RoundSummaryPage({
   // on an un-migrated database — the note on fetchTripKind.
   const [kind, { data: trip, error: tripError }] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, name, start_date, formats, leaderboards, team_scoring, track_stats, settings_passcode_hash')
       .eq('trip_code', tripCode)
@@ -74,7 +75,7 @@ export default async function RoundSummaryPage({
   // `*` rather than a column list: the casual flags arrive with migration
   // 031, which is run by hand, and naming them would break this page on a
   // database that has not run it yet. Undefined reads as counting.
-  const { data: round, error: roundError } = await supabase
+  const { data: round, error: roundError } = await db
     .from('rounds')
     .select('*')
     .eq('trip_id', trip.id)
@@ -96,7 +97,7 @@ export default async function RoundSummaryPage({
   const matchesSession = lead?.competition === 'matches'
   // The round as a session of the Overall, for the organiser's settings.
   const overallRules = overallOf(boards)?.overall
-  const sessionMatchRows = matchesSession ? (await readSessionMatchRows(trip.id)).filter(m => m.round_id === round.id) : []
+  const sessionMatchRows = matchesSession ? (await readSessionMatchRows(db, trip.id)).filter(m => m.round_id === round.id) : []
   const sessionInfo = overallRules ? {
     name: sessionName(overallRules, round.id, round.round_number),
     storedName: overallRules.names?.[round.id] ?? '',
@@ -130,12 +131,12 @@ export default async function RoundSummaryPage({
   // Promise.resolve because the query builder is only PromiseLike — it has
   // a then and no catch until it becomes a real promise.
   const nicknamesPromise = Promise.resolve(
-    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+    db.from('players').select('id, nickname').eq('trip_id', trip.id),
   )
     .then(r => (r.data ?? []) as { id: string; nickname: string | null }[])
     .catch(() => [] as { id: string; nickname: string | null }[])
 
-  const podiumPromise = fetchRoundRows(
+  const podiumPromise = fetchRoundRows(db, 
     trip.id,
     round.id,
     lead,
@@ -151,13 +152,13 @@ export default async function RoundSummaryPage({
   // itinerary item is where the tee time lives — the date is on the round,
   // and `itinerary_item_id` is the only thing tying the two together.
   const [courseRes, holesRes, teesRes, itemRes, playersRes] = await Promise.all([
-    supabase.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
-    supabase
+    db.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
+    db
       .from('holes')
       .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
       .eq('course_id', round.course_id)
       .order('hole_number'),
-    supabase
+    db
       .from('tees')
       .select('name, gender, par, course_rating, slope')
       .eq('course_id', round.course_id)
@@ -169,13 +170,13 @@ export default async function RoundSummaryPage({
       .order('slope', { ascending: false, nullsFirst: false })
       .order('name'),
     round.itinerary_item_id
-      ? supabase
+      ? db
           .from('itinerary_items')
           .select('day_index, tee_time, tee_count')
           .eq('id', round.itinerary_item_id)
           .single()
       : Promise.resolve({ data: null, error: null }),
-    supabase
+    db
       .from('players')
       .select('id, name, gender')
       .eq('trip_id', trip.id)

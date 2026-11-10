@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import type { Reads } from '@/lib/eventReader'
 import { roundSheet, sheetIsOpen, describeOpening } from '@/lib/teeSheet'
 import { parseStartFormat } from '@/lib/eventHub'
 import { readSheetSettings } from '../teesheet/sheets'
@@ -12,15 +12,16 @@ export { buildMatchSheets, sessionTimes, clocksOf, type MatchSheetProps, type Se
  * never no matches.
  */
 export async function readSessionTimes(
+  db: Reads,
   tripId: string,
   setupHref: (roundId: string) => string,
   rowsOf: (roundId: string) => number,
 ): Promise<Map<string, SessionTimes>> {
   const [roundsRes, itemsRes, settings, assignRes] = await Promise.all([
-    supabase.from('rounds').select('id, itinerary_item_id, start_format, scheduled_date').eq('trip_id', tripId),
-    supabase.from('itinerary_items').select('id, tee_time').eq('trip_id', tripId).eq('kind', 'golf'),
-    readSheetSettings(tripId),
-    supabase.from('tee_assignments').select('round_id').eq('trip_id', tripId),
+    db.from('rounds').select('id, itinerary_item_id, start_format, scheduled_date').eq('trip_id', tripId),
+    db.from('itinerary_items').select('id, tee_time').eq('trip_id', tripId).eq('kind', 'golf'),
+    readSheetSettings(db, tripId),
+    db.from('tee_assignments').select('round_id').eq('trip_id', tripId),
   ])
   if (roundsRes.error) return new Map()
   const teeTimes = new Map(((itemsRes.data ?? []) as { id: string; tee_time: string | null }[]).map(i => [i.id, i.tee_time]))

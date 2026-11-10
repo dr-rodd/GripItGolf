@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { tripBase } from '@/lib/tripPaths'
 import { fetchTripKind } from '@/app/golf/[root]/[tripCode]/kind'
@@ -33,8 +33,9 @@ export default async function ShortCodePage({ params }: {
   if (!/^[A-Za-z0-9]{6}$/.test(code)) notFound()
 
   const tripCode = code.toUpperCase()
+  const db = eventReader(tripCode)
   const [{ data }, kind] = await Promise.all([
-    supabase
+    db
       .from('trips')
       .select('trip_code')
       .eq('trip_code', tripCode)

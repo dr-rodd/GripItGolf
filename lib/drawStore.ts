@@ -16,7 +16,7 @@ import type { EntrantKind } from './matchplayEntrants'
 export type DrawState = { drawn: boolean; inPlay: boolean }
 
 /** Whether this event has a draw, and whether it has started. */
-export async function readDrawState(client: SupabaseClient, tripId: string): Promise<DrawState> {
+export async function readDrawState(client: Pick<SupabaseClient, 'from'>, tripId: string): Promise<DrawState> {
   const [matchesRes, cardsRes] = await Promise.all([
     client.from('matchplay_matches')
       .select('winner_player_id, winner_team_id, player_a_is_bye, player_b_is_bye')

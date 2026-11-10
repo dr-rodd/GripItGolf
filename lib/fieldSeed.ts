@@ -41,11 +41,14 @@ export type FieldSeed = {
   on: boolean
   /**
    * The other event, once its code (and public PIN, where it has one) checks
-   * out — with its organiser PIN's hash, to check that PIN against on this
-   * phone (anybody with the code can read it: lib/passcode.ts).
+   * out — and whether it has an organiser PIN to ask for. Both PINs are
+   * checked on the server (app/api/event/seed, under /api/entry's retry
+   * limit); the browser never holds their hashes.
    */
   source: {
-    code: string; name: string; tripId: string; adminHash: string | null
+    code: string; name: string; tripId: string
+    /** Whether that event has an organiser PIN to ask for — never the PIN's hash (checked on the server, app/api/event/seed). */
+    adminLocked: boolean
     /** Its leaderboards as finishing orders, by its own player ids — for the draw's seeds. */
     boards: SeedBoard[]
   } | null

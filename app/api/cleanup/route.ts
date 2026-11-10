@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
+import { FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT } from "@/lib/membership"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
@@ -196,11 +197,34 @@ export async function GET(req: NextRequest) {
     console.error("entry attempts cleanup failed:", e)
   }
 
+  // ── 5. Anonymous phones nobody will miss ──
+  // The rule is migration 069's `anonymous_phones_to_forget()`, counted every
+  // night; deleted only once FORGET_ANONYMOUS_PHONES (lib/membership.ts) is
+  // switched on, and never on a dry run. Before 069 the count is null and
+  // nothing is deleted. Its own try, like every step here.
+  let anonymousPhones: { toForget: number | null; forgotten: number; deleting: boolean } =
+    { toForget: null, forgotten: 0, deleting: FORGET_ANONYMOUS_PHONES && !dryRun }
+  try {
+    const { count, error } = await supabaseAdmin
+      .rpc("anonymous_phones_to_forget", {}, { count: "exact", head: true })
+    if (error) throw error
+    anonymousPhones = { ...anonymousPhones, toForget: count ?? 0 }
+    if (anonymousPhones.deleting && (count ?? 0) > 0) {
+      const { data, error: forgetError } = await supabaseAdmin
+        .rpc("forget_anonymous_phones", { max_rows: FORGET_PER_NIGHT })
+      if (forgetError) throw forgetError
+      anonymousPhones = { ...anonymousPhones, forgotten: typeof data === "number" ? data : 0 }
+    }
+  } catch (e) {
+    console.error("anonymous phones cleanup failed:", e)
+  }
+
   return NextResponse.json({
     ok: true,
     dryRun,
     draws,
     staleAttempts,
+    anonymousPhones,
     closedEmpty,
     closedAbandoned,
     // On a dry run nothing is deleted, so report what would have been.

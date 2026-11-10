@@ -314,10 +314,10 @@ section('The match play card: top of the draw left, bottom right, NR, the result
 
   // The live board: the Scoring tab reads every open match's card through the
   // same setup the card page draws from, so the two cannot disagree.
-  ok(cards.includes('export async function readLiveMatches') && /readCardSetups\(trip, view, players, started\)/.test(cards),
+  ok(cards.includes('export async function readLiveMatches') && /readCardSetups\(db, trip, view, players, started\)/.test(cards),
     'live matches are read off their cards through the card\'s own setup')
   const scoringPage = read('app/golf/[root]/[tripCode]/scoring/page.tsx')
-  ok(scoringPage.includes('readLiveMatches(trip, view, roster)') && scoringPage.includes('live={knockoutRead?.live ?? []}'),
+  ok(scoringPage.includes('readLiveMatches(db, trip, view, roster)') && scoringPage.includes('live={knockoutRead?.live ?? []}'),
     'the Scoring tab hands the portal its live matches')
   const views = read('app/golf/[root]/[tripCode]/KnockoutViews.tsx')
   ok(views.includes('<LiveBoard') && views.includes('dot-live') && !views.includes('setInterval'),

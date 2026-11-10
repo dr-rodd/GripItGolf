@@ -1139,7 +1139,7 @@ section('The lab reads the derivation and does none of its own')
   // the trip cannot have stats switched on in the first place.
   const hub = code('lib/hubStanding.ts')
   ok(/withStats = false/.test(hub), 'the shared fetch asks for the stats only when told to')
-  ok(/fetchTripContext\(tripId, null, onlyRoundIds, true\)/.test(hub),
+  ok(/fetchTripContext\(db, tripId, null, onlyRoundIds, true\)/.test(hub),
     '  …which the stats path does')
   const boardFetch = hub.slice(hub.indexOf('async function fetchBoardRows'),
     hub.indexOf('export async function fetchTripContext'))

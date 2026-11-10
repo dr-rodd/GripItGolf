@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { MAIN_SET } from '@/lib/teamSets'
@@ -26,9 +26,10 @@ export default async function TagsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error } = await supabase
+  const { data: trip, error } = await db
     .from('trips')
     .select('id, trip_code, name, kind, settings_passcode_hash')
     .eq('trip_code', tripCode)
@@ -64,26 +65,26 @@ export default async function TagsPage({ params }: {
   // pre-049 the column does not exist, this errors, and the self-assign
   // toggle simply shows its default.
   const [teamsRes, playersRes, memberships, permsRes, boardsRes] = await Promise.all([
-    supabase
+    db
       .from('teams')
       .select('id, name, color, team_set')
       .eq('trip_id', trip.id)
       .order('created_at'),
-    supabase
+    db
       .from('players')
       .select('id, name')
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
-    fetchMemberships(trip.id),
-    supabase
+    fetchMemberships(trip.id, db),
+    db
       .from('trips')
       .select('event_permissions')
       .eq('id', trip.id)
       .single(),
     // What the event plays for, so the screen can say whether the tags are
     // being ranked yet — and offer to make the board that ranks them.
-    supabase
+    db
       .from('trips')
       .select('leaderboards')
       .eq('id', trip.id)

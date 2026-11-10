@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { isKnockoutEvent, parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
@@ -38,15 +38,16 @@ export default async function BracketSetupPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   const [tripResult, setupResult] = await Promise.all([
-    supabase
+    db
       .from('trips')
       .select('id, trip_code, name, kind, settings_passcode_hash, start_date, leaderboards, formats, team_scoring')
       .eq('trip_code', tripCode)
       .single(),
-    supabase
+    db
       .from('trips')
       .select('bracket_setup')
       .eq('trip_code', tripCode)
@@ -96,9 +97,9 @@ export default async function BracketSetupPage({ params }: {
     // league with a bracket. Day count comes from the rounds, the one copy
     // of how many days there are.
     const [{ count }, itemsRes, roundsRes] = await Promise.all([
-      supabase.from('rounds').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id),
-      supabase.from('itinerary_items').select('id, day_index, kind, course_id').eq('trip_id', trip.id),
-      supabase.from('rounds').select('id, round_number, itinerary_item_id, course_id, scheduled_date').eq('trip_id', trip.id),
+      db.from('rounds').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id),
+      db.from('itinerary_items').select('id, day_index, kind, course_id').eq('trip_id', trip.id),
+      db.from('rounds').select('id, round_number, itinerary_item_id, course_id, scheduled_date').eq('trip_id', trip.id),
     ])
     // A league whose rounds are played over a stretch is asked a deadline
     // for each (Ross, 5 Nov 2026) — every round it has now, TBC ones too.
@@ -155,9 +156,9 @@ export default async function BracketSetupPage({ params }: {
     const board = boards.find(lb => lb.competition === 'matchplay')
     const kind = needsPairings(boards) ? 'pair' as const : 'player' as const
     const [entrants, state, matchesRes] = await Promise.all([
-      fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET).catch(() => []),
-      readDrawState(supabase, trip.id).catch(() => ({ drawn: false, inPlay: false })),
-      supabase.from('matchplay_matches')
+      fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET, db).catch(() => []),
+      readDrawState(db, trip.id).catch(() => ({ drawn: false, inPlay: false })),
+      db.from('matchplay_matches')
         .select('round_number, slot, player_a_id, player_b_id, team_a_id, team_b_id, entrant_type, seed_a, seed_b')
         .eq('trip_id', trip.id),
     ])

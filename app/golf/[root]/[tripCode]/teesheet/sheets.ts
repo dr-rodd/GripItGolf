@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import type { Reads } from '@/lib/eventReader'
 
 /**
  * Each round's tee-sheet settings as stored — the one read of them, for
@@ -13,12 +13,12 @@ import { supabase } from '@/lib/supabase'
  */
 export type StoredSheet = { rules: unknown; intervalMins: unknown; groupSize: unknown; startFormat: unknown }
 
-export async function readSheetSettings(tripId: string): Promise<Map<string, StoredSheet>> {
+export async function readSheetSettings(db: Reads, tripId: string): Promise<Map<string, StoredSheet>> {
   const [rulesRes, oldRes] = await Promise.all([
-    supabase.from('rounds').select('id, tee_sheet').eq('trip_id', tripId),
+    db.from('rounds').select('id, tee_sheet').eq('trip_id', tripId),
     // The start format rides here, migration 046 being older than 050 —
     // so a trip's screens can ask it without naming it in a main select.
-    supabase.from('rounds').select('id, tee_interval_mins, tee_group_size, start_format').eq('trip_id', tripId),
+    db.from('rounds').select('id, tee_interval_mins, tee_group_size, start_format').eq('trip_id', tripId),
   ])
   const out = new Map<string, StoredSheet>()
   const at = (id: string) => {

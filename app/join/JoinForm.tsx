@@ -2,7 +2,6 @@
 
 import { useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import { FIELD, buttonClass } from '@/app/components/ui'
@@ -35,13 +34,20 @@ export default function JoinForm() {
     setError('')
     setLoading(true)
 
-    const { data } = await supabase
-      .from('trips')
-      .select('trip_code')
-      .eq('trip_code', code.toUpperCase().trim())
-      .single()
+    // Asked of the server (app/api/event/find): a phone that has entered
+    // nothing cannot read an event itself from row-level security stage 3.
+    let found: string | null = null
+    try {
+      const res = await fetch(`/api/event/find?code=${encodeURIComponent(code.toUpperCase().trim())}`, { cache: 'no-store' })
+      if (res.status !== 200 && res.status !== 404) throw new Error(`find ${res.status}`)
+      found = (await res.json() as { code: string | null }).code
+    } catch {
+      setLoading(false)
+      setError('Could not check the code — try again')
+      return
+    }
 
-    if (!data) {
+    if (!found) {
       setLoading(false)
       setError('Event not found — check your code and try again')
       return
@@ -49,7 +55,7 @@ export default function JoinForm() {
 
     // The short link sends a code to wherever it lives — /trip/, /event/ or
     // /run/ (app/[code]/page.tsx).
-    router.push(`/${data.trip_code}`)
+    router.push(`/${found}`)
   }
 
   return (

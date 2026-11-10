@@ -809,7 +809,7 @@ section('Migration 027 and lib/itinerary.ts describe the same table')
   // in the same batch as its live cards. Never the sheet's whole itinerary.
   ok(!portal.includes('activity_name') && !portal.includes('fromItemRow'),
     'and the Scoring tab itself no longer fetches an itinerary it does not draw')
-  ok(portal.includes("? supabase.from('itinerary_items').select('id, day_index, position, kind, course_id')")
+  ok(portal.includes("? db.from('itinerary_items').select('id, day_index, position, kind, course_id')")
     && portal.includes('    series\n'),
     '  …a league\'s golf items alone, and only for a league')
 }

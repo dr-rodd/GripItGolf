@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseLeaderboards } from '@/lib/leaderboards'
@@ -25,9 +25,10 @@ export default async function DayBoardsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error } = await supabase
+  const { data: trip, error } = await db
     .from('trips')
     .select('id, trip_code, name, kind, settings_passcode_hash, leaderboards')
     .eq('trip_code', tripCode)
@@ -60,23 +61,23 @@ export default async function DayBoardsPage({ params }: {
   }
 
   const [roundsRes, playersRes, teamsRes, setupRes] = await Promise.all([
-    supabase
+    db
       .from('rounds')
       .select('id, round_number, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
-    supabase
+    db
       .from('players')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
-    supabase
+    db
       .from('teams')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id),
     // Its own query, fail-soft: pre-047 the column does not exist and the
     // days simply read as one running total, which is what they were.
-    supabase
+    db
       .from('trips')
       .select('bracket_setup')
       .eq('id', trip.id)

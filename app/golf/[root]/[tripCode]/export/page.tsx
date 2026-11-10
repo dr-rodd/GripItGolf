@@ -1,6 +1,6 @@
 import { parseLeagueSetup } from '@/lib/leagueSetup'
 import { notFound } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { parseFormats } from '@/lib/formats'
 import { parseLeaderboards, boardTitle, boardRules } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
@@ -44,9 +44,10 @@ export default async function TripExportPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip } = await supabase
+  const { data: trip } = await db
     .from('trips')
     .select('*, rounds(*, courses(id, name))')
     .eq('trip_code', tripCode)
@@ -73,33 +74,33 @@ export default async function TripExportPage({
   const [teamsRes, playersRes, holesRes, scoresRes, hcpsRes, teesRes, itineraryRes,
          memberships, roundCards] =
     await Promise.all([
-      supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-      supabase.from('players')
+      db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
+      db.from('players')
         .select('id, name, handicap, gender, is_composite')
         .eq('trip_id', trip.id).eq('is_composite', false).order('name'),
-      supabase.from('holes')
+      db.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId])
         .order('hole_number'),
       // Read whole, past Supabase's 1,000-row cap — lib/scoreReads.ts. A
       // trip on paper missing a round is the worst place to lose one.
-      readScores<ScoreRow>(supabase,
+      readScores<ScoreRow>(db,
         'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
         roundIds.length > 0 ? roundIds : [nilId]),
-      readRoundHandicaps<HandicapRow>(supabase,
+      readRoundHandicaps<HandicapRow>(db,
         'round_id, player_id, playing_handicap, tee_id',
         roundIds.length > 0 ? roundIds : [nilId]),
-      supabase.from('tees')
+      db.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
-      supabase.from('itinerary_items')
+      db.from('itinerary_items')
         .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
                 'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
                 'activity_name, activity_time')
         .eq('trip_id', trip.id)
         .order('day_index')
         .order('position'),
-      fetchMemberships(trip.id),
+      fetchMemberships(trip.id, db),
       // A Golf Ireland league's cards are signed cards too. Nothing asked
       // unless the league reads them.
       readRoundCards(trip.id, leagueSetup,

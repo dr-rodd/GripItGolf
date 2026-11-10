@@ -309,8 +309,37 @@ function wiringTests() {
     const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
     const writers = [...files('app'), ...files('lib')].filter(f => read(f).includes("from('trip_members')"))
-    eq(writers, ['app/api/entry/route.ts'], 'one file names the table, and it is the route')
-    ok(read('app/api/entry/route.ts').includes('createAdminClient'), '  …on the service role')
+    eq(writers, ['app/api/entry/store.ts'], 'one file names the table: the entry route\'s store')
+    ok(read('app/api/entry/route.ts').includes('serviceStore(createAdminClient())') || /serviceStore\(db\)/.test(read('app/api/entry/route.ts')),
+      '  …built on the service role by the route')
+  }
+
+  section('Forgetting anonymous phones: one rule, counted first, deleted only when switched on')
+  {
+    const sql = read('supabase/migrations/20260101000069_forget_anonymous_phones.sql')
+    const code = sql.replace(/--[^\n]*/g, '')
+    ok(/u\.is_anonymous IS TRUE/.test(code) && (code.match(/is_anonymous IS TRUE/g) ?? []).length >= 2,
+      'only anonymous phones, in the rule and again in the delete')
+    ok(/interval '7 days'/.test(code) && /NOT EXISTS \(SELECT 1 FROM public\.trip_members/.test(code),
+      '  (1) in no event and made more than 7 days ago')
+    ok(/interval '90 days'/.test(code) && /auth\.sessions/.test(code), '  (2) unseen for 90 days, sessions included')
+    ok(/end_date IS NULL OR t\.end_date >= \(as_of AT TIME ZONE 'Europe\/Dublin'\)::date - 30/.test(code),
+      '  …with no event open: none without an end date, none ended within 30 days')
+    ok(/SECURITY DEFINER[\s\S]*SET search_path = ''[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = ''/.test(code),
+      'both functions run as their owner with an empty search path')
+    for (const fn of ['anonymous_phones_to_forget(timestamptz)', 'forget_anonymous_phones(integer)']) {
+      ok(code.includes(`REVOKE ALL ON FUNCTION public.${fn}`) && /FROM PUBLIC, anon, authenticated/.test(code),
+        `${fn}: closed to every phone`)
+      ok(code.includes(`GRANT EXECUTE ON FUNCTION public.${fn}`), `  …the server's alone`)
+    }
+    ok(/LIMIT max_rows/.test(code), 'a night forgets a bounded number')
+
+    const route = read('app/api/cleanup/route.ts')
+    ok(/rpc\("anonymous_phones_to_forget"/.test(route), 'the nightly job counts every night')
+    ok(/deleting: FORGET_ANONYMOUS_PHONES && !dryRun/.test(route) && /if \(anonymousPhones\.deleting/.test(route),
+      '  …and deletes only with the switch on, never on a dry run')
+    ok(/FORGET_ANONYMOUS_PHONES = false/.test(read('lib/membership.ts')), 'the switch ships off: the dry-run count comes first')
+    ok(/anonymous_phones_to_forget\(\)/.test(read('scripts/rls-check.sql')), 'scripts/rls-check.sql has the dry-run count, off the same function')
   }
 
   section('The realtime question has its query')

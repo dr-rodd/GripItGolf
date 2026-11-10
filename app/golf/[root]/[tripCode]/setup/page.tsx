@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import BackButton from '@/app/components/BackButton'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -17,8 +17,9 @@ export const dynamic = 'force-dynamic'
 
 export default async function TripSetupPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
+  const db = eventReader(tripCode)
 
-  const { data: trip, error: tripError } = await supabase
+  const { data: trip, error: tripError } = await db
     .from('trips')
     .select('*')
     .eq('trip_code', tripCode)
@@ -38,12 +39,12 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
 
   const [teamsResult, playersResult, roundsResult, memberships, itineraryResult] =
     await Promise.all([
-      supabase
+      db
         .from('teams')
         .select('id, name, color, team_set')
         .eq('trip_id', trip.id)
         .order('created_at'),
-      supabase
+      db
         .from('players')
         .select('id, name, handicap, gender, team_id, is_lead')
         .eq('trip_id', trip.id)
@@ -66,13 +67,13 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       // catalogue, fetched below purely to be indexed by id — a growing list
       // of every course on the site, on every load of this tab, to name the
       // two or three this trip actually plays.
-      supabase
+      db
         .from('rounds')
         .select('*, courses(id, name)')
         .eq('trip_id', trip.id)
         .order('round_number'),
-      fetchMemberships(trip.id),
-      supabase
+      fetchMemberships(trip.id, db),
+      db
         .from('itinerary_items')
         .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
                 'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
@@ -136,13 +137,13 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   const roundIds = rounds.map(r => r.id)
   const [scored, liveRes, sessionRes] = roundIds.length > 0
     ? await Promise.all([
-        roundsWithScores(supabase, roundIds),
-        supabase.from('live_rounds').select('round_id').in('round_id', roundIds),
+        roundsWithScores(db, roundIds),
+        db.from('live_rounds').select('round_id').in('round_id', roundIds),
         // A session match's card plays the round's course too (Ross, 10 Nov
         // 2026: a course changed under a card in play transplanted its
         // scores) — each match's count of scores, embedded. Fail-soft:
         // before migration 067 there are no session matches.
-        supabase.from('session_matches').select('round_id, session_match_scores(count)').eq('trip_id', trip.id),
+        db.from('session_matches').select('round_id, session_match_scores(count)').eq('trip_id', trip.id),
       ])
     : [{ data: new Set<string>(), error: null }, { data: [], error: null }, { data: [], error: null }]
   if (scored.error) console.error('TripSetupPage scores count failed:', scored.error)
@@ -167,7 +168,7 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
   let teeTimes: React.ReactNode = null
   if (!isEvent(trip.kind) && rounds.length > 0) {
     const booked = await readAllRows<{ round_id: string; player_id: string }>(
-      () => supabase
+      () => db
         .from('tee_assignments')
         .select('round_id, player_id', { count: 'exact' })
         .eq('trip_id', trip.id)

@@ -79,7 +79,7 @@ async function main() {
     ok(read('app/[code]/page.tsx').includes('tripBase(data.trip_code, kind)'), 'the short link sends a code to /golf/trip/, /golf/event/ or /run/')
     ok(read('app/api/trip-confirmation/route.ts').includes('tripBase(trip.trip_code, kindResult.data?.kind)'), 'the confirmation email links its own address')
     ok(read('app/enter/[tripCode]/page.tsx').includes('tripBase(tripCode, trip.kind)'), 'the public PIN door lets an event in at its own address')
-    ok(read('app/Landing.tsx').includes('depart(`/${data.trip_code}`)') && read('app/join/JoinForm.tsx').includes('router.push(`/${data.trip_code}`)'),
+    ok(read('app/Landing.tsx').includes('depart(`/${data.code}`)') && read('app/join/JoinForm.tsx').includes('router.push(`/${found}`)'),
       'the landing page and Join go through the short link')
     for (const f of ['CreateTripForm', 'CreateKnockoutForm', 'CreateLeagueForm']) {
       ok(read(`app/dashboard/create/${f}.tsx`).includes('href={tripBase(resultCode'), `${f}: the new trip or event opens at its own address`)

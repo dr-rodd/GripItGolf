@@ -411,7 +411,7 @@ section('A score is scoped through its round, because that is the only way it ca
   // round itself (test:all-rows holds that half).
   ok(/from\('rounds'\)[\s\S]*?readScores</.test(hub),
     'the cheap path asks for the trip\'s rounds first')
-  ok(/readScores<[\s\S]*?\(supabase, '[^']*', roundIds\)/.test(hub),
+  ok(/readScores<[\s\S]*?\(db, '[^']*', roundIds\)/.test(hub),
     '  …then for the scores on them')
 }
 

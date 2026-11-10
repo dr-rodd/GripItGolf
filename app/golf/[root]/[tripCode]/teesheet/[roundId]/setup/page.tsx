@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { teeSheetAccess } from '@/lib/eventPermissions'
@@ -37,9 +37,10 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   searchParams: Promise<{ from?: string }>
 }) {
   const [{ root, tripCode, roundId }, { from }] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error } = await supabase
+  const { data: trip, error } = await db
     .from('trips')
     .select('id, name, kind, leaderboards, settings_passcode_hash')
     .eq('trip_code', tripCode)
@@ -65,29 +66,29 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   const event = isEvent(trip.kind)
 
   const [roundRes, playersRes, permsRes, sheets, assignRes, membersRes, teamsRes, allRoundsRes] = await Promise.all([
-    supabase
+    db
       .from('rounds')
       .select('id, round_number, itinerary_item_id, scheduled_date, courses(name)')
       .eq('trip_id', trip.id)
       .eq('id', roundId)
       .maybeSingle(),
-    supabase
+    db
       .from('players')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
-    supabase.from('trips').select('event_permissions').eq('id', trip.id).single(),
-    readSheetSettings(trip.id),
+    db.from('trips').select('event_permissions').eq('id', trip.id).single(),
+    readSheetSettings(db, trip.id),
     // Who is on this round's sheet already — fail-soft, like the sheet's own
     // read. Their highest slot is what a shorter sheet must not lose.
-    supabase.from('tee_assignments').select('slot_index').eq('trip_id', trip.id).eq('round_id', roundId),
+    db.from('tee_assignments').select('slot_index').eq('trip_id', trip.id).eq('round_id', roundId),
     // Who is in which team — a league whose teams are over four is not
     // playing in partnerships, so it is not asked whether they play together.
-    supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+    db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
     // The teams and every round, for the partnerships a round makes of its
     // own to start from the last round's (lib/partnerships.ts).
-    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
-    supabase.from('rounds').select('id, round_number').eq('trip_id', trip.id),
+    db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
+    db.from('rounds').select('id, round_number').eq('trip_id', trip.id),
   ])
 
   type RoundRow = {
@@ -101,7 +102,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   }
 
   const item = round.itinerary_item_id
-    ? (await supabase
+    ? (await db
         .from('itinerary_items')
         .select('tee_time, tee_count')
         .eq('id', round.itinerary_item_id)
@@ -143,7 +144,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   const overall = overallOf(boards)
   const matchBoard = overall ? sessionBoardFor(boards, round.id) : null
   const matchSession = matchBoard?.competition === 'matches' && matchBoard.matchFormat ? matchBoard.matchFormat : null
-  const matchRows = matchSession ? (await readSessionMatchRows(trip.id)).filter(m => m.round_id === round.id) : []
+  const matchRows = matchSession ? (await readSessionMatchRows(db, trip.id)).filter(m => m.round_id === round.id) : []
   const matchCount = matchSession
     ? sessionSlotCount(overall?.overall, matchBoard, round.id, matchRows.map(m => ({ roundId: m.round_id, slot: m.slot })), fieldSize)
     : 0

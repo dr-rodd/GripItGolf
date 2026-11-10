@@ -74,6 +74,32 @@ export async function attemptKeys(tripId: string, kind: AttemptKind, address: st
 const LIMITS: [keyof typeof ATTEMPT_LIMITS, AttemptLimit][] =
   [['address', ATTEMPT_LIMITS.address], ['event', ATTEMPT_LIMITS.event]]
 
+/** Where wrong PINs are counted: `entry_attempts`, through the service role. */
+export type AttemptStore = Pick<EntryStore, 'readAttempts' | 'writeAttempt'>
+
+/**
+ * One PIN against its hash, under the retry limit — the only copy, shared by
+ * /api/entry and every other route that checks an event's PIN on the server
+ * (/api/event/seed). Blocked before the PIN is looked at; a wrong one is
+ * counted in both windows.
+ */
+export async function checkPin(
+  store: AttemptStore,
+  a: { tripId: string; kind: AttemptKind; address: string; pin: string; hash: string },
+  now: Date,
+): Promise<'ok' | 'wrong' | 'blocked'> {
+  const keys = await attemptKeys(a.tripId, a.kind, a.address)
+  const windows = await store.readAttempts([keys.address, keys.event])
+  if (LIMITS.some(([scope, limit]) => attemptBlocked(windows.get(keys[scope]) ?? null, limit, now))) return 'blocked'
+  if ((await hashPasscode(a.pin)) === a.hash) return 'ok'
+  for (const [scope, limit] of LIMITS) {
+    await store.writeAttempt(keys[scope], a.tripId, afterFailure(windows.get(keys[scope]) ?? null, limit, now))
+  }
+  return 'wrong'
+}
+
+const TOO_MANY = 'Too many tries — wait a few minutes and try again.'
+
 export async function runEntry(input: EntryInput, store: EntryStore, now: Date): Promise<EntryOutcome> {
   const code = typeof input.code === 'string' ? input.code.trim().toUpperCase() : ''
   if (!/^[A-Z0-9]{4,12}$/.test(code)) return fail(400, 'No event code.')
@@ -88,34 +114,14 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
   const adminPin = str(input.adminPin)
   const publicPin = str(input.publicPin)
 
-  // The retry limit, before any PIN is looked at.
-  const tried: AttemptKind[] = [...(adminPin ? ['admin' as const] : []), ...(publicPin ? ['public' as const] : [])]
-  const keys = new Map<AttemptKind, { address: string; event: string }>()
-  for (const kind of tried) keys.set(kind, await attemptKeys(trip.id, kind, input.address))
-  const windows = tried.length
-    ? await store.readAttempts([...keys.values()].flatMap(k => [k.address, k.event]))
-    : new Map<string, AttemptWindow>()
-  for (const kind of tried) {
-    const k = keys.get(kind)!
-    if (LIMITS.some(([scope, limit]) => attemptBlocked(windows.get(k[scope]) ?? null, limit, now))) {
-      return fail(429, 'Too many tries — wait a few minutes and try again.')
-    }
-  }
-  async function countFailure(kind: AttemptKind) {
-    const k = keys.get(kind)!
-    for (const [scope, limit] of LIMITS) {
-      await store.writeAttempt(k[scope], trip!.id, afterFailure(windows.get(k[scope]) ?? null, limit, now))
-    }
-  }
-
-  // The admin PIN. An event with none has nothing to check: everybody in it
-  // is the organiser already (lib/membership.ts, roleOf).
+  // The admin PIN, under the retry limit. An event with none has nothing to
+  // check: everybody in it is the organiser already (lib/membership.ts,
+  // roleOf).
   let organiser = false
   if (adminPin && trip.adminHash) {
-    if ((await hashPasscode(adminPin)) !== trip.adminHash) {
-      await countFailure('admin')
-      return fail(403, 'That isn’t the PIN.')
-    }
+    const r = await checkPin(store, { tripId: trip.id, kind: 'admin', address: input.address, pin: adminPin, hash: trip.adminHash }, now)
+    if (r === 'blocked') return fail(429, TOO_MANY)
+    if (r === 'wrong') return fail(403, 'That isn’t the PIN.')
     organiser = true
   }
 
@@ -124,11 +130,10 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
   if (trip.publicHash) {
     let allowed = organiser || entryAllowed(trip.publicHash, input.entryCookie ?? null)
     if (!allowed && publicPin) {
-      if ((await hashPasscode(publicPin)) === trip.publicHash) allowed = true
-      else {
-        await countFailure('public')
-        return fail(403, 'That PIN is not this event’s.')
-      }
+      const r = await checkPin(store, { tripId: trip.id, kind: 'public', address: input.address, pin: publicPin, hash: trip.publicHash }, now)
+      if (r === 'blocked') return fail(429, TOO_MANY)
+      if (r === 'wrong') return fail(403, 'That PIN is not this event’s.')
+      allowed = true
     }
     if (!allowed) return fail(403, 'This event needs its PIN.')
   }

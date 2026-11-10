@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { hashPasscode, MAX_PASSCODE } from '@/lib/passcode'
+import { MAX_PASSCODE } from '@/lib/passcode'
 import { EVENT_CODE, NO_FIELD_SEED, tidyCode, type FieldSeed, type SeedBoard, type SeedPlayer } from '@/lib/fieldSeed'
 import Toggle from '@/app/components/Toggle'
 import { IconCheck } from '@/app/components/icons'
@@ -17,7 +16,31 @@ import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
  * Then, optionally, its organiser PIN — and everything its players shared
  * with it comes across too when this event is made.
  */
-type Found = { tripId: string; code: string; name: string; publicHash: string | null; adminHash: string | null }
+type Found = { tripId: string; code: string; name: string; publicLocked: boolean; adminLocked: boolean }
+
+type SeedAnswer =
+  | { needsPublicPin: true; name: string }
+  | { tripId: string; code: string; name: string; adminLocked: boolean; players: SeedPlayer[]; adminOk?: boolean }
+  | { error: string }
+
+/**
+ * Ask the server about the other event (app/api/event/seed): it reads that
+ * event on its own key and checks its PINs, so this phone never needs to be
+ * able to read it — or to hold either PIN's hash.
+ */
+async function askSeed(body: { code: string; publicPin?: string; adminPin?: string }): Promise<SeedAnswer> {
+  try {
+    const res = await fetch('/api/event/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const out = await res.json().catch(() => null) as SeedAnswer | null
+    return out ?? { error: 'Could not check that event — try again.' }
+  } catch {
+    return { error: 'Could not check that event — try again.' }
+  }
+}
 
 export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
   value: FieldSeed
@@ -30,7 +53,7 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
   const [code, setCode] = useState(value.source?.code ?? '')
   // Back on this step after moving on: what was found is the form's to keep.
   const [found, setFound] = useState<Found | null>(() => value.source
-    ? { tripId: value.source.tripId, code: value.source.code, name: value.source.name, adminHash: value.source.adminHash, publicHash: null }
+    ? { tripId: value.source.tripId, code: value.source.code, name: value.source.name, adminLocked: value.source.adminLocked, publicLocked: false }
     : null)
   const [publicPin, setPublicPin] = useState('')
   const [adminPin, setAdminPin] = useState(value.adminPin ?? '')
@@ -39,7 +62,7 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
   const [adminError, setAdminError] = useState<string | null>(null)
 
   const seeded = !!value.source
-  const asksPublic = !!found?.publicHash && !seeded
+  const asksPublic = !!found?.publicLocked && !seeded
 
   function reset() {
     if (seeded) onUnseed()
@@ -51,14 +74,7 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
     setAdminError(null)
   }
 
-  async function bringIn(f: Found) {
-    const { data, error: err } = await supabase
-      .from('players')
-      .select('id, name, handicap, gender')
-      .eq('trip_id', f.tripId)
-      .order('created_at')
-    if (err) { setError('Could not read that event’s players — try again.'); return }
-    const players = (data ?? []) as SeedPlayer[]
+  async function bringIn(f: Found, players: SeedPlayer[]) {
     if (players.length === 0) { setError(`${f.name} has no players to bring in yet.`); return }
     // Its leaderboards' finishing orders too, while its public PIN is to
     // hand — the draw step offers them as seeds. Never in the way: none
@@ -74,7 +90,7 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
       if (res.ok && Array.isArray(out?.boards)) boards = out.boards
     } catch { /* no seeds offered */ }
     onSeed(players)
-    onChange({ on: true, source: { code: f.code, name: f.name, tripId: f.tripId, adminHash: f.adminHash, boards }, adminPin: null })
+    onChange({ on: true, source: { code: f.code, name: f.name, tripId: f.tripId, adminLocked: f.adminLocked, boards }, adminPin: null })
   }
 
   async function findEvent() {
@@ -83,46 +99,42 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
     setBusy(true)
     setError(null)
     try {
-      const { data, error: err } = await supabase
-        .from('trips')
-        .select('id, name, kind, settings_passcode_hash')
-        .eq('trip_code', c)
-        .maybeSingle()
-      if (err || !data) { setError(`Could not find an event with the code ${c} — check it and try again.`); return }
-      if (data.kind === 'run') { setError('That code is a running challenge — seed the field from a golf event.'); return }
-      // The public PIN in its own read: a database before migration 060 has
-      // no such column, and no column means no PIN.
-      const pub = await supabase.from('trips').select('public_passcode_hash').eq('id', data.id).maybeSingle()
-      const publicHash = !pub.error && typeof pub.data?.public_passcode_hash === 'string' && pub.data.public_passcode_hash
-        ? pub.data.public_passcode_hash : null
-      const f: Found = {
-        tripId: data.id, code: c, name: data.name,
-        publicHash,
-        adminHash: typeof data.settings_passcode_hash === 'string' && data.settings_passcode_hash ? data.settings_passcode_hash : null,
+      const out = await askSeed({ code: c })
+      if ('error' in out) { setError(out.error); return }
+      if ('needsPublicPin' in out) {
+        setFound({ tripId: '', code: c, name: out.name, publicLocked: true, adminLocked: false })
+        return
       }
+      const f: Found = { tripId: out.tripId, code: out.code, name: out.name, publicLocked: false, adminLocked: out.adminLocked }
       setFound(f)
-      if (!publicHash) await bringIn(f)
+      await bringIn(f, out.players)
     } finally {
       setBusy(false)
     }
   }
 
   async function checkPublic() {
-    if (!found?.publicHash) return
+    if (!found?.publicLocked) return
     setBusy(true)
     setError(null)
     try {
-      if ((await hashPasscode(publicPin)) !== found.publicHash) { setError('That PIN is not right — try again.'); return }
-      await bringIn(found)
+      const out = await askSeed({ code: found.code, publicPin })
+      if ('error' in out) { setError(out.error); return }
+      if ('needsPublicPin' in out) { setError('That PIN is not right — try again.'); return }
+      const f: Found = { tripId: out.tripId, code: out.code, name: out.name, publicLocked: true, adminLocked: out.adminLocked }
+      setFound(f)
+      await bringIn(f, out.players)
     } finally {
       setBusy(false)
     }
   }
 
   async function checkAdmin() {
-    if (!found?.adminHash || !value.source) return
+    if (!found?.adminLocked || !value.source) return
     setAdminError(null)
-    if ((await hashPasscode(adminPin)) !== found.adminHash) { setAdminError('That PIN is not right — try again.'); return }
+    const out = await askSeed({ code: found.code, publicPin: publicPin || undefined, adminPin })
+    if ('error' in out) { setAdminError(out.error); return }
+    if (!('adminOk' in out) || !out.adminOk) { setAdminError('That PIN is not right — try again.'); return }
     onChange({ ...value, adminPin })
   }
 
@@ -207,7 +219,7 @@ export default function SeedFromEvent({ value, onChange, onSeed, onUnseed }: {
             </p>
           )}
 
-          {seeded && found?.adminHash && (
+          {seeded && found?.adminLocked && (
             <div className="pt-4 border-t border-line">
               <label className={FIELD_LABEL} htmlFor="seed-admin">Bring across everything (optional)</label>
               <p className="text-ink/65 text-[13px] -mt-1 mb-2 leading-snug">

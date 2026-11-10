@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import type { Reads } from '@/lib/eventReader'
 import { readAllRows } from '@/lib/allRows'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceOf } from '@/lib/handicapAllowance'
@@ -32,6 +32,7 @@ export type CardSetup = {
 
 /** Every listed match's card, ready to draw or the reason it is not. */
 export async function readCardSetups(
+  db: Reads,
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   view: KnockoutView,
   players: readonly Player[],
@@ -44,9 +45,9 @@ export async function readCardSetups(
   // migration 057, the extra holes' with 061 — and a missing 061 must not
   // cost the card its shots.
   const [arrangedRes, extraRes] = await Promise.all([
-    supabase.from('matchplay_matches').select('id, course_id, tees')
+    db.from('matchplay_matches').select('id, course_id, tees')
       .eq('trip_id', trip.id).in('id', [...matchIds]),
-    supabase.from('matchplay_matches').select('id, extra_holes')
+    db.from('matchplay_matches').select('id, extra_holes')
       .eq('trip_id', trip.id).in('id', [...matchIds]),
   ])
   if (arrangedRes.error) console.error('Match arrangements read failed:', arrangedRes.error)
@@ -59,9 +60,9 @@ export async function readCardSetups(
   const [coursesRes, teesRes, holesRes] = courseIds.length === 0
     ? [{ data: [] }, { data: [] }, { data: [] }]
     : await Promise.all([
-        supabase.from('courses').select('id, name').in('id', courseIds),
-        supabase.from('tees').select('id, course_id, slope, course_rating, par').in('course_id', courseIds),
-        supabase.from('holes').select('course_id, hole_number, par, stroke_index, stroke_index_ladies')
+        db.from('courses').select('id, name').in('id', courseIds),
+        db.from('tees').select('id, course_id, slope, course_rating, par').in('course_id', courseIds),
+        db.from('holes').select('course_id, hole_number, par, stroke_index, stroke_index_ladies')
           .in('course_id', courseIds).order('hole_number'),
       ])
   const courseName = new Map(((coursesRes.data ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]))
@@ -139,6 +140,7 @@ export type LiveMatch = {
  * migration 058 there are no cards, quietly.
  */
 async function playedCards(
+  db: Reads,
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   view: KnockoutView,
   players: readonly Player[],
@@ -150,13 +152,13 @@ async function playedCards(
   type ConcessionRow = { match_id: string; hole_number: number; conceded_by: string }
   const [scoresRes, concessionsRes] = await Promise.all([
     readAllRows<ScoreRow>(
-      () => supabase.from('match_scores').select('match_id, player_id, hole_number, gross', { count: 'exact' })
+      () => db.from('match_scores').select('match_id, player_id, hole_number, gross', { count: 'exact' })
         .eq('trip_id', trip.id).in('match_id', [...ids])
         .order('match_id').order('player_id').order('hole_number'),
       r => `${r.match_id}|${r.player_id}|${r.hole_number}`,
     ),
     readAllRows<ConcessionRow>(
-      () => supabase.from('match_concessions').select('match_id, hole_number, conceded_by', { count: 'exact' })
+      () => db.from('match_concessions').select('match_id, hole_number, conceded_by', { count: 'exact' })
         .eq('trip_id', trip.id).in('match_id', [...ids])
         .order('match_id').order('hole_number'),
       r => `${r.match_id}|${r.hole_number}`,
@@ -180,7 +182,7 @@ async function playedCards(
   }
 
   const started = ids.filter(id => scoresOf.has(id) || concededOf.has(id))
-  const setups = await readCardSetups(trip, view, players, started)
+  const setups = await readCardSetups(db, trip, view, players, started)
   for (const id of started) {
     const card = setups.get(id)?.card
     if (!card) continue
@@ -207,12 +209,13 @@ async function playedCards(
  * has no row to slide one open beneath).
  */
 export async function readMatchDetails(
+  db: Reads,
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   view: KnockoutView,
   players: readonly Player[],
 ): Promise<Record<string, MatchCardDetail>> {
   const ids = view.matches.filter(m => isPlayable(m) && m.sideA && m.sideB).map(m => m.id)
-  const cards = await playedCards(trip, view, players, ids)
+  const cards = await playedCards(db, trip, view, players, ids)
   return Object.fromEntries([...cards].map(([id, c]) => [id, c.detail]))
 }
 
@@ -222,13 +225,14 @@ export async function readMatchDetails(
  * card says; before migration 058 there are no cards and nothing is live.
  */
 export async function readLiveMatches(
+  db: Reads,
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   view: KnockoutView,
   players: readonly Player[],
 ): Promise<LiveMatch[]> {
   const open = view.matches.filter(m => isPlayable(m) && m.winner === null && m.sideA && m.sideB)
   if (open.length === 0) return []
-  const cards = await playedCards(trip, view, players, open.map(m => m.id))
+  const cards = await playedCards(db, trip, view, players, open.map(m => m.id))
   const live: LiveMatch[] = []
   for (const [id, { state, card, detail }] of cards) {
     const match = open.find(m => m.id === id)

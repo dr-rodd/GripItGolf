@@ -60,3 +60,33 @@ SELECT t.trip_code, a.key LIKE '%:e' AS whole_event, a.failures, a.window_starte
 FROM entry_attempts a JOIN trips t ON t.id = a.trip_id
 ORDER BY a.window_started DESC
 LIMIT 20;
+
+-- ─── Stage 2: the dry-run count before any phone is forgotten ────────────
+--
+-- After migration 069. How many anonymous phones the nightly cleanup would
+-- forget tonight, and why — read this BEFORE FORGET_ANONYMOUS_PHONES in
+-- lib/membership.ts is switched on. Nothing here deletes. The rule is the
+-- function itself (069), so this count and the deletion cannot disagree.
+
+SELECT reason, count(*) AS phones
+FROM public.anonymous_phones_to_forget()
+GROUP BY reason
+ORDER BY reason;
+
+-- The phones the rule keeps, for comparison: everyone else signed in.
+
+SELECT
+  (SELECT count(*) FROM auth.users WHERE is_anonymous)              AS anonymous_phones,
+  (SELECT count(*) FROM public.anonymous_phones_to_forget())        AS would_forget,
+  (SELECT count(*) FROM auth.users WHERE is_anonymous)
+    - (SELECT count(*) FROM public.anonymous_phones_to_forget())    AS would_keep;
+
+-- Belt and braces: none it would forget belongs to an event still open.
+-- Should say 0.
+
+SELECT count(*) AS forgotten_but_still_playing
+FROM public.anonymous_phones_to_forget() f
+JOIN public.trip_members m ON m.user_id = f.user_id
+JOIN public.trips t ON t.id = m.trip_id
+WHERE t.end_date IS NULL OR t.end_date >= (now() AT TIME ZONE 'Europe/Dublin')::date - 30;
+

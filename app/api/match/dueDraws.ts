@@ -38,7 +38,9 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
   const boards = boardsForTrip({ leaderboards: trip.leaderboards, formats: trip.formats, team_scoring: trip.team_scoring })
   const board = boards.find(lb => lb.competition === 'matchplay')
   const kind = needsPairings(boards) ? 'pair' as const : 'player' as const
-  const entrants = await fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET)
+  // On the job's own service-role client, not the browser's key, which from
+  // row-level security stage 3 reads nothing for a server with no phone.
+  const entrants = await fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET, admin)
   const field = entrants.map(e => e.id)
 
   let slots: (string | null)[]

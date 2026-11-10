@@ -13,12 +13,17 @@
 // The second is a mirror, not a source. Nothing here reads it back.
 
 import { supabase } from '@/lib/supabase'
+import type { Reads } from './eventReader'
 import { MAIN_SET, type Membership } from './teamSets'
 import { failed, type WriteFailure } from './writeFailure'
 
 /** Every membership on a trip, both sheets. */
-export async function fetchMemberships(tripId: string): Promise<Membership[]> {
-  const { data, error } = await supabase
+export async function fetchMemberships(
+  tripId: string,
+  /** The server passes its event reader (lib/eventReader.ts); the browser reads on its own client. */
+  db: Reads = supabase,
+): Promise<Membership[]> {
+  const { data, error } = await db
     .from('team_members')
     .select('team_id, team_set, player_id')
     .eq('trip_id', tripId)

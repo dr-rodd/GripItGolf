@@ -1,6 +1,6 @@
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { entryAllowed, entryCookie } from '@/lib/publicPin'
 import EntryGate from './EntryGate'
 import { tripBase } from '@/lib/tripPaths'
@@ -19,8 +19,9 @@ export const dynamic = 'force-dynamic'
  */
 export default async function EnterPage({ params }: { params: Promise<{ tripCode: string }> }) {
   const { tripCode } = await params
+  const db = eventReader(tripCode)
   const [{ data }, jar] = await Promise.all([
-    supabase.from('trips').select('*').eq('trip_code', tripCode).maybeSingle(),
+    db.from('trips').select('*').eq('trip_code', tripCode).maybeSingle(),
     cookies(),
   ])
   const trip = data as { name: string; kind?: string | null; public_passcode_hash?: string | null; settings_passcode_hash?: string | null } | null

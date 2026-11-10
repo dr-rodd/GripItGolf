@@ -794,7 +794,7 @@ section('Viewers open a card in place, sitewide (Ross, 10 Nov 2026)')
     'the bracket: a match with a card opens it over the draw — no row to open one beneath')
   ok(bracket.includes('Record the result') && bracket.includes('Hold the match on the draw to change its result.'),
     '  …recording a result by hand inside it, a hold still changing a finished one')
-  ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(trip, view,'), '  …read on the server with the draw')
+  ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(db, trip, view,'), '  …read on the server with the draw')
 }
 
 section('Scoring: who goes into scoring, everybody else gets the scorecard (Ross, 10 Nov 2026)')
@@ -816,7 +816,7 @@ section('Scoring: who goes into scoring, everybody else gets the scorecard (Ross
   ok(list.includes('const goesToScore = toScore && !!m && mayScoreCard({') && list.includes('{!set ? row : goesToScore ? ('),
     'a session’s matches on the Scoring tab: the same, off score_session_matches')
   const page = read(base + 'scoring/page.tsx')
-  ok(page.includes('readMatchDetails(trip, view, roster)') && page.includes("allowsParticipant(kind, permsRaw, 'score_session_matches')"),
+  ok(page.includes('readMatchDetails(db, trip, view, roster)') && page.includes("allowsParticipant(kind, permsRaw, 'score_session_matches')"),
     '  …the Scoring tab reads every card for the slider and the permission for the rule')
 }
 

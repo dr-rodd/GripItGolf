@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import { isEvent } from '@/lib/eventHub'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
@@ -29,6 +29,7 @@ export default async function TeamPickPage({ params, searchParams }: {
   searchParams: Promise<{ sheet?: string; team?: string; back?: string }>
 }) {
   const [{ root, tripCode }, query] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   const teamsHref = `${tripHome}/teams`
   // Only ever back into this trip — a link is a suggestion, never a redirect
@@ -37,7 +38,7 @@ export default async function TeamPickPage({ params, searchParams }: {
 
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, trip_code, name, formats, leaderboards, team_scoring, settings_passcode_hash')
       .eq('trip_code', tripCode)
@@ -56,20 +57,20 @@ export default async function TeamPickPage({ params, searchParams }: {
 
   const boards = boardsForTrip(trip)
   const [teamsRes, playersRes, membersRes, addedRes, roundsRes, viewerPlayerId] = await Promise.all([
-    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-    supabase.from('players').select('id, name').eq('trip_id', trip.id).eq('is_composite', false).order('name'),
-    supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+    db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
+    db.from('players').select('id, name').eq('trip_id', trip.id).eq('is_composite', false).order('name'),
+    db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
     // Who added whom (migration 066), on its own and fail-soft — named in
     // the read above it would cost the whole picker before 066.
     readAllRows<{ team_set: string; player_id: string; added_by: string | null }>(
-      () => supabase
+      () => db
         .from('team_members')
         .select('team_set, player_id, added_by', { count: 'exact' })
         .eq('trip_id', trip.id)
         .order('team_set').order('player_id'),
       m => `${m.team_set}|${m.player_id}`,
     ),
-    supabase.from('rounds').select('id').eq('trip_id', trip.id),
+    db.from('rounds').select('id').eq('trip_id', trip.id),
     linkedPlayerId(tripCode),
   ])
 

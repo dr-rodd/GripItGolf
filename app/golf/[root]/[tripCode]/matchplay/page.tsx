@@ -6,7 +6,7 @@ import { bracketScoreLinks } from '@/lib/knockoutPortal'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { eventReader, type EventReader } from '@/lib/eventReader'
 import { boardRules, boardTitle, hasMatchplay, isMatchTally, needsPairings, tripQuotaScale } from '@/lib/leaderboards'
 import { buildRows } from '@/lib/boardRows'
 import { matchResultSides } from '@/lib/tagBoards'
@@ -55,9 +55,10 @@ export default async function MatchplayPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error: tripError } = await supabase
+  const { data: trip, error: tripError } = await db
     .from('trips')
     .select('id, name, formats, leaderboards, team_scoring')
     .eq('trip_code', tripCode)
@@ -75,7 +76,7 @@ export default async function MatchplayPage({
   const pairs   = needsPairings(boards)
 
   const [matchesRes, playersRes, teamsRes, memberships, nicknamesRes, setupRes, picksRes] = await Promise.all([
-    supabase
+    db
       .from('matchplay_matches')
       .select(
         'id, trip_id, round_number, round_name, slot, player_a_id, player_b_id, ' +
@@ -86,27 +87,27 @@ export default async function MatchplayPage({
       .eq('trip_id', trip.id)
       .order('round_number')
       .order('slot'),
-    supabase
+    db
       .from('players')
       .select('id, name, handicap, gender')
       .eq('trip_id', trip.id),
     // Only needed for a pairs draw, but asking for it unconditionally keeps
     // this a single round trip rather than a conditional second one.
-    supabase
+    db
       .from('teams')
       .select('id, name, team_set, color')
       .eq('trip_id', trip.id),
-    fetchMemberships(trip.id),
+    fetchMemberships(trip.id, db),
     // Leaderboard nicknames, on their own and fail-soft: naming the column
     // in the players select would fail the draw on a database that has not
     // run migration 047, and a bracket without nicknames still stands.
-    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+    db.from('players').select('id, nickname').eq('trip_id', trip.id),
     // The bracket setup — the dates each round is played by, and whether
     // this is a match play event — on its own and fail-soft, never in the
     // trip's select (migration 047 is applied by hand).
-    supabase.from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle(),
+    db.from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle(),
     // The players' own colours, on their own and fail-soft (migration 063).
-    supabase.from('players').select('id, colour').eq('trip_id', trip.id),
+    db.from('players').select('id, colour').eq('trip_id', trip.id),
   ])
 
   if (matchesRes.error) console.error('MatchplayPage matches query failed:', matchesRes.error)
@@ -218,20 +219,20 @@ export default async function MatchplayPage({
   // arranged — `course_id` in its own fail-soft query (migration 057).
   const [readings, cardRead, arrangedRes, permsRes] = await Promise.all([
     links.length > 0
-      ? readLinkedRounds(trip, links, matches, entrants, memberships, tripQuotaScale(boards))
+      ? readLinkedRounds(db, trip, links, matches, entrants, memberships, tripQuotaScale(boards))
       : Promise.resolve([]),
     linkedPlayerId(tripCode)
       .then(async id => {
         const me = cardRoster.some(p => p.id === id) ? id : null
-        const view = await readKnockout(trip, rawSetup, me, cardRoster)
-        const details = view ? await readMatchDetails(trip, view, cardRoster.map(p => ({ ...p, gender: p.gender ?? 'M' }))) : {}
+        const view = await readKnockout(db, trip, rawSetup, me, cardRoster)
+        const details = view ? await readMatchDetails(db, trip, view, cardRoster.map(p => ({ ...p, gender: p.gender ?? 'M' }))) : {}
         return { view, details }
       })
       .catch(e => { console.error('MatchplayPage card read failed:', e); return { view: null, details: {} } }),
-    supabase.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
+    db.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
     // Whether anybody may score a match (`score_matches`), on its own and
     // fail-soft — never in the trip's select (migration 049).
-    supabase.from('trips').select('event_permissions').eq('id', trip.id).maybeSingle(),
+    db.from('trips').select('event_permissions').eq('id', trip.id).maybeSingle(),
   ])
   const details = cardRead.details
   const arranged = new Set(((arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[])
@@ -324,6 +325,7 @@ export default async function MatchplayPage({
  * agreeing. See lib/matchResults.ts.
  */
 async function readLinkedRounds(
+  db: EventReader,
   trip: { id: string; team_scoring?: unknown },
   links: readonly { roundId: string }[],
   matches: readonly Record<string, unknown>[],
@@ -335,7 +337,7 @@ async function readLinkedRounds(
   const roundIds = [...new Set(links.map(l => l.roundId))]
   const nilId = '00000000-0000-0000-0000-000000000000'
 
-  const { data: rounds } = await supabase
+  const { data: rounds } = await db
     .from('rounds')
     .select('id, round_number, course_id')
     .in('id', roundIds.length > 0 ? roundIds : [nilId])
@@ -344,28 +346,28 @@ async function readLinkedRounds(
 
   const [playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes] =
     await Promise.all([
-      supabase.from('players')
+      db.from('players')
         .select('id, name, handicap, gender')
         .eq('trip_id', trip.id).eq('is_composite', false),
-      supabase.from('holes')
+      db.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
       // Read whole, past Supabase's 1,000-row cap — lib/scoreReads.ts.
-      readScores<ScoreRow>(supabase,
+      readScores<ScoreRow>(db,
         'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
         roundIds.length > 0 ? roundIds : [nilId]),
-      readLiveScores<LiveScoreRow>(supabase,
+      readLiveScores<LiveScoreRow>(db,
         'player_id, round_id, hole_number, gross_score, stableford_points',
         roundIds.length > 0 ? roundIds : [nilId]),
-      readRoundHandicaps<HandicapRow>(supabase,
+      readRoundHandicaps<HandicapRow>(db,
         'round_id, player_id, playing_handicap, tee_id',
         roundIds.length > 0 ? roundIds : [nilId]),
-      supabase.from('tees')
+      db.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
       // Locks embedded: a vacant card puts nothing in play — the rule is
       // liveRoundPresence's, in lib/rowContext.ts, same as every reader.
-      supabase.from('live_rounds')
+      db.from('live_rounds')
         .select('round_id, live_player_locks(player_id)')
         .eq('status', 'active')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),

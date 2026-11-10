@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import type { Reads } from '@/lib/eventReader'
 import { readAllRows } from '@/lib/allRows'
 import { readRoundHandicaps } from '@/lib/scoreReads'
 import type { Leaderboard } from '@/lib/leaderboards'
@@ -47,8 +47,8 @@ export type SessionCardSetup = {
 }
 
 /** Every session match on the event, rows only. */
-export async function readSessionMatchRows(tripId: string): Promise<SessionMatchRow[]> {
-  const { data, error } = await supabase
+export async function readSessionMatchRows(db: Reads, tripId: string): Promise<SessionMatchRow[]> {
+  const { data, error } = await db
     .from('session_matches')
     .select('id, round_id, slot, side_a, side_b, result, margin, tees')
     .eq('trip_id', tripId)
@@ -72,6 +72,7 @@ export function sideName(
  * matches (a card page asks for one).
  */
 export async function readSessionCards(
+  db: Reads,
   trip: { id: string },
   boards: readonly Leaderboard[],
   players: readonly Player[],
@@ -83,12 +84,12 @@ export async function readSessionCards(
   const roundIds = [...new Set(rows.map(r => r.round_id))]
   const matchIds = rows.map(r => r.id)
   const [roundsRes, hcpRes, scoresRes] = await Promise.all([
-    supabase.from('rounds').select('id, course_id, courses(name)').eq('trip_id', trip.id).in('id', roundIds),
-    readRoundHandicaps<{ round_id: string; player_id: string; tee_id: string | null }>(supabase, 'round_id, player_id, tee_id', roundIds),
+    db.from('rounds').select('id, course_id, courses(name)').eq('trip_id', trip.id).in('id', roundIds),
+    readRoundHandicaps<{ round_id: string; player_id: string; tee_id: string | null }>(db, 'round_id, player_id, tee_id', roundIds),
     // Past Supabase's 1,000-row cap — a Ryder Cup's cards are about 2,000
     // rows — so read whole, ordered on the table's own key (lib/allRows.ts).
     readAllRows<{ match_id: string; player_id: string; hole_number: number; gross: number | null }>(
-      () => supabase.from('session_match_scores').select('match_id, player_id, hole_number, gross', { count: 'exact' })
+      () => db.from('session_match_scores').select('match_id, player_id, hole_number, gross', { count: 'exact' })
         .eq('trip_id', trip.id).in('match_id', matchIds)
         .order('match_id').order('player_id').order('hole_number'),
       r => `${r.match_id}|${r.player_id}|${r.hole_number}`,
@@ -98,8 +99,8 @@ export async function readSessionCards(
   const roundById = new Map(((roundsRes.data ?? []) as unknown as RoundRow[]).map(r => [r.id, r]))
   const courseIds = [...new Set([...roundById.values()].map(r => r.course_id))]
   const [teesRes, holesRes] = courseIds.length === 0 ? [{ data: [] }, { data: [] }] : await Promise.all([
-    supabase.from('tees').select('id, course_id, name, gender, slope, course_rating, par').in('course_id', courseIds),
-    supabase.from('holes').select('course_id, hole_number, par, stroke_index, stroke_index_ladies').in('course_id', courseIds).order('hole_number'),
+    db.from('tees').select('id, course_id, name, gender, slope, course_rating, par').in('course_id', courseIds),
+    db.from('holes').select('course_id, hole_number, par, stroke_index, stroke_index_ladies').in('course_id', courseIds).order('hole_number'),
   ])
   type Tee = { id: string; course_id: string; name: string; gender: string; slope: number | null; course_rating: number | null; par: number | null }
   const tees = (teesRes.data ?? []) as Tee[]
@@ -221,12 +222,13 @@ export async function readSessionCards(
 
 /** The event's session matches with where each stands — what the leaderboard and the hub read. */
 export async function readSessionResults(
+  db: Reads,
   trip: { id: string },
   boards: readonly Leaderboard[],
   players: readonly Player[],
   ctx: { teams: { id: string; name: string }[]; memberships: Membership[] },
 ): Promise<SessionMatchResult[]> {
   if (!boards.some(b => b.competition === 'matches')) return []
-  const rows = await readSessionMatchRows(trip.id)
-  return (await readSessionCards(trip, boards, players, ctx, rows)).results
+  const rows = await readSessionMatchRows(db, trip.id)
+  return (await readSessionCards(db, trip, boards, players, ctx, rows)).results
 }

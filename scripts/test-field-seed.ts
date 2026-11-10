@@ -71,7 +71,7 @@ section('The draw seeded from that event\'s leaderboard (Ross, 4 Nov 2026)')
   const seed = {
     ...NO_FIELD_SEED, on: true,
     source: {
-      code: 'OLDKO1', name: 'Summer 2026', tripId: 'T1', adminHash: null,
+      code: 'OLDKO1', name: 'Summer 2026', tripId: 'T1', adminLocked: false,
       boards: [
         { id: 'b1', title: 'Stableford Points', order: ['o3', 'o9', 'o1'] },
         { id: 'b2', title: 'Strokes', order: ['o9'] },
@@ -239,8 +239,8 @@ async function main() {
     ok(field.includes('onKeyDown={enterGoesTo(`field-hcp-${i}`)}') && field.includes('id={`field-hcp-${i}`}'),
       'Enter after a name goes on to that player\'s handicap')
     ok(seed.includes('Seed the field from another event') && seed.includes("'Enter'") && seed.includes('<IconCheck')
-      && seed.includes('public_passcode_hash') && seed.includes('Bring across everything (optional)'),
-      'seeding: the event\'s code, its public PIN where it has one, Enter turning to a tick, then optionally its organiser PIN')
+      && seed.includes('/api/event/seed') && !seed.includes('passcode_hash') && seed.includes('Bring across everything (optional)'),
+      'seeding: the event\'s code, its public PIN where it has one, Enter turning to a tick, then optionally its organiser PIN — both PINs checked on the server, never a hash in the browser')
     ok(ko.includes('bringAcross(seed, code, passcode,') && trip.includes('bringAcross(seed, code, passcode,'),
       'creating the event brings everything across when the organiser PIN was given — a failure never stops it')
     const privacy = read('app/privacy/page.tsx')

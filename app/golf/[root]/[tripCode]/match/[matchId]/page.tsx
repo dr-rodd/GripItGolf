@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { describeShortDate } from '@/lib/itinerary'
 import { deadlineNote } from '@/lib/bracketSetup'
@@ -48,9 +48,10 @@ export default async function MatchPage({
   params: Promise<{ root: string; tripCode: string; matchId: string }>
 }) {
   const { root, tripCode, matchId } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip } = await supabase
+  const { data: trip } = await db
     .from('trips')
     .select('*, rounds(id)')
     .eq('trip_code', tripCode)
@@ -58,14 +59,14 @@ export default async function MatchPage({
   if (!trip) notFound()
 
   const [{ data: playerRows }, homesRes, arrangedRes] = await Promise.all([
-    supabase.from('players')
+    db.from('players')
       .select('id, name, handicap, claimed, gender')
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
     // Migration 057's columns, each in its own fail-soft query: before it
     // runs the page shows the match without its arrangements.
-    supabase.from('players').select('id, home_course_id').eq('trip_id', trip.id),
-    supabase.from('matchplay_matches').select('course_id, played_on, tees')
+    db.from('players').select('id, home_course_id').eq('trip_id', trip.id),
+    db.from('matchplay_matches').select('course_id, played_on, tees')
       .eq('trip_id', trip.id).eq('id', matchId).maybeSingle(),
   ])
   const players = (playerRows ?? []) as {
@@ -78,7 +79,7 @@ export default async function MatchPage({
   const arrangeable = !arrangedRes.error
   const me = await currentPlayer(tripCode, players)
 
-  const view = await readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+  const view = await readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
   const match = view?.matches.find(m => m.id === matchId)
   if (!view || !match) notFound()
 
@@ -101,19 +102,19 @@ export default async function MatchPage({
   const inMatchIds = sideIds.flatMap(id => view.members[id] ?? [])
   const [courseRes, teesRes, holesRes, contacts, scoredRes] = await Promise.all([
     arranged?.course_id
-      ? supabase.from('courses').select('id, name').eq('id', arranged.course_id).maybeSingle()
+      ? db.from('courses').select('id, name').eq('id', arranged.course_id).maybeSingle()
       : Promise.resolve({ data: null }),
     arranged?.course_id
-      ? supabase.from('tees').select('id, name, gender, slope, course_rating, par').eq('course_id', arranged.course_id)
+      ? db.from('tees').select('id, name, gender, slope, course_rating, par').eq('course_id', arranged.course_id)
       : Promise.resolve({ data: [] }),
     arranged?.course_id
-      ? supabase.from('holes').select('hole_number, stroke_index, stroke_index_ladies').eq('course_id', arranged.course_id)
+      ? db.from('holes').select('hole_number, stroke_index, stroke_index_ladies').eq('course_id', arranged.course_id)
       : Promise.resolve({ data: [] }),
     readContacts(trip.id, inMatchIds),
     // Whether the card is under way — counted, not fetched. A player's own
     // handicap is theirs to change until it is (Ross, 4 Nov 2026: "until
     // the day of play"). Fail-soft: before migration 058 nothing is scored.
-    supabase.from('match_scores').select('match_id', { count: 'exact', head: true })
+    db.from('match_scores').select('match_id', { count: 'exact', head: true })
       .eq('trip_id', trip.id).eq('match_id', matchId),
   ])
   const underWay = !scoredRes.error && (scoredRes.count ?? 0) > 0

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { fetchTripKind } from '@/app/golf/[root]/[tripCode]/kind'
 import { MAIN_SET } from '@/lib/teamSets'
 import {
@@ -41,21 +41,22 @@ export type RunChallenge = {
 }
 
 export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge | null> {
+  const db = eventReader(tripCode)
   const [kind, tripRes, extrasRes, finalRes] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, name, trip_code, start_date, end_date, settings_passcode_hash')
       .eq('trip_code', tripCode)
       .single(),
-    supabase
+    db
       .from('trips')
       .select('run_setup, event_permissions')
       .eq('trip_code', tripCode)
       .single(),
     // Its own query: before migration 055 the column does not exist, and
     // naming it above would take the whole challenge down with it.
-    supabase
+    db
       .from('trips')
       .select('run_results')
       .eq('trip_code', tripCode)
@@ -72,18 +73,18 @@ export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge 
   const extras = (extrasRes.data ?? {}) as { run_setup?: unknown; event_permissions?: unknown }
 
   const [teamsRes, playersRes, membersRes] = await Promise.all([
-    supabase
+    db
       .from('teams')
       .select('id, name, color, created_at')
       .eq('trip_id', trip.id)
       .eq('team_set', MAIN_SET)
       .order('created_at'),
-    supabase
+    db
       .from('players')
       .select('id, name, claimed, is_lead, created_at')
       .eq('trip_id', trip.id)
       .order('created_at'),
-    supabase
+    db
       .from('team_members')
       .select('team_id, player_id')
       .eq('trip_id', trip.id)

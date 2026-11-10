@@ -197,7 +197,7 @@ section('Trips have tee times too, under the same rules (Ross, 26 Oct 2026)')
     'a round added to a trip later follows it onto a tee sheet')
 
   const hub = read('app/golf/[root]/[tripCode]/page.tsx')
-  ok(/\/\/ them whole \(lib\/allRows\.ts\)\.\s*readSheetSettings\(trip\.id\),/.test(hub),
+  ok(/\/\/ them whole \(lib\/allRows\.ts\)\.\s*readSheetSettings\(db, trip\.id\),/.test(hub),
     'a trip\'s home screen reads its tee sheets as an event\'s does')
 }
 
@@ -520,7 +520,7 @@ section('The sheet reads fail-soft and writes scoped')
   const mainRounds = page.match(/select\('id, round_number[^']*'\)/)?.[0] ?? ''
   ok(!mainRounds.includes('tee_interval'),
     'the main rounds select never names a migration-050 column')
-  ok(page.includes('readSheetSettings(trip.id)'),
+  ok(page.includes('readSheetSettings(db, trip.id)'),
     'the settings ride in their own fail-soft queries')
   const sheets = read('app/golf/[root]/[tripCode]/teesheet/sheets.ts')
   ok(sheets.includes("select('id, tee_sheet')") && sheets.includes("select('id, tee_interval_mins, tee_group_size, start_format')"),

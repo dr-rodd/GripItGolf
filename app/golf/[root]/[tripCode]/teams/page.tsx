@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import OrganiserLock from '@/app/components/OrganiserLock'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -44,13 +44,14 @@ export default async function TripTeamsPage({
   searchParams: Promise<{ view?: string }>
 }) {
   const [{ root, tripCode }, { view }] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The kind alongside, not inside: a named `kind` would fail this select
   // on an un-migrated database — the note on fetchTripKind.
   const [kind, { data: trip, error: tripError }, viewerPlayerId] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, trip_code, name, formats, leaderboards, team_scoring, settings_passcode_hash')
       .eq('trip_code', tripCode)
@@ -67,18 +68,18 @@ export default async function TripTeamsPage({
   const boards = boardsForTrip(trip)
 
   const [teamsRes, playersRes, memberships, permsRes, addedRes, roundsRes, myTeeRes] = await Promise.all([
-    supabase.from('teams')
+    db.from('teams')
       .select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-    supabase
+    db
       .from('players')
       .select('id, name, handicap, gender')
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
-    fetchMemberships(trip.id),
+    fetchMemberships(trip.id, db),
     // Its own query, never the main select: pre-049 the column does not
     // exist, this errors, and self-assign simply reads at its default off.
-    supabase
+    db
       .from('trips')
       .select('event_permissions')
       .eq('id', trip.id)
@@ -86,7 +87,7 @@ export default async function TripTeamsPage({
     // Who added whom (migration 066), on its own and fail-soft — before it,
     // players put only themselves in a team.
     readAllRows<{ team_set: string; player_id: string; added_by: string | null }>(
-      () => supabase
+      () => db
         .from('team_members')
         .select('team_set, player_id, added_by', { count: 'exact' })
         .eq('trip_id', trip.id)
@@ -94,12 +95,12 @@ export default async function TripTeamsPage({
       m => `${m.team_set}|${m.player_id}`,
     ),
     // The rounds, so each list can say whether its teams go out together.
-    supabase.from('rounds').select('id, round_number, scheduled_date').eq('trip_id', trip.id),
+    db.from('rounds').select('id, round_number, scheduled_date').eq('trip_id', trip.id),
     // Where this phone's player stands on the tee sheets — leaving a
     // partnership booked on one happens there (Ross, 1 Nov 2026). Fail-soft:
     // before migration 050 there is nowhere they could be booked.
     viewerPlayerId
-      ? supabase.from('tee_assignments').select('round_id, slot_index').eq('trip_id', trip.id).eq('player_id', viewerPlayerId)
+      ? db.from('tee_assignments').select('round_id, slot_index').eq('trip_id', trip.id).eq('player_id', viewerPlayerId)
       : Promise.resolve({ data: [], error: null }),
   ])
 

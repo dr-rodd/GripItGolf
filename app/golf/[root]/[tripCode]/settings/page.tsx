@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { isEvent } from '@/lib/eventHub'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isConfirmed } from '@/lib/roster'
@@ -37,13 +37,14 @@ export default async function EventSettingsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The kind alongside, never inside the select — the kind.ts rule. The
   // field rides in as an embed, one hop rather than two.
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, name, players(id, name, claimed, is_composite)')
       .eq('trip_code', tripCode)
@@ -72,7 +73,7 @@ export default async function EventSettingsPage({ params }: {
   // beside the cookie read.
   const [me, { data: teams, error: teamsError }] = await Promise.all([
     currentPlayer(tripCode, roster),
-    supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id),
+    db.from('teams').select('id, name, team_set').eq('trip_id', trip.id),
   ])
   if (teamsError) console.error('EventSettingsPage teams query failed:', teamsError)
   const claimed = me && isConfirmed(me) ? me : null

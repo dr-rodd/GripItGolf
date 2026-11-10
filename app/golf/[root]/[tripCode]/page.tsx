@@ -3,7 +3,7 @@ import OrganiserLock from '@/app/components/OrganiserLock'
 import { readSessionResults } from './session/sessionMatches'
 import { overallOf, sessionName, bySlot, itinerarySessions } from '@/lib/sessions'
 import type { Metadata } from 'next'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import Link from 'next/link'
 import { hasMatchplay, needsPairings, primary } from '@/lib/leaderboards'
 import { boardsForTrip, isLegacy } from '@/lib/leaderboardsCompat'
@@ -98,7 +98,7 @@ function formatDate(d: string | null) {
  * cost this screen a second copy of its first query.
  */
 const fetchTrip = cache(async (tripCode: string) => {
-  const { data, error } = await supabase
+  const { data, error } = await eventReader(tripCode)
     .from('trips')
     .select('*')
     .eq('trip_code', tripCode)
@@ -120,6 +120,7 @@ export async function generateMetadata(
   { params }: { params: Promise<{ tripCode: string }> },
 ): Promise<Metadata> {
   const { tripCode } = await params
+  const db = eventReader(tripCode)
   const trip = await fetchTrip(tripCode)
   if (!trip) return {}
 
@@ -146,6 +147,7 @@ export default async function TripPage({ params, searchParams }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   // Where this lives — /trip/X or, for an event, /event/X (lib/tripPaths.ts).
   const tripHome = tripHomeAt(root, tripCode)
 
@@ -175,19 +177,19 @@ export default async function TripPage({ params, searchParams }: {
     // for the Event Hub's schedule; selecting a column migration 046 adds
     // would fail the whole query on an un-migrated database, but a trip
     // cannot be an event there either, so it is only asked for when it is.
-    supabase
+    db
       .from('rounds')
       .select(`id, round_number, course_id, scheduled_date, itinerary_item_id${isEvent ? ', start_format' : ''}`)
       .eq('trip_id', trip.id)
       .order('round_number'),
-    supabase
+    db
       .from('players')
       .select('id, name, handicap, claimed, team_id, is_lead, gender')
       .eq('trip_id', trip.id)
       // A composite is a synthetic scorecard, not a person.
       .eq('is_composite', false)
       .order('name'),
-    supabase
+    db
       .from('itinerary_items')
       .select('id, day_index, position, kind, course_id, tee_time, tee_count, ' +
               'stay_name, travel_mode, from_place, to_place, duration_mins, ' +
@@ -198,7 +200,7 @@ export default async function TripPage({ params, searchParams }: {
     // End times ride in their own query, never the select above — naming a
     // column migration 048 adds would fail the whole hub on an un-migrated
     // database, while failing this costs only the ranges on the day plan.
-    supabase
+    db
       .from('itinerary_items')
       .select('id, end_time')
       .eq('trip_id', trip.id),
@@ -225,13 +227,13 @@ export default async function TripPage({ params, searchParams }: {
     //
     // `courseMap` below is only ever read by id, so the platform courses this
     // trip does not play are never looked up.
-    supabase.from('courses').select('id, name')
+    db.from('courses').select('id, name')
       .or(`trip_id.eq.${trip.id},trip_id.is.null`),
     // The organiser's notices — events only, newest first. The same
     // conditional-promise shape the stats fetch uses, so the batch stays
     // one Promise.all whichever kind this is.
     isEvent
-      ? supabase
+      ? db
           .from('event_messages')
           .select('id, body, created_at')
           .eq('trip_id', trip.id)
@@ -245,7 +247,7 @@ export default async function TripPage({ params, searchParams }: {
     // rounds select above, so a database without migration 031 loses the
     // "Doesn't count" note and nothing else. Only a dated event asks.
     isEvent && trip.start_date
-      ? supabase.from('rounds').select('id, casual').eq('trip_id', trip.id)
+      ? db.from('rounds').select('id, casual').eq('trip_id', trip.id)
       : Promise.resolve({ data: [], error: null }),
     // The tee times module's two reads — an event's or a trip's, since tee
     // times reached trips — in the same breath rather than after the rounds
@@ -255,9 +257,9 @@ export default async function TripPage({ params, searchParams }: {
     // ride in the settings read, so a trip's main select never names one.
     // The assignments are read whole for the same reason the sheet reads
     // them whole (lib/allRows.ts).
-    readSheetSettings(trip.id),
+    readSheetSettings(db, trip.id),
     readAllRows<{ round_id: string; player_id: string; slot_index: number }>(
-      () => supabase
+      () => db
         .from('tee_assignments')
         .select('round_id, player_id, slot_index', { count: 'exact' })
         .eq('trip_id', trip.id)
@@ -428,13 +430,13 @@ export default async function TripPage({ params, searchParams }: {
   // story 2). Started now and awaited at the render, so it rides beside
   // the standing rather than after it; a failed read costs the card only.
   const knockoutView = isEventKind(trip.kind) && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
-    ? readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+    ? readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
         .then(async view => {
           if (!view) return null
           // Your own match, when it is being played now, says so on the card.
           const next = myNextMatch(view.matches, view.entrantId)
           const live = next
-            ? (await readLiveMatches(trip, { ...view, matches: view.matches.filter(m => m.id === next.id) },
+            ? (await readLiveMatches(db, trip, { ...view, matches: view.matches.filter(m => m.id === next.id) },
                 players as { id: string; name: string; handicap: number | null; gender: string }[]))[0] ?? null
             : null
           return { view, live }
@@ -446,7 +448,7 @@ export default async function TripPage({ params, searchParams }: {
   const myMatchDetails = me && isConfirmed(me) && isEventKind(trip.kind)
       && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
     ? Promise.all([
-        supabase.from('players').select('home_course_id, courses:home_course_id(name)')
+        db.from('players').select('home_course_id, courses:home_course_id(name)')
           .eq('id', me.id).eq('trip_id', trip.id).maybeSingle(),
         readContacts(trip.id, [me.id]),
       ]).then(([homeRes, contacts]) => {
@@ -492,11 +494,11 @@ export default async function TripPage({ params, searchParams }: {
     overallOf(hubBoards) && hubBoards.some(b => b.competition === 'matches')
       ? await (async () => {
           const [pl, tm, mb] = await Promise.all([
-            supabase.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
-            supabase.from('teams').select('id, name').eq('trip_id', trip.id),
-            supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+            db.from('players').select('id, name, handicap, gender').eq('trip_id', trip.id).eq('is_composite', false),
+            db.from('teams').select('id, name').eq('trip_id', trip.id),
+            db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
           ])
-          const sessionMatches = await readSessionResults(trip,
+          const sessionMatches = await readSessionResults(db, trip,
             hubBoards, (pl.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
             { teams: (tm.data ?? []) as { id: string; name: string }[], memberships: (mb.data ?? []) as { team_id: string; team_set: string; player_id: string }[] })
             .catch(() => [])
@@ -512,7 +514,7 @@ export default async function TripPage({ params, searchParams }: {
       // Gated exactly as the leaderboard page gates it. A trip that has
       // chosen real boards must not be scored on the old trip-wide options,
       // or this screen and that one disagree about who is where.
-      fetchPlacing(
+      fetchPlacing(db, 
         trip.id, lead, me.id,
         isLegacy(parseLeaderboards(trip.leaderboards))
           ? parseTeamScoring(trip.team_scoring)
@@ -523,7 +525,7 @@ export default async function TripPage({ params, searchParams }: {
         hubSessions,
       ),
       hasMatchplay(boards)
-        ? supabase
+        ? db
             .from('matchplay_matches')
             .select('round_number, round_name, player_a_id, player_b_id, ' +
                     'player_a_is_bye, player_b_is_bye, ' +
@@ -537,7 +539,7 @@ export default async function TripPage({ params, searchParams }: {
       // An event whose stats have the tab does not draw them here, so
       // does not pay for them either.
       trip.track_stats === true && statsOnHome
-        ? fetchTripStats(trip.id)
+        ? fetchTripStats(db, trip.id)
         : Promise.resolve(null),
     ])
 
@@ -579,8 +581,8 @@ export default async function TripPage({ params, searchParams }: {
       const pairs = needsPairings(boards)
       const [memberships, teamsRes] = pairs
         ? await Promise.all([
-            fetchMemberships(trip.id),
-            supabase.from('teams').select('id, name').eq('trip_id', trip.id),
+            fetchMemberships(trip.id, db),
+            db.from('teams').select('id, name').eq('trip_id', trip.id),
           ])
         : [[], null]
       const entrantId = pairs

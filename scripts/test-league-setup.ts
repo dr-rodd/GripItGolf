@@ -759,7 +759,7 @@ section('Every round has its own leaderboard; a round can stop counting')
     'the gear sits beside the tile, outside its link')
 
   const hub = read('app/golf/[root]/[tripCode]/page.tsx')
-  ok(hub.includes("supabase.from('rounds').select('id, casual')"),
+  ok(hub.includes("db.from('rounds').select('id, casual')"),
     'the hub reads it in its own fail-soft query')
 
   const summary = read('app/golf/[root]/[tripCode]/round/[roundNumber]/page.tsx')
@@ -823,9 +823,9 @@ section('A player\'s card in a round can be switched off, and back on')
   ok(rc.includes('cardsOff: new Set(input.cardsOff)'), 'the one assembly carries the list')
 
   const hub = read('lib/hubStanding.ts')
-  ok(hub.includes('fetchLeague(tripId),') && hub.includes('.filter(s => !off.has(cardKey(s.round_id, s.player_id)))'),
+  ok(hub.includes('fetchLeague(db, tripId),') && hub.includes('.filter(s => !off.has(cardKey(s.round_id, s.player_id)))'),
     'the hub\'s cheap standing drops it too, so it cannot disagree with the board')
-  ok(hub.includes('fetchLeagueCards(tripId,') && hub.includes('cardsOff: league.cardsOff,'),
+  ok(hub.includes('fetchLeagueCards(db, tripId,') && hub.includes('cardsOff: league.cardsOff,'),
     '  …and its full path, both reading it fail-soft in their own batch')
   ok(read('app/golf/[root]/[tripCode]/leaderboard/page.tsx').includes('cardsOff={leagueSetup?.cardsOff}'),
     'the leaderboard is handed it')

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import type { Reads } from '@/lib/eventReader'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { MAIN_SET, membersOf, setOf, teamFor } from '@/lib/teamSets'
 import { fetchMemberships } from '@/lib/teamMembers'
@@ -48,6 +48,7 @@ type Row = {
 }
 
 export async function readKnockout(
+  db: Reads,
   trip: { id: string; leaderboards?: unknown; formats?: unknown; team_scoring?: unknown },
   /** `trips.bracket_setup` as the caller read it — fail-soft, its own query. */
   rawSetup: unknown,
@@ -60,16 +61,16 @@ export async function readKnockout(
   if (!draw) return null
 
   const [matchesRes, memberships, teamsRes, picksRes] = await Promise.all([
-    supabase.from('matchplay_matches')
+    db.from('matchplay_matches')
       .select('id, round_number, round_name, slot, player_a_id, player_b_id, ' +
               'player_a_is_bye, player_b_is_bye, team_a_id, team_b_id, ' +
               'winner_player_id, winner_team_id, result, entrant_type')
       .eq('trip_id', trip.id)
       .order('round_number').order('slot'),
-    fetchMemberships(trip.id),
-    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
+    fetchMemberships(trip.id, db),
+    db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
     // The players' own colours, on their own and fail-soft (migration 063).
-    supabase.from('players').select('id, colour').eq('trip_id', trip.id),
+    db.from('players').select('id, colour').eq('trip_id', trip.id),
   ])
   if (matchesRes.error) console.error('readKnockout matches query failed:', matchesRes.error)
   const rows = (matchesRes.data ?? []) as unknown as Row[]

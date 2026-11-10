@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { fetchTripStats } from '@/lib/hubStanding'
 import { coverage } from '@/lib/holeStats'
 import { tripState, todayString } from '@/lib/tripStatus'
@@ -30,9 +30,10 @@ export default async function StatsPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error: tripError } = await supabase
+  const { data: trip, error: tripError } = await db
     .from('trips')
     .select('*')
     .eq('trip_code', tripCode)
@@ -54,7 +55,7 @@ export default async function StatsPage({
   // mentions, and `stats` is the filtered set. A course with no holes behind
   // it still cannot become a chip.
   const { stats, holes, players, rounds, courseByRound, courseNames, error } =
-    await fetchTripStats(trip.id)
+    await fetchTripStats(db, trip.id)
 
   // The roster is fetched here rather than taken from `players` above so the
   // cookie is matched against the same shape every other screen matches it

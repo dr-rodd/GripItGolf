@@ -16,10 +16,12 @@ import { readAllRows, type AllRows } from './allRows'
  *
  * `cols` is the caller's own column list, unchanged; it must include the
  * key's columns, which every reader already asks for. Works with either
- * client: the pages read on the anon key, the browser's in-play board too.
+ * client: the server's event reader (lib/eventReader.ts), and the
+ * browser's own for its in-play board.
  */
 
-type Client = SupabaseClient
+/** Only `from` — so the browser's client and the server's event reader (lib/eventReader.ts) both do. */
+type Client = Pick<SupabaseClient, 'from'>
 
 /** Committed scores for these rounds. UNIQUE (round_id, player_id, hole_id). */
 export function readScores<T extends { round_id: string; player_id: string; hole_id: string }>(

@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { splitCourseName } from '@/lib/courseDirectory'
 import { allowsParticipant } from '@/lib/eventPermissions'
@@ -32,19 +32,20 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
   searchParams: Promise<{ view?: string }>
 }) {
   const [{ root, tripCode, roundId, slot }, { view }] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   const slotNo = Number(slot)
   if (!Number.isInteger(slotNo) || slotNo < 0) notFound()
 
-  const { data: trip } = await supabase.from('trips').select('*').eq('trip_code', tripCode).single()
+  const { data: trip } = await db.from('trips').select('*').eq('trip_code', tripCode).single()
   if (!trip) notFound()
 
   const [playersRes, teamsRes, membersRes, roundRes, matchRes] = await Promise.all([
-    supabase.from('players').select('id, name, handicap, claimed, gender').eq('trip_id', trip.id).eq('is_composite', false),
-    supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
-    supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
-    supabase.from('rounds').select('id, round_number').eq('trip_id', trip.id).eq('id', roundId).maybeSingle(),
-    supabase.from('session_matches').select('id, round_id, slot, side_a, side_b, result, margin, tees')
+    db.from('players').select('id, name, handicap, claimed, gender').eq('trip_id', trip.id).eq('is_composite', false),
+    db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id),
+    db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id),
+    db.from('rounds').select('id, round_number').eq('trip_id', trip.id).eq('id', roundId).maybeSingle(),
+    db.from('session_matches').select('id, round_id, slot, side_a, side_b, result, margin, tees')
       .eq('trip_id', trip.id).eq('round_id', roundId).eq('slot', slotNo).maybeSingle(),
   ])
   if (!roundRes.data) notFound()
@@ -82,9 +83,9 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
   }
 
   const [{ setups }, scoredRes] = await Promise.all([
-    readSessionCards(trip, boards, players, { teams, memberships }, [row]),
+    readSessionCards(db, trip, boards, players, { teams, memberships }, [row]),
     // Whether the card is under way — the tees are fixed once it is.
-    supabase.from('session_match_scores').select('match_id', { count: 'exact', head: true })
+    db.from('session_match_scores').select('match_id', { count: 'exact', head: true })
       .eq('trip_id', trip.id).eq('match_id', row.id),
   ])
   // A failed count reads as under way: the safer answer, it only locks the tees.

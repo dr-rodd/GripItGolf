@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import { overallOf, sessionBoardFor } from '@/lib/sessions'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceCycle } from '@/lib/handicapAllowance'
 import { tripQuotaScale } from '@/lib/leaderboards'
@@ -22,6 +22,7 @@ export default async function TripCoursePage({
   params: Promise<{ root: string; tripCode: string; roundNumber: string }>
 }) {
   const { root, tripCode, roundNumber } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   const roundNum = parseInt(roundNumber)
   if (isNaN(roundNum)) notFound()
@@ -31,7 +32,7 @@ export default async function TripCoursePage({
   // removes is a whole round trip. `CourseDashboardClient` needs every round
   // of the trip (the activate step offers them), so this is the same data as
   // before, arriving with the trip instead of after it.
-  const { data: trip } = await supabase
+  const { data: trip } = await db
     .from('trips')
     .select('*, rounds(id, round_number, status, courses(id, name))')
     .eq('trip_code', tripCode)
@@ -71,12 +72,12 @@ export default async function TripCoursePage({
   const event = isEvent((trip as { kind?: unknown }).kind)
 
   const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes, picksRes, teamsRes] = await Promise.all([
-    supabase
+    db
       .from('players')
       .select('id, name, role, handicap, gender, is_composite, teams(name, color)')
       .eq('trip_id', trip.id)
       .order('name'),
-    supabase
+    db
       .from('holes')
       .select(
         'id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies, ' +
@@ -85,7 +86,7 @@ export default async function TripCoursePage({
       )
       .eq('course_id', courseId)
       .order('hole_number'),
-    supabase
+    db
       .from('tees')
       .select('id, course_id, name, gender, par, course_rating, slope')
       .eq('course_id', courseId),
@@ -96,21 +97,21 @@ export default async function TripCoursePage({
     // this screen. Every consumer filters to `liveRound.round_id` before it
     // uses one: the scoring flow, the live board, the card. Scoped here
     // instead, so the rows that arrive are the rows that get read.
-    supabase
+    db
       .from('round_handicaps')
       .select('round_id, player_id, playing_handicap, tee_id')
       .eq('round_id', thisRound.id),
     // Leaderboard nicknames for the in-play panel, on their own and
     // fail-soft: naming the column in the players select would fail this
     // whole screen on a database that has not run migration 047.
-    supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+    db.from('players').select('id, nickname').eq('trip_id', trip.id),
     // An event's own colours, on their own and fail-soft (migration 063),
     // and its teams — whether it has sides decides whether a pick counts.
     event
-      ? supabase.from('players').select('id, colour').eq('trip_id', trip.id)
+      ? db.from('players').select('id, colour').eq('trip_id', trip.id)
       : Promise.resolve({ data: null }),
     event
-      ? supabase.from('teams').select('id, name, team_set').eq('trip_id', trip.id)
+      ? db.from('teams').select('id, name, team_set').eq('trip_id', trip.id)
       : Promise.resolve({ data: null }),
   ])
 

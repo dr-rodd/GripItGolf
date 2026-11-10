@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import TripHeader from '@/app/components/TripHeader'
 import BackButton from '@/app/components/BackButton'
 import ShareTrip from '../ShareTrip'
@@ -23,13 +23,14 @@ export const dynamic = 'force-dynamic'
  */
 export default async function SharePage({ params }: { params: Promise<{ root: string; tripCode: string }> }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The kind rides alongside, fail-soft in its own request — an event says
   // event on this screen, and an un-migrated database simply reads as a trip.
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, name')
       .eq('trip_code', tripCode)

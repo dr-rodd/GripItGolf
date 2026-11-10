@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { overallOf } from '@/lib/sessions'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
@@ -43,9 +43,10 @@ export default async function OrganiserPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip, error } = await supabase
+  const { data: trip, error } = await db
     .from('trips')
     .select('id, trip_code, name, kind, settings_passcode_hash, start_date, end_date, leaderboards, track_stats')
     .eq('trip_code', tripCode)
@@ -87,22 +88,22 @@ export default async function OrganiserPage({ params }: {
     permsResult, playersResult, claimedResult, teeSettingsResult, teeAssignmentsResult,
     tagsResult, taggedResult,
   ] = await Promise.all([
-    supabase
+    db
       .from('event_messages')
       .select('id, body, created_at')
       .eq('trip_id', trip.id)
       .order('created_at', { ascending: false }),
-    supabase
+    db
       .from('rounds')
       .select('id, round_number, itinerary_item_id, start_format, scheduled_date, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
-    supabase
+    db
       .from('itinerary_items')
       .select('id, tee_time')
       .eq('trip_id', trip.id)
       .eq('kind', 'golf'),
-    supabase
+    db
       .from('trips')
       .select('bracket_setup')
       .eq('id', trip.id)
@@ -110,19 +111,19 @@ export default async function OrganiserPage({ params }: {
     // Its own query for the same reason as the setup: pre-migration-049
     // the column does not exist, this errors, and the toggles simply show
     // their defaults.
-    supabase
+    db
       .from('trips')
       .select('event_permissions')
       .eq('id', trip.id)
       .single(),
     // The bird's-eye numbers: who is confirmed, out of how many. A count
     // in a header, not a body — the scoring path's own rule.
-    supabase
+    db
       .from('players')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
       .eq('is_composite', false),
-    supabase
+    db
       .from('players')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
@@ -132,9 +133,9 @@ export default async function OrganiserPage({ params }: {
     // fail-soft — and who is on one, which is what keeps a sheet made
     // before the wizard live (lib/teeSheet.ts `roundSheet`). Read whole,
     // as the sheet reads them (lib/allRows.ts).
-    readSheetSettings(trip.id),
+    readSheetSettings(db, trip.id),
     readAllRows<{ round_id: string; player_id: string }>(
-      () => supabase
+      () => db
         .from('tee_assignments')
         .select('round_id, player_id', { count: 'exact' })
         .eq('trip_id', trip.id)
@@ -144,12 +145,12 @@ export default async function OrganiserPage({ params }: {
     // The Teams & tags card's numbers. A tag is a team on the main sheet
     // (lib/tagBoards.ts), so both are counts in headers against tables
     // that have existed since migration 023.
-    supabase
+    db
       .from('teams')
       .select('id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)
       .eq('team_set', TAG_SET),
-    supabase
+    db
       .from('team_members')
       .select('player_id', { count: 'exact', head: true })
       .eq('trip_id', trip.id)

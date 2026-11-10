@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { currentPlayer } from '@/lib/currentPlayer'
 import { isMine } from '@/lib/knockoutPortal'
 import { splitCourseName } from '@/lib/courseDirectory'
@@ -35,22 +35,23 @@ export default async function MatchCardPage({
   searchParams: Promise<{ view?: string }>
 }) {
   const [{ root, tripCode, matchId }, { view: opensOn }] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  const { data: trip } = await supabase.from('trips').select('*').eq('trip_code', tripCode).single()
+  const { data: trip } = await db.from('trips').select('*').eq('trip_code', tripCode).single()
   if (!trip) notFound()
 
-  const { data: playerRows } = await supabase.from('players').select('id, name, handicap, claimed, gender')
+  const { data: playerRows } = await db.from('players').select('id, name, handicap, claimed, gender')
     .eq('trip_id', trip.id).eq('is_composite', false)
   const players = (playerRows ?? []) as {
     id: string; name: string; handicap: number | null; claimed: boolean | null; gender: string
   }[]
   const me = await currentPlayer(tripCode, players)
-  const view = await readKnockout(trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+  const view = await readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
   const match = view?.matches.find(m => m.id === matchId)
   if (!view || !match) notFound()
 
-  const setup = (await readCardSetups(trip, view, players, [matchId])).get(matchId)
+  const setup = (await readCardSetups(db, trip, view, players, [matchId])).get(matchId)
   const card = setup?.card ?? null
   const named = setup?.courseName ? splitCourseName(setup.courseName) : null
   const mySide = !view.entrantId || !isMine(match, view.entrantId) ? null

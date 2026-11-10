@@ -1,7 +1,7 @@
 import { cache } from 'react'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { overallOf } from '@/lib/sessions'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { teeSheetInUse } from '@/lib/eventHub'
 
 /**
@@ -19,7 +19,7 @@ import { teeSheetInUse } from '@/lib/eventHub'
  * before it: the whole point of the shape is that it adds no round trip.
  */
 export const fetchTripKind = cache(async (tripCode: string): Promise<string | null> => {
-  const { data } = await supabase
+  const { data } = await eventReader(tripCode)
     .from('trips')
     .select('kind')
     .eq('trip_code', tripCode)
@@ -33,7 +33,7 @@ export const fetchTripKind = cache(async (tripCode: string): Promise<string | nu
  * migration 060 the column is not there, and no column is no lock.
  */
 export const fetchEntryLock = cache(async (tripCode: string): Promise<string | null> => {
-  const { data, error } = await supabase
+  const { data, error } = await eventReader(tripCode)
     .from('trips')
     .select('public_passcode_hash')
     .eq('trip_code', tripCode)
@@ -49,7 +49,7 @@ export const fetchEntryLock = cache(async (tripCode: string): Promise<string | n
  * kind (before migration 047 there is no column, and no column is no).
  */
 export const fetchIsKnockout = cache(async (tripCode: string): Promise<boolean> => {
-  const { data, error } = await supabase
+  const { data, error } = await eventReader(tripCode)
     .from('trips')
     .select('format:bracket_setup->>format')
     .eq('trip_code', tripCode)
@@ -66,7 +66,7 @@ export const fetchIsKnockout = cache(async (tripCode: string): Promise<boolean> 
  * neither, and the bar is four.
  */
 export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes: boolean; stats: boolean; orderOfPlay: boolean }> => {
-  const { data, error } = await supabase
+  const { data, error } = await eventReader(tripCode)
     .from('trips')
     .select('track_stats, leaderboards, rounds(start_format)')
     .eq('trip_code', tripCode)

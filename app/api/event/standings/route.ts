@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { hashPasscode } from '@/lib/passcode'
 import { EVENT_CODE } from '@/lib/fieldSeed'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
@@ -30,8 +30,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as { code?: unknown; pin?: unknown }
   const code = String(body.code ?? '').toUpperCase().trim()
   if (!EVENT_CODE.test(code)) return NextResponse.json({ boards: [] }, { status: 400 })
+  const db = eventReader(code)
 
-  const { data: trip } = await supabase
+  const { data: trip } = await db
     .from('trips')
     .select('id, leaderboards, formats, team_scoring')
     .eq('trip_code', code)
@@ -39,7 +40,7 @@ export async function POST(req: NextRequest) {
   if (!trip) return NextResponse.json({ boards: [] }, { status: 404 })
 
   // The public PIN in its own read: before migration 060 there is none.
-  const pub = await supabase.from('trips').select('public_passcode_hash').eq('id', trip.id).maybeSingle()
+  const pub = await db.from('trips').select('public_passcode_hash').eq('id', trip.id).maybeSingle()
   const publicHash = !pub.error ? (pub.data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash : null
   if (publicHash && (await hashPasscode(String(body.pin ?? ''))) !== publicHash) {
     return NextResponse.json({ boards: [] }, { status: 403 })
@@ -48,7 +49,7 @@ export async function POST(req: NextRequest) {
   const tables = boardsForTrip(trip).filter(lb => lb.audience === 'individual' && lb.competition === 'league')
   if (tables.length === 0) return NextResponse.json({ boards: [] })
 
-  const { ctx } = await fetchTripContext(trip.id, parseTeamScoring(trip.team_scoring))
+  const { ctx } = await fetchTripContext(db, trip.id, parseTeamScoring(trip.team_scoring))
   if (!ctx) return NextResponse.json({ boards: [] })
 
   const boards = tables

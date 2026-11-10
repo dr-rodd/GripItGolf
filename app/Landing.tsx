@@ -159,17 +159,14 @@ export default function Landing() {
 
     const entered = code.toUpperCase().trim()
     try {
-      // Imported when asked for rather than at the top of the file: this
-      // page renders without Supabase configured (the tests do exactly
-      // that), and nothing else on it needs a database.
-      const { supabase } = await import('@/lib/supabase')
-      const { data } = await supabase
-        .from('trips')
-        .select('trip_code')
-        .eq('trip_code', entered)
-        .single()
+      // Asked of the server, which reads the event on its own key — a phone
+      // that has entered nothing cannot read it from row-level security
+      // stage 3 (app/api/event/find).
+      const res = await fetch(`/api/event/find?code=${encodeURIComponent(entered)}`, { cache: 'no-store' })
+      if (res.status !== 200 && res.status !== 404) throw new Error(`find ${res.status}`)
+      const data = await res.json() as { code: string | null }
 
-      if (!data) {
+      if (!data.code) {
         setError('Event not found — check the code and try again')
         setChecking(false)
         return
@@ -178,7 +175,7 @@ export default function Landing() {
       setChecking(false)
       // The short link sends a code to wherever it lives — /trip/, /event/
       // or /run/ — so this page need not know the kind (app/[code]/page.tsx).
-      depart(`/${data.trip_code}`)
+      depart(`/${data.code}`)
     } catch {
       setError('Could not check the code — try again')
       setChecking(false)

@@ -1,4 +1,4 @@
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { overallOf, sessionBoardFor, sessionSlotCount } from '@/lib/sessions'
 import { tripHomeAt } from '@/lib/tripPaths'
 import { eventTags } from '@/lib/tagBoards'
@@ -46,6 +46,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
   searchParams: Promise<{ round?: string; edit?: string }>
 }) {
   const [{ root, tripCode }, { round: initialRoundId, edit }] = await Promise.all([params, searchParams])
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   // A tee time to open for changing, from the Teams page (stage 2).
   const editSlot = initialRoundId && edit && /^\d{1,3}$/.test(edit) ? Number(edit) : null
@@ -54,7 +55,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
   // lead player and passcode.
   const [kind, { data: trip, error }] = await Promise.all([
     fetchTripKind(tripCode),
-    supabase
+    db
       .from('trips')
       .select('id, trip_code, name, leaderboards, settings_passcode_hash')
       .eq('trip_code', tripCode)
@@ -91,17 +92,17 @@ export default async function TeeSheetPage({ params, searchParams }: {
     roundsResult, itemsResult, playersResult, settingsResult,
     assignmentsResult, permsResult, teamsResult, membersResult, bookersResult, addedResult,
   ] = await Promise.all([
-    supabase
+    db
       .from('rounds')
       .select('id, round_number, itinerary_item_id, start_format, scheduled_date, courses(name)')
       .eq('trip_id', trip.id)
       .order('round_number'),
-    supabase
+    db
       .from('itinerary_items')
       .select('id, tee_time')
       .eq('trip_id', trip.id)
       .eq('kind', 'golf'),
-    supabase
+    db
       .from('players')
       .select('id, name, claimed, handicap, gender')
       .eq('trip_id', trip.id)
@@ -109,21 +110,21 @@ export default async function TeeSheetPage({ params, searchParams }: {
       .order('name'),
     // Each round's sheet settings — the wizard's rules and the older two
     // columns, each fail-soft on its own.
-    readSheetSettings(trip.id),
+    readSheetSettings(db, trip.id),
     // The assignments, fail-soft the same way — pre-050 the sheet is empty
     // and the first write says calmly what is missing.
     // Read whole: one row per player per round, so a long league with a
     // sheet passes Supabase's 1,000-row cap, and a seat past it would look
     // empty (lib/allRows.ts). UNIQUE (round_id, player_id) ends the order.
     readAllRows<{ round_id: string; player_id: string; slot_index: number; created_at: string }>(
-      () => supabase
+      () => db
         .from('tee_assignments')
         .select('round_id, player_id, slot_index, created_at', { count: 'exact' })
         .eq('trip_id', trip.id)
         .order('created_at').order('round_id').order('player_id'),
       a => `${a.round_id}|${a.player_id}`,
     ),
-    supabase
+    db
       .from('trips')
       .select('event_permissions')
       .eq('id', trip.id)
@@ -133,15 +134,15 @@ export default async function TeeSheetPage({ params, searchParams }: {
     // round can be grouped, a team formed and the tag gate answered
     // without a second trip.
     anyTeamBoard || playingForTags
-      ? supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id)
+      ? db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id)
       : Promise.resolve({ data: null, error: null }),
     anyTeamBoard || playingForTags
-      ? supabase.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id)
+      ? db.from('team_members').select('team_id, team_set, player_id').eq('trip_id', trip.id)
       : Promise.resolve({ data: null, error: null }),
     // Who booked each name (migration 065), on its own and fail-soft —
     // named in the read above it would cost the whole sheet before 065.
     readAllRows<{ round_id: string; player_id: string; booked_by: string | null }>(
-      () => supabase
+      () => db
         .from('tee_assignments')
         .select('round_id, player_id, booked_by', { count: 'exact' })
         .eq('trip_id', trip.id)
@@ -151,7 +152,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
     // Whether who put each player in their team is recorded (migration
     // 066) — a booking that makes a partnership names it only then.
     anyTeamBoard
-      ? supabase.from('team_members').select('added_by').eq('trip_id', trip.id).limit(1)
+      ? db.from('team_members').select('added_by').eq('trip_id', trip.id).limit(1)
       : Promise.resolve({ data: null, error: { message: 'no team boards' } }),
   ])
 
@@ -313,8 +314,8 @@ export default async function TeeSheetPage({ params, searchParams }: {
   const hasMatchSessions = allRounds.some(r => isMatchSession(r.id))
   const sheetRounds = rounds.filter(r => !isMatchSession(r.id))
   const matchResults = hasMatchSessions
-    ? (await readSessionCards(trip, boards, roster.map(p => ({ ...p, gender: p.gender ?? 'M' })),
-        { teams: allTeams, memberships }, await readSessionMatchRows(trip.id))).results
+    ? (await readSessionCards(db, trip, boards, roster.map(p => ({ ...p, gender: p.gender ?? 'M' })),
+        { teams: allTeams, memberships }, await readSessionMatchRows(db, trip.id))).results
     : []
   const tags = eventTags(allTeams)
   const tagIdOf = Object.fromEntries(memberships.filter(m => m.team_set === TAG_SET).map(m => [m.player_id, m.team_id]))

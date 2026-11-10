@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { overallOf } from '@/lib/sessions'
 import { readSessionResults } from '../session/sessionMatches'
 import { isKnockoutEvent } from '@/lib/bracketSetup'
-import { supabase } from '@/lib/supabase'
+import { eventReader } from '@/lib/eventReader'
 import { parseFormats } from '@/lib/formats'
 import { isMatchTally, parseLeaderboards } from '@/lib/leaderboards'
 import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
@@ -47,6 +47,7 @@ export default async function TripLeaderboardPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
   // The trip and its rounds in one request.
@@ -64,7 +65,7 @@ export default async function TripLeaderboardPage({
   // keep working on a database without it. The ordering has to name the
   // embedded table; left off, the rounds come back in whatever order the
   // join produced and the board's columns are shuffled.
-  const { data: trip } = await supabase
+  const { data: trip } = await db
     .from('trips')
     .select('*, rounds(*, courses(id, name))')
     .eq('trip_code', tripCode)
@@ -100,32 +101,32 @@ export default async function TripLeaderboardPage({
   const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
          memberships, nicknamesRes, giLinked, roundCards, picksRes] =
     await Promise.all([
-      supabase.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-      supabase.from('players')
+      db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
+      db.from('players')
         .select('id, name, handicap, gender, is_composite')
         .eq('trip_id', trip.id).eq('is_composite', false).order('name'),
-      supabase.from('holes')
+      db.from('holes')
         .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId])
         .order('hole_number'),
       // Every score, however many — lib/scoreReads.ts reads past Supabase's
       // 1,000-row cap, which a trip of fourteen playing four rounds reaches.
-      readScores<Score>(supabase,
+      readScores<Score>(db,
         'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
         roundIds.length > 0 ? roundIds : [nilId]),
       // In-progress scores — merged client-side so the board moves during play
-      readLiveScores<LiveScore>(supabase,
+      readLiveScores<LiveScore>(db,
         'player_id, round_id, hole_number, gross_score, stableford_points',
         roundIds.length > 0 ? roundIds : [nilId]),
       // `tee_id` comes with them: a board playing off a percentage needs the
       // course handicap before it was rounded, and that can only be worked out
       // again from the tee it was played off.
-      readRoundHandicaps<RoundHcp>(supabase,
+      readRoundHandicaps<RoundHcp>(db,
         'round_id, player_id, playing_handicap, tee_id',
         roundIds.length > 0 ? roundIds : [nilId]),
       // The ratings behind those tees, so the unrounded course handicap can be
       // rebuilt. Only a board playing off a percentage reads it.
-      supabase.from('tees')
+      db.from('tees')
         .select('id, slope, course_rating, par')
         .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
       // A round is "in play" when a scorecard is open on it — not merely
@@ -133,19 +134,19 @@ export default async function TripLeaderboardPage({
       // who is on that card is what decides which rows wear the live dot, and
       // it has to be per player — not everybody plays every round, and a
       // signed card is not live however busy the rest of the trip is.
-      supabase.from('live_rounds')
+      db.from('live_rounds')
         .select('id, round_id, live_player_locks(player_id)')
         .eq('status', 'active')
         .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
       // Who is in which team, on every sheet. A trip can run a league between
       // fours and a knockout between pairings, so this cannot be a field on
       // the player — see lib/teamSets.ts.
-      fetchMemberships(trip.id),
+      fetchMemberships(trip.id, db),
       // Leaderboard nicknames, on their own and fail-soft: naming the column
       // in the players select above would fail the whole roster on a
       // database that has not run migration 047, and a board without
       // nicknames still stands.
-      supabase.from('players').select('id, nickname').eq('trip_id', trip.id),
+      db.from('players').select('id, nickname').eq('trip_id', trip.id),
       // A Golf Ireland league's linked players — the mark beside their
       // names. No query unless the league reads Golf Ireland.
       golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
@@ -155,7 +156,7 @@ export default async function TripLeaderboardPage({
       // An event's players' own colours, on their own and fail-soft
       // (migration 063). A trip offers no picker, so it asks for nothing.
       isEvent((trip as { kind?: unknown }).kind)
-        ? supabase.from('players').select('id, colour').eq('trip_id', trip.id)
+        ? db.from('players').select('id, colour').eq('trip_id', trip.id)
         : Promise.resolve({ data: null }),
     ])
 
@@ -202,7 +203,7 @@ export default async function TripLeaderboardPage({
   // A Dynamic Overall Leaderboard's Matches sessions: each match and where
   // it stands, read on the server — what the Overall counts them from.
   const sessionMatches = overallOf(boards) && boards.some(b => b.competition === 'matches')
-    ? await readSessionResults(trip, boards,
+    ? await readSessionResults(db, trip, boards,
         (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
         { teams: (teamsRes.data ?? []) as { id: string; name: string }[], memberships })
         .catch(e => { console.error('Leaderboard session matches read failed:', e); return [] })
