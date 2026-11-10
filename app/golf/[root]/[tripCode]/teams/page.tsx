@@ -208,9 +208,12 @@ export default async function TripTeamsPage({
       (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions
     ).assign_tag
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!event} />
+
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!event} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="paper border-b border-line">
         <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
           <BackButton href={event ? tripHome : `${tripHome}/setup`} />

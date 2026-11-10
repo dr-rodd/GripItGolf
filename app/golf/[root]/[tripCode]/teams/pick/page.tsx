@@ -102,9 +102,12 @@ export default async function TeamPickPage({ params, searchParams }: {
     return notHere('No such team', 'It may have been taken apart since — the teams page has them as they are now.')
   }
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!isEvent(kind)} />
+
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <TripHeader backTo={back} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!isEvent(kind)} />} />
+      <TripHeader backTo={back} action={organiserLock} />
       <TeamPickerWizard
         tripId={trip.id}
         tripCode={tripCode}

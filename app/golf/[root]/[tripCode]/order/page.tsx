@@ -71,9 +71,12 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
     },
   })
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
         <h1 className="t-h1 text-ink mb-1">Order of play</h1>
         <p className="text-ink/65 text-sm mb-6 leading-snug">

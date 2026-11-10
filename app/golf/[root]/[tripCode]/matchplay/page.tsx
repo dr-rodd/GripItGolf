@@ -208,9 +208,12 @@ export default async function MatchplayPage({
         tripQuotaScale(boards))
     : []
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />
+
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="paper border-b border-line">
         <div className="max-w-lg mx-auto px-4 py-5 flex items-center justify-between">
           {knockout ? <div className="w-11" /> : <BackButton href={`${tripHome}/leaderboard`} />}

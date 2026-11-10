@@ -1034,8 +1034,10 @@ section('The round summary reuses, and invents nothing')
   ok(!/mph|km\/h|fahrenheit|knots/i.test(page),
     'and the page names no unit the app does not use')
 
-  // The scoring shortcut goes to the renamed route.
-  ok(page.includes('/scoring/${round.round_number}'), 'the shortcut routes into live scoring')
+  // The way into scoring goes through the Scoring tab, never straight into
+  // a card (Ross, 10 Nov 2026) — a Matches session has no stroke card.
+  ok(page.includes('<Link href={`${tripHome}/scoring`}') && !page.includes('/scoring/${round.round_number}'),
+    'the shortcut routes into scoring through the Scoring tab')
 
   // The way back is at the top left, where a phone puts one. This page is
   // opened from the itinerary to read one thing and then left again, and the

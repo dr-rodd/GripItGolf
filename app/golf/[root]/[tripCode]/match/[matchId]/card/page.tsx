@@ -54,9 +54,12 @@ export default async function MatchCardPage({
   const mySide = !view.entrantId || !isMine(match, view.entrantId) ? null
     : match.sideA === view.entrantId ? 'A' as const : 'B' as const
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
         {card ? (
           <MatchCardClient

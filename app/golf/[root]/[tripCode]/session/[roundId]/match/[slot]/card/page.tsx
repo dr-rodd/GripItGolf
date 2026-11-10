@@ -94,9 +94,12 @@ export default async function SessionMatchCardPage({ params }: {
   }
   const format = MATCH_FORMATS.find(f => f.key === setup.format)?.label ?? 'Match'
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="max-w-lg mx-auto px-4 pt-3 pb-8">
         {card ? (
           <>

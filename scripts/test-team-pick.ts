@@ -118,8 +118,8 @@ section('Players pick only where the board says so — through the team picker')
 
   const client = read('app/golf/[root]/[tripCode]/teams/TeamsClient.tsx')
   ok(client.includes('Claim your spot'), 'a stranger is pointed at the players screen, calmly')
-  ok(client.includes('hasUnlocked(tripCode)') && client.includes('<InlineUnlock'),
-    'the organiser is recognised by the same session unlock, one inline PIN away')
+  ok(client.includes('useUnlocked(tripCode)') && read('app/golf/[root]/[tripCode]/teams/page.tsx').includes('<OrganiserLock tripCode={tripCode}'),
+    'the organiser is recognised by the same session unlock, the header\'s lock one tap away')
 
   const writes = read('app/golf/[root]/[tripCode]/teams/teamWrites.ts')
   ok(writes.includes('setTeam(tripId, id, sheet, teamId, addedBy)'),

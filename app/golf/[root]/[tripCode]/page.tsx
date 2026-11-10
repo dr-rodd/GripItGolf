@@ -827,6 +827,9 @@ export default async function TripPage({ params, searchParams }: {
 
   const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={tripRaw.settings_passcode_hash ?? null} isTrip={!isEvent} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
 
@@ -834,7 +837,7 @@ export default async function TripPage({ params, searchParams }: {
           page: this screen is opened to be read, and the brand performing on
           the way in only delays it. The mark goes to the start of the site,
           not to this page — this IS the trip hub. */}
-      <TripHeader backTo="/" action={<><OrganiserLock tripCode={tripCode} passcodeHash={tripRaw.settings_passcode_hash ?? null} isTrip={!isEvent} />{preferences}</>} />
+      <TripHeader backTo="/" action={<>{organiserLock}{preferences}</>} />
 
       <div className="max-w-lg mx-auto px-4 pt-4 pb-10">
 

@@ -218,9 +218,12 @@ export default async function RoundSummaryPage({
   const named = splitCourseName(course?.name ?? 'Course')
   const directions = mapsUrl([course?.name ? named.club : null, course?.location].filter(Boolean).join(', '))
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!event} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!event} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
 
       {/* The way back, top left, where a phone puts one.
           This page is opened from the itinerary to read one thing — a tee

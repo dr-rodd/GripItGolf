@@ -280,10 +280,13 @@ export default async function TripCoursePortalPage({
     .sort()
     .at(-1) ?? null
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={setupRow?.settings_passcode_hash ?? null} isTrip={!event} />
+
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
 
-      <TripHeader backTo={tripHome} title="scoring" action={<OrganiserLock tripCode={tripCode} passcodeHash={setupRow?.settings_passcode_hash ?? null} isTrip={!event} />} />
+      <TripHeader backTo={tripHome} title="scoring" action={organiserLock} />
 
       <div className="max-w-lg mx-auto px-4 py-6">
         <div className="flex items-center justify-between mb-4">

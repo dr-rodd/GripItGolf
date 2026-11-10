@@ -194,9 +194,12 @@ export default async function MatchPage({
     </div>
   )
 
+  // The organiser's lock, at the header's right edge (OrganiserLock).
+  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={!isEvent(kind)} />
+
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
-      <TripHeader backTo={tripHome} action={<OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={!isEvent(kind)} />} />
+      <TripHeader backTo={tripHome} action={organiserLock} />
       <div className="max-w-lg mx-auto px-4 pt-4">
         <BackButton href={`${tripHome}/scoring`} label="Scoring" />
       </div>

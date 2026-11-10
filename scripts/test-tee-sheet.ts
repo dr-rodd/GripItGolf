@@ -533,9 +533,10 @@ section('The sheet reads fail-soft and writes scoped')
     '  …each vacant, live or legacy by lib/teeSheet.ts')
 
   const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('hasUnlocked(tripCode)'),
-    'the organiser\'s right is the PIN unlock this device already holds')
-  ok(client.includes('useEffect(() => { setUnlocked(hasUnlocked(tripCode)) }'),
+  ok(client.includes('useUnlocked(tripCode)'),
+    'the organiser\'s right is the PIN unlock this device already holds, following the header\'s lock')
+  const hook = read('app/components/useUnlocked.ts')
+  ok(/useEffect\(\(\) => \{\s*const read = \(\) => setUnlocked\(hasUnlocked\(tripCode\)\)/.test(hook),
     '  …read after mount, because sessionStorage would tear hydration')
   // One batch insert — a single INSERT statement — so a race with another
   // phone books all of a linked team or none of it, never half.
@@ -631,7 +632,7 @@ section('The organiser is never locked out of their own sheet')
       `${f.split('/').pop()} remembers the unlock at creation`)
   }
   const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('<InlineUnlock'), 'the sheet offers the PIN inline')
+  ok(client.includes('<OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash}'), 'the sheet offers the PIN through the header\'s lock')
   const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('settings_passcode_hash'), 'with the hash the page already has')
 }
