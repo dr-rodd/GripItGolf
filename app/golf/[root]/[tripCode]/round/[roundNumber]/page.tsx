@@ -1,6 +1,9 @@
 import { Fragment, Suspense } from 'react'
 import OrganiserLock from '@/app/components/OrganiserLock'
-import { overallOf, sessionBoardFor } from '@/lib/sessions'
+import { overallOf, sessionBoardFor, sessionName, describeFormat, formatOfBoard, matchSlotsFor, slotFloor } from '@/lib/sessions'
+import { parseStartFormat } from '@/lib/eventHub'
+import { readSessionMatchRows } from '../../session/sessionMatches'
+import RoundOrganiser from './RoundOrganiser'
 import { placeClass } from '@/lib/leaderboardStyle'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
@@ -91,6 +94,17 @@ export default async function RoundSummaryPage({
   // board's (lib/sessions.ts), never the Overall's points.
   const lead = overallOf(boards) ? sessionBoardFor(boards, round.id) : primary(boards)
   const matchesSession = lead?.competition === 'matches'
+  // The round as a session of the Overall, for the organiser's settings.
+  const overallRules = overallOf(boards)?.overall
+  const sessionMatchRows = matchesSession ? (await readSessionMatchRows(trip.id)).filter(m => m.round_id === round.id) : []
+  const sessionInfo = overallRules ? {
+    name: sessionName(overallRules, round.id, round.round_number),
+    storedName: overallRules.names?.[round.id] ?? '',
+    format: describeFormat(lead ? formatOfBoard(lead) : null),
+    matches: matchesSession,
+    slots: matchSlotsFor(overallRules, round.id, sessionMatchRows.map(m => ({ roundId: m.round_id, slot: m.slot }))),
+    floor: slotFloor(sessionMatchRows.map(m => ({ slot: m.slot, sideA: m.side_a, sideB: m.side_b }))),
+  } : null
 
   // **Started, deliberately not awaited.** `fetchRoundRows` needs `trip.id`
   // and `round.id` and nothing else, both known by now — but it is not one
@@ -379,6 +393,26 @@ export default async function RoundSummaryPage({
           <IconClipboardList size={20} />
           {matchesSession ? 'See the matches' : 'Go to scoring'}
         </Link>
+
+        {/* ── The organiser's settings for this round ──
+            Drawn once the header's lock is open (Ross, 10 Nov 2026). */}
+        <RoundOrganiser
+          tripId={trip.id}
+          tripCode={tripCode}
+          roundId={round.id}
+          passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+          isTrip={!event}
+          teeTimes={parseStartFormat(round.start_format) === 'tee_sheet'}
+          sheetOpen={round.tee_sheet != null}
+          links={{
+            teeSheet: `${tripHome}/teesheet?round=${round.id}`,
+            teeSetup: `${tripHome}/teesheet/${round.id}/setup`,
+            sessions: event ? `${tripHome}/organiser/sessions` : `${tripHome}/setup/sessions`,
+            order: `${tripHome}/order?round=${round.id}`,
+            more: event ? `${tripHome}/organiser` : `${tripHome}/setup`,
+          }}
+          session={sessionInfo}
+        />
       </div>
 
       <SupportLink className="px-6 pb-8" />

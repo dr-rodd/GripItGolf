@@ -12,8 +12,8 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { parseLeaderboards } from './leaderboards'
-import { withSessionSlots } from './sessions'
+import { parseLeaderboards, type Leaderboard } from './leaderboards'
+import { withSessionSlots, withSessionName } from './sessions'
 
 type Side = 'a' | 'b'
 type Row = { id: string; side_a: string[]; side_b: string[]; updated_at: string; result: string | null }
@@ -141,17 +141,35 @@ async function deleteMatch(
 }
 
 /**
- * How many matches a session holds — the order of play's − and +. Read
- * fresh and merged, so nothing else on the leaderboards is put back to how
- * this phone last saw it; a vacant match is still a point up for grabs on
- * the Overall's ticker (lib/faceOff.ts).
+ * The leaderboards changed by one of lib/sessions.ts's pure helpers — read
+ * fresh and merged, so nothing else on them is put back to how this phone
+ * last saw it. Every change to a session's settings outside the Session
+ * formats page comes through here.
+ */
+export async function changeBoards(
+  client: SupabaseClient, tripId: string, change: (boards: Leaderboard[]) => Leaderboard[],
+): Promise<StoreResult> {
+  const { data, error } = await client.from('trips').select('leaderboards').eq('id', tripId).single()
+  if (error || !data) return { ok: false, reason: 'Could not save — try again' }
+  const next = change(parseLeaderboards((data as { leaderboards: unknown }).leaderboards))
+  const { error: err } = await client.from('trips').update({ leaderboards: next }).eq('id', tripId)
+  return err ? { ok: false, reason: 'Could not save — try again' } : { ok: true }
+}
+
+/**
+ * How many matches a session holds — the order of play's − and +. A vacant
+ * match is still a point up for grabs on the Overall's ticker
+ * (lib/faceOff.ts).
  */
 export async function setSessionSlots(
   client: SupabaseClient, tripId: string, roundId: string, count: number,
 ): Promise<StoreResult> {
-  const { data, error } = await client.from('trips').select('leaderboards').eq('id', tripId).single()
-  if (error || !data) return { ok: false, reason: 'Could not save — try again' }
-  const next = withSessionSlots(parseLeaderboards((data as { leaderboards: unknown }).leaderboards), roundId, count)
-  const { error: err } = await client.from('trips').update({ leaderboards: next }).eq('id', tripId)
-  return err ? { ok: false, reason: 'Could not save — try again' } : { ok: true }
+  return changeBoards(client, tripId, boards => withSessionSlots(boards, roundId, count))
+}
+
+/** A session's name — blank goes back to "Session n". */
+export async function setSessionName(
+  client: SupabaseClient, tripId: string, roundId: string, name: string,
+): Promise<StoreResult> {
+  return changeBoards(client, tripId, boards => withSessionName(boards, roundId, name))
 }

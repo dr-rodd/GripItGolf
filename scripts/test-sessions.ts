@@ -567,7 +567,8 @@ section('The order of play: − and +, one session open at a time (Ross, 9 Nov 2
   ok(!sheet.includes('+ Add a match'), '  …in place of Add a match')
   ok(sheet.includes('setSessionSlots(supabase, tripId, roundId, n)'), '  …saved as the session’s count')
   const store = read('lib/sessionMatchStore.ts')
-  ok(store.includes("select('leaderboards').eq('id', tripId)") && store.includes('withSessionSlots(parseLeaderboards('),
+  ok(store.includes("select('leaderboards').eq('id', tripId)") && store.includes('change(parseLeaderboards(')
+    && store.includes('changeBoards(client, tripId, boards => withSessionSlots(boards, roundId, count))'),
     '  …read fresh and merged, nothing else on the leaderboards put back')
   const list = read('app/golf/[root]/[tripCode]/order/OrderOfPlayList.tsx')
   ok(list.includes('open={openId === sheet.roundId}') && list.includes('setOpenId(id => (id === sheet.roundId ? null : sheet.roundId))'),
@@ -674,6 +675,44 @@ section('The home screen: sessions on the schedule, Matches through Scoring (Ros
   const card = read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')
   ok(card.includes("sessionBoardFor(boards, thisRound.id)?.competition === 'matches'") && card.includes('redirect(`${tripHome}/scoring`)'),
     '  …and any door still landing on its stroke card is sent to the Scoring tab')
+}
+
+section('The organiser’s lock, and a round’s own settings (Ross, 10 Nov 2026)')
+{
+  const pass = read('lib/passcode.ts')
+  ok(pass.includes("export const UNLOCK_EVENT = 'gd-organiser-unlock'") && /export function rememberUnlock[\s\S]*?announce\(\)/.test(pass),
+    'unlocking says so on the window, so every control on the page hears it')
+  ok(/export function forgetUnlock[\s\S]*?removeItem\(key\(tripCode\)\)[\s\S]*?announce\(\)/.test(pass), '  …and the lock can be shut again')
+  const hook = read('app/components/useUnlocked.ts')
+  ok(hook.includes('window.addEventListener(UNLOCK_EVENT, read)'), 'useUnlocked follows the unlock as it changes')
+  const lock = read('app/components/OrganiserLock.tsx')
+  ok(lock.includes('if (!isLocked(passcodeHash)) return null'), 'the lock is drawn only where there is a PIN to open')
+  ok(lock.includes('forgetUnlock(tripCode)') && lock.includes('rememberUnlock(tripCode)'), '  …a tap shuts it, the right PIN opens it')
+  ok(lock.includes("className={`inline-flex ${wobble ? 'lock-wobble' : ''}`}") && lock.includes('key={wobble}'), '  …wobbling on every tap')
+  ok(lock.includes('absolute right-0 top-full'), '  …the PIN in a small box under it')
+  const css = read('app/globals.css')
+  ok(/\.lock-wobble \{ animation: gdLockWobble 3\d\dms ease-out;/.test(css), 'the wobble is a one-shot inside the 400ms ceiling, switched off under Reduce Motion with the rest')
+  const base = 'app/golf/[root]/[tripCode]/'
+  for (const page of ['round/[roundNumber]/page.tsx', 'teesheet/TeeSheetClient.tsx', 'order/page.tsx', 'teams/page.tsx', 'teams/pick/page.tsx',
+    'page.tsx', 'scoring/page.tsx', 'match/[matchId]/page.tsx', 'match/[matchId]/card/page.tsx', 'matchplay/page.tsx',
+    'session/[roundId]/match/[slot]/card/page.tsx']) {
+    ok(read(base + page).includes('<OrganiserLock tripCode={tripCode}'), `  …in the header of ${page}`)
+  }
+  for (const f of ['teesheet/TeeSheetClient.tsx', 'teams/TeamsClient.tsx', 'session/MatchesSheet.tsx', 'AddToField.tsx', 'LeagueRounds.tsx',
+    'match/[matchId]/MatchActions.tsx', 'match/[matchId]/card/MatchCardClient.tsx', 'matchplay/MatchplayBracket.tsx', 'teams/pick/TeamPickerWizard.tsx']) {
+    ok(read(base + f).includes('useUnlocked('), `  …and ${f.split('/').pop()} follows it`)
+  }
+  ok(!read(base + 'teesheet/TeeSheetClient.tsx').includes('<InlineUnlock') && !read(base + 'session/MatchesSheet.tsx').includes('<InlineUnlock'),
+    'the page-wide PIN rows it replaces are gone')
+
+  const ro = read(base + 'round/[roundNumber]/RoundOrganiser.tsx')
+  ok(ro.includes('if (!unlocked && isLocked(passcodeHash)) return null'), 'a round’s settings show once the lock is open')
+  ok(ro.includes(".update({ start_format: on ? 'tee_sheet' : null })"), '  …tee times on or off for the round, nothing else touched')
+  ok(ro.includes('setSessionName(supabase, tripId, roundId, name)') && ro.includes('setSessionSlots(supabase, tripId, roundId, n)'),
+    '  …a session’s name and how many matches it holds')
+  ok(ro.includes('Change the format →') && ro.includes('Set the matches →'), '  …and the way to its format and its matches')
+  const rp = read(base + 'round/[roundNumber]/page.tsx')
+  ok(rp.includes('<RoundOrganiser') && rp.includes('session={sessionInfo}'), 'the round summary draws them')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
