@@ -63,7 +63,7 @@ import {
   sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor, defaultMatchSlots,
 } from '@/lib/sessions'
 import { daySheetId } from '@/lib/teamSets'
-import { enterEvent } from '@/lib/entryClient'
+import { createTripRow, enterEvent } from '@/lib/entryClient'
 
 /**
  * Creating a league event — the league branch of the tournament door.
@@ -691,11 +691,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     const leadEmail = normaliseEmail(email)
     if (leadEmail) tripRow.lead_email = leadEmail
 
-    const { data: trip, error: tripErr } = await supabase
-      .from('trips')
-      .insert(tripRow)
-      .select('id')
-      .single()
+    const { data: trip, error: tripErr } = await createTripRow(tripRow)
 
     if (tripErr || !trip) {
       setError(`Could not create the event. ${describeError(tripErr)}`)

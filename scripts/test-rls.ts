@@ -1,0 +1,208 @@
+/**
+ * Row-level security, stage 3: the first lock. Run with: npm run test:rls
+ *
+ * Migration 070 lets a phone read and write an event's setup tables only as
+ * a member of it. Nothing a phone does today may be refused by it, and the
+ * test suite cannot reach a database, so this holds the three things that
+ * make that true:
+ *
+ *   · creation — the one write a member cannot make — goes through
+ *     /api/trip/create, which makes the row and the creator's membership
+ *     together (run here on a stand-in), and takes every column the four
+ *     create forms send;
+ *   · every other browser write on those tables happens where the phone is
+ *     already a member — inside an event's own pages, or a create form after
+ *     the row exists — and no browser file reads another event by its code;
+ *   · the migration itself: the ten tables and no others, members only,
+ *     no `USING (true)`, the scoring tables untouched, an undo.
+ */
+
+import fs from 'fs'
+import { runCreate, CREATE_COLUMNS, type CreateStore } from '../app/api/trip/create/create'
+import { ORGANISER_MS, type Membership } from '../lib/membership'
+
+let passed = 0, failed = 0
+const failures: string[] = []
+function ok(cond: boolean, label: string) {
+  if (cond) passed++
+  else { failed++; failures.push(label); console.log(`  FAIL  ${label}`) }
+}
+function eq(got: unknown, want: unknown, label: string) {
+  const g = JSON.stringify(got), w = JSON.stringify(want)
+  if (g === w) passed++
+  else { failed++; failures.push(label); console.log(`  FAIL  ${label}\n        got  ${g}\n        want ${w}`) }
+}
+const section = (n: string) => console.log(`\n${n}`)
+const read = (p: string) => fs.readFileSync(p, 'utf-8')
+function files(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
+    d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
+}
+const isClient = (src: string) => /^(?:\s*\/\/[^\n]*\n|\s*\/\*[\s\S]*?\*\/)*\s*['"]use client['"]/.test(src)
+
+const LOCKED = ['trips', 'players', 'teams', 'team_members', 'rounds', 'itinerary_items',
+  'event_messages', 'matchplay_matches', 'tee_assignments', 'tee_times'] as const
+const SCORING = ['scores', 'live_scores', 'live_rounds', 'live_player_locks', 'round_handicaps', 'composite_holes',
+  'match_scores', 'match_concessions', 'session_matches', 'session_match_scores'] as const
+const FORMS = ['CreateTripForm', 'CreateLeagueForm', 'CreateKnockoutForm', 'CreateRunForm'].map(f => `app/dashboard/create/${f}.tsx`)
+
+// ─── /api/trip/create ──────────────────────────────────────────
+
+const NOW = new Date('2026-11-11T09:00:00Z')
+
+function standIn(opts: { taken?: boolean; membershipFails?: boolean } = {}) {
+  const trips = new Map<string, Record<string, unknown>>()
+  const members = new Map<string, Membership>()
+  const store: CreateStore = {
+    async userFromToken(t) { return t.startsWith('tok-') ? t.slice(4) : null },
+    async insertTrip(row) {
+      if (opts.taken) return { error: { message: 'duplicate key value', code: '23505' } }
+      const id = `trip-${trips.size + 1}`
+      trips.set(id, row)
+      return { id }
+    },
+    async writeMembership(u, t, m) {
+      if (opts.membershipFails) throw new Error('down')
+      members.set(`${u}:${t}`, m)
+    },
+    async deleteTrip(id) { trips.delete(id) },
+  }
+  return { store, trips, members }
+}
+const ROW = { name: 'Winter League', trip_code: 'GX7K2P', slug: 'gx7k2p', status: 'upcoming' }
+
+async function createTests() {
+  section('/api/trip/create: makes the row and the creator\'s membership together')
+  {
+    const { store, trips, members } = standIn()
+    eq((await runCreate({ token: null, row: ROW }, store, NOW)).status, 401, 'no sign-in: refused')
+    eq((await runCreate({ token: 'forged', row: ROW }, store, NOW)).status, 401, 'a token that is nobody: refused')
+    const odd = await runCreate({ token: 'tok-u1', row: { ...ROW, id: 'x', run_results: {} } }, store, NOW)
+    eq(odd.status, 400, 'a column no create form sets: refused')
+    ok(!odd.body.data && /id, run_results/.test(odd.body.error?.message ?? ''), '  …naming it, never dropping it quietly')
+    eq((await runCreate({ token: 'tok-u1', row: { ...ROW, name: ' ' } }, store, NOW)).status, 400, 'no name: refused')
+    eq((await runCreate({ token: 'tok-u1', row: { ...ROW, trip_code: 'abc' } }, store, NOW)).status, 400, 'no proper code: refused')
+    eq(trips.size, 0, '  …and none of those made a row')
+
+    const made = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)
+    eq(made.status, 200, 'a proper row is made')
+    eq(made.body, { data: { id: 'trip-1' }, error: null }, '  …answered in supabase-js\'s own shape, so the form reads it as its insert')
+    eq(members.get('u1:trip-1'), { role: 'guest', playerId: null, organiserUntil: null },
+      '  …and the phone that made it is a member from the first moment')
+
+    await runCreate({ token: 'tok-u2', row: { ...ROW, trip_code: 'ABC123', settings_passcode_hash: 'h' } }, store, NOW)
+    eq(members.get('u2:trip-2')?.organiserUntil, new Date(NOW.getTime() + ORGANISER_MS).toISOString(),
+      'the phone that set the PIN is the organiser for twelve hours')
+  }
+  {
+    const { store } = standIn({ taken: true })
+    const out = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)
+    eq([out.status, out.body.error?.code], [409, '23505'], 'a code already taken says so, as the insert did')
+  }
+  {
+    const { store, trips } = standIn({ membershipFails: true })
+    const out = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)
+    eq(out.status, 503, 'the membership not written: refused')
+    eq(trips.size, 0, '  …and the row taken back, never an event its maker cannot touch')
+  }
+
+  section('Every column a create form sends is one the route takes')
+  for (const f of FORMS) {
+    const src = read(f)
+    const start = src.indexOf('const tripRow: Record<string, unknown> = {')
+    const end = src.indexOf('createTripRow(tripRow)', start)
+    ok(start >= 0 && end > start, `${f}: builds its row, then hands it to createTripRow`)
+    const block = src.slice(start, end)
+    const keys = new Set<string>()
+    for (const m of block.matchAll(/tripRow\.(\w+)\s*=/g)) keys.add(m[1])
+    for (const m of block.matchAll(/\?\s*\{\s*(\w+):/g)) keys.add(m[1])
+    let depth = 0
+    for (const line of block.slice(block.indexOf('{') + 1).split('\n')) {
+      if (depth === 0) { const k = /^\s*(\w+)\s*[:,]/.exec(line)?.[1]; if (k) keys.add(k) }
+      depth += (line.match(/[{[(]/g) ?? []).length - (line.match(/[}\])]/g) ?? []).length
+      if (depth < 0) break
+    }
+    const missing = [...keys].filter(k => !(CREATE_COLUMNS as readonly string[]).includes(k))
+    eq(missing, [], `${f}: sends ${[...keys].length} columns, every one taken`)
+    ok(!/from\('trips'\)\s*\.insert/.test(src.replace(/\s+/g, ' ').replace(/\. /g, '.')) && !/\.from\('trips'\)\s*\n\s*\.insert/.test(src),
+      `${f}: never inserts into trips itself`)
+  }
+}
+
+// ─── Nothing a phone does today is refused ─────────────────────
+
+const BROWSER_STORES = new Set([
+  'lib/teamMembers.ts', 'lib/matchplayStore.ts', 'lib/leagueRoundStore.ts', 'lib/roundHandicaps.ts',
+  'lib/itineraryStore.ts', 'lib/drawStore.ts', 'lib/sessionMatchStore.ts', 'lib/matchCardVoid.ts',
+  'lib/scorecardVoid.ts', 'app/golf/[root]/[tripCode]/teams/teamWrites.ts', 'app/dashboard/create/fieldTagsWrite.ts',
+])
+/** Where a phone is already a member: an event's own pages (EnsureMember in their layouts), a create form after its row. */
+const MEMBER_PLACES = [/^app\/golf\/\[root\]\/\[tripCode\]\//, /^app\/run\/\[tripCode\]\//, /^app\/dashboard\/create\//, /^app\/scoring\//, /^app\/components\//]
+
+function wiringTests() {
+  const all = [...files('app'), ...files('lib')]
+
+  section('Every browser write on a locked table happens where the phone is a member')
+  for (const f of all) {
+    const src = read(f)
+    if (!isClient(src) && !BROWSER_STORES.has(f)) continue
+    for (const t of LOCKED) {
+      const writes = new RegExp(`from\\(['"]${t}['"]\\)[\\s\\S]{0,200}?\\.(insert|update|upsert|delete)\\(`).test(src)
+      if (!writes) continue
+      ok(BROWSER_STORES.has(f) || MEMBER_PLACES.some(re => re.test(f)), `${f} writes ${t} from a place the phone is a member`)
+    }
+  }
+  const layouts = ['app/golf/[root]/[tripCode]/layout.tsx', 'app/run/[tripCode]/layout.tsx']
+  for (const l of layouts) ok(read(l).includes('<EnsureMember tripCode={tripCode} />'), `${l}: every page under it makes the phone a member`)
+  const ensure = read('app/components/EnsureMember.tsx')
+  ok(/useEffect\(\(\) => \{[\s\S]*?void ensureMember\(tripCode\)[\s\S]*?\}, \[tripCode\]\)/.test(ensure) && !/requestIdleCallback|setTimeout/.test(ensure),
+    '  …straight after the first paint, not left until the phone is idle')
+
+  section('No browser file reads another event by its code')
+  for (const f of all) {
+    const src = read(f)
+    if (!isClient(src)) continue
+    ok(!/eq\(['"]trip_code['"]/.test(src), `${f} asks the server about a code (/api/event/find, /api/event/seed), never the table`)
+  }
+
+  section('Migration 070: the ten setup tables, members only')
+  const sql = read('supabase/migrations/20260101000070_lock_setup_tables.sql')
+  const code = sql.replace(/--[^\n]*/g, '')
+  const locked = [...code.matchAll(/ALTER TABLE (\w+) ENABLE ROW LEVEL SECURITY/g)].map(m => m[1]).sort()
+  eq(locked, [...LOCKED].sort(), 'row-level security goes on exactly the ten')
+  for (const t of SCORING) ok(!new RegExp(`\\b${t}\\b`).test(code), `${t}: untouched — scoring stays open`)
+  ok(!/USING \(true\)|WITH CHECK \(true\)/i.test(code), 'no policy that lets everybody in')
+  ok((code.match(/TO authenticated/g) ?? []).length >= 2 + 9 * 4 && !/ON \w+ FOR \w+ TO anon/.test(code), 'every policy is for signed-in phones; none for anon')
+  for (const t of LOCKED.filter(t => t !== 'trips')) {
+    ok(new RegExp(`CREATE POLICY ${t}_member_read\\s+ON ${t} FOR SELECT TO authenticated USING \\(trip_id IN \\(SELECT public\\.readable_trips\\(\\)\\)\\)`).test(code), `${t}: members read`)
+    for (const op of ['insert', 'update', 'delete']) {
+      ok(new RegExp(`CREATE POLICY ${t}_member_${op}\\s+ON ${t} FOR ${op.toUpperCase()} TO authenticated[^;]*writable_trips`).test(code), `  …and ${op}`)
+    }
+  }
+  ok(/CREATE POLICY trips_member_read ON trips FOR SELECT/.test(code) && /CREATE POLICY trips_member_update ON trips FOR UPDATE/.test(code)
+    && !/ON trips FOR (INSERT|DELETE)/.test(code), 'trips: read and change your own; never make or delete one from a phone')
+  ok(/writable_trips\(\)[\s\S]*?m\.role IN \('player', 'guest'\) OR m\.organiser_until > now\(\)/.test(code),
+    'a spectator reads and does not write; the organiser writes while the twelve hours run')
+  for (const fn of ['readable_trips', 'writable_trips']) {
+    ok(new RegExp(`FUNCTION public\\.${fn}\\(\\)[\\s\\S]*?SECURITY DEFINER[\\s\\S]*?SET search_path = ''`).test(code), `${fn}: runs as its owner, empty search path`)
+    ok(code.includes(`REVOKE ALL ON FUNCTION public.${fn}() FROM PUBLIC, anon`), `  …closed to anon`)
+  }
+  ok(/REVOKE ALL ON public\.leaderboard_summary\s+FROM anon, authenticated/.test(code)
+    && /REVOKE ALL ON public\.leaderboard_by_round FROM anon, authenticated/.test(code), 'the two old views, a way round every policy, are closed to phones')
+  ok(/PASTE THIS AFTER THE STAGE 3 DEPLOY/.test(sql), 'it says to paste it after the deploy')
+  const undo = sql.slice(sql.indexOf('Undo'))
+  for (const t of LOCKED) ok(new RegExp(`ALTER TABLE ${t}\\s+DISABLE ROW LEVEL SECURITY`).test(undo), `undo switches ${t} back`)
+}
+
+async function main() {
+  await createTests()
+  wiringTests()
+  console.log(`\n${'─'.repeat(56)}`)
+  if (failed > 0) {
+    console.log(`✗ ${failed} failed, ${passed} passed`)
+    for (const f of failures) console.log(`  - ${f}`)
+    process.exit(1)
+  }
+  console.log(`✓ all ${passed} checks passed`)
+}
+void main()

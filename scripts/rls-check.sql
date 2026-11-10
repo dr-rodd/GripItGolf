@@ -90,3 +90,42 @@ JOIN public.trip_members m ON m.user_id = f.user_id
 JOIN public.trips t ON t.id = m.trip_id
 WHERE t.end_date IS NULL OR t.end_date >= (now() AT TIME ZONE 'Europe/Dublin')::date - 30;
 
+-- ─── Stage 3: the first lock (after migration 070) ──────────────────────
+--
+-- The migration's own "Did it land?" first. Then the lock seen working, by
+-- pretending to be a phone. Each block runs inside BEGIN … ROLLBACK, so
+-- nothing is changed and the pretence ends with the block.
+
+-- (1) A phone in no event at all reads nothing. Should say 0 and 0.
+
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000000","role":"authenticated"}', true);
+SELECT (SELECT count(*) FROM trips) AS trips_seen, (SELECT count(*) FROM players) AS players_seen;
+ROLLBACK;
+
+-- (2) The phone that entered an event most recently reads that event and no
+-- other. events_seen should equal events_entered, and players_seen should be
+-- that many events' players, not the whole database's.
+
+BEGIN;
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', (SELECT user_id::text FROM trip_members ORDER BY updated_at DESC LIMIT 1), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+SELECT
+  (SELECT count(*) FROM trip_members WHERE user_id = auth.uid()) AS events_entered,
+  (SELECT count(*) FROM trips)                                    AS events_seen,
+  (SELECT count(DISTINCT trip_id) FROM players)                   AS events_with_players_seen,
+  (SELECT count(*) FROM players)                                  AS players_seen;
+ROLLBACK;
+
+-- (3) The scoring tables are still open: a phone in no event still reads
+-- them, exactly as before (stages 7 and 8 lock them). Should be the same
+-- numbers as running the inner SELECT on its own, outside the block.
+
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-000000000000","role":"authenticated"}', true);
+SELECT (SELECT count(*) FROM live_rounds) AS live_rounds_seen, (SELECT count(*) FROM match_scores) AS match_scores_seen;
+ROLLBACK;
+

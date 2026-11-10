@@ -171,3 +171,34 @@ export async function ensureMember(tripCode: string): Promise<void> {
   if (!needsEntry(readLocal(stampKey(code)), session.userId, cookiePlayer(code))) return
   await enterEvent(code)
 }
+
+/**
+ * Make a new event's row (row-level security, stage 3): through
+ * /api/trip/create, which makes the row and this phone's membership of it
+ * together — a phone cannot insert the row of an event it is not yet a
+ * member of, or read it back. Answers in supabase-js's own shape, so a create
+ * form reads it exactly as it read its insert. Unlike the rest of this file
+ * a failure is said, because the form says it: never thrown.
+ */
+export async function createTripRow(
+  row: Record<string, unknown>,
+): Promise<{ data: { id: string } | null; error: { message: string; code?: string } | null }> {
+  const failed = (message: string) => ({ data: null, error: { message } })
+  if (!inBrowser()) return failed('Could not create the event — try again.')
+  if (!(await databaseReady())) return failed('Could not reach Green Dot — try again.')
+  const session = await phoneSession()
+  if (!session) return failed('Could not sign this phone in — try again.')
+  try {
+    const res = await fetch('/api/trip/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
+      body: JSON.stringify({ row }),
+      credentials: 'same-origin',
+    })
+    const out = await res.json().catch(() => null) as { data: { id: string } | null; error: { message: string; code?: string } | null } | null
+    if (!out) return failed('Could not create the event — try again.')
+    return out
+  } catch {
+    return failed('Could not create the event — try again.')
+  }
+}

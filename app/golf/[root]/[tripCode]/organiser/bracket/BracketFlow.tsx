@@ -140,8 +140,11 @@ export default function BracketFlow({
     try {
       if (qualifyingOn) {
         if (code === tripCode.toUpperCase()) throw new Error('An event cannot qualify for itself — use the qualifying event’s own code.')
-        const { data: qual, error: qualErr } = await supabase.from('trips').select('id').eq('trip_code', code).maybeSingle()
-        if (qualErr || !qual) throw new Error(`Could not find an event with the code ${code} — check it and try again.`)
+        // Asked of the server: the qualifying event is another event, which this
+        // phone may not be a member of and so cannot read (row-level security).
+        const res = await fetch(`/api/event/find?code=${encodeURIComponent(code)}`, { cache: 'no-store' })
+        const qual = res.ok ? (await res.json().catch(() => null) as { code?: string | null } | null)?.code : null
+        if (!qual) throw new Error(`Could not find an event with the code ${code} — check it and try again.`)
       }
       const { slots, seeds } = draftSlots(draft)
       // The draw, when it is made now and is new or changed.

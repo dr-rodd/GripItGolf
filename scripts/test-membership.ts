@@ -259,8 +259,8 @@ function wiringTests() {
     ok(read('app/run/[tripCode]/layout.tsx').includes('<EnsureMember tripCode={tripCode} />'), 'the run layout mounts it too')
 
     const ensure = read('app/components/EnsureMember.tsx')
-    ok(ensure.includes('useEffect') && /requestIdleCallback|setTimeout/.test(ensure) && ensure.includes('return null'),
-      'EnsureMember runs after paint and draws nothing')
+    ok(ensure.includes('useEffect') && ensure.includes('void ensureMember(tripCode)') && ensure.includes('return null'),
+      'EnsureMember runs after paint, never awaited by the page, and draws nothing')
 
     // Every door that remembers an unlock or a claimed name on the phone
     // tells the server the same thing.
@@ -309,7 +309,9 @@ function wiringTests() {
     const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
     const writers = [...files('app'), ...files('lib')].filter(f => read(f).includes("from('trip_members')"))
-    eq(writers, ['app/api/entry/store.ts'], 'one file names the table: the entry route\'s store')
+    eq(writers.sort(), ['app/api/entry/store.ts', 'app/api/trip/create/route.ts'],
+      'two files name the table: the entry route\'s store, and creation (the maker\'s own membership)')
+    ok(read('app/api/trip/create/route.ts').includes('createAdminClient()'), '  …both on the service role')
     ok(read('app/api/entry/route.ts').includes('serviceStore(createAdminClient())') || /serviceStore\(db\)/.test(read('app/api/entry/route.ts')),
       '  …built on the service role by the route')
   }

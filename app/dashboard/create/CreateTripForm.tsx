@@ -51,7 +51,7 @@ import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
 import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
-import { enterEvent } from '@/lib/entryClient'
+import { createTripRow, enterEvent } from '@/lib/entryClient'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -421,11 +421,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
     const desc = normalizeDescription(description)
     if (desc) tripRow.description = desc
 
-    const { data: trip, error: tripErr } = await supabase
-      .from('trips')
-      .insert(tripRow)
-      .select('id')
-      .single()
+    const { data: trip, error: tripErr } = await createTripRow(tripRow)
 
     if (tripErr || !trip) {
       setError(`Could not create the ${noun}. ${describeError(tripErr)}`)

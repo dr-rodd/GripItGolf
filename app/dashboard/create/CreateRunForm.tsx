@@ -26,7 +26,7 @@ import {
 import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
-import { enterEvent } from '@/lib/entryClient'
+import { createTripRow, enterEvent } from '@/lib/entryClient'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -176,11 +176,7 @@ export default function CreateRunForm() {
     const leadEmail = normaliseEmail(email)
     if (leadEmail) tripRow.lead_email = leadEmail
 
-    const { data: trip, error: tripErr } = await supabase
-      .from('trips')
-      .insert(tripRow)
-      .select('id')
-      .single()
+    const { data: trip, error: tripErr } = await createTripRow(tripRow)
 
     if (tripErr || !trip) {
       setError(migrationMissing(tripErr)
