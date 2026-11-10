@@ -660,9 +660,10 @@ section('A scorecard survives being left and reopened')
   // Every access point that can open a card has to restore it
   const dash = read('app/scoring/[slug]/CourseDashboardClient.tsx')
   ok(/autoResume=\{/.test(dash), 'the trip dashboard resumes an open card')
-  const legacy = read('app/scoring/ScoringClient.tsx')
-  ok(/autoResume=\{/.test(legacy),
-    'and so does the route that offers to join a round in progress')
+  // The other access point, the legacy /scoring screen (ScoringClient), is
+  // deleted — test:legacy holds that it stays so — leaving the dashboard as
+  // the one way onto a card.
+  ok(!fs.existsSync('app/scoring/ScoringClient.tsx'), '  …the only one left, now the legacy screen is gone')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
