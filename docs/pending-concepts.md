@@ -141,7 +141,7 @@ second phone that was organiser is locked on its next action; the same link
 refuses a second use.
 
 **Open until built.** Where D62 moves the event's email (this reads it from
-wherever that lands); the email send reuses `lib/email.ts`'s Resend path,
-which is a silent no-op without `RESEND_API_KEY`, so an unset key must read
-as "Couldn't send just now" here, not "Sent" with nothing sent — except that
-the route's answer must not reveal whether an address exists.
+wherever that lands). The email send would reuse `lib/email.ts`'s Resend
+path, a silent no-op without `RESEND_API_KEY`; by the rule above the route
+still answers "Sent", so the failed screen ("Couldn't send just now") is for
+the route itself failing, not for the email.
