@@ -245,13 +245,11 @@ There used to be a `setup_status` of `draft` or `live`, flipped by a **Finalise 
 
 **One thing still locks, and it is not a flag.** A round with a score or a live session locks its own golf item — no removing, no re-coursing — because a course change would orphan real data, which is a fact about the data rather than a phase of the trip. Per round, not per trip: everything else stays editable and new rounds can be added mid-trip. The locked set is computed server-side in `setup/page.tsx` on every load.
 
-`edit_permission` is `everyone` or `owner`, and it is the only thing that makes settings read-only now. Owner is a device flag in localStorage (`gig-owner-<TRIP_CODE>`) written once, by `CreateTripForm`, on the device the trip was created on — a placeholder until auth lands.
+**Who can change a trip is its passcode** (Ross, 11 Nov 2026 — trips on the events' model, after row-level security stage 4). Trip Setup's **Who can edit** is `AdminPinCard`: **Any player** is no passcode — every member is the organiser, which is what the database says too (migration 071, `organiser_trips()`) — and **Lead player only** is a passcode, set, changed or taken off through `/api/event/admin-pin` (`runSetAdminPin` in `app/api/event/actions.ts`), the current one asked when there is one. A new passcode is stored salted and slow, ends organiser access on every other phone, and makes this phone the organiser for twelve hours; a forgotten one is reset by email (Forgot passcode?, D67). Trip Setup carries the padlock in its header like every page with organiser settings, and stands behind `PasscodeGate` while shut. An event changes its organiser PIN the same way from the organiser area, and a run challenge from its own; neither can take it off.
 
-**It changes what other people can do, so from the owner's own phone it appears to do nothing.** That phone is where it is set from, and `mayChange` is satisfied by `isOwner` whichever way the setting goes, so no control on the screen moves. The section says so in as many words rather than leaving it looking broken.
+**What it replaced.** `edit_permission` (`everyone` or `owner`) with "owner" a flag in localStorage (`gig-owner-<TRIP_CODE>`) on the phone that made the trip. Nothing but Trip Setup's own screen honoured it — the database let any member write — and it was a one-way door once the browser storage was cleared. The column is left in place, no longer read or written; the create forms no longer set the flag. A trip stored with `owner` and no passcode is now open to its members, as the database already had it.
 
-**A device that is not the owner cannot select "Owner only".** There is no way to hand the flag to another device, so that tap would lock the screen — including the control itself — with nothing anywhere able to undo it. The option is disabled, not just discouraged.
-
-The flag's fragility is the known weakness: clear the browser storage, or open the trip on a new phone, and the owner is an ordinary player. With `everyone` that costs nothing. With `owner` it is a one-way door, which is why nothing can walk through it by accident. Real ownership needs auth.
+**A trip's bracket follows the padlock too**: a result already in is changed with the passcode where the trip has one, as on an event.
 
 ## Exporting a trip, and retiring an old one
 

@@ -252,9 +252,10 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
 
   const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('pin={sheet.correcting && lock && !unlocked ? lock : null}'),
-    'on an event, a result already in is changed only with the admin PIN')
+    'a result already in is changed only with the admin PIN')
   const mpage = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
-  ok(mpage.includes('isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash'), '  …a trip\'s bracket stays open')
+  ok(mpage.includes('const lock = isLocked(setupRow?.settings_passcode_hash ?? null)'),
+    '  …and on a trip with a passcode too — trips on the events\' model (Ross, 11 Nov 2026)')
 }
 
 section('The match play card: top of the draw left, bottom right, NR, the result into the bracket')

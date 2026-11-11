@@ -1,5 +1,7 @@
 'use client'
 
+import AdminPinCard from '@/app/components/AdminPinCard'
+import OrganiserLock from '@/app/components/OrganiserLock'
 import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
@@ -51,9 +53,11 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
     }
   }
 
+  const organiserLock = <OrganiserLock tripCode={challenge.code} pinSet={challenge.pinSet} />
+
   return (
     <main className="min-h-dvh paper has-tabbar">
-      <TripHeader backTo={`/run/${challenge.code}`} />
+      <TripHeader backTo={`/run/${challenge.code}`} action={organiserLock} />
 
       <div className="max-w-lg mx-auto px-4 pt-8 pb-16 page-enter space-y-8">
 
@@ -144,6 +148,8 @@ export default function RunOrganiserClient({ challenge, dates, progress }: {
           <SectionTitle>How points work</SectionTitle>
           <RunRulesEditor tripId={challenge.id} setup={challenge.setup} />
         </section>
+
+        <AdminPinCard tripCode={challenge.code} pinSet={challenge.pinSet} isTrip={false} />
       </div>
     </main>
   )

@@ -319,7 +319,7 @@ section('The event email carries the admin link, never the PIN')
   const html = confirmationHtml(eventDetails)
   ok(html.includes(eventDetails.adminUrl), 'the admin link is in the message')
   ok(html.includes('keep this email'), 'and labelled to keep')
-  ok(html.includes('cannot be recovered'), 'with the PIN reminder spelled out')
+  ok(html.includes('never email it') && html.includes('Forgot PIN?'), 'with the PIN reminder spelled out, and how to reset it')
   ok(html.includes('Event code:'), 'an event calls its code an event code')
 
   // How organiser access works on a phone (Ross, 26 Oct 2026): the way in

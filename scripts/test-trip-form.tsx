@@ -402,7 +402,7 @@ section('The gear says what is behind it')
   const src = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   const sheet = src.slice(src.indexOf('{detailsOpen && ('), src.indexOf('{itineraryOpen && ('))
   ok(sheet.includes('Who can edit'), 'it is inside the details sheet')
-  ok(sheet.includes('savePermission'), 'and still saves from there')
+  ok(sheet.includes('<AdminPinCard'), 'and is the passcode, set through the server (trips on the events\' model)')
 
   // Track stats is in the drawer alongside it, and saves the same way —
   // optimistically, reverting on a refusal, through the shared `saveTrip`.
@@ -600,12 +600,10 @@ async function main() {
       'and no hash is made or named on the phone (stage 4, D64)')
     ok(source.includes('describeError'),
       'and a failed insert reports what the database actually said')
-    ok(source.includes('This can only be set now'),
-      'the warning states it is a one-time choice')
-    // The reason it cannot be handed over later was cut in the copy review;
-    // what the warning still has to do is say that it cannot.
-    ok(/no way to add, change or remove your passcode later/.test(source),
-      'and states it cannot be changed later')
+    // It can be changed or taken off later in Trip Setup now, and a
+    // forgotten one reset by email (D67) — the warning says where.
+    ok(/change it or take it off later in Trip Setup/.test(source),
+      'the warning says where it can be changed later')
     ok(source.includes('Write it down'), 'and tells you to keep it')
   }
 

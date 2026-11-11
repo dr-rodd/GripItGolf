@@ -187,9 +187,10 @@ export default async function MatchplayPage({
   // On a match play event the bracket IS the leaderboard tab, so there is
   // no leaderboard to go back to.
   const knockout = isKnockoutEvent(rawSetup)
-  // On an event, a result already in is changed with the admin PIN.
+  // A result already in is changed with the admin PIN — on a trip with a
+  // passcode too, as everywhere the padlock stands (Ross, 11 Nov 2026).
   const setupRow = setupRes.data as { kind?: unknown; settings_passcode_hash?: string | null } | null
-  const lock = isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash
+  const lock = isLocked(setupRow?.settings_passcode_hash ?? null)
     ? { tripCode, pinSet: true } : null
 
   // The tags' tally, where the event keeps one: the bracket's played
@@ -247,7 +248,7 @@ export default async function MatchplayPage({
   } : null
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={!!lock} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={!!lock} isTrip={!isEvent(setupRow?.kind)} />
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">

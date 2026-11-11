@@ -227,7 +227,6 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
         // existed arrives with the boards its old flags described rather
         // than a blank slate. Its first save writes them down for real.
         leaderboards: boardsForTrip(trip),
-        edit_permission: trip.edit_permission ?? 'everyone',
         // `?? false` rather than trusting the column: a trip read back before
         // migration 028 ran has no such field, and undefined would put the
         // toggle in neither position.
@@ -251,12 +250,14 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       askTeeTeams={isEvent(trip.kind)}
       askTags={isEvent(trip.kind)}
       event={isEvent(trip.kind)}
+      pinSet={isLocked(trip.settings_passcode_hash)}
       teeTimes={teeTimes}
     />
   )
 
-  // Locked at creation and never afterwards, so a trip cannot be locked out
-  // from under whoever runs it. An event's gate speaks to the organiser —
+  // Behind the passcode when there is one — set at creation or since, in
+  // Trip Setup itself (AdminPinCard), and resettable by email (D67).
+  // An event's gate speaks to the organiser —
   // "ask your lead player" is a trip sentence, and the field is not meant
   // to be here at all (the tab bar no longer brings them).
   if (isLocked(trip.settings_passcode_hash)) {

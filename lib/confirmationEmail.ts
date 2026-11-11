@@ -215,8 +215,9 @@ ${d.adminUrl ? `
                     ${w.admin.replace(/’/g, '&rsquo;')}<br />
                     <a href="${escapeHtml(d.adminUrl)}" style="color:#0A6B3C;font-weight:600;text-decoration:underline;">Open the organiser area</a><br /><br />
                     <strong>Your organiser PIN</strong> is the one you set
-                    ${w.created}. It was never sent to us and
-                    cannot be recovered or changed &mdash; write it down.<br /><br />
+                    ${w.created}. We keep it only scrambled and never email it.
+                    You can change it in the organiser area, and if you forget it,
+                    Forgot PIN? on the padlock emails a link here to choose a new one.<br /><br />
                     ${w.manage.replace(/’/g, '&rsquo;')}
                   </td>
                 </tr>
@@ -266,7 +267,7 @@ export function confirmationText(d: ConfirmationDetails): string {
       "YOU'RE THE ORGANISER — KEEP THIS EMAIL.",
       `${w.adminText}: ${d.adminUrl}`,
       `Your organiser PIN is the one you set ${w.created}.`,
-      'It was never sent to us and cannot be recovered or changed — write it down.',
+      'We keep it only scrambled and never email it. You can change it in the organiser area, and if you forget it, Forgot PIN? on the padlock emails a link here to choose a new one.',
       '',
       w.manage,
     ] : []),

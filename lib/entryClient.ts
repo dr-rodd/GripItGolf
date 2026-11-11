@@ -410,3 +410,21 @@ export async function saveResetPin(
     error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.',
   }
 }
+
+// ─── The organiser PIN (a trip's passcode), set or changed ─────
+
+/**
+ * The organiser PIN — on a trip, its passcode — set (`pin`), changed, or
+ * taken off a trip (`null`), the current one asked when there is one. A new
+ * PIN makes this phone the organiser for twelve hours and every other phone
+ * not; taken off, everybody is.
+ */
+export async function setAdminPin(tripCode: string, currentPin: string | null, pin: string | null): Promise<Saved> {
+  if (!inBrowser()) return { ok: false, error: 'Could not save — try again.' }
+  const code = tripCode.trim().toUpperCase()
+  const r = await ask('/api/event/admin-pin', { code, currentPin, pin })
+  if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.' }
+  rememberUnlock(code, isoOrNull(r.body.organiserUntil))
+  return { ok: true }
+}

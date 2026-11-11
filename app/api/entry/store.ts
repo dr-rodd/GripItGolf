@@ -98,5 +98,11 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       const { error } = await db.from('trips').update(patch).eq('id', tripId)
       if (error) throw error
     },
+    async endOrganisers(tripId) {
+      const { error } = await db.from('trip_members')
+        .update({ organiser_until: null, updated_at: new Date().toISOString() })
+        .eq('trip_id', tripId).not('organiser_until', 'is', null)
+      if (error) throw error
+    },
   }
 }

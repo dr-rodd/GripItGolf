@@ -2,7 +2,7 @@
 
 import { enterGoesTo } from '@/lib/focusNext'
 import { isOverallBoard, isSessionBoard } from '@/lib/sessions'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -15,6 +15,8 @@ import ItineraryEditor from './ItineraryEditor'
 import DateField from '@/app/components/DateField'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
+import OrganiserLock from '@/app/components/OrganiserLock'
+import AdminPinCard from '@/app/components/AdminPinCard'
 import SupportLink from '@/app/components/SupportLink'
 import Toggle from '@/app/components/Toggle'
 import {
@@ -53,7 +55,6 @@ type Trip = {
   start_date: string | null
   end_date: string | null
   leaderboards: Leaderboard[]
-  edit_permission: string
   track_stats: boolean
 }
 
@@ -163,6 +164,7 @@ export default function TripSetupClient({
   askTags = false,
   teeTimes = null,
   event = false,
+  pinSet = false,
 }: {
   trip: Trip
   teams: Team[]
@@ -186,6 +188,8 @@ export default function TripSetupClient({
   askTags?: boolean
   /** An event: its schedule offers golf and activities, never a stay or journey. */
   event?: boolean
+  /** Whether there is an organiser PIN (a trip's passcode) — never its hash. */
+  pinSet?: boolean
   /**
    * A trip's Tee times section, drawn by the page (`TripTeeTimes`) — an
    * event keeps its tee times in the organiser area instead.
@@ -207,7 +211,6 @@ export default function TripSetupClient({
   // reads `trips.formats` any more: every question it used to answer is now
   // asked properly by a leaderboard card.
   const [boards, setBoards] = useState<Leaderboard[]>(trip.leaderboards ?? [])
-  const [editPermission, setEditPermission] = useState(trip.edit_permission)
   const [trackStats, setTrackStats] = useState(trip.track_stats === true)
 
   // Collections
@@ -235,13 +238,6 @@ export default function TripSetupClient({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [isOwner, setIsOwner] = useState(false)
-
-  useEffect(() => {
-    try {
-      setIsOwner(localStorage.getItem(`gig-owner-${trip.trip_code}`) === '1')
-    } catch { /* localStorage unavailable */ }
-  }, [trip.trip_code])
 
   const playerIds = players.map(p => p.id)
   // A trip has no draft and no live: it is always both. There was a
@@ -250,7 +246,10 @@ export default function TripSetupClient({
   // trip needs announcing — scoring is open from the moment there is
   // something to score, and a roster that changes on the first tee is the
   // normal case rather than the exception.
-  const mayChange = editPermission === 'everyone' || isOwner
+  // Who may change it is the padlock's question now, answered before this
+  // screen draws: a trip with a passcode stands behind it (PasscodeGate),
+  // one without is anybody's — as the database has it (migration 071).
+  const mayChange = true
   const canEdit = mayChange
   /** Somebody who is not allowed to change this trip, looking at it anyway. */
   const viewOnly = !canEdit
@@ -268,6 +267,9 @@ export default function TripSetupClient({
    * Courses, rounds and the roster are a different matter, and stay locked.
    */
   const canArrange = mayChange && !busy
+  // The padlock, as on every page with organiser settings — shutting it
+  // shuts this screen behind its gate again (PasscodeGate).
+  const organiserLock = <OrganiserLock tripCode={trip.trip_code} pinSet={pinSet} isTrip={!event} />
   function flashError(msg: string) {
     setError(msg)
     setTimeout(() => setError(''), 4000)
@@ -327,12 +329,6 @@ export default function TripSetupClient({
     const prev = boards
     setBoards(next)
     if (!(await saveTrip({ leaderboards: next }))) setBoards(prev)
-  }
-
-  async function savePermission(next: string) {
-    const prev = editPermission
-    setEditPermission(next)
-    if (!(await saveTrip({ edit_permission: next }))) setEditPermission(prev)
   }
 
   async function saveTrackStats(next: boolean) {
@@ -541,7 +537,7 @@ export default function TripSetupClient({
 
       {/* The page names itself in the header, the way the leaderboard and
           the scoring screens do. Tapping the mark is the way back. */}
-      <TripHeader backTo={tripHome} title="settings" />
+      <TripHeader backTo={tripHome} title="settings" action={organiserLock} />
 
       {/* The trip's own details sit behind the gear rather than at the top of
           the page. They are set once and almost never touched again, so they
@@ -652,58 +648,20 @@ export default function TripSetupClient({
                 </button>
               </div>
 
-              {/* ── Who can edit ──
-                  In here with the name and the dates rather than down the
-                  page with the leaderboards. It is a fact about the trip, not
-                  about the golf: it decides who may open any of this, which
-                  makes it the same kind of question as what the trip is
-                  called and when it runs. */}
-              <div className="pt-4 border-t border-line">
-                <label className={FIELD_LABEL}>Who can edit</label>
-                <p className="t-cap text-ink/65 mb-3 leading-snug">
-                  Who can change this trip&apos;s players, teams, format and dates.
-                </p>
-                <div className="flex gap-2">
-                  {[
-                    { value: 'everyone', label: 'Any player' },
-                    { value: 'owner', label: 'Lead player only' },
-                  ].map(o => {
-                    // Owner is a flag on the device the trip was created on, and
-                    // there is no way to hand it to another one. A device that
-                    // does not hold it choosing "owner only" would lock this
-                    // screen — this control included — the instant it was tapped,
-                    // with nothing anywhere able to undo it.
-                    const wouldLockMeOut = o.value === 'owner' && !isOwner
-                    return (
-                      <button
-                        key={o.value}
-                        onClick={() => savePermission(o.value)}
-                        disabled={locked || wouldLockMeOut}
-                        className={`${chipClass(editPermission === o.value)} flex-1`}
-                      >
-                        {o.label}
-                      </button>
-                    )
-                  })}
+              {/* ── Who can change the trip ──
+                  A trip's passcode, set, changed or taken off through the
+                  server (AdminPinCard) — the events' model (Ross, 11 Nov
+                  2026). "Lead player only" is the passcode: the database
+                  enforces it (migration 071). There used to be a "Lead
+                  player only" that meant the phone the trip was made on,
+                  which nothing but this screen ever honoured. An event's
+                  organiser PIN is changed in the organiser area. */}
+              {!event && (
+                <div className="pt-4 border-t border-line">
+                  <label className={FIELD_LABEL}>Who can edit</label>
+                  <AdminPinCard tripCode={trip.trip_code} pinSet={pinSet} isTrip />
                 </div>
-
-                {/* What it actually did.
-                    This setting changes what OTHER people can do, so from the
-                    owner's own phone — which is the phone it is usually set from —
-                    nothing on screen moves and it reads as a control that does
-                    nothing at all. So it says so. */}
-                <p className="t-cap text-ink/65 mt-3 leading-snug">
-                  {editPermission === 'owner' ? (
-                    isOwner
-                      ? 'Nothing changes for you; everyone else can only view.'
-                      : 'Only the device this trip was created on can change it.'
-                  ) : (
-                    isOwner
-                      ? 'Anyone can change the trip; “Lead player only” would leave it to you.'
-                      : 'Anyone can change the trip; only the lead player’s device can restrict it.'
-                  )}
-                </p>
-              </div>
+              )}
 
               {/* ── Track stats ──
                   Last in the drawer because it is the newest setting and the
@@ -1175,7 +1133,7 @@ export default function TripSetupClient({
           <MatchplayPanel
             tripId={trip.id}
             tripCode={trip.trip_code}
-            canEdit={editPermission === 'everyone' || isOwner}
+            canEdit={canEdit}
             boards={boards}
             // The draw's own sheet. A knockout between pairings running
             // beside a league of fours must be drawn from the pairings, and

@@ -17,6 +17,7 @@ import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
 import OrganiserClient from './OrganiserClient'
 import PublicPinCard from './PublicPinCard'
+import AdminPinCard from '@/app/components/AdminPinCard'
 import { fetchEntryLock } from '../kind'
 import { golfIrelandRequests } from '../golfIreland'
 import { tripHomeAt } from '@/lib/tripPaths'
@@ -266,7 +267,10 @@ export default async function OrganiserPage({ params }: {
       golfIreland={gi}
       knockout={isKnockoutEvent(setupRaw)}
       drawSummary={rawDrawPlan(setupRaw)?.when === 'date' ? describeDrawPlan(rawDrawPlan(setupRaw), d => describeShortDate(d) ?? d, describeTime) : null}
-      accessCard={<PublicPinCard tripCode={tripCode} hasPin={!!publicLock} adminPinSet={isLocked(trip.settings_passcode_hash)} />}
+      accessCard={<>
+        <AdminPinCard tripCode={tripCode} pinSet={isLocked(trip.settings_passcode_hash)} isTrip={false} />
+        <PublicPinCard tripCode={tripCode} hasPin={!!publicLock} adminPinSet={isLocked(trip.settings_passcode_hash)} />
+      </>}
       // The door to the team picker, while a leaderboard plays in teams.
       hasTeamBoards={boards.some(b => b.audience === 'team' && !b.tagMode)}
       dayFormatSummary={

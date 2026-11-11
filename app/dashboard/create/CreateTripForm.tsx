@@ -541,12 +541,6 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
       }
     }
 
-    // Remember this device created the trip — used by the setup page
-    // when edit permission is set to "owner only" (no auth yet).
-    try {
-      localStorage.setItem(`gig-owner-${code}`, '1')
-    } catch { /* localStorage unavailable */ }
-
     // The confirmation email, if an address was given. Fire-and-forget on
     // purpose: the server decides everything — whether a key is configured,
     // whether this trip already had its one email — and nothing about it may
@@ -646,8 +640,8 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
             <div className={`mb-4 px-4 py-3 ${cardClass('flat')}`}>
               <p className="text-ink/80 text-[13px] leading-snug">
                 {isTournament
-                  ? 'Your organiser PIN is set. Keep it safe — it cannot be recovered or changed.'
-                  : 'Settings are locked. Keep your passcode safe — it cannot be recovered or changed.'}
+                  ? 'Your organiser PIN is set. Keep it safe — you can change it in the organiser area, and Forgot PIN? emails a link to choose a new one to the address this event was made with.'
+                  : 'Settings are locked. Keep your passcode safe — you can change it in Trip Setup, and Forgot passcode? emails a link to choose a new one to the address this trip was made with.'}
               </p>
             </div>
           )}
@@ -1110,11 +1104,11 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                 <div className="mt-3 space-y-3">
                   <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
                     <p className="text-rust-deep text-sm font-semibold leading-snug">
-                      This can only be set now.
+                      Write it down.
                     </p>
                     <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
-                      There is no way to add, change or remove your passcode later —
-                      Write it down!
+                      You can change it or take it off later in Trip Setup, and a forgotten
+                      one can be reset by email to the address this trip is made with.
                     </p>
                   </div>
 

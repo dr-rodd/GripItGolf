@@ -21,7 +21,7 @@ import {
 } from '../lib/membership'
 import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '../lib/pinHash'
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
-import { runDoor, runExtend, runPlayTogether, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
+import { runDoor, runExtend, runPlayTogether, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
 import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
 import { runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
 import { RESETS_PER_EVENT_HOUR, RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
@@ -167,9 +167,13 @@ async function world(trip: Partial<EntryTrip> = {}) {
     async updateTrip(_tr, patch) {
       for (const [k, v] of Object.entries(patch)) {
         if (k === 'public_passcode_hash') t.publicHash = v as string | null
+        else if (k === 'settings_passcode_hash') t.adminHash = v as string | null
         else if (k === 'end_date') t.endDate = v as string | null
         else cols[k] = v
       }
+    },
+    async endOrganisers(tr) {
+      for (const [k, m] of members) if (k.endsWith(`:${tr}`)) members.set(k, { ...m, organiserUntil: null })
     },
   }
   return { t, members, attempts, store, actions, cols }
@@ -516,6 +520,58 @@ async function stageFourTests() {
   }
 }
 
+// ─── The organiser PIN / a trip's passcode, after creation ─────
+
+async function adminPinTests() {
+  section('The organiser PIN, or a trip\'s passcode, set, changed or taken off (trips on the events\' model)')
+  const ask = (w: Awaited<ReturnType<typeof world>>, currentPin: string | null, pin: string | null, token = 'tok-u1') =>
+    runSetAdminPin({ token, code: 'GX7K2P', currentPin, pin, address: '203.0.113.9' }, w.actions, NOW)
+  {
+    const w = await world()
+    w.members.set('u2:trip-1', { role: 'player', playerId: P2, organiserUntil: later(HOUR).toISOString() })
+    eq((await ask(w, null, '5678')).status, 403, 'a trip with a passcode asks for the current one')
+    eq((await ask(w, '9999', '5678')).status, 403, '  …and refuses a wrong one')
+    eq((await ask(w, ADMIN, '12')).status, 400, 'a new one must be 4 to 8 digits')
+    const done = await ask(w, ADMIN, '5678')
+    eq(done.status, 200, 'the right current passcode changes it')
+    ok(!!w.t.adminHash && (await verifyPin('5678', w.t.adminHash)).ok && !(await verifyPin(ADMIN, w.t.adminHash)).ok,
+      '  …stored salted and slow, the old one no longer opening it')
+    eq(w.members.get('u2:trip-1')?.organiserUntil, null, '  …every other phone is organiser no longer')
+    eq(w.members.get('u1:trip-1')?.organiserUntil, later(ORGANISER_MS).toISOString(), '  …and this phone is, for twelve hours')
+    eq((await ask(w, '5678', null)).status, 200, 'a trip\'s passcode can be taken off')
+    eq(w.t.adminHash, null, '  …and then the trip is anybody\'s to change, as the database has it')
+  }
+  {
+    const w = await world({ adminHash: null })
+    eq((await ask(w, null, '2468', 'tok-stranger')).status, 403, 'with none set, a phone that is not in the trip cannot set one')
+    await runEntry(base, w.store, NOW)
+    eq((await ask(w, null, '2468')).status, 200, '  …a member can: on a trip with no passcode every member is the organiser')
+  }
+  {
+    const w = await world()
+    w.cols.kind = 'tournament'
+    eq((await ask(w, ADMIN, null)).status, 400, 'an event\'s organiser PIN cannot be taken off')
+    ok(!!w.t.adminHash, '  …and is still there')
+  }
+  {
+    const w = await world({ publicHash: await hashPin(PUBLIC, 'GX7K2P') })
+    eq((await ask(w, ADMIN, PUBLIC)).status, 400, 'the new organiser PIN cannot be the public PIN')
+  }
+
+  section('Trips wear the padlock, on the events\' model')
+  const setup = read('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx')
+  ok(/<OrganiserLock /.test(setup), 'Trip Setup carries the padlock in its header')
+  ok(!/gig-owner|edit_permission|editPermission|isOwner/.test(setup), '  …and no longer reads the phone-that-made-it flag, or "who can edit"')
+  ok(/<AdminPinCard /.test(setup), '  …where "Lead player only" is the passcode, set through the server')
+  for (const f of ['app/dashboard/create/CreateTripForm.tsx', 'app/dashboard/create/CreateKnockoutForm.tsx', 'app/dashboard/create/CreateLeagueForm.tsx']) {
+    ok(!/gig-owner/.test(read(f)), `${f} no longer marks the phone that made it`)
+  }
+  ok(!/isEvent\([^)]*\)\s*&&\s*setupRow\?\.settings_passcode_hash/.test(read('app/golf/[root]/[tripCode]/matchplay/page.tsx')),
+    'a trip\'s bracket wears the padlock too, not only an event\'s')
+  ok(/<AdminPinCard /.test(read('app/golf/[root]/[tripCode]/organiser/page.tsx')) && /<AdminPinCard /.test(read('app/run/[tripCode]/organiser/RunOrganiserClient.tsx')),
+    'an event\'s and a challenge\'s organiser areas change their PIN the same way')
+}
+
 // ─── Forgot PIN (D67) ──────────────────────────────────────────
 
 async function forgotPinTests() {
@@ -648,6 +704,7 @@ async function main() {
   await routeTests()
   await stageFourTests()
   await forgotPinTests()
+  await adminPinTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

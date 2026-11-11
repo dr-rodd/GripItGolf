@@ -820,10 +820,6 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       if (!saved.ok) setDeadlineWarning('The league is made, but its round deadlines could not be saved — set them in the organiser area.')
     }
 
-    try {
-      localStorage.setItem(`gig-owner-${code}`, '1')
-    } catch { /* localStorage unavailable */ }
-
     // The confirmation email, fire-and-forget for the same reasons the trip
     // wizard's is — nothing may stand between the organiser and their event.
     if (leadEmail) {
@@ -891,8 +887,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
 
           <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
-              Your organiser PIN is set. Keep it safe — it cannot be recovered
-              or changed.
+              Your organiser PIN is set. Keep it safe — you can change it in the organiser
+              area, and Forgot PIN? emails a link to choose a new one to the address
+              this event was made with.
             </p>
           </div>
 
@@ -1717,11 +1714,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               <div className="space-y-3">
                 <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
                   <p className="text-rust-deep text-sm font-semibold leading-snug">
-                    This can only be set now.
+                    Write it down.
                   </p>
                   <p className="text-rust/70 text-[13px] leading-snug mt-1.5">
-                    There is no way to add, change or remove your PIN later —
-                    Write it down!
+                    You can change it later in the organiser area, and a forgotten one can
+                    be reset by email to the address this event is made with.
                   </p>
                 </div>
 

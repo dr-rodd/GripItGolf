@@ -19,13 +19,17 @@ import { passcodeError } from '@/lib/passcode'
 import { entryToken, hashPin, verifyPin } from '@/lib/pinHash'
 import { teeSheetAccess } from '@/lib/eventPermissions'
 import { withPlayTogether } from '@/lib/partnerships'
-import { mayChangeEvent, mayWrite, type EventFacts, type Membership } from '@/lib/membership'
+import { mayChangeEvent, mayWrite, mergeGrant, type EventFacts, type Membership } from '@/lib/membership'
+import { isEvent } from '@/lib/eventHub'
+import { isRunChallenge } from '@/lib/runChallenge'
 import { checkPin, type EntryStore, type EntryTrip } from '../entry/entry'
 
 export interface ActionStore extends EntryStore {
   /** Raw columns of the event's row, read fresh. Null on a failed read. */
   tripColumns(tripId: string, columns: string[]): Promise<Record<string, unknown> | null>
   updateTrip(tripId: string, patch: Record<string, unknown>): Promise<void>
+  /** Organiser access ended on every phone in the event (a new admin PIN, D67's rule). */
+  endOrganisers(tripId: string): Promise<void>
 }
 
 type Fail = { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
@@ -131,6 +135,62 @@ export async function runSetPublicPin(
   const hash = await hashPin(next, trip.code)
   await store.updateTrip(trip.id, { public_passcode_hash: hash })
   return { status: 200, body: { ok: true }, cookie: entryToken(hash, trip.code) }
+}
+
+// ─── The admin PIN (a trip's passcode), set, changed or taken off ───
+
+export type AdminPinOutcome =
+  | { status: 200; body: { ok: true; organiserUntil: string | null } }
+  | Fail
+
+/**
+ * The organiser's own PIN — on a trip, the Trip Setup passcode — set,
+ * changed or taken off after creation (Ross, 11 Nov 2026: trips on the
+ * events' model). D65: never written from a browser. With a PIN, the
+ * current one is asked (under the retry limit); without one, any member who
+ * may change the event — everybody, on a trip or event with no PIN — may set
+ * one. Only a trip may take it off: an event always has an organiser. A new
+ * PIN is stored salted and slow, ends organiser access on every other phone
+ * (as a reset does) and makes this phone the organiser for twelve hours.
+ */
+export async function runSetAdminPin(
+  input: { token: string | null; code: unknown; currentPin: unknown; pin: unknown; address: string },
+  store: ActionStore,
+  now: Date,
+): Promise<AdminPinOutcome> {
+  const c = await caller(store, input.token, input.code)
+  if (failed(c)) return c
+  const { trip } = c
+  const cols = await store.tripColumns(trip.id, ['kind'])
+  if (!cols) return fail(503, 'Could not read the event — try again.')
+  const isTrip = !isEvent(cols.kind) && !isRunChallenge(cols.kind)
+  const word = isTrip ? 'passcode' : 'organiser PIN'
+
+  if (trip.adminHash) {
+    const current = str(input.currentPin)
+    if (!current) return fail(403, `Enter the current ${word}.`)
+    const r = await checkPin(store, { tripId: trip.id, code: trip.code, kind: 'admin', address: input.address, pin: current, hash: trip.adminHash }, now)
+    if (r === 'blocked') return fail(429, TOO_MANY)
+    if (r === 'wrong') return fail(403, `That isn’t the current ${word}.`)
+  } else if (!mayChangeEvent(c.m, c.facts, now)) {
+    return fail(403, `Only the ${isTrip ? 'lead player' : 'event organiser'} can set the ${word}.`)
+  }
+
+  if (input.pin === null) {
+    if (!isTrip) return fail(400, 'An event always has an organiser PIN — change it instead.')
+    await store.updateTrip(trip.id, { settings_passcode_hash: null })
+    return { status: 200, body: { ok: true, organiserUntil: null } }
+  }
+  const next = str(input.pin) ?? ''
+  const issue = passcodeError(next)
+  if (issue) return fail(400, issue)
+  if (trip.publicHash && (await verifyPin(next, trip.publicHash)).ok) return fail(400, 'Use a different PIN from the public PIN.')
+
+  await store.updateTrip(trip.id, { settings_passcode_hash: await hashPin(next, trip.code) })
+  await store.endOrganisers(trip.id)
+  const m = mergeGrant(await store.readMembership(c.userId, trip.id), { organiser: true }, now)
+  await store.writeMembership(c.userId, trip.id, m)
+  return { status: 200, body: { ok: true, organiserUntil: m.organiserUntil } }
 }
 
 // ─── An ad hoc series' end date, moved on ──────────────────────
