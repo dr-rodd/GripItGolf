@@ -88,7 +88,9 @@ gets baked into every opacity utility at build time and no theme can reach it.
   offered (D75, `lib/teamColors.ts`) are brick, cobalt, plum, orange, slate,
   rose, olive and navy: muted for cream, apart in lightness as well as hue,
   no emerald or gold. A stored colour is never rewritten. Navy reads at
-  only 1.5:1 against the dark page, so a navy dot is faint in dark mode.
+  only 1.5:1 against the dark page, so **every team-colour dot and swatch
+  wears a hairline `ring-1 ring-line-strong`** (Ross, 11 Nov 2026) — navy on
+  the dark page, or a pale pick on white, still shows its edge.
 
 - **Open (Ross, 19 Oct): the title type and its colour don't yet sit
   with the wordmark.** Titles are Schibsted in ink; the mark is its own

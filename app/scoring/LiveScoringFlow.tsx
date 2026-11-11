@@ -1336,7 +1336,7 @@ export default function LiveScoringFlow({
                     {isSelected && <IconCheck size={14} />}
                   </span>
                   {dotColour(player) && (
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} aria-hidden="true" />
+                    <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} aria-hidden="true" />
                   )}
                   <span className="flex-1 min-w-0 truncate text-[17px] font-medium text-ink">{player.name}</span>
                   <span className="t-cap text-ink/65 flex-shrink-0 tabular-nums">
@@ -1797,7 +1797,7 @@ export default function LiveScoringFlow({
                 >
                   <div className="flex items-center gap-1.5 mb-1">
                     {dotColour(player) && (
-                      <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} />
+                      <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} />
                     )}
                     <span className={`text-base font-medium leading-tight ${isSel ? "text-ink" : "text-ink/65"}`}>
                       {player.name.split(" ")[0]}

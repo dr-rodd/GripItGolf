@@ -213,7 +213,7 @@ export default function TeamsClient({
                   const room = sheet.cap === null ? null : Math.max(0, sheet.cap - ids.length)
                   const label = (
                     <span className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
+                      <span className="w-2.5 h-2.5 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
                       <span className="truncate">{shown(team, ids)}</span>
                     </span>
                   )

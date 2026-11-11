@@ -318,7 +318,7 @@ function ColourSwatch({ fill, label, chosen, onPick }: {
     >
       <span
         className={`block w-7 h-7 rounded-full ${fill ? '' : 'border-2 border-dashed border-line-strong'} ${
-          chosen ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : ''
+          chosen ? 'ring-2 ring-ink ring-offset-2 ring-offset-surface' : fill ? 'ring-1 ring-line-strong' : ''
         }`}
         style={fill ? { backgroundColor: fill } : undefined}
         aria-hidden="true"

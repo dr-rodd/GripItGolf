@@ -4,10 +4,11 @@
 -- the card check offers no colours, saves new tees without one, and every
 -- tee dot falls back to its name as it always has.
 --
--- Some tees are named after rocks or unusual colours — Granite, Sandstone,
--- Slate — and the app's name-to-colour list cannot know them all. The card
--- check now reads an approximate colour for each tee: the colour it is
--- printed in on the card, else what its name suggests. It is kept here, as
+-- Some tees are named after things the app's name-to-colour list does not
+-- know. For those only — never Black, Blue, White, Red, Yellow, Sandstone,
+-- Slate, Granite or Claret, which the app already colours — the card check
+-- reads an approximate colour: the colour the tee is printed in on the
+-- card, else what its name suggests. It is kept here, as
 -- `#RRGGBB`, and drawn on the tee dot in place of the name's guess.
 --
 -- A swatch, never a scoring figure: nothing reads it to score. Written only

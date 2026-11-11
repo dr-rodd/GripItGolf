@@ -554,7 +554,7 @@ export default function MatchCardClient({
         <div className="min-w-0 pb-1" aria-live="polite">
           <p className="t-label text-ink flex items-center gap-2">
             {loaded && state.leader && (
-              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
+              <span className="w-2.5 h-2.5 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
             )}
             <span className="min-w-0">{loaded ? status : 'Loading the card…'}</span>
           </p>
@@ -609,7 +609,7 @@ export default function MatchCardClient({
 
       <p className="t-cap text-ink text-center h-5 flex items-center justify-center gap-2">
         {(outcome?.winner === 'A' || outcome?.winner === 'B') && (
-          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colours[outcome.winner].fill }} aria-hidden="true" />
+          <span className="w-2.5 h-2.5 rounded-full ring-1 ring-line-strong" style={{ backgroundColor: colours[outcome.winner].fill }} aria-hidden="true" />
         )}
         {canEdit && !holeOpen && firstOpen !== undefined ? (
           <button type="button" onClick={() => goTo(firstOpen)} className="t-cap text-accent-deep">
@@ -733,7 +733,7 @@ export default function MatchCardClient({
       >
         <p className="t-card text-ink flex items-center gap-2" aria-live="polite">
           {loaded && state.leader && (
-            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
+            <span className="w-2.5 h-2.5 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: colours[state.leader].fill }} aria-hidden="true" />
           )}
           <span className="min-w-0">{loaded ? status : 'Loading the card…'}</span>
         </p>

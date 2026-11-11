@@ -248,7 +248,7 @@ export default function RunJoinClient({
                 onClick={() => setChoice({ kind: 'existing', id: t.id })}
                 className={on ? CARD_ON : CARD}
               >
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                <span className="w-3 h-3 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
                 <span className="text-ink text-sm font-medium flex-1 min-w-0 truncate">{t.name}</span>
                 <span className="text-ink/65 text-[13px] tabular-nums flex-shrink-0">
                   {t.count === 1 ? '1 runner' : `${t.count} runners`}

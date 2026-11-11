@@ -250,4 +250,4 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D73 | Whoever may start a round may add its course: "Add a course" is in every course picker, the photo deferrable, and the field's add-courses setting is gone | Built |
 | D74 | A user's course is live for everyone at once; the database knows which courses the system added and which a user did (`courses.added_by`, migration 074), never who. A review to confirm them is a future project | Built (074 to paste) |
 | D75 | New default team colours: brick, cobalt, plum, orange, slate, rose, olive, navy. Existing teams keep theirs (decided as D73 on 11 Nov; renumbered, D73 was already taken) | Built |
-| D76 | The card check offers each tee's colour, approximated from the card or the tee's name (tees named after rocks or unusual colours), kept on the tee and drawn on its dot | Built (075 to paste) |
+| D76 | The card check offers a tee's colour, approximated from the card or the tee's name, only where the name does not already say one; kept on the tee and drawn on its dot. Team-colour dots wear a hairline ring | Built (075 to paste) |

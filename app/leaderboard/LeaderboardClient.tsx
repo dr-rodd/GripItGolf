@@ -460,7 +460,7 @@ export default function LeaderboardClient({ rounds, teams, holes, scores, roundH
                 {/* Team name + member names (single row) */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} />
+                    <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: team.color }} />
                     <span className="font-[family-name:var(--font-playfair)] text-base text-white truncate">
                       {team.name}
                     </span>

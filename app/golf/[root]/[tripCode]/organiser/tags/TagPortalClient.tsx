@@ -280,7 +280,7 @@ export default function TagPortalClient({
                         type="button"
                         onClick={() => recolorTag(tag.id, c)}
                         aria-label={`Colour ${c}`}
-                        className={`w-7 h-7 rounded-full border-2 ${
+                        className={`w-7 h-7 rounded-full ring-1 ring-line-strong border-2 ${
                           c === tag.color ? 'border-ink/60' : 'border-transparent'
                         }`}
                         style={{ backgroundColor: c }}
@@ -332,7 +332,7 @@ export default function TagPortalClient({
                               <span className="text-ink text-sm truncate flex-1">{p.name}</span>
                               {currentTag && (
                                 <span
-                                  className="w-2 h-2 rounded-full flex-shrink-0"
+                                  className="w-2 h-2 rounded-full flex-shrink-0 ring-1 ring-line-strong"
                                   style={{ backgroundColor: colorOf.get(currentTag) }}
                                   aria-label="Already has a tag. Tapping moves them."
                                 />

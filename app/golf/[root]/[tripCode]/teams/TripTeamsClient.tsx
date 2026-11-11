@@ -171,7 +171,7 @@ function TeamColumn({
       <div className="px-3 py-3 border-b border-line flex items-center gap-2">
         <button
           onClick={() => setShowColors(v => !v)}
-          className="w-4 h-4 rounded-full flex-shrink-0 ring-offset-2 ring-offset-surface hover:ring-2 hover:ring-line-strong transition-all"
+          className="w-4 h-4 rounded-full flex-shrink-0 ring-1 ring-line-strong ring-offset-2 ring-offset-surface hover:ring-2 hover:ring-line-strong transition-all"
           style={{ backgroundColor: team.color }}
           aria-label={`Change ${team.name} colour`}
         />
@@ -200,7 +200,7 @@ function TeamColumn({
               onClick={() => { onRecolour(team.id, color); setShowColors(false) }}
               style={{ backgroundColor: color }}
               className={`w-6 h-6 rounded-full transition-transform hover:scale-110 ${
-                team.color === color ? 'ring-2 ring-bark/40 ring-offset-2 ring-offset-surface' : ''
+                team.color === color ? 'ring-2 ring-bark/40 ring-offset-2 ring-offset-surface' : 'ring-1 ring-line-strong'
               }`}
               aria-label={`Colour ${color}`}
             />
@@ -388,7 +388,7 @@ function BoardTile({
             const names = membersOf(memberships, t.id).map(nameOf).filter(Boolean)
             return (
               <div key={t.id} className="flex items-start gap-3 px-3 py-2.5 border border-line rounded-xl">
-                <span className="mt-1 w-3 h-3 rounded-full flex-shrink-0"
+                <span className="mt-1 w-3 h-3 rounded-full flex-shrink-0 ring-1 ring-line-strong"
                   style={{ backgroundColor: t.color }} />
                 <span className="min-w-0 flex-1">
                   <span className="block text-ink text-sm truncate">{t.name}</span>

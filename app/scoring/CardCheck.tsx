@@ -461,7 +461,7 @@ export default function CardCheck({
           worked out from a name like Granite or Sandstone. */}
       {colours.length > 0 && (
         <div className="space-y-1">
-          <p className="text-ink/65 text-sm">Tee colours, from the card or the tee&apos;s name:</p>
+          <p className="text-ink/65 text-sm">Tee colours, from the card:</p>
           <ul className="flex flex-wrap gap-x-4 gap-y-1 text-ink/80 text-sm">
             {colours.map(c => (
               <li key={c.teeId} className="flex items-center gap-1.5">

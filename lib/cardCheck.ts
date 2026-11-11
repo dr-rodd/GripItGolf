@@ -32,6 +32,8 @@
  * confirmed card is how they start to. A tee colour outside this list has no
  * column, so its yardages are reported but never written.
  */
+import { teeNameHasColour } from './teeColours'
+
 export const YARDAGE_TEES = [
   'black', 'blue', 'white', 'red', 'sandstone', 'slate', 'granite', 'claret',
 ] as const
@@ -150,7 +152,7 @@ Rules — accuracy matters more than completeness:
 - Ignore OUT, IN and TOTAL columns — holes only.
 - Yardage tee names are the colour printed on the card (e.g. "Blue", "Red"), one entry per tee per hole. Skip a tee's yardage on a hole you cannot read.
 - For each tee box shown on the card: its colour name, whether it is a men's or ladies tee (ladies tees are usually Red or Claret and carry the ladies ratings), its total par, and its course rating and slope if printed (often in a ratings box, e.g. "CR 71.4 / Slope 125"). Null for anything not printed.
-- For each tee, colour is an approximate hex colour (#RRGGBB) for its marker: the colour the tee is printed in on the card where it is shown, otherwise what its name suggests — a plain colour as itself, a rock or material by its look (Granite a stone grey, Sandstone a sandy tan, Slate a blue-grey), Claret a deep red. Null if neither the card nor the name gives any idea.
+- For each tee, colour is an approximate hex colour (#RRGGBB) for its marker, but ONLY for a tee whose name is not one of Black, Blue, White, Red, Yellow, Sandstone, Slate, Granite or Claret — those already have a colour, so return null for them. For any other tee: the colour it is printed in on the card where it is shown, otherwise what its name suggests (a rock or material by its look, an unusual colour as itself). Null if neither the card nor the name gives any idea.
 - courseName is the club or course name printed on the card, null if unreadable.`
 
 // ─── Raw shapes off the wire ──────────────────────────────────
@@ -206,7 +208,8 @@ export function normalizeCard(raw: RawCard): ExtractedCard {
       par: t.par ?? null,
       courseRating: t.courseRating ?? null,
       slope: t.slope ?? null,
-      colour: teeColourOf(t.colour),
+      // A name the styles already colour is never given one by the photo.
+      colour: teeNameHasColour(t.name) ? null : teeColourOf(t.colour),
     })),
   }
 }
@@ -616,7 +619,7 @@ export function newCourseRows(card: ExtractedCard): NewCard {
       par,
       course_rating: t.courseRating,
       slope: t.slope,
-      ...(t.colour ? { colour: t.colour } : {}),
+      ...(t.colour && !teeNameHasColour(t.name) ? { colour: t.colour } : {}),
     })
   }
 
@@ -718,7 +721,7 @@ export function teeColourFills(
 ): TeeColourFill[] {
   const out: TeeColourFill[] = []
   for (const t of card.tees) {
-    if (!t.colour) continue
+    if (!t.colour || teeNameHasColour(t.name)) continue
     const stored = storedTees.find(
       s => s.name.trim().toLowerCase() === t.name.toLowerCase() && s.gender === t.gender,
     )

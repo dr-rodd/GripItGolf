@@ -111,7 +111,7 @@ export default function TagJoinClient({
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-ink text-sm font-medium">
                     <span
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-line-strong"
                       style={{ backgroundColor: tag.color }}
                     />
                     <span className="truncate">{tag.name}</span>

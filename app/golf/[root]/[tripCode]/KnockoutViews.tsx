@@ -306,7 +306,7 @@ function coloursOf(view: KnockoutView, a: string | null, b: string | null): Reco
 /** "● Ann v ● Bob" — each name with its side's colour, the same on every phone. */
 function SideNames({ a, b, colours }: { a: string; b: string; colours: Record<'A' | 'B', SideColour> }) {
   const dot = (c: SideColour) => (
-    <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: c.fill }} aria-hidden="true" />
+    <span className="inline-block w-2 h-2 rounded-full ring-1 ring-line-strong mr-1.5 align-middle" style={{ backgroundColor: c.fill }} aria-hidden="true" />
   )
   return <>{dot(colours.A)}{a} v {dot(colours.B)}{b}</>
 }

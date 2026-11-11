@@ -114,7 +114,7 @@ export function TagsCard({ tags, setTags, counts, onRemove }: {
                       onClick={() => { edit(t.key, { colour: c }); setColourFor(null) }}
                       aria-label={PRESET_COLOR_NAMES[c] ?? c}
                       aria-pressed={c === t.colour}
-                      className={`w-8 h-8 rounded-full border-2 ${c === t.colour ? 'border-ink/60' : 'border-transparent'}`}
+                      className={`w-8 h-8 rounded-full ring-1 ring-line-strong border-2 ${c === t.colour ? 'border-ink/60' : 'border-transparent'}`}
                       style={{ backgroundColor: c }}
                     />
                   ))}

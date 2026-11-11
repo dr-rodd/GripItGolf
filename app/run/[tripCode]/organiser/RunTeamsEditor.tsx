@@ -283,7 +283,7 @@ export default function RunTeamsEditor({ tripId, teams, unassigned }: {
               </div>
             ) : (
               <div className="flex items-center gap-2.5">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
+                <span className="w-3 h-3 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
                 <p className="text-ink text-sm font-medium flex-1 min-w-0 truncate">{team.name}</p>
                 <span className="text-ink/65 text-[13px] tabular-nums flex-shrink-0">
                   {team.members.length === 1 ? '1 runner' : `${team.members.length} runners`}

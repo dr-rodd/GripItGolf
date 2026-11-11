@@ -51,7 +51,7 @@ export default async function RunSettingsPage({ params }: {
                 <p className="text-ink text-sm font-medium">{viewer.name}</p>
                 <p className="text-ink/65 text-[13px] mt-0.5 flex items-center gap-1.5">
                   {team && (
-                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
+                    <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: team.color }} aria-hidden="true" />
                   )}
                   {team ? `Running for ${team.name}` : 'No team yet — ask the organiser to put you on one.'}
                 </p>

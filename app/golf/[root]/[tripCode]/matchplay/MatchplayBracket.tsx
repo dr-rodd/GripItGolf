@@ -1120,9 +1120,9 @@ function CardSheet({ match, detail, playerById, onClose, onDecide }: {
           <div className="min-w-0">
             <p className="t-cap text-ink/65">{match.round_name}</p>
             <p className="t-card text-ink mt-0.5">
-              <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colours.A.fill }} aria-hidden="true" />
+              <span className="inline-block w-2 h-2 rounded-full ring-1 ring-line-strong mr-1.5 align-middle" style={{ backgroundColor: colours.A.fill }} aria-hidden="true" />
               {nameOf(match.player_a_id)} v{' '}
-              <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle" style={{ backgroundColor: colours.B.fill }} aria-hidden="true" />
+              <span className="inline-block w-2 h-2 rounded-full ring-1 ring-line-strong mr-1.5 align-middle" style={{ backgroundColor: colours.B.fill }} aria-hidden="true" />
               {nameOf(match.player_b_id)}
             </p>
           </div>

@@ -161,7 +161,7 @@ export default async function RunHubPage({ params }: {
               {final.teams.map((t, i) => (
                 <div key={`${t.name}-${i}`} className="font-serif flex items-center gap-3">
                   <span className="text-[15px] leading-[1.45] text-ink/65 tabular-nums w-6">{t.place}</span>
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
+                  <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: t.color }} aria-hidden="true" />
                   <span className="text-ink text-sm flex-1 min-w-0 truncate">{t.name}</span>
                   <span className="text-lg font-semibold tabular-nums text-ink">
                     {formatPoints(t.score)}

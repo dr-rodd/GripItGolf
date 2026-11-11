@@ -2830,6 +2830,13 @@ section('The team palette: brick to navy (D75)')
         `${PRESET_COLOR_NAMES[PRESET_COLORS[i]]} against ${PRESET_COLOR_NAMES[PRESET_COLORS[j]]} clears MIN_SIDE_DISTANCE`)
     }
   }
+  // A dot in a team's colour wears a hairline ring, so navy on the dark page still shows its edge.
+  for (const f of ['app/leaderboard/LeaderboardClient.tsx', 'app/run/[tripCode]/page.tsx', 'app/golf/[root]/[tripCode]/teams/TeamsClient.tsx', 'app/dashboard/create/FieldTags.tsx']) {
+    const src = read(f)
+    for (const line of src.split('\n').filter(l => /rounded-full/.test(l) && /backgroundColor: (team\.color|t\.color|c)\b/.test(l))) {
+      ok(/ring-1 ring-line-strong/.test(line), `${f}: a team-colour dot wears its ring`)
+    }
+  }
   // Stored colours are never rewritten: no migration touches teams.color or players.colour for this.
   const migrations = fs.readdirSync('supabase/migrations').map(f => read(`supabase/migrations/${f}`)).join('\n')
   ok(!/UPDATE\s+teams\s+SET\s+colou?r/i.test(migrations) && !/UPDATE\s+players\s+SET\s+colou?r/i.test(migrations),

@@ -63,7 +63,7 @@ export default function MatchFinish({
               : <span className="w-3.5 h-3.5 rounded-full bg-accent" aria-hidden="true" />}
             <p className="t-cap text-ink/65 mt-3">{phase === 'confirm' ? 'Match over' : 'Final result'}</p>
             <p className="t-h1 text-ink mt-1 flex items-center gap-2.5">
-              {winner && <span className="w-3.5 h-3.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[winner].fill }} aria-hidden="true" />}
+              {winner && <span className="w-3.5 h-3.5 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: colours[winner].fill }} aria-hidden="true" />}
               {headline}
             </p>
           </div>
