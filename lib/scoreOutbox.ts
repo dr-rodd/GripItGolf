@@ -117,6 +117,19 @@ export class Refused extends Error {
   constructor(message: string, readonly cause?: unknown) { super(message) }
 }
 
+/**
+ * A send where some entries went and some did not: `done` are the keys the
+ * server took, `refused` says whether any failure was the server saying no.
+ * One bad entry (a card voided on another phone, an event this phone is no
+ * longer in) must never hold every other hole behind it — the groups are
+ * tried independently and what got through is dropped from the queue.
+ */
+export class PartialSend extends Error {
+  constructor(readonly done: Set<string>, readonly refused: boolean, readonly reason: string) {
+    super(`partial send: ${reason}`)
+  }
+}
+
 export function isRefused(e: unknown): boolean {
   return !!e && typeof e === 'object' && (e as { refused?: unknown }).refused === true
 }
@@ -185,6 +198,16 @@ export const SEND_TIMEOUT_MS = 6_000
  */
 export function unsentLine(count: number): string {
   return `Weak signal · ${count === 1 ? '1 score' : `${count} scores`} pending submission`
+}
+
+/**
+ * After a few failed sends in a row, one quiet extra line saying it is still
+ * trying and, in brackets, why — so a connection that is up but a server that
+ * is not taking the scores can be told from no signal at all. Null before then.
+ */
+export function unsentDetail(failures: number, reason: string | null): string | null {
+  if (failures < 3 || !reason) return null
+  return `Still trying (${reason})`
 }
 
 export function keyOf(playerId: string, roundId: string, holeNumber: number): string {
@@ -308,6 +331,9 @@ export interface Outbox {
   flush(): Promise<number>
   /** The signal is back (or the phone woke): forget the backoff and send at once. */
   nudge(): Promise<number>
+  /** How many sends in a row have failed, and why — a screen may say so quietly after a few. */
+  status(): { failures: number; reason: string | null }
+  subscribeStatus(listener: (s: { failures: number; reason: string | null }) => void): () => void
   /** Forget everything queued for this round, after it has been committed or voided. */
   discardRound(roundId: string, playerIds?: string[]): void
   /** Forget a match card's queued boxes, after it has been voided. */
@@ -329,6 +355,13 @@ export function createOutbox(deps: OutboxDeps): Outbox {
   let seq = queue.reduce((n, e) => Math.max(n, e.seq), 0)
   let listeners: { fn: (pending: number) => void; which?: (e: Entry) => boolean }[] = []
   let lastRecover = -Infinity
+  let failures = 0
+  let reason: string | null = null
+  let statusListeners: ((s: { failures: number; reason: string | null }) => void)[] = []
+  function setStatus(f: number, r: string | null) {
+    failures = f; reason = r
+    for (const l of statusListeners) l({ failures, reason })
+  }
   let timer: unknown = null
   let attempt = 0
   let flushing = false
@@ -415,13 +448,23 @@ export function createOutbox(deps: OutboxDeps): Outbox {
       const sentSeq = new Map(sent.map(e => [e.key, e.seq]))
       queue = queue.filter(e => sentSeq.get(e.key) !== e.seq)
       attempt = 0
+      if (failures !== 0) setStatus(0, null)
       changed()
     } catch (e) {
+      // Some of it may have gone: drop exactly that, keep the rest.
+      if (e instanceof PartialSend) {
+        const sentSeq = new Map(sent.map(x => [x.key, x.seq]))
+        queue = queue.filter(x => !(e.done.has(x.key) && sentSeq.get(x.key) === x.seq))
+        changed()
+      }
+      setStatus(failures + 1, e instanceof PartialSend ? e.reason
+        : isRefused(e) ? 'refused'
+        : e instanceof Error && /timed out/.test(e.message) ? 'timeout' : 'network')
       // Refused by the server, not lost on the radio: sign back in and enter
       // the events these holes belong to, then try again straight away —
       // at most once a minute, so a phone the server keeps refusing falls
       // back to the ordinary backoff and the holes simply wait.
-      if (isRefused(e) && deps.recover && now() - lastRecover >= RECOVER_GAP_MS) {
+      if ((isRefused(e) || (e instanceof PartialSend && e.refused)) && deps.recover && now() - lastRecover >= RECOVER_GAP_MS) {
         lastRecover = now()
         const trips = [...new Set(sent.map(x => x.trip).filter((t): t is string => !!t))]
         retryNow = await deps.recover(trips).catch(() => false)
@@ -461,6 +504,12 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     },
     match(cell, clear, trip) {
       enqueue([{ kind: 'match', key: matchKeyOf(cell), seq: ++seq, at: now(), ...(trip ? { trip } : {}), cell, clear }])
+    },
+    status: () => ({ failures, reason }),
+    subscribeStatus(listener) {
+      statusListeners.push(listener)
+      listener({ failures, reason })
+      return () => { statusListeners = statusListeners.filter(l => l !== listener) }
     },
     nudge() {
       attempt = 0

@@ -13,7 +13,7 @@ import {
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { type ScoreRow } from "@/lib/scoreOutbox"
 import { scoreOutbox, refusal } from "./outbox"
-import { unsentLine } from "@/lib/scoreOutbox"
+import { unsentLine, unsentDetail } from "@/lib/scoreOutbox"
 import { IconSignalWeak } from "@/app/components/icons"
 import { recoverEvents } from "@/lib/entryClient"
 import { why } from "@/lib/writeFailure"
@@ -299,7 +299,10 @@ function yardageForTee(hole: Hole, teeName: string): number | null {
  * Rendered nowhere when the queue is empty, which on a normal round is always.
  */
 function UnsentNote({ count, inline = false }: { count: number; inline?: boolean }) {
+  const [status, setStatus] = useState<{ failures: number; reason: string | null }>({ failures: 0, reason: null })
+  useEffect(() => scoreOutbox().subscribeStatus(setStatus), [])
   if (count <= 0) return null
+  const detail = unsentDetail(status.failures, status.reason)
   return (
     <div
       role="status"
@@ -308,7 +311,10 @@ function UnsentNote({ count, inline = false }: { count: number; inline?: boolean
       }`}
     >
       <IconSignalWeak />
-      <p className="t-cap text-ink/65 leading-snug">{unsentLine(count)}</p>
+      <p className="t-cap text-ink/65 leading-snug">
+        {unsentLine(count)}
+        {detail && <span className="block text-ink/50">{detail}</span>}
+      </p>
     </div>
   )
 }

@@ -16,7 +16,7 @@
 
 import { readFileSync } from 'fs'
 import {
-  createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused,
+  createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused, PartialSend, unsentLine, unsentDetail,
   MAX_AGE_MS, BACKOFF_MS, SEND_TIMEOUT_MS, STORAGE_KEY, RECOVER_GAP_MS,
   type Batch, type Entry, type ScoreRow, type OutboxStorage,
 } from '../lib/scoreOutbox'
@@ -518,11 +518,11 @@ section('The outbox is one instance, wired once')
   const wired = read('app/scoring/outbox.ts')
   ok(/let instance: Outbox \| null = null/.test(wired),
     'there is a single queue behind one storage key')
-  ok(/if \(error\) throw failed\(error\)/.test(wired),
+  ok(/if \(error\) throw failed_\(error\)/.test(wired),
     'a failed write is thrown, so the queue holds the hole and tries again')
-  ok(/\.upsert\(batch\.saves[\s\S]{0,80}\.select\(/.test(wired) && /< batch\.saves\.length\) throw new Refused/.test(wired),
+  ok(/\.upsert\(rows[\s\S]{0,80}\.select\(/.test(wired) && /< rows\.length\) throw new Refused/.test(wired),
     'an upsert counts what came back: fewer rows is a refusal, not a success (stage 6)')
-  ok((wired.match(/stillThere\(/g) ?? []).length >= 3,
+  ok((wired.match(/stillThere\(/g) ?? []).length >= 3 && /new PartialSend\(done/.test(wired),
     'a delete that took fewer rows asks what is still there — "0 rows" is how row-level security says no')
   ok(/recover: browser \? recoverEvents/.test(wired), 'a refusal signs the phone back in and enters the event again')
   ok(/'42501'/.test(wired) && /PGRST301/.test(wired), 'a policy refusal and a bad token are both told apart from a lost radio')
@@ -609,6 +609,36 @@ section('The event is stamped when the hole is queued, and survives a reload')
   eq(parseQueue(store.raw())[0]?.trip, 'ABC123', 'the code rides with the hole')
   eq(parseQueue(JSON.stringify([{ kind: 'save', key: 'k', seq: 1, at: 1, row: row(1) }]))[0]?.trip, undefined,
     'a hole queued before stage 6 still reads, with no event')
+}
+
+section('One entry the server will not take never holds the rest behind it')
+{
+  const timers = clockwork()
+  let online = true
+  const box = createOutbox({
+    // Round r-bad is refused; everything else goes.
+    send: async b => {
+      const done = new Set<string>()
+      for (const r of b.saves) if (r.round_id !== 'r-bad') done.add(keyOf(r.player_id, r.round_id, r.hole_number))
+      if (b.saves.some(r => r.round_id === 'r-bad')) throw new PartialSend(done, true, 'refused')
+    },
+    isOnline: () => online, ...timers,
+  })
+  box.save([row(1), row(2, 4, { round_id: 'r-bad' }), row(3)])
+  await settle()
+  eq(box.pending(), 1, 'the good holes went; only the refused one is left waiting')
+  eq(box.entries()[0]?.key, keyOf('p1', 'r-bad', 2), '  …and it is the refused one')
+  eq(box.status().reason, 'refused', 'the reason is kept, for the quiet line')
+  box.stop()
+}
+
+section('The waiting line is status, not a fault')
+{
+  eq(unsentLine(1), 'Weak signal · 1 score pending submission', 'one score')
+  eq(unsentLine(3), 'Weak signal · 3 scores pending submission', 'several')
+  ok(!/fail|error|could not|wrong/i.test(unsentLine(2)), 'no word of failure')
+  eq(unsentDetail(2, 'refused'), null, 'nothing extra for the first couple of tries')
+  eq(unsentDetail(3, 'refused'), 'Still trying (refused)', 'after a few, one quiet line says why, in brackets')
 }
 
 // ─── Stage 7: the match play card ──────────────────────────────

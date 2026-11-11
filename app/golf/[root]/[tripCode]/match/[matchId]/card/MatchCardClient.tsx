@@ -14,7 +14,7 @@ import {
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import { onMatchRejected, scoreOutbox } from '@/app/scoring/outbox'
-import { unsentLine, type Entry } from '@/lib/scoreOutbox'
+import { unsentLine, unsentDetail, type Entry } from '@/lib/scoreOutbox'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
@@ -137,6 +137,8 @@ export default function MatchCardClient({
   const outbox = scoreOutbox()
   const mine = useCallback((e: Entry) => e.kind === 'match' && e.cell.match_id === matchId && e.cell.table === scoreTable, [matchId, scoreTable])
   const [unsent, setUnsent] = useState(0)
+  const [sendStatus, setSendStatus] = useState<{ failures: number; reason: string | null }>({ failures: 0, reason: null })
+  useEffect(() => outbox.subscribeStatus(setSendStatus), [outbox])
   useEffect(() => outbox.subscribe(setUnsent, mine), [outbox, mine])
   useEffect(() => onMatchRejected(r => {
     if (r.cell.match_id !== matchId) return
@@ -692,7 +694,10 @@ export default function MatchCardClient({
       {unsent > 0 && (
         <p className="t-cap text-ink/65 text-center leading-snug flex items-center justify-center gap-2.5" role="status">
           <IconSignalWeak />
-          {unsentLine(unsent)}
+          <span>
+            {unsentLine(unsent)}
+            {unsentDetail(sendStatus.failures, sendStatus.reason) && <span className="block text-ink/50">{unsentDetail(sendStatus.failures, sendStatus.reason)}</span>}
+          </span>
         </p>
       )}
 

@@ -15,7 +15,7 @@
 
 import { supabase } from '@/lib/supabase'
 import { recoverEvents } from '@/lib/entryClient'
-import { createOutbox, Refused, type Batch, type Outbox } from '@/lib/scoreOutbox'
+import { createOutbox, keyOf, matchKeyOf, PartialSend, Refused, type Batch, type Outbox } from '@/lib/scoreOutbox'
 
 /**
  * The server saying no, as opposed to the radio failing (stage 6): an
@@ -47,7 +47,7 @@ function dataError(error: unknown): { code: string; message: string } | null {
 }
 
 /** A write failure, sorted: refused (sign back in, retry) or anything else (back off). */
-function failed(error: unknown): Error {
+function failed_(error: unknown): Error {
   return refusal(error) ? new Refused('refused', error) : (error as Error)
 }
 
@@ -63,39 +63,59 @@ async function stillThere(
   let q = supabase.from(table).select('hole_number')
   for (const [k, v] of Object.entries(match)) q = q.eq(k, v)
   const { data, error } = await q.in('hole_number', holes)
-  if (error) throw failed(error)
+  if (error) throw failed_(error)
   if ((data ?? []).length > 0) throw new Refused('delete refused')
 }
 
 /**
- * One batch, in two calls at most.
+ * One batch, sent group by group — each round's holes together, each
+ * player's clears together, each match card box on its own — and **every
+ * group tried even if an earlier one fails**, so one entry the server will
+ * not take (a card voided on another phone, an event this phone has left)
+ * never holds the rest behind it. What got through is reported on
+ * `PartialSend`, and the outbox drops exactly that.
  *
- * Throws on a write failure rather than swallowing it — that rejection is
- * what tells the outbox to hold the holes and try again, and returning
- * quietly is precisely the bug this whole mechanism exists to end.
+ * Throws on any write failure rather than swallowing it — that rejection is
+ * what tells the outbox to hold what is left and try again.
  */
 async function send(batch: Batch): Promise<void> {
-  if (batch.saves.length > 0) {
-    const { data, error } = await supabase
-      .from('live_scores')
-      .upsert(batch.saves, { onConflict: 'player_id,round_id,hole_number' })
-      .select('hole_number')
-    if (error) throw failed(error)
-    // Every row written comes back; fewer is a write the server quietly refused.
-    if ((data ?? []).length < batch.saves.length) throw new Refused('upsert refused')
+  const done = new Set<string>()
+  let refused = false
+  let reason = 'network'
+  let failedAny = false
+  const fail = (e: unknown) => {
+    failedAny = true
+    const isRef = e instanceof Refused
+    if (isRef) refused = true
+    reason = isRef ? 'refused' : (e as { code?: string })?.code ? String((e as { code?: string }).code) : reason
   }
 
-  if (batch.clears.length > 0) {
-    // Grouped by whose card and which round, so clearing four players' holes
-    // on one edit is at most a call each rather than one per hole.
-    const groups = new Map<string, { player_id: string; round_id: string; holes: number[] }>()
-    for (const c of batch.clears) {
-      const k = `${c.player_id}:${c.round_id}`
-      const g = groups.get(k) ?? { player_id: c.player_id, round_id: c.round_id, holes: [] }
-      g.holes.push(c.hole_number)
-      groups.set(k, g)
-    }
-    for (const g of groups.values()) {
+  // Holes, one round at a time.
+  const byRound = new Map<string, Batch['saves']>()
+  for (const r of batch.saves) byRound.set(r.round_id, [...(byRound.get(r.round_id) ?? []), r])
+  for (const rows of byRound.values()) {
+    try {
+      const { data, error } = await supabase
+        .from('live_scores')
+        .upsert(rows, { onConflict: 'player_id,round_id,hole_number' })
+        .select('hole_number')
+      if (error) throw failed_(error)
+      // Every row written comes back; fewer is a write the server quietly refused.
+      if ((data ?? []).length < rows.length) throw new Refused('upsert refused')
+      for (const r of rows) done.add(keyOf(r.player_id, r.round_id, r.hole_number))
+    } catch (e) { fail(e) }
+  }
+
+  // Cleared holes, grouped by whose card and which round.
+  const groups = new Map<string, { player_id: string; round_id: string; holes: number[] }>()
+  for (const c of batch.clears) {
+    const k = `${c.player_id}:${c.round_id}`
+    const g = groups.get(k) ?? { player_id: c.player_id, round_id: c.round_id, holes: [] }
+    g.holes.push(c.hole_number)
+    groups.set(k, g)
+  }
+  for (const g of groups.values()) {
+    try {
       const { data, error } = await supabase
         .from('live_scores')
         .delete()
@@ -103,33 +123,40 @@ async function send(batch: Batch): Promise<void> {
         .eq('round_id', g.round_id)
         .in('hole_number', g.holes)
         .select('hole_number')
-      if (error) throw failed(error)
+      if (error) throw failed_(error)
       if ((data ?? []).length < g.holes.length) {
         await stillThere('live_scores', { player_id: g.player_id, round_id: g.round_id }, g.holes)
       }
-    }
+      for (const h of g.holes) done.add(keyOf(g.player_id, g.round_id, h))
+    } catch (e) { fail(e) }
   }
 
-  // Match play card boxes (stage 7), one at a time in the order entered —
-  // a handful per hole, and each its own row.
+  // Match play card boxes (stage 7), one at a time in the order entered.
   for (const { cell, clear } of batch.match) {
-    const at = { trip_id: cell.trip_id, match_id: cell.match_id, player_id: cell.player_id }
-    if (clear) {
-      const { data, error } = await supabase.from(cell.table).delete()
-        .eq('trip_id', at.trip_id).eq('match_id', at.match_id).eq('player_id', at.player_id)
-        .eq('hole_number', cell.hole_number).select('hole_number')
-      if (error) throw failed(error)
-      if ((data ?? []).length === 0) await stillThere(cell.table, at, [cell.hole_number])
-    } else {
-      const { data, error } = await supabase.from(cell.table).upsert({
-        ...at, hole_number: cell.hole_number, gross: cell.gross, updated_at: new Date().toISOString(),
-      }, { onConflict: 'match_id,player_id,hole_number' }).select('hole_number')
-      const bad = error ? dataError(error) : null
-      if (bad) { for (const fn of rejectionListeners) fn({ cell, ...bad }); continue }
-      if (error) throw failed(error)
-      if ((data ?? []).length === 0) throw new Refused('upsert refused')
-    }
+    try {
+      const at = { trip_id: cell.trip_id, match_id: cell.match_id, player_id: cell.player_id }
+      if (clear) {
+        const { data, error } = await supabase.from(cell.table).delete()
+          .eq('trip_id', at.trip_id).eq('match_id', at.match_id).eq('player_id', at.player_id)
+          .eq('hole_number', cell.hole_number).select('hole_number')
+        if (error) throw failed_(error)
+        if ((data ?? []).length === 0) await stillThere(cell.table, at, [cell.hole_number])
+      } else {
+        const { data, error } = await supabase.from(cell.table).upsert({
+          ...at, hole_number: cell.hole_number, gross: cell.gross, updated_at: new Date().toISOString(),
+        }, { onConflict: 'match_id,player_id,hole_number' }).select('hole_number')
+        const bad = error ? dataError(error) : null
+        if (bad) { for (const fn of rejectionListeners) fn({ cell, ...bad }) }
+        else {
+          if (error) throw failed_(error)
+          if ((data ?? []).length === 0) throw new Refused('upsert refused')
+        }
+      }
+      done.add(matchKeyOf(cell))
+    } catch (e) { fail(e) }
   }
+
+  if (failedAny) throw new PartialSend(done, refused, reason)
 }
 
 let instance: Outbox | null = null
