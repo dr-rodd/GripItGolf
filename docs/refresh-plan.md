@@ -112,7 +112,7 @@ The eight `--gd-*` tokens and their dark values don't change. Add these as named
 
 - **Active tab and emerald text links use `accent-deep` in light mode** (6.6:1). Emerald `accent` on white is 3.5:1, which is too low for text under 24px.
 - **Disabled primary buttons stop being washed-out green** (today: `disabled:opacity-40` on emerald). They become `disabled-bg` with `disabled-fg`. A pale green button reads as broken, not as "not yet".
-- Optional, Phase 4: new default team colours, muted to sit on cream, told apart by lightness as well as hue, with no emerald and no gold: brick `#C8453A`, cobalt `#3D6FB6`, plum `#8A5BA8`, ochre-free orange `#D9731E`, slate `#4F6B7A`, rose `#C24D7C`, olive `#6B7A2E`, navy `#22375E`. Existing teams keep their stored colours. Ask Ross before doing this one.
+- **Done, D75 (Ross, 11 Nov 2026):** new default team colours, muted to sit on cream, told apart by lightness as well as hue, with no emerald and no gold: brick `#C8453A`, cobalt `#3D6FB6`, plum `#8A5BA8`, ochre-free orange `#D9731E`, slate `#4F6B7A`, rose `#C24D7C`, olive `#6B7A2E`, navy `#22375E`. Existing teams keep their stored colours.
 
 ### 3.3 Depth and texture: paper and card
 

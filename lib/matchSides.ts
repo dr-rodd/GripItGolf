@@ -83,11 +83,13 @@ export function colourDistance(x: string, y: string): number {
 }
 
 /**
- * Below this, two sides' colours are shaded apart. Set against the
- * palette: the two purples (7) and two greens (9) fall under it, and so do
+ * Below this, two sides' colours are shaded apart. Set against the old
+ * twelve: the two purples (7) and two greens (9) fall under it, and so do
  * red against orange (23), orange against amber (23), teal against cyan
  * (28) and green against lime (28) — each readable as a swatch on its own,
- * not as a run of thin marks on a strip.
+ * not as a run of thin marks on a strip. Of the eight (D75), slate against
+ * navy (27), cobalt against plum (29) and cobalt against navy (29) — still
+ * stored on older teams, the twelve are still met.
  */
 export const MIN_SIDE_DISTANCE = 30
 

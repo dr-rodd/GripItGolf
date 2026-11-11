@@ -638,7 +638,7 @@ section('The portal writes through the one membership writer')
 section('The palette is one copy, wherever a team comes from')
 {
   const lib = read('lib/teamColors.ts')
-  ok(lib.includes('#DC2626'), 'the twelve live in lib/teamColors.ts')
+  ok(lib.includes("'#C8453A', '#3D6FB6'"), 'the palette lives in lib/teamColors.ts')
   const editor = read('app/golf/[root]/[tripCode]/teams/TripTeamsClient.tsx')
   ok(editor.includes("from '@/lib/teamColors'"),
     'the drag editor imports them rather than holding its own')

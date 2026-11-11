@@ -2801,6 +2801,41 @@ section('The card start sheet wears the parts kit (D72)')
   ok(chipClass(false).includes('rounded-full'), '  …and a chip stays fully round')
 }
 
+section('The team palette: brick to navy (D75)')
+{
+  const { PRESET_COLORS, PRESET_COLOR_NAMES } = require('../lib/teamColors') as typeof import('../lib/teamColors')
+  const sides = require('../lib/matchSides') as typeof import('../lib/matchSides')
+  const { PLAYER_COLOURS } = require('../lib/playerColours') as typeof import('../lib/playerColours')
+  eq(PRESET_COLORS, ['#C8453A', '#3D6FB6', '#8A5BA8', '#D9731E', '#4F6B7A', '#C24D7C', '#6B7A2E', '#22375E'],
+    'the eight, in Ross\'s order: brick, cobalt, plum, orange, slate, rose, olive, navy')
+  eq(PRESET_COLORS.map(c => PRESET_COLOR_NAMES[c]), ['Brick', 'Cobalt', 'Plum', 'Orange', 'Slate', 'Rose', 'Olive', 'Navy'],
+    '  …each named for a screen reader')
+  ok(!PRESET_COLORS.some(c => /^#0A9D56$|^#0A6B3C$|^#C9A84C$/i.test(c)), '  …no emerald and no gold')
+  eq(PLAYER_COLOURS, PRESET_COLORS, 'a player\'s own pick is from the same list')
+  const lum = (h: string) => {
+    const v = [1, 3, 5].map(i => { const c = parseInt(h.slice(i, i + 2), 16) / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4 })
+    return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]
+  }
+  const ratio = (a: string, b: string) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05) }
+  for (const c of PRESET_COLORS) {
+    ok(ratio(c, sides.inkOn(c)) >= 3, `text on ${PRESET_COLOR_NAMES[c]} reads at 3:1 or better (${ratio(c, sides.inkOn(c)).toFixed(2)})`)
+  }
+  // Any two sides on a match — the strip, the bracket, the tag header — read
+  // as two once setApart has had its say. The hex is the same in both themes.
+  for (let i = 0; i < PRESET_COLORS.length; i++) {
+    for (let j = 0; j < PRESET_COLORS.length; j++) {
+      if (i === j) continue
+      const [x, y] = sides.setApart(PRESET_COLORS[i], PRESET_COLORS[j])
+      ok(sides.colourDistance(x, y) >= sides.MIN_SIDE_DISTANCE,
+        `${PRESET_COLOR_NAMES[PRESET_COLORS[i]]} against ${PRESET_COLOR_NAMES[PRESET_COLORS[j]]} clears MIN_SIDE_DISTANCE`)
+    }
+  }
+  // Stored colours are never rewritten: no migration touches teams.color or players.colour for this.
+  const migrations = fs.readdirSync('supabase/migrations').map(f => read(`supabase/migrations/${f}`)).join('\n')
+  ok(!/UPDATE\s+teams\s+SET\s+colou?r/i.test(migrations) && !/UPDATE\s+players\s+SET\s+colou?r/i.test(migrations),
+    'no stored team, tag or player colour is rewritten — an older event looks as it did')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

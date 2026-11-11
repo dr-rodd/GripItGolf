@@ -84,8 +84,11 @@ gets baked into every opacity utility at build time and no theme can reach it.
   3.1:1 and is for 24px and up. Nothing prints at 40% or below.
 - **Emerald text under 24px is `accent-deep`.** Bright `accent` on white is
   3.5:1.
-- **Team colours are data**, stored per team, shown as dots. New defaults
-  without emerald are proposed (`refresh-plan.md` 3.2) and wait on Ross.
+- **Team colours are data**, stored per team, shown as dots. The defaults
+  offered (D75, `lib/teamColors.ts`) are brick, cobalt, plum, orange, slate,
+  rose, olive and navy: muted for cream, apart in lightness as well as hue,
+  no emerald or gold. A stored colour is never rewritten. Navy reads at
+  only 1.5:1 against the dark page, so a navy dot is faint in dark mode.
 
 - **Open (Ross, 19 Oct): the title type and its colour don't yet sit
   with the wordmark.** Titles are Schibsted in ink; the mark is its own
