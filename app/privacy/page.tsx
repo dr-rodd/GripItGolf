@@ -288,8 +288,9 @@ export default function PrivacyPage() {
           name, email or phone number; once you claim your name in an event, it records which player
           you are there. Supabase, which runs the sign-in, notes the network address and type of
           browser each identity signs in from. An identity that enters no event within{' '}
-          {FORGET_RULE.noEventDays} days of being made, or goes {FORGET_RULE.unseenDays} days unused
-          once every event it entered ended more than {FORGET_RULE.afterEventDays} days ago,{' '}
+          {FORGET_RULE.noEventDays} days of being made, or whose events all ended more than{' '}
+          {FORGET_RULE.afterEventDays} days ago (for an event with no end date, once it goes{' '}
+          {FORGET_RULE.unseenDays} days unused),{' '}
           {FORGET_ANONYMOUS_PHONES
             ? 'is deleted, with its record of which events it entered.'
             : 'is to be deleted, with its record of which events it entered, by a nightly clear-out that is not switched on yet. Until it is, identities are kept.'}

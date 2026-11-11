@@ -369,11 +369,25 @@ function wiringTests() {
     ok(/LIMIT max_rows/.test(code), 'a night forgets a bounded number')
 
     const route = read('app/api/cleanup/route.ts')
-    ok(/rpc\("anonymous_phones_to_forget"/.test(route), 'the nightly job counts every night')
+    ok(/rpc\("anonymous_phones_to_forget"/.test(route), 'the job counts when it is not deleting')
     ok(/deleting: FORGET_ANONYMOUS_PHONES && !dryRun/.test(route) && /if \(anonymousPhones\.deleting/.test(route),
       '  …and deletes only with the switch on, never on a dry run')
     ok(/FORGET_ANONYMOUS_PHONES = false/.test(read('lib/membership.ts')), 'the switch ships off: the dry-run count comes first')
     ok(/anonymous_phones_to_forget\(\)/.test(read('scripts/rls-check.sql')), 'scripts/rls-check.sql has the dry-run count, off the same function')
+
+    // 081: lighter. The sessions lookup only for open-ended events, one call, weekly.
+    const lite = read('supabase/migrations/20260101000081_forget_phones_lighter.sql').replace(/--[^\n]*/g, '')
+    ok(/interval '7 days'/.test(lite) && /interval '90 days'/.test(lite) && lite.includes(`::date - ${FORGET_RULE.afterEventDays}`),
+      '081 keeps the three numbers FORGET_RULE prints')
+    ok(!/WITH anon AS/.test(lite) && /t\.end_date IS NULL/.test(lite) && /'add_rounds' = 'true'/.test(lite),
+      '081 asks the sessions only where an event is open-ended (no end date, or an ad hoc series adding rounds)')
+    ok(/t\.end_date IS NOT NULL\s+AND t\.end_date >= /.test(lite), '  …and an event with an end date closes 30 days after it, no last-seen test')
+    ok((lite.match(/is_anonymous IS TRUE/g) ?? []).length >= 3, '  …only anonymous phones, in both rules and the delete')
+    ok(lite.includes('REVOKE ALL ON FUNCTION public.forget_anonymous_phones') && lite.includes('GRANT EXECUTE ON FUNCTION public.forget_anonymous_phones'),
+      '  …both functions stay the server\'s alone')
+    ok(/getUTCDay\(\) === FORGET_WEEKDAY/.test(route) && /FORGET_WEEKDAY = 0/.test(read('lib/membership.ts')), 'the forgetting step runs weekly, not nightly')
+    ok(!/rpc\("anonymous_phones_to_forget"[\s\S]*rpc\("forget_anonymous_phones"/.test(route.replace(/\/\/[^\n]*/g,'')) || /if \(anonymousPhones\.deleting\) \{[\s\S]*\} else \{[\s\S]*anonymous_phones_to_forget/.test(route),
+      '  …one call: the delete, or the count, never both')
 
     // The privacy notice prints FORGET_RULE; the SQL is what runs. One rule.
     ok(code.includes(`interval '${FORGET_RULE.noEventDays} days'`), `069 forgets a phone with no event after ${FORGET_RULE.noEventDays} days, as FORGET_RULE says`)

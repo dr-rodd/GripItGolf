@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
-import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT } from "@/lib/membership"
+import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT, FORGET_WEEKDAY } from "@/lib/membership"
 import { RESET_KEEP_HOURS } from "@/lib/pinReset"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
@@ -215,22 +215,30 @@ export async function GET(req: NextRequest) {
   }
 
   // ── 5. Anonymous phones nobody will miss ──
-  // The rule is migration 069's `anonymous_phones_to_forget()`, counted every
-  // night; deleted only once FORGET_ANONYMOUS_PHONES (lib/membership.ts) is
-  // switched on, and never on a dry run. Before 069 the count is null and
-  // nothing is deleted. Its own try, like every step here.
-  let anonymousPhones: { toForget: number | null; forgotten: number; deleting: boolean } =
-    { toForget: null, forgotten: 0, deleting: FORGET_ANONYMOUS_PHONES && !dryRun }
+  // The rule is migration 069's, lightened by 081: `anonymous_phones_to_
+  // forget()`. Weekly, on Sunday (UTC), not nightly — a free-tier database
+  // has no need of the scan every night, and a backlog drains at
+  // FORGET_PER_NIGHT a run regardless. One call: the deletion when the
+  // switch (lib/membership.ts) is on, else the count alone; a dry run counts
+  // and never deletes, on any day. `toForget` is null on the other days and
+  // before 069. Its own try, like every step here.
+  let anonymousPhones: { toForget: number | null; forgotten: number; deleting: boolean; ran: boolean } =
+    { toForget: null, forgotten: 0, deleting: FORGET_ANONYMOUS_PHONES && !dryRun, ran: false }
   try {
-    const { count, error } = await supabaseAdmin
-      .rpc("anonymous_phones_to_forget", {}, { count: "exact", head: true })
-    if (error) throw error
-    anonymousPhones = { ...anonymousPhones, toForget: count ?? 0 }
-    if (anonymousPhones.deleting && (count ?? 0) > 0) {
-      const { data, error: forgetError } = await supabaseAdmin
-        .rpc("forget_anonymous_phones", { max_rows: FORGET_PER_NIGHT })
-      if (forgetError) throw forgetError
-      anonymousPhones = { ...anonymousPhones, forgotten: typeof data === "number" ? data : 0 }
+    if (dryRun || now.getUTCDay() === FORGET_WEEKDAY) {
+      anonymousPhones = { ...anonymousPhones, ran: true }
+      if (anonymousPhones.deleting) {
+        const { data, error } = await supabaseAdmin
+          .rpc("forget_anonymous_phones", { max_rows: FORGET_PER_NIGHT })
+        if (error) throw error
+        const n = typeof data === "number" ? data : 0
+        anonymousPhones = { ...anonymousPhones, toForget: n, forgotten: n }
+      } else {
+        const { count, error } = await supabaseAdmin
+          .rpc("anonymous_phones_to_forget", {}, { count: "exact", head: true })
+        if (error) throw error
+        anonymousPhones = { ...anonymousPhones, toForget: count ?? 0 }
+      }
     }
   } catch (e) {
     console.error("anonymous phones cleanup failed:", e)

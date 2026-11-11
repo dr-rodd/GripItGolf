@@ -270,9 +270,11 @@ export function needsEntry(stamp: string | null | undefined, userId: string, pla
 //
 // Supabase never expires an anonymous user by itself. The rule (Ross,
 // 10 Nov 2026) is SQL, in one place — migration 069's
-// `anonymous_phones_to_forget()`: no event and made more than 7 days ago, or
-// unseen for 90 days with every one of its events ended more than 30 days
-// ago. The nightly cleanup (/api/cleanup) always counts it; it deletes only
+// `anonymous_phones_to_forget()` (lightened by 081, 11 Nov 2026): no event and
+// made more than 7 days ago, or every one of its events ended more than 30
+// days ago — and, where one is open-ended (no end date, or an ad hoc series
+// still adding rounds), also unseen for 90 days. A forgotten phone returns
+// by its cookie and the event code, so it costs nothing to bring back. The nightly cleanup (/api/cleanup) always counts it; it deletes only
 // while this is on — switched on once the dry-run count in
 // scripts/rls-check.sql has been looked at.
 
@@ -294,4 +296,7 @@ export const FORGET_RULE = {
 
 /** At most this many phones forgotten a night, so a backlog drains rather than lands at once. */
 export const FORGET_PER_NIGHT = 5000
+
+/** The weekday the forgetting step runs (UTC, 0 is Sunday); the rest of the cleanup is nightly. */
+export const FORGET_WEEKDAY = 0
 
