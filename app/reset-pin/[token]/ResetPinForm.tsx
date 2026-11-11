@@ -72,8 +72,8 @@ export default function ResetPinForm({ resetToken }: { resetToken: string }) {
     <main className="min-h-dvh paper flex flex-col">
       <form onSubmit={save} className="flex-1 flex flex-col w-full max-w-md mx-auto">
         <div className="flex-1 px-4 pt-10">
-          <h1 className="t-h1 text-ink">Choose a new {w.pin}</h1>
-          <p className="text-ink/65 text-sm mt-1">{link.eventName} · <span className="t-code">{link.code}</span></p>
+          <h1 className="t-h1 text-ink">Choose a new {w.pin} for {link.eventName}</h1>
+          <p className="text-ink/65 text-sm mt-1"><span className="t-code">{link.code}</span></p>
 
           <label htmlFor="new-pin" className="t-label text-ink block mt-8 mb-2">New {w.pin}</label>
           <input

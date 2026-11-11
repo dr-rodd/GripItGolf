@@ -13,8 +13,6 @@ import { MAX_PASSCODE, MIN_PASSCODE } from './passcode'
 
 /** How long a reset link works. */
 export const RESET_LINK_MINUTES = 30
-/** Links emailed for one event in an hour; past it the route still says "Sent". */
-export const RESETS_PER_EVENT_HOUR = 3
 /** The nightly cleanup deletes a link this long after it was made. */
 export const RESET_KEEP_HOURS = 24
 

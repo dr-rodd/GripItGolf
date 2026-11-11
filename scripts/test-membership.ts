@@ -24,7 +24,7 @@ import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entr
 import { runDoor, runExtend, runPlayTogether, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
 import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
 import { SaveStepError, runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
-import { RESETS_PER_EVENT_HOUR, RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
+import { RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
 
 // The door's token and a re-stored PIN are keyed by the server's secret.
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
@@ -657,8 +657,8 @@ async function forgotPinTests() {
   sendWorks = true
   await ask('RESET1', '3.3.3.3')
   const before = sent.length
-  eq((await ask('RESET1', '4.4.4.4')).body, { ok: true, result: 'sent' }, `past ${RESETS_PER_EVENT_HOUR} an hour for the event it still says Sent`)
-  eq(sent.length, before, '  …and sends nothing')
+  eq((await ask('RESET1', '4.4.4.4')).body, { ok: true, result: 'sent' }, 'a fourth ask in the hour is sent too')
+  eq(sent.length, before + 1, '  …no cap per event: the email goes')
   clock = later(61 * 60_000)
   for (let i = 0; i < 10; i++) await ask('RESET1', '5.5.5.5')
   const capped = sent.length
@@ -694,7 +694,7 @@ async function forgotPinTests() {
   eq(members.get('third|T9')?.organiserUntil, later(HOUR).toISOString(), '  …another event\'s phones untouched')
   eq(members.get('me|T1')?.organiserUntil, later(ORGANISER_MS).toISOString(), '  …and this phone is organiser for twelve hours')
   if (done.status === 200) {
-    eq(done.body.home, '/golf/event/RESET1/organiser', '  …landing in the organiser area')
+    eq(done.body.home, '/golf/event/RESET1', '  …landing on the event’s home page')
     ok(!!done.cookie, '  …past the event\'s public PIN too')
   }
   eq((await save('9999')).status, 410, 'the same link refuses a second use')

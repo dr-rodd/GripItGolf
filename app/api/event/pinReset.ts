@@ -23,7 +23,7 @@ import { entryToken, hashPin, verifyPin } from '@/lib/pinHash'
 import { mergeGrant, ATTEMPT_LIMITS, afterFailure, attemptBlocked, type AttemptWindow, type Membership } from '@/lib/membership'
 import { passcodeError } from '@/lib/passcode'
 import {
-  RESETS_PER_EVENT_HOUR, RESET_EXPIRED, RESET_LINK_MINUTES, SAME_AS_PUBLIC,
+  RESET_EXPIRED, RESET_LINK_MINUTES, SAME_AS_PUBLIC,
   newPinIssue, resetHtml, resetSubject, resetText, resetWords,
 } from '@/lib/pinReset'
 import { isEvent } from '@/lib/eventHub'
@@ -83,10 +83,10 @@ export function isPlainTrip(kind: unknown): boolean {
   return !isEvent(kind) && !isRunChallenge(kind)
 }
 
-/** Where a reset lands: the organiser area, unlocked (Trip Setup on a trip). */
+/** Where a reset lands: the event's own home page, the phone unlocked as organiser. */
 export function resetHome(code: string, kind: unknown): string {
-  if (isRunChallenge(kind)) return `/run/${code}/organiser`
-  return `${tripBase(code, kind)}${isPlainTrip(kind) ? '/setup' : '/organiser'}`
+  if (isRunChallenge(kind)) return `/run/${code}`
+  return tripBase(code, kind)
 }
 
 export function newResetToken(): string {
@@ -130,10 +130,8 @@ export async function runAskReset(
   if (attemptBlocked(w, ATTEMPT_LIMITS.address, now)) return sent
   await store.writeAttempt(key, trip.id, afterFailure(w, ATTEMPT_LIMITS.address, now))
 
-  // Three links an hour for the event, whoever asks.
-  const hourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString()
-  if ((await store.countResets(trip.id, hourAgo)) >= RESETS_PER_EVENT_HOUR) return sent
-
+  // No cap per event (Ross, 11 Nov 2026: a third email silently never came):
+  // the network window above is the only limit, and each link is its own.
   const token = newResetToken()
   await store.insertReset({
     tokenHash: resetTokenHash(token),
