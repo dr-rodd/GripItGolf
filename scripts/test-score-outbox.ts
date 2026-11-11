@@ -16,7 +16,7 @@
 
 import { readFileSync } from 'fs'
 import {
-  createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused, PartialSend, unsentLine, unsentDetail,
+  createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused, PartialSend, unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS,
   MAX_AGE_MS, BACKOFF_MS, SEND_TIMEOUT_MS, STORAGE_KEY, RECOVER_GAP_MS,
   type Batch, type Entry, type ScoreRow, type OutboxStorage,
 } from '../lib/scoreOutbox'
@@ -630,6 +630,15 @@ section('One entry the server will not take never holds the rest behind it')
   eq(box.entries()[0]?.key, keyOf('p1', 'r-bad', 2), '  …and it is the refused one')
   eq(box.status().reason, 'refused', 'the reason is kept, for the quiet line')
   box.stop()
+}
+
+section('The waiting line does not flash up for a normal send')
+{
+  ok(UNSENT_SHOW_DELAY_MS >= 2_000 && UNSENT_SHOW_DELAY_MS <= 6_000, 'it waits a few seconds first, then speaks')
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  const card = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
+  ok(/useAfterDelay\(count > 0, UNSENT_SHOW_DELAY_MS\)/.test(flow), 'the stroke card holds it back')
+  ok(/useAfterDelay\(unsent > 0, UNSENT_SHOW_DELAY_MS\)/.test(card) && /\{unsentShown && \(/.test(card), 'and so does the match card')
 }
 
 section('The waiting line is status, not a fault')

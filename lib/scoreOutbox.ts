@@ -192,6 +192,13 @@ export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000]
 export const SEND_TIMEOUT_MS = 6_000
 
 /**
+ * How long scores must have been waiting before the screen says anything. A
+ * score on good signal is on its way within a second; the line is for a
+ * connection that is actually weak (Ross, 11 Nov 2026).
+ */
+export const UNSENT_SHOW_DELAY_MS = 3_000
+
+/**
  * What a phone with scores waiting says, the one copy (Ross, 11 Nov 2026):
  * status, not a fault — "Weak signal · 3 scores pending submission". Nothing
  * is wrong and nothing needs doing, so no "failed", "error" or "could not".

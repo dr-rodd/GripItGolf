@@ -13,8 +13,9 @@ import {
 } from '@/lib/matchCard'
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
+import { useAfterDelay } from '@/app/components/useAfterDelay'
 import { onMatchRejected, scoreOutbox } from '@/app/scoring/outbox'
-import { unsentLine, unsentDetail, type Entry } from '@/lib/scoreOutbox'
+import { unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS, type Entry } from '@/lib/scoreOutbox'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
@@ -140,6 +141,8 @@ export default function MatchCardClient({
   const [sendStatus, setSendStatus] = useState<{ failures: number; reason: string | null }>({ failures: 0, reason: null })
   useEffect(() => outbox.subscribeStatus(setSendStatus), [outbox])
   useEffect(() => outbox.subscribe(setUnsent, mine), [outbox, mine])
+  // Not for the moment a normal send takes: only once they have been waiting a while.
+  const unsentShown = useAfterDelay(unsent > 0, UNSENT_SHOW_DELAY_MS)
   useEffect(() => onMatchRejected(r => {
     if (r.cell.match_id !== matchId) return
     // Before migration 059 the card's tables stop at the 18th; before 062
@@ -691,7 +694,7 @@ export default function MatchCardClient({
       )}
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
-      {unsent > 0 && (
+      {unsentShown && (
         <p className="t-cap text-ink/65 text-center leading-snug flex items-center justify-center gap-2.5" role="status">
           <IconSignalWeak />
           <span>

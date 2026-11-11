@@ -13,7 +13,8 @@ import {
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { type ScoreRow } from "@/lib/scoreOutbox"
 import { scoreOutbox, refusal } from "./outbox"
-import { unsentLine, unsentDetail } from "@/lib/scoreOutbox"
+import { unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS } from "@/lib/scoreOutbox"
+import { useAfterDelay } from "@/app/components/useAfterDelay"
 import { IconSignalWeak } from "@/app/components/icons"
 import { recoverEvents } from "@/lib/entryClient"
 import { why } from "@/lib/writeFailure"
@@ -301,7 +302,9 @@ function yardageForTee(hole: Hole, teeName: string): number | null {
 function UnsentNote({ count, inline = false }: { count: number; inline?: boolean }) {
   const [status, setStatus] = useState<{ failures: number; reason: string | null }>({ failures: 0, reason: null })
   useEffect(() => scoreOutbox().subscribeStatus(setStatus), [])
-  if (count <= 0) return null
+  // Not for the moment a normal send takes: only once they have been waiting a while.
+  const waiting = useAfterDelay(count > 0, UNSENT_SHOW_DELAY_MS)
+  if (count <= 0 || !waiting) return null
   const detail = unsentDetail(status.failures, status.reason)
   return (
     <div
