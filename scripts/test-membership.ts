@@ -23,6 +23,8 @@ import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '.
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runExtend, runPlayTogether, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
 import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
+import { runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
+import { RESETS_PER_EVENT_HOUR, RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
 
 // The door's token and a re-stored PIN are keyed by the server's secret.
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
@@ -333,8 +335,8 @@ function wiringTests() {
     const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
     const writers = [...files('app'), ...files('lib')].filter(f => read(f).includes("from('trip_members')"))
-    eq(writers.sort(), ['app/api/entry/store.ts', 'app/api/trip/create/route.ts'],
-      'two files name the table: the entry route\'s store, and creation (the maker\'s own membership)')
+    eq(writers.sort(), ['app/api/entry/store.ts', 'app/api/event/resetStore.ts', 'app/api/trip/create/route.ts'],
+      'three files name the table: the entry route\'s store, creation (the maker\'s own membership), and a PIN reset ending every phone\'s organiser access')
     ok(read('app/api/trip/create/route.ts').includes('createAdminClient()'), '  …both on the service role')
     ok(read('app/api/entry/route.ts').includes('serviceStore(createAdminClient())') || /serviceStore\(db\)/.test(read('app/api/entry/route.ts')),
       '  …built on the service role by the route')
@@ -514,9 +516,138 @@ async function stageFourTests() {
   }
 }
 
+// ─── Forgot PIN (D67) ──────────────────────────────────────────
+
+async function forgotPinTests() {
+  section('Forgot PIN: a link emailed, once, for thirty minutes (D67)')
+  const ADDRESS = 'organiser@example.com'
+  const trips: ResetTrip[] = [
+    { id: 'T1', code: 'RESET1', name: 'Autumn Open', kind: 'tournament', email: ADDRESS, publicHash: await hashPin('4321', 'RESET1') },
+    { id: 'T2', code: 'NOMAIL', name: 'No Mail Cup', kind: 'tournament', email: null, publicHash: null },
+  ]
+  const resets = new Map<string, ResetRow & { createdAt: string }>()
+  const members = new Map<string, Membership>()
+  const attempts = new Map<string, AttemptWindow>()
+  const sent: { to: string; text: string; html: string }[] = []
+  let adminHash: string | null = null
+  let sendWorks = true
+  const store: ResetStore = {
+    async userFromToken(t) { return t.startsWith('tok-') ? t.slice(4) : null },
+    async tripByCode(code) { return trips.find(t => t.code === code) ?? null },
+    async tripById(id) { return trips.find(t => t.id === id) ?? null },
+    async countResets(tripId, since) { return [...resets.values()].filter(r => r.tripId === tripId && r.createdAt >= since).length },
+    async insertReset(r) { resets.set(r.tokenHash, { tripId: r.tripId, expiresAt: r.expiresAt, usedAt: null, createdAt: clock.toISOString() }) },
+    async findReset(h) { const r = resets.get(h); return r ? { tripId: r.tripId, expiresAt: r.expiresAt, usedAt: r.usedAt } : null },
+    async claimReset(h, now) {
+      const r = resets.get(h)
+      if (!r || r.usedAt || r.expiresAt <= now) return false
+      r.usedAt = now
+      return true
+    },
+    async setAdminHash(_t, h) { adminHash = h },
+    async endOrganisers(tripId) {
+      for (const [k, m] of members) if (k.endsWith(`|${tripId}`)) members.set(k, { ...m, organiserUntil: null })
+    },
+    async readMembership(u, t) { return members.get(`${u}|${t}`) ?? null },
+    async writeMembership(u, t, m) { members.set(`${u}|${t}`, m) },
+    async readAttempts(keys) { return new Map(keys.flatMap(k => (attempts.has(k) ? [[k, attempts.get(k)!] as const] : []))) },
+    async writeAttempt(k, _t, w) { attempts.set(k, w) },
+    async sendEmail(to, _subject, html, text) { if (!sendWorks) throw new Error('down'); sent.push({ to, text, html }); return true },
+  }
+  let clock = NOW
+  const ask = (code: string, address = '1.1.1.1') => runAskReset({ code, address, origin: 'https://greendot.live' }, store, clock)
+  const tokenIn = (text: string) => /\/reset-pin\/([A-Za-z0-9_-]+)/.exec(text)?.[1] ?? ''
+
+  const first = await ask('RESET1')
+  eq(first.body, { ok: true, result: 'sent' }, 'asking says Sent')
+  ok(!JSON.stringify(first).includes(ADDRESS), '  …and never carries the address')
+  eq(sent.length, 1, '  …and one email went')
+  eq(sent[0]?.to, ADDRESS, '  …to the address the event was made with')
+  const token = tokenIn(sent[0]?.text ?? '')
+  ok(token.length >= 32, '  …carrying a long random token')
+  ok(!resets.has(token) && resets.has(resetTokenHash(token)), 'only the token\'s hash is stored')
+  eq(resets.get(resetTokenHash(token))?.expiresAt, later(RESET_LINK_MINUTES * 60_000).toISOString(), 'the link works for thirty minutes')
+  ok(!sent[0].text.match(/\b4321\b/), 'the email holds no PIN')
+
+  const none = await ask('NOMAIL')
+  eq(none.body, { ok: true, result: 'none', support: 'support@greendot.live' }, 'an event with no address says so and names the support address')
+  eq((await ask('NOPE99')).status, 404, 'an unknown code is no event')
+
+  sendWorks = false
+  eq((await ask('RESET1', '2.2.2.2')).body, { ok: true, result: 'sent' }, 'a send that fails still says Sent')
+  sendWorks = true
+  await ask('RESET1', '3.3.3.3')
+  const before = sent.length
+  eq((await ask('RESET1', '4.4.4.4')).body, { ok: true, result: 'sent' }, `past ${RESETS_PER_EVENT_HOUR} an hour for the event it still says Sent`)
+  eq(sent.length, before, '  …and sends nothing')
+  clock = later(61 * 60_000)
+  for (let i = 0; i < 10; i++) await ask('RESET1', '5.5.5.5')
+  const capped = sent.length
+  clock = later(62 * 60_000)
+  resets.clear()
+  eq((await ask('RESET1', '5.5.5.5')).body, { ok: true, result: 'sent' }, 'past ten from one network it still says Sent')
+  eq(sent.length, capped, '  …and sends nothing')
+  clock = NOW
+
+  // A fresh link, then the reset itself.
+  resets.clear(); attempts.clear(); sent.length = 0
+  await ask('RESET1')
+  const link = tokenIn(sent[0].text)
+  const check = await runCheckReset({ resetToken: link }, store, NOW)
+  eq(check.body, { ok: true, eventName: 'Autumn Open', code: 'RESET1', isTrip: false, hasPublicPin: true }, 'the page checks the link: the event, and nothing used up')
+  ok(!JSON.stringify(check).includes(ADDRESS), '  …never the address')
+
+  members.set('other|T1', { role: 'player', playerId: P1, organiserUntil: later(HOUR).toISOString() })
+  members.set('third|T9', { role: 'guest', playerId: null, organiserUntil: later(HOUR).toISOString() })
+  const save = (pin: string, again = pin, resetToken = link, token: string | null = 'tok-me') =>
+    runSaveReset({ token, resetToken, pin, again }, store, NOW)
+
+  eq((await save('12', '12')).status, 400, 'too short is refused')
+  eq((await save('1234', '1235')).status, 400, 'two PINs that differ are refused')
+  eq((await save('4321')).status, 400, 'the public PIN is refused')
+  eq((await save('5678', '5678', link, null)).status, 401, 'a phone not signed in is refused')
+  eq(adminHash, null, '  …and none of those changed anything')
+
+  const done = await save('5678')
+  eq(done.status, 200, 'the new PIN saves')
+  ok(!!adminHash && (await verifyPin('5678', adminHash)).ok && !(adminHash as string).includes('5678'), '  …stored salted and slow, never as typed')
+  eq(members.get('other|T1')?.organiserUntil, null, '  …every other phone in the event is organiser no longer')
+  eq(members.get('third|T9')?.organiserUntil, later(HOUR).toISOString(), '  …another event\'s phones untouched')
+  eq(members.get('me|T1')?.organiserUntil, later(ORGANISER_MS).toISOString(), '  …and this phone is organiser for twelve hours')
+  if (done.status === 200) {
+    eq(done.body.home, '/golf/event/RESET1/organiser', '  …landing in the organiser area')
+    ok(!!done.cookie, '  …past the event\'s public PIN too')
+  }
+  eq((await save('9999')).status, 410, 'the same link refuses a second use')
+  eq((await runCheckReset({ resetToken: link }, store, NOW)).status, 410, '  …and the page says it has been used')
+
+  resets.clear(); sent.length = 0; attempts.clear()
+  await ask('RESET1')
+  const late = tokenIn(sent[0].text)
+  eq((await runCheckReset({ resetToken: late }, store, later(RESET_LINK_MINUTES * 60_000 + 1))).status, 410, 'a link past thirty minutes has expired')
+  eq((await runSaveReset({ token: 'tok-me', resetToken: late, pin: '2468', again: '2468' }, store, later(RESET_LINK_MINUTES * 60_000 + 1))).status, 410,
+    '  …and saves nothing')
+  eq((await runCheckReset({ resetToken: 'made-up-token-made-up-token-made-up' }, store, NOW)).status, 410, 'a made-up link is no link')
+
+  eq(newPinIssue('123', '123'), 'Use 4 to 8 digits.', 'the reset page\'s words: length')
+  eq(newPinIssue('1234', '4321'), 'The two PINs don’t match.', '  …and two that differ')
+
+  section('Forgot PIN: the address never reaches a browser (D67)')
+  const clientFiles = ['app/components/ForgotPin.tsx', 'app/components/OrganiserLock.tsx', 'app/components/InlineUnlock.tsx',
+    'app/golf/[root]/[tripCode]/setup/PasscodeGate.tsx', 'app/reset-pin/[token]/ResetPinForm.tsx', 'app/reset-pin/[token]/page.tsx', 'lib/pinReset.ts']
+  for (const f of clientFiles) ok(!/lead_email|leadEmail|\.email\b/.test(read(f)), `${f} names no event address`)
+  const entryClient = read('lib/entryClient.ts')
+  const resetHalf = entryClient.slice(entryClient.indexOf('Forgot PIN (D67)'))
+  ok(resetHalf.length > 100 && !/email\b(?!\s+(the|a|was))/i.test(resetHalf.replace(/\/\/.*$|\*.*$/gm, '')), 'lib/entryClient.ts\'s reset half reads no address')
+  ok(/linkOrigin/.test(read('app/api/event/forgot/route.ts')) && !/headers\.get\('host'\)/.test(read('app/api/event/forgot/route.ts')),
+    'the emailed link\'s origin is fixed, never the request\'s Host')
+  ok(/pin_resets/.test(read('app/api/cleanup/route.ts')), 'the nightly cleanup deletes old links')
+}
+
 async function main() {
   await routeTests()
   await stageFourTests()
+  await forgotPinTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

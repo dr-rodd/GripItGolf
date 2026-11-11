@@ -5,6 +5,7 @@ import { MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from './ui'
 import { unlockWithPin } from '@/lib/entryClient'
 import { unlockError } from './OrganiserLock'
+import ForgotPin, { ForgotPinLink } from './ForgotPin'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -18,16 +19,19 @@ import { unlockError } from './OrganiserLock'
  * where the event has one.
  */
 export default function InlineUnlock({
-  tripCode, onUnlocked, prompt = 'Organiser? Enter your PIN to edit.',
+  tripCode, onUnlocked, prompt = 'Organiser? Enter your PIN to edit.', isTrip = false,
 }: {
   tripCode: string
   onUnlocked: () => void
   prompt?: string
+  /** A trip's: its Trip Setup passcode, in the Forgot words. */
+  isTrip?: boolean
 }) {
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [forgot, setForgot] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -55,8 +59,13 @@ export default function InlineUnlock({
     )
   }
 
+  if (forgot) {
+    return <ForgotPin tripCode={tripCode} isTrip={isTrip} onBack={() => setForgot(false)} />
+  }
+
   return (
-    <form onSubmit={submit} className="flex items-center gap-2">
+    <div className="flex flex-col items-start">
+    <form onSubmit={submit} className="flex items-center gap-2 w-full">
       <input
         type="password"
         inputMode="numeric"
@@ -77,5 +86,7 @@ export default function InlineUnlock({
       </button>
       {error && <span className="t-cap text-rust-deep flex-shrink-0">{error}</span>}
     </form>
+    <ForgotPinLink isTrip={isTrip} onClick={() => { setError(''); setForgot(true) }} />
+    </div>
   )
 }

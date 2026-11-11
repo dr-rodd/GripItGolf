@@ -358,3 +358,55 @@ export async function createTripRow(
     return failed('Could not create the event — try again.')
   }
 }
+
+// ─── Forgot PIN (D67) ──────────────────────────────────────────
+
+/**
+ * "Email me a link": the server emails a reset link to the address the
+ * event was made with, which never comes back here. `none` means the event
+ * has no address, and `support` is who to write to instead.
+ */
+export async function askPinReset(tripCode: string): Promise<{ result: 'sent' | 'failed' } | { result: 'none'; support: string }> {
+  if (!inBrowser() || !tripCode) return { result: 'failed' }
+  const r = await ask('/api/event/forgot', { code: tripCode.trim().toUpperCase() }, { signIn: false })
+  if (r?.status !== 200) return { result: 'failed' }
+  if (r.body.result === 'none') return { result: 'none', support: typeof r.body.support === 'string' ? r.body.support : '' }
+  return { result: r.body.result === 'sent' ? 'sent' : 'failed' }
+}
+
+export type ResetLink =
+  | { ok: true; eventName: string; code: string; isTrip: boolean; hasPublicPin: boolean }
+  | { ok: false; error: string }
+
+/** Is this reset link still good, and for which event? Uses nothing up. */
+export async function checkResetLink(resetToken: string): Promise<ResetLink> {
+  const r = inBrowser() ? await ask('/api/event/reset', { resetToken, check: true }, { signIn: false }) : null
+  if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
+  if (r.status === 200 && typeof r.body.code === 'string') {
+    return {
+      ok: true, eventName: String(r.body.eventName ?? ''), code: r.body.code,
+      isTrip: r.body.isTrip === true, hasPublicPin: r.body.hasPublicPin === true,
+    }
+  }
+  return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not reach Green Dot — try again.' }
+}
+
+/**
+ * The new PIN, saved through the link: this phone is the organiser from
+ * then, for as long as the server says, and every other phone is not.
+ */
+export async function saveResetPin(
+  resetToken: string, pin: string, again: string,
+): Promise<{ ok: true; home: string } | { ok: false; expired: boolean; error: string }> {
+  const r = inBrowser() ? await ask('/api/event/reset', { resetToken, pin, again }) : null
+  if (!r) return { ok: false, expired: false, error: 'Could not reach Green Dot — try again.' }
+  if (r.status === 200 && typeof r.body.code === 'string' && typeof r.body.home === 'string') {
+    rememberUnlock(r.body.code, isoOrNull(r.body.organiserUntil))
+    return { ok: true, home: r.body.home }
+  }
+  return {
+    ok: false,
+    expired: r.status === 410,
+    error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.',
+  }
+}

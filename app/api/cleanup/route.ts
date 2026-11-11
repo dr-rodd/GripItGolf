@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
 import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT } from "@/lib/membership"
+import { RESET_KEEP_HOURS } from "@/lib/pinReset"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
@@ -197,6 +198,22 @@ export async function GET(req: NextRequest) {
     console.error("entry attempts cleanup failed:", e)
   }
 
+  // ── 4b. PIN reset links a day old (D67, migration 072) ──
+  // A link works for 30 minutes and the limit counts an hour of them, so a
+  // day is plenty. Its own try: before 072 the table does not exist.
+  let staleResets = 0
+  try {
+    const cutoff = new Date(Date.now() - RESET_KEEP_HOURS * 60 * 60 * 1000).toISOString()
+    const q = dryRun
+      ? supabaseAdmin.from("pin_resets").select("token_hash", { count: "exact", head: true }).lt("created_at", cutoff)
+      : supabaseAdmin.from("pin_resets").delete({ count: "exact" }).lt("created_at", cutoff)
+    const { count, error } = await q
+    if (error) throw error
+    staleResets = count ?? 0
+  } catch (e) {
+    console.error("pin resets cleanup failed:", e)
+  }
+
   // ── 5. Anonymous phones nobody will miss ──
   // The rule is migration 069's `anonymous_phones_to_forget()`, counted every
   // night; deleted only once FORGET_ANONYMOUS_PHONES (lib/membership.ts) is
@@ -224,6 +241,7 @@ export async function GET(req: NextRequest) {
     dryRun,
     draws,
     staleAttempts,
+    staleResets,
     anonymousPhones,
     closedEmpty,
     closedAbandoned,

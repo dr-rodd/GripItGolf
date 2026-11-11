@@ -6,6 +6,7 @@ import { useUnlocked } from './useUnlocked'
 import { IconLock, IconLockOpen } from './icons'
 import { FIELD, buttonClass, cardClass } from './ui'
 import { lockShut, unlockWithPin } from '@/lib/entryClient'
+import ForgotPin, { ForgotPinLink } from './ForgotPin'
 
 /**
  * The organiser's lock, at the header's right edge on every page that has
@@ -34,6 +35,8 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  // "Forgot PIN?" tapped: the box asks for a reset link instead (D67).
+  const [forgot, setForgot] = useState(false)
   // Each tap restarts the wobble: a fresh key, a fresh animation.
   const [wobble, setWobble] = useState(0)
   const box = useRef<HTMLDivElement>(null)
@@ -55,6 +58,7 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
   function tap() {
     setWobble(n => n + 1)
     setError('')
+    setForgot(false)
     if (unlocked) {
       lockShut(tripCode)
       setOpen(false)
@@ -97,7 +101,13 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
         </span>
       </button>
 
-      {open && !unlocked && (
+      {open && !unlocked && forgot && (
+        <div className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`}>
+          <ForgotPin tripCode={tripCode} isTrip={isTrip} onBack={() => setForgot(false)} />
+        </div>
+      )}
+
+      {open && !unlocked && !forgot && (
         <form
           onSubmit={submit}
           className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`}
@@ -127,6 +137,7 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
             </button>
           </div>
           {error && <p className="t-cap text-rust-deep mt-2">{error}</p>}
+          <ForgotPinLink isTrip={isTrip} onClick={() => { setError(''); setForgot(true) }} className="mt-1 -mb-2" />
         </form>
       )}
     </div>

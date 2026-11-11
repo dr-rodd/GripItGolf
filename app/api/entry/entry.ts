@@ -76,7 +76,7 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.length > 
  * The keys a PIN's two windows are counted under. Hashed with the event's id
  * so the address is never stored and two events' counts never meet.
  */
-export async function attemptKeys(tripId: string, kind: AttemptKind, address: string) {
+export async function attemptKeys(tripId: string, kind: AttemptKind | 'reset', address: string) {
   const scrambled = createHash('sha256').update(`${tripId}|${kind}|${address}`, 'utf8').digest('hex')
   return {
     address: `${tripId}:${kind}:a:${scrambled}`,

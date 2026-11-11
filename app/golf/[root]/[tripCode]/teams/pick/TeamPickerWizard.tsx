@@ -192,6 +192,7 @@ export default function TeamPickerWizard({
           <InlineUnlock
             tripCode={tripCode}
             onUnlocked={() => setUnlocked(true)}
+            isTrip={isTrip}
             prompt={isTrip ? 'Lead player? Enter the passcode to change teams.' : 'Organiser? Enter your PIN to change teams.'}
           />
         )}

@@ -7,6 +7,7 @@ import { FIELD, buttonClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 import { unlockWithPin } from '@/lib/entryClient'
 import { unlockError } from '@/app/components/OrganiserLock'
+import ForgotPin, { ForgotPinLink } from '@/app/components/ForgotPin'
 
 /**
  * Stands in front of trip settings when the trip was created with a passcode.
@@ -17,7 +18,7 @@ import { unlockError } from '@/app/components/OrganiserLock'
  * other phone. Shutting the header's padlock shuts this gate again.
  */
 export default function PasscodeGate({
-  tripCode, tripName, children, title, hint,
+  tripCode, tripName, children, title, hint, isTrip = false,
 }: {
   tripCode: string
   tripName: string
@@ -30,6 +31,8 @@ export default function PasscodeGate({
    */
   title?: string
   hint?: string
+  /** A trip's Trip Setup passcode, in the Forgot words; an event's organiser PIN otherwise. */
+  isTrip?: boolean
 }) {
   const tripHome = useTripBase(tripCode)
   // this phone's storage is browser-only, so it is read through an external store
@@ -48,6 +51,7 @@ export default function PasscodeGate({
   const [code, setCode]   = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy]   = useState(false)
+  const [forgot, setForgot] = useState(false)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -81,6 +85,9 @@ export default function PasscodeGate({
           {hint ?? `${tripName} was set up with a passcode. Ask your lead player!`}
         </p>
 
+        {forgot ? (
+          <ForgotPin tripCode={tripCode} isTrip={isTrip} onBack={() => setForgot(false)} />
+        ) : (
         <form onSubmit={submit} className="flex flex-col gap-3">
           <input
             type="password"
@@ -103,7 +110,9 @@ export default function PasscodeGate({
           >
             {busy ? 'Checking…' : 'Unlock'}
           </button>
+          <ForgotPinLink isTrip={isTrip} onClick={() => { setError(''); setForgot(true) }} />
         </form>
+        )}
 
         <div className="mt-8">
           <BackButton href={tripHome} label="Trip" />

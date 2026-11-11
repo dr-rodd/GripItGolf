@@ -951,6 +951,7 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
               tripCode={tripCode}
               onUnlocked={() => { setUnlocked(true); setAskPin(false) }}
               prompt="Which leaderboards these teams play for needs the passcode — enter it"
+              isTrip
             />
           </div>
         )}

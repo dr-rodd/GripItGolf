@@ -85,7 +85,8 @@ export default function PrivacyPage() {
           </li>
           <li>
             <B>The organiser&apos;s email address</B> — the lead player&apos;s, for a golf trip — used to
-            send one confirmation email with the event&apos;s links. An event&apos;s PINs are kept only in a
+            send one confirmation email with the event&apos;s links, and a link to choose a new organiser PIN
+            when somebody asks for one from the event. An event&apos;s PINs are kept only in a
             scrambled form. When somebody types one in, it is sent to us to be checked against that
             and is not kept.
           </li>
