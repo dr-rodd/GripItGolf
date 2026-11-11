@@ -5,7 +5,7 @@
 
 import { Resend } from 'resend'
 import type { createAdminClient } from '@/lib/supabase-admin'
-import { CONFIRMATION_FROM } from '@/lib/confirmationEmail'
+import { SITE } from '@/config/site'
 import { serviceStore } from '../entry/store'
 import type { ResetStore, ResetTrip } from './pinReset'
 
@@ -86,7 +86,7 @@ export function resetStore(db: ReturnType<typeof createAdminClient>): ResetStore
     async sendEmail(to, subject, html, text) {
       const key = process.env.RESEND_API_KEY
       if (!key) return false
-      const send = new Resend(key).emails.send({ from: CONFIRMATION_FROM, to, subject, html, text })
+      const send = new Resend(key).emails.send({ from: `Green Dot <${SITE.supportEmail}>`, to, subject, html, text })
       const result = await Promise.race([
         send,
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('send timed out')), SEND_TIMEOUT_MS)),
