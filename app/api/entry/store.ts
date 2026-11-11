@@ -98,6 +98,11 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       const { error } = await db.from('trips').update(patch).eq('id', tripId)
       if (error) throw error
     },
+    async leadPlayerId(tripId) {
+      const { data, error } = await db.from('players')
+        .select('id').eq('trip_id', tripId).eq('is_lead', true).limit(1).maybeSingle()
+      return error || !data ? null : (data as { id: string }).id
+    },
     async endOrganisers(tripId) {
       const { error } = await db.from('trip_members')
         .update({ organiser_until: null, updated_at: new Date().toISOString() })

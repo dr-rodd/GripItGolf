@@ -28,6 +28,8 @@ export interface ActionStore extends EntryStore {
   /** Raw columns of the event's row, read fresh. Null on a failed read. */
   tripColumns(tripId: string, columns: string[]): Promise<Record<string, unknown> | null>
   updateTrip(tripId: string, patch: Record<string, unknown>): Promise<void>
+  /** The player marked as the trip's lead player (`players.is_lead`), or null. */
+  leadPlayerId(tripId: string): Promise<string | null>
   /** Organiser access ended on every phone in the event (a new admin PIN, D67's rule). */
   endOrganisers(tripId: string): Promise<void>
 }
@@ -173,7 +175,16 @@ export async function runSetAdminPin(
     if (r === 'blocked') return fail(429, TOO_MANY)
     if (r === 'wrong') return fail(403, `That isn’t the current ${word}.`)
   } else if (!mayChangeEvent(c.m, c.facts, now)) {
-    return fail(403, `Only the ${isTrip ? 'lead player' : 'event organiser'} can set the ${word}.`)
+    // No PIN yet, and this phone may not change the event: not entered, or
+    // past the 30-day read-only cap (D59), which on a trip with no passcode
+    // leaves nobody able to change it — or to set the passcode that would
+    // let them. The phone holding the lead player's name may still set the
+    // first one (Ross, 11 Nov 2026: a legacy trip, its lead player's phone).
+    if (!c.m) return fail(403, `This phone hasn’t joined the ${isTrip ? 'trip' : 'event'} yet — open its home screen and try again.`)
+    const lead = c.m.playerId ? await store.leadPlayerId(trip.id) : null
+    if (!lead || lead !== c.m.playerId) {
+      return fail(403, `This ${isTrip ? 'trip' : 'event'} finished more than 30 days ago, so only the phone holding the ${isTrip ? 'lead player’s' : 'organiser’s'} name can set the ${word} now.`)
+    }
   }
 
   if (input.pin === null) {

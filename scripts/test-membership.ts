@@ -151,6 +151,7 @@ async function world(trip: Partial<EntryTrip> = {}) {
   const members = new Map<string, Membership>()
   const attempts = new Map<string, AttemptWindow>()
   const claimed = new Set([`trip-1:${P1}`])
+  const lead: { id: string | null } = { id: P1 }
   const store: EntryStore = {
     async userFromToken(token) { return token.startsWith('tok-') ? token.slice(4) : null },
     async tripByCode(code) { return code === 'GX7K2P' ? t : null },
@@ -172,11 +173,12 @@ async function world(trip: Partial<EntryTrip> = {}) {
         else cols[k] = v
       }
     },
+    async leadPlayerId() { return lead.id },
     async endOrganisers(tr) {
       for (const [k, m] of members) if (k.endsWith(`:${tr}`)) members.set(k, { ...m, organiserUntil: null })
     },
   }
-  return { t, members, attempts, store, actions, cols }
+  return { t, members, attempts, store, actions, cols, lead }
 }
 const base = { token: 'tok-u1', code: 'gx7k2p', address: '203.0.113.7' }
 
@@ -546,6 +548,24 @@ async function adminPinTests() {
     eq((await ask(w, null, '2468', 'tok-stranger')).status, 403, 'with none set, a phone that is not in the trip cannot set one')
     await runEntry(base, w.store, NOW)
     eq((await ask(w, null, '2468')).status, 200, '  …a member can: on a trip with no passcode every member is the organiser')
+  }
+  {
+    // A legacy trip, finished more than 30 days ago, with no passcode: past
+    // the cap nobody may change it — so only the lead player's phone may set
+    // the first passcode, which makes it the organiser again.
+    const w = await world({ adminHash: null, endDate: '2026-08-20' })
+    w.members.set('u1:trip-1', { role: 'guest', playerId: null, organiserUntil: null })
+    w.members.set('u2:trip-1', { role: 'player', playerId: P1, organiserUntil: null })
+    w.members.set('u3:trip-1', { role: 'player', playerId: P2, organiserUntil: null })
+    eq((await ask(w, null, '2468')).status, 403, 'past the 30-day cap, a guest cannot set the first passcode')
+    eq((await ask(w, null, '2468', 'tok-u3')).status, 403, '  …nor a player who is not the lead player')
+    eq((await ask(w, null, '2468', 'tok-u2')).status, 200, '  …the phone holding the lead player\'s name can')
+    ok(!!w.t.adminHash, '  …and it is set')
+    eq(w.members.get('u2:trip-1')?.organiserUntil, later(ORGANISER_MS).toISOString(), '  …that phone the organiser, uncapped, for twelve hours')
+    const again = await world({ adminHash: null, endDate: '2026-08-20' })
+    again.lead.id = null
+    again.members.set('u2:trip-1', { role: 'player', playerId: P1, organiserUntil: null })
+    eq((await ask(again, null, '2468', 'tok-u2')).status, 403, 'a trip with no lead player marked stays as it is')
   }
   {
     const w = await world()
