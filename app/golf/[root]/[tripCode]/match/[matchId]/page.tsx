@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
+import { isLocked } from '@/lib/passcode'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
 import { eventReader } from '@/lib/eventReader'
@@ -148,7 +149,7 @@ export default async function MatchPage({
   }
   const concede = walkoverChoices(match, view.entrantId, false)[0] ?? null
   const awardable = walkoverChoices(match, null, true)
-  const passcodeHash = (trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null
+  const pinSet = isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)
   const kind = (trip as { kind?: unknown }).kind
   const perms = (trip as { event_permissions?: unknown }).event_permissions
 
@@ -196,7 +197,7 @@ export default async function MatchPage({
   )
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={!isEvent(kind)} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={pinSet} isTrip={!isEvent(kind)} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -249,7 +250,7 @@ export default async function MatchPage({
                   tripId={trip.id}
                   tripCode={tripCode}
                   matchId={match.id}
-                  passcodeHash={passcodeHash}
+                  pinSet={pinSet}
                   inMatch={iAmIn}
                   allowAddCourse={allowsParticipant(kind, perms, 'add_courses')}
                   people={inMatchIds.flatMap(id => {
@@ -285,7 +286,7 @@ export default async function MatchPage({
             tripId={trip.id}
             tripCode={tripCode}
             matchId={match.id}
-            passcodeHash={passcodeHash}
+            pinSet={pinSet}
             concedeTo={concede ? { id: concede, name: nameOf(concede) ?? 'your opponent' } : null}
             sides={awardable.map(id => ({ id, name: nameOf(id) ?? 'A player' }))}
             decided={match.winner !== null}

@@ -35,6 +35,7 @@ import { boardNames } from '@/lib/displayNames'
 import { buttonClass, cardClass } from '@/app/components/ui'
 import { splitCourseName } from '@/lib/courseDirectory'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -222,7 +223,7 @@ export default async function RoundSummaryPage({
   const directions = mapsUrl([course?.name ? named.club : null, course?.location].filter(Boolean).join(', '))
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!event} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)} isTrip={!event} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -406,7 +407,7 @@ export default async function RoundSummaryPage({
           tripId={trip.id}
           tripCode={tripCode}
           roundId={round.id}
-          passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+          pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)}
           isTrip={!event}
           teeTimes={parseStartFormat(round.start_format) === 'tee_sheet'}
           sheetOpen={round.tee_sheet != null}

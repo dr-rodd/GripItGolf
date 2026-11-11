@@ -126,7 +126,6 @@ export default async function TagsPage({ params }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         title="Tags"
         hint={`Enter the organiser PIN for ${trip.name}.`}
       >

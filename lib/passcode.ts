@@ -1,24 +1,14 @@
-// Settings passcode for a trip.
+// An event's PINs as a phone sees them: what makes one acceptable, whether
+// one is set, and this phone's memory of the organiser's unlock.
 //
-// ┌─────────────────────────────────────────────────────────────────────┐
-// │ WHAT THIS IS, AND WHAT IT IS NOT                                    │
-// │                                                                     │
-// │ This is a soft lock. It stops a player wandering into settings and  │
-// │ changing the format mid-trip. It is not a security control.         │
-// │                                                                     │
-// │ There is no auth yet and the Supabase anon key ships to the browser │
-// │ (see docs/gotchas-and-debt.md), so anyone determined                │
-// │ can read the stored hash and brute-force a short numeric code in    │
-// │ moments. Hashing keeps it out of plain sight, nothing more.         │
-// │                                                                     │
-// │ When auth lands, this should be replaced by real ownership rather   │
-// │ than hardened. It is landing: from row-level security stage 1 the   │
-// │ PIN is also checked on the server (/api/entry), which records the   │
-// │ phone as organiser for twelve hours; stage 2 stops sending the hash │
-// │ to the browser at all.                                              │
-// └─────────────────────────────────────────────────────────────────────┘
-
-import { ORGANISER_MS } from './membership'
+// **No hash is ever here** (row-level security stage 4, D64; Ross, 11 Nov
+// 2026). Every PIN prompt and the padlock ask the server (/api/entry,
+// through lib/entryClient.ts `unlockWithPin`), which keeps the hash and
+// records this phone as organiser for twelve hours. What the phone keeps is
+// only *when that runs out*, as the server said — so every control on the
+// page can open and close together without asking again. Pages are handed
+// `pinSet`, a yes or no, never a hash; `test:client-boundary` fails a client
+// file or prop that names one. The server's half is lib/pinHash.ts.
 
 export const MIN_PASSCODE = 4
 export const MAX_PASSCODE = 8
@@ -37,27 +27,9 @@ export function isPasscodeValid(code: string): boolean {
 }
 
 /**
- * SHA-256 of the passcode, hex encoded.
- *
- * Deliberately plain: a salt or a work factor would imply a level of
- * protection this cannot provide while the hash itself is readable by anyone
- * with the trip code.
+ * Whether this trip's settings are locked at all. On the server, from the
+ * stored hash — handed to a page as `pinSet`, the answer and nothing more.
  */
-export async function hashPasscode(code: string): Promise<string> {
-  const bytes = new TextEncoder().encode(code)
-  const digest = await crypto.subtle.digest('SHA-256', bytes)
-  return Array.from(new Uint8Array(digest))
-    .map(b => b.toString(16).padStart(2, '0'))
-    .join('')
-}
-
-export async function verifyPasscode(code: string, hash: string | null): Promise<boolean> {
-  if (!hash) return true            // no passcode set — settings are open
-  if (!code) return false
-  return (await hashPasscode(code)) === hash
-}
-
-/** Whether this trip's settings are locked at all. */
 export function isLocked(hash: string | null | undefined): boolean {
   return typeof hash === 'string' && hash.length > 0
 }
@@ -65,14 +37,14 @@ export function isLocked(hash: string | null | undefined): boolean {
 // ─── Remembering an unlock on this device ──────────────────────
 //
 // Twelve hours from the moment the PIN was entered, on this phone (Ross,
-// 10 Nov 2026) — the same twelve hours the server's organiser grant lasts
-// (lib/membership.ts, ORGANISER_HOURS), and what the confirmation email says.
-// Closing the browser no longer ends it; tapping the header's lock shut does.
-// It used to live in sessionStorage, ending when the browser closed; an
-// unlock written there before this change is still honoured until it does.
+// 10 Nov 2026) — the server's own twelve hours (`trip_members.
+// organiser_until`), the time it answered with, never a clock of the phone's
+// own. Tapping the header's lock shut ends both (lib/entryClient.ts
+// `lockShut`). An unlock remembered before stage 4 — in sessionStorage, or
+// without the server's answer — is no longer honoured: the server never
+// recorded it, so its writes would be refused; the PIN is asked once more.
 
-
-const key = (tripCode: string) => `gig-settings-unlocked-${tripCode}`
+const key = (tripCode: string) => `gd-organiser-until-${tripCode.toUpperCase()}`
 
 /**
  * Said on the window whenever this device's unlock changes, so every
@@ -85,32 +57,30 @@ function announce() {
   try { window.dispatchEvent(new Event(UNLOCK_EVENT)) } catch { /* no window */ }
 }
 
-/** When an unlock written at `now` runs out, as stored: milliseconds since 1970. */
-export function unlockExpiry(now: number): string {
-  return String(now + ORGANISER_MS)
-}
-
 /** Whether a stored unlock is still open at `now`. Anything unreadable is locked. */
 export function unlockOpen(stored: string | null, now: number): boolean {
-  const until = Number(stored)
+  const until = Date.parse(stored ?? '')
   return Number.isFinite(until) && until > now
 }
 
-export function rememberUnlock(tripCode: string) {
-  try { localStorage.setItem(key(tripCode), unlockExpiry(Date.now())) } catch { /* unavailable */ }
+/**
+ * The server's answer, remembered: open until `until` (ISO), or shut when
+ * there is none. Only lib/entryClient.ts calls it, with what the server said.
+ */
+export function rememberUnlock(tripCode: string, until: string | null) {
+  try {
+    if (until && unlockOpen(until, Date.now())) localStorage.setItem(key(tripCode), until)
+    else localStorage.removeItem(key(tripCode))
+  } catch { /* unavailable */ }
   announce()
 }
 
-/** Locked again by hand — the header's lock tapped shut. */
+/** Shut on this phone — the server told separately (lib/entryClient.ts `lockShut`). */
 export function forgetUnlock(tripCode: string) {
-  try { localStorage.removeItem(key(tripCode)) } catch { /* unavailable */ }
-  try { sessionStorage.removeItem(key(tripCode)) } catch { /* unavailable */ }
-  announce()
+  rememberUnlock(tripCode, null)
 }
 
-/** Open for twelve hours from the PIN, on this phone only. */
+/** Open until the twelve hours the server granted run out, on this phone only. */
 export function hasUnlocked(tripCode: string): boolean {
-  try { if (unlockOpen(localStorage.getItem(key(tripCode)), Date.now())) return true } catch { /* unavailable */ }
-  // Written before the twelve hours, while the browser that wrote it is open.
-  try { return sessionStorage.getItem(key(tripCode)) === '1' } catch { return false }
+  try { return unlockOpen(localStorage.getItem(key(tripCode)), Date.now()) } catch { return false }
 }

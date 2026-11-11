@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase'
 import { readHandicapField, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { duplicateName, duplicateNameError, isDuplicateNameError } from '@/lib/roster'
 import { syncRoundHandicaps } from '@/lib/roundHandicaps'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { hasUnlocked } from '@/lib/passcode'
 import { Sheet } from '@/app/components/ItineraryForms'
 import HandicapField from '@/app/components/HandicapField'
 import InlineUnlock from '@/app/components/InlineUnlock'
@@ -30,7 +30,7 @@ import { IconPlus } from '@/app/components/icons'
  * snapshotted onto every round that already exists, as a late join is.
  */
 export default function AddToField({
-  tripId, tripCode, roundIds, players, fieldMayAdd, fieldSetsHandicaps = true, passcodeHash,
+  tripId, tripCode, roundIds, players, fieldMayAdd, fieldSetsHandicaps = true, pinSet,
 }: {
   tripId: string
   tripCode: string
@@ -46,7 +46,7 @@ export default function AddToField({
    * adds the name pending.
    */
   fieldSetsHandicaps?: boolean
-  passcodeHash: string | null
+  pinSet: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -57,8 +57,8 @@ export default function AddToField({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const mayAdd = fieldMayAdd || unlocked || !isLocked(passcodeHash)
-  const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)
+  const mayAdd = fieldMayAdd || unlocked || !pinSet
+  const maySetHandicap = fieldSetsHandicaps || unlocked || !pinSet
 
   function openSheet() {
     // The unlock lives in this phone's storage — read on tap, never in render.
@@ -129,7 +129,7 @@ export default function AddToField({
           addLabel={saving ? 'Adding…' : 'Add player'}
           error={error}
         >
-          {!mayAdd && passcodeHash && (
+          {!mayAdd && pinSet && (
             <div className={`p-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">The organiser adds to the field</p>
               <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
@@ -137,7 +137,6 @@ export default function AddToField({
               </p>
               <InlineUnlock
                 tripCode={tripCode}
-                passcodeHash={passcodeHash}
                 onUnlocked={() => setUnlocked(true)}
                 prompt="Enter the PIN"
               />

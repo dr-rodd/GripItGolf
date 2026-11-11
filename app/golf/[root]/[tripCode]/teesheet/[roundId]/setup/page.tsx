@@ -186,6 +186,7 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
       <TripHeader backTo={backHref} />
       <TeeSheetWizard
         tripId={trip.id}
+        tripCode={tripCode}
         roundId={round.id}
         roundNumber={round.round_number}
         courseName={course?.name ?? null}
@@ -218,7 +219,6 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         title="Tee sheet"
         hint={`Enter the ${event ? 'organiser PIN' : 'Trip Setup passcode'} for ${trip.name} to open round ${round.round_number}'s tee sheet.`}
       >

@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
-import { verifyPasscode, rememberUnlock, MAX_PASSCODE } from '@/lib/passcode'
+import { MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from './ui'
-import { enterEvent } from '@/lib/entryClient'
+import { unlockWithPin } from '@/lib/entryClient'
+import { unlockError } from './OrganiserLock'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -12,17 +13,14 @@ import { enterEvent } from '@/lib/entryClient'
  * tee sheet, the teams join screen — where the page is for everybody and
  * only the *editing* is the organiser's. A quiet row offers the unlock, the
  * PIN opens inline, and success writes the same memory on this phone the
- * gate writes (`rememberUnlock`), so unlocking here unlocks everything for
- * the session — one PIN, one memory.
- *
- * The same soft lock as ever: verification is the client comparing a hash
- * the server already sent (lib/passcode.ts's note holds).
+ * gate writes, so unlocking here unlocks everything for twelve hours — one
+ * PIN, one memory. The server checks the PIN (stage 4, D64); drawn only
+ * where the event has one.
  */
 export default function InlineUnlock({
-  tripCode, passcodeHash, onUnlocked, prompt = 'Organiser? Enter your PIN to edit.',
+  tripCode, onUnlocked, prompt = 'Organiser? Enter your PIN to edit.',
 }: {
   tripCode: string
-  passcodeHash: string
   onUnlocked: () => void
   prompt?: string
 }) {
@@ -35,13 +33,11 @@ export default function InlineUnlock({
     e.preventDefault()
     setBusy(true)
     setError('')
-    const ok = await verifyPasscode(code, passcodeHash)
-    if (ok) {
-      rememberUnlock(tripCode)
-      void enterEvent(tripCode, { adminPin: code })
+    const r = await unlockWithPin(tripCode, code)
+    if (r === 'ok') {
       onUnlocked()
     } else {
-      setError('Incorrect code.')
+      setError(unlockError(r))
       setCode('')
     }
     setBusy(false)

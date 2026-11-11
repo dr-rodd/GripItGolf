@@ -1351,9 +1351,11 @@ section('There is one door to the settings, not two')
   ok(!/href=\{`\/trip\/\$\{tripCode\}\/setup`\}/.test(hub),
     '  …nor any other link into the settings')
 
-  // The passcode padlock rode that gear. Nothing on the hub reads the hash
-  // any more, so nothing on the hub should still be asking about it.
-  ok(!hub.includes('isLocked'), 'and the padlock went with it')
+  // The passcode padlock rode that gear, and went with it. The header's
+  // organiser lock (Ross, 10 Nov 2026) is all the hub asks about the PIN —
+  // and since stage 4 (D64) it is handed only whether there is one.
+  ok((hub.match(/isLocked\(/g) ?? []).length === (hub.match(/pinSet[=:]\s*\{?isLocked\(/g) ?? []).length,
+    'and the padlock went with it — the hub only says whether there is a PIN, for the header\'s lock')
 }
 
 section('The first section has no rule above it')

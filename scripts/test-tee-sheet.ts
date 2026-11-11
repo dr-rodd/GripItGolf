@@ -566,11 +566,11 @@ section('A vacant round offers the wizard; players pick their own time when allo
   const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
   ok(client.includes("isn&apos;t open yet") && client.includes('Open the tee sheet'),
     'a round with no sheet yet says so and offers the wizard — never an empty heading')
-  ok(/!fieldMaySet && isLocked\(passcodeHash\) && !unlocked/.test(client) && client.includes('Asks for the organiser PIN.'),
+  ok(/!fieldMaySet && pinSet && !unlocked/.test(client) && client.includes('Asks for the organiser PIN.'),
     '  …saying the PIN is asked, unless anyone may make the sheets')
   ok(/\{fieldMaySet && \([\s\S]{0,200}Edit the tee sheet/.test(client),
     'an open event\'s live sheet carries an Edit button into the wizard; a closed one does not')
-  ok(client.includes('const organiser = unlocked || !isLocked(passcodeHash)'),
+  ok(client.includes('const organiser = unlocked || !pinSet'),
     'the organiser places anybody — the PIN unlocked, or an event without one')
   ok(client.includes('const selfPickAllowed = !organiser && fieldMayEdit && !!meId'),
     'a claimed player picks their own time only when the event says players pick')
@@ -628,11 +628,11 @@ section('The organiser is never locked out of their own sheet')
     'app/dashboard/create/CreateKnockoutForm.tsx',
     'app/dashboard/create/CreateTripForm.tsx',
   ]) {
-    ok(read(f).includes('rememberUnlock('),
-      `${f.split('/').pop()} remembers the unlock at creation`)
+    ok(read(f).includes('createTripRow(tripRow, pins)'),
+      `${f.split('/').pop()} remembers the unlock at creation — the server's, through createTripRow (stage 4)`)
   }
   const client = read('app/golf/[root]/[tripCode]/teesheet/TeeSheetClient.tsx')
-  ok(client.includes('<OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash}'), 'the sheet offers the PIN through the header\'s lock')
+  ok(client.includes('<OrganiserLock tripCode={tripCode} pinSet={pinSet}'), 'the sheet offers the PIN through the header\'s lock')
   const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes('settings_passcode_hash'), 'with the hash the page already has')
 }

@@ -4,7 +4,6 @@ import { useUnlocked } from '@/app/components/useUnlocked'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { isLocked } from '@/lib/passcode'
 import { boardNames } from '@/lib/displayNames'
 import { partnershipName } from '@/lib/partnerships'
 import {
@@ -27,14 +26,14 @@ import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
  * not here; they have their own portal.
  */
 export default function TeamsClient({
-  tripId, tripCode, isTrip, passcodeHash, sheets, teams: initialTeams,
+  tripId, tripCode, isTrip, pinSet, sheets, teams: initialTeams,
   memberships: initialMemberships, players, meId, addedRecorded, myTeeTimes = {},
 }: {
   tripId: string
   tripCode: string
   /** A trip's teams are the group's — everybody is the organiser here. */
   isTrip: boolean
-  passcodeHash: string | null
+  pinSet: boolean
   sheets: PickerSheet[]
   teams: TeamRow[]
   memberships: PickerMember[]
@@ -51,7 +50,7 @@ export default function TeamsClient({
   // The organiser's PIN unlock, read after mount — this phone's storage does not
   // exist on the server, and a render that reads it would tear hydration.
   const [unlocked] = useUnlocked(tripCode)
-  const organiser = isTrip || unlocked || !isLocked(passcodeHash)
+  const organiser = isTrip || unlocked || !pinSet
 
   const [teams, setTeams] = useState(initialTeams)
   const [memberships, setMemberships] = useState(initialMemberships)

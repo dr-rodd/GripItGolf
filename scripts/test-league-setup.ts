@@ -493,7 +493,7 @@ section('The continuous knockout door is lean on purpose')
   ok(src.includes('leaderboards: withTagTally(knockoutBoards(), '), 'and the bracket\'s board, so it plays from the start — its tags tally beside it where it has tags')
   ok(!src.includes("from('itinerary_items')") && !src.includes("from('rounds')"),
     'no itinerary and no rounds — matches happen when players make them happen')
-  ok(src.includes('hashPasscode'), 'the organiser PIN is hashed on the device')
+  ok(src.includes('createTripRow(tripRow, pins)') && !src.includes('hashPasscode'), 'the organiser PIN goes to the server to be stored, never hashed on the phone (stage 4)')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
   ok(!src.includes('service_role') && !src.includes('SERVICE_ROLE'),
     'no service key anywhere near the browser')
@@ -532,7 +532,7 @@ section('The league wizard reuses the proven pieces rather than restating them')
   ok(src.includes("kind: 'tournament'"), 'a league is an event')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
   ok(!src.includes("from('teams')"), 'and no teams are written')
-  ok(src.includes('hashPasscode'), 'the organiser PIN is hashed on the device')
+  ok(src.includes('createTripRow(tripRow, pins)') && !src.includes('hashPasscode'), 'the organiser PIN goes to the server to be stored, never hashed on the phone (stage 4)')
   ok(!src.includes('service_role') && !src.includes('SERVICE_ROLE'),
     'no service key anywhere near the browser')
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { eventReader } from '@/lib/eventReader'
-import { hashPasscode } from '@/lib/passcode'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { checkPin } from '../../entry/entry'
+import { addressOf, serviceStore } from '../../entry/store'
 import { EVENT_CODE } from '@/lib/fieldSeed'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { boardTitle } from '@/lib/leaderboards'
@@ -42,8 +44,13 @@ export async function POST(req: NextRequest) {
   // The public PIN in its own read: before migration 060 there is none.
   const pub = await db.from('trips').select('public_passcode_hash').eq('id', trip.id).maybeSingle()
   const publicHash = !pub.error ? (pub.data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash : null
-  if (publicHash && (await hashPasscode(String(body.pin ?? ''))) !== publicHash) {
-    return NextResponse.json({ boards: [] }, { status: 403 })
+  // Under /api/entry's retry limit, like every PIN the server checks.
+  if (publicHash) {
+    const pin = typeof body.pin === 'string' ? body.pin : ''
+    const r = pin
+      ? await checkPin(serviceStore(createAdminClient()), { tripId: trip.id, code, kind: 'public', address: addressOf(req), pin, hash: publicHash }, new Date())
+      : 'wrong'
+    if (r !== 'ok') return NextResponse.json({ boards: [] }, { status: r === 'blocked' ? 429 : 403 })
   }
 
   const tables = boardsForTrip(trip).filter(lb => lb.audience === 'individual' && lb.competition === 'league')

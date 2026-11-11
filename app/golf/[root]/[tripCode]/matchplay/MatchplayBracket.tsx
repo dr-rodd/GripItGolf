@@ -4,7 +4,6 @@ import { useUnlocked } from '@/app/components/useUnlocked'
 import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { isLocked } from '@/lib/passcode'
 import {
   tileTop, tileCenter, columnX, columnHeight,
   connectorPath, roundHeaderLabel, clampPosition, easeOut, centringShift,
@@ -105,7 +104,7 @@ export default function MatchplayBracket({
    */
   scoring?: {
     tripCode: string
-    passcodeHash: string | null
+    pinSet: boolean
     anyoneScores: boolean
     /** The matches this phone's player (or pairing) plays in. */
     mine: string[]
@@ -125,7 +124,7 @@ export default function MatchplayBracket({
    * one somebody entered, is corrected only by the organiser. Null on a
    * trip, and on an event with no PIN — open, as ever.
    */
-  lock?: { tripCode: string; passcodeHash: string } | null
+  lock?: { tripCode: string; pinSet: boolean } | null
   matches: BracketMatchRow[]
   entrants: BracketEntrantRow[]
   /**
@@ -156,7 +155,7 @@ export default function MatchplayBracket({
   // `Navigate`, so the bracket still renders without one (test:bracket-render).
   const [going, setGoing] = useState<string | null>(null)
   const mineSet = useMemo(() => new Set(scoring?.mine ?? []), [scoring])
-  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? lock?.passcodeHash ?? null)
+  const organiser = unlocked || !!!(scoring?.pinSet ?? lock?.pinSet ?? null)
   // The card to score, where this phone may score the match — null otherwise.
   const scoreHref = (m: BracketMatchRow): string | null => {
     const href = scoring?.hrefs[m.id]
@@ -1156,7 +1155,7 @@ function DecideSheet({
   match: BracketMatchRow
   correcting: boolean
   /** Set when changing this result needs the admin PIN first. */
-  pin?: { tripCode: string; passcodeHash: string } | null
+  pin?: { tripCode: string; pinSet: boolean } | null
   onUnlocked?: () => void
   playerById: Map<string, BracketEntrantRow>
   onClose: () => void
@@ -1207,7 +1206,6 @@ function DecideSheet({
           </p>
           <InlineUnlock
             tripCode={pin.tripCode}
-            passcodeHash={pin.passcodeHash}
             onUnlocked={() => onUnlocked?.()}
             prompt="Enter the admin PIN"
           />

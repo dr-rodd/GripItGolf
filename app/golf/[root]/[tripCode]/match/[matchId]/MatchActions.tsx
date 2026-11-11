@@ -4,7 +4,6 @@ import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isLocked } from '@/lib/passcode'
 import { teesForPlayer } from '@/lib/courseHandicap'
 import { WALKOVER, withTee, type MatchTees } from '@/lib/matchArrangements'
 import { cardHasScores, voidMatchCard } from '@/lib/matchCardVoid'
@@ -35,16 +34,16 @@ type MatchPerson = { id: string; name: string; gender: string; homeCourseId: str
 type TeeOption = { id: string; name: string | null; gender: string; slope: number | null; course_id: string }
 
 /** The admin PIN: open when none is set, else this device's unlock or the PIN asked now. */
-function useOrganiser(tripCode: string, passcodeHash: string | null) {
+function useOrganiser(tripCode: string, pinSet: boolean) {
   // The unlock lives in this phone's storage, and follows the header's lock.
   const [unlocked, setUnlocked] = useUnlocked(tripCode)
-  return { organiser: unlocked || !isLocked(passcodeHash), unlock: () => setUnlocked(true) }
+  return { organiser: unlocked || !pinSet, unlock: () => setUnlocked(true) }
 }
 
 // ─── Arranging ─────────────────────────────────────────────────
 
 export function MatchArrange({
-  tripId, tripCode, matchId, passcodeHash, inMatch, allowAddCourse, people,
+  tripId, tripCode, matchId, pinSet, inMatch, allowAddCourse, people,
   courseId, playedOn, tees, underWay = false,
 }: {
   /** The card has a score on it: the course and tees are fixed until it is voided. */
@@ -52,7 +51,7 @@ export function MatchArrange({
   tripId: string
   tripCode: string
   matchId: string
-  passcodeHash: string | null
+  pinSet: boolean
   /** This phone is one of the players in the match. */
   inMatch: boolean
   allowAddCourse: boolean
@@ -62,7 +61,7 @@ export function MatchArrange({
   tees: MatchTees
 }) {
   const router = useRouter()
-  const { organiser, unlock } = useOrganiser(tripCode, passcodeHash)
+  const { organiser, unlock } = useOrganiser(tripCode, pinSet)
   const [open, setOpen] = useState(false)
   const [course, setCourse] = useState(courseId ?? '')
   const [day, setDay] = useState(playedOn ?? '')
@@ -166,13 +165,13 @@ export function MatchArrange({
           addLabel={saving ? 'Saving…' : 'Save'}
           error={error}
         >
-          {!mayArrange && passcodeHash && (
+          {!mayArrange && pinSet && (
             <div className={`p-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">The players arrange their match</p>
               <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
                 Or the organiser, with the admin PIN.
               </p>
-              <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={unlock} prompt="Enter the PIN" />
+              <InlineUnlock tripCode={tripCode} onUnlocked={unlock} prompt="Enter the PIN" />
             </div>
           )}
 
@@ -271,12 +270,12 @@ export function MatchArrange({
 // ─── Walkover ──────────────────────────────────────────────────
 
 export function MatchWalkover({
-  tripId, tripCode, matchId, passcodeHash, concedeTo, sides, decided,
+  tripId, tripCode, matchId, pinSet, concedeTo, sides, decided,
 }: {
   tripId: string
   tripCode: string
   matchId: string
-  passcodeHash: string | null
+  pinSet: boolean
   /** The side this phone's player would concede to, when they may. */
   concedeTo: { id: string; name: string } | null
   /** Both sides, for the organiser to award to either. */
@@ -284,7 +283,7 @@ export function MatchWalkover({
   decided: boolean
 }) {
   const router = useRouter()
-  const { organiser, unlock } = useOrganiser(tripCode, passcodeHash)
+  const { organiser, unlock } = useOrganiser(tripCode, pinSet)
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
@@ -340,8 +339,8 @@ export function MatchWalkover({
             <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
               The organiser’s, with the admin PIN{decided ? ' — and it changes the result already in' : ''}.
             </p>
-            {!organiser && passcodeHash ? (
-              <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={unlock} prompt="Enter the PIN" />
+            {!organiser && pinSet ? (
+              <InlineUnlock tripCode={tripCode} onUnlocked={unlock} prompt="Enter the PIN" />
             ) : (
               <div className="flex flex-col gap-2">
                 {sides.map(s => (

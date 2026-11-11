@@ -12,7 +12,8 @@ import {
   batchLast, clockMins, countToLast, minsClock, teeClocks, sheetLength, sheetCapacity,
   seatsShort, rulesIssue, describeRules, describeOpening,
 } from '@/lib/teeSheet'
-import { type CarriedPartnership, PAIR, withPlayTogether } from '@/lib/partnerships'
+import { type CarriedPartnership, PAIR } from '@/lib/partnerships'
+import { answerPlayTogether } from '@/lib/entryClient'
 import { setTeam } from '@/lib/teamMembers'
 import { mirrorTeeTimes } from '@/lib/sessionMatchStore'
 import DateField from '@/app/components/DateField'
@@ -58,10 +59,12 @@ function toDraft(b: TeeBatch): Draft {
 }
 
 export default function TeeSheetWizard({
-  tripId, roundId, roundNumber, courseName, roundDate, itineraryItemId, initial, live,
+  tripId, tripCode, roundId, roundNumber, courseName, roundDate, itineraryItemId, initial, live,
   fieldSize, lastAssignedSlot, teamSize, playTogether = null, carried = null, backHref, doneHref, matchSession = false,
 }: {
   tripId: string
+  /** The event's code — the answer below is written through the server. */
+  tripCode: string
   roundId: string
   roundNumber: number
   courseName: string | null
@@ -196,17 +199,14 @@ export default function TeeSheetWizard({
       return
     }
     // The answer to "Do players play in their teams?", written onto the
-    // board it was asked of — first time, or changed. Read fresh and edited
-    // in place, so nothing else on the boards is touched on the way past.
+    // board it was asked of — first time, or changed. Through the server
+    // (row-level security stage 4, D65: only the organiser writes the trips
+    // row), which allows it to whoever may open the sheet, reads the boards
+    // fresh and changes this one alone.
     if (playTogether && (!playTogether.answered || together !== playTogether.together)) {
-      const { data: fresh, error: e0 } = await supabase
-        .from('trips').select('leaderboards').eq('id', tripId).single()
-      const { error: e3 } = e0 ? { error: e0 } : await supabase
-        .from('trips')
-        .update({ leaderboards: withPlayTogether((fresh as { leaderboards?: unknown } | null)?.leaderboards, playTogether.boardId, together) })
-        .eq('id', tripId)
-      if (e3) {
-        console.error('Play-together answer save failed:', e3)
+      const saved = await answerPlayTogether(tripCode, playTogether.boardId, together)
+      if (!saved.ok) {
+        console.error('Play-together answer save failed:', saved.error)
         setSaving(false)
         setError('The sheet is saved, but whether players play in their teams could not be — try again')
         return

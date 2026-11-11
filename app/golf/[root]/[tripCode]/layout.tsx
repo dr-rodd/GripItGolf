@@ -4,7 +4,8 @@ import TabBar from '@/app/components/TabBar'
 import EnsureMember from '@/app/components/EnsureMember'
 import { fourthTab, isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
-import { entryAllowed, entryCookie } from '@/lib/publicPin'
+import { entryCookie } from '@/lib/publicPin'
+import { entryAllowed } from '@/lib/pinHash'
 import { isTripRoot, tripBase } from '@/lib/tripPaths'
 import { fetchEntryLock, fetchIsKnockout, fetchTabExtras, fetchTripKind } from './kind'
 import { AddressFix, TripBaseProvider } from './TripBase'
@@ -73,7 +74,7 @@ export default async function TripLayout({
     fetchTripKind(tripCode), fetchEntryLock(tripCode), fetchIsKnockout(tripCode), fetchTabExtras(tripCode), cookies(),
   ])
   if (isRunChallenge(kind)) redirect(`/run/${tripCode}`)
-  if (!entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(`/enter/${tripCode}`)
+  if (!entryAllowed(lock, jar.get(entryCookie(tripCode))?.value, tripCode)) redirect(`/enter/${tripCode}`)
 
   // An event lives at /golf/event/, a trip at /golf/trip/ (Ross, 8 Nov
   // 2026). Both addresses are this page, so one opened at the other —

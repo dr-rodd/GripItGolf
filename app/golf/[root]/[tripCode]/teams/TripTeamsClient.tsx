@@ -8,6 +8,8 @@ import {
   useDroppable, useDraggable,
 } from '@dnd-kit/core'
 import { supabase } from '@/lib/supabase'
+import InlineUnlock from '@/app/components/InlineUnlock'
+import { useUnlocked } from '@/app/components/useUnlocked'
 import { revalidateTrip } from '@/app/actions/revalidate'
 import { boardTitle, boardFacts, isSlotFree, type Leaderboard } from '@/lib/leaderboards'
 import { TABBAR_SPACE } from '@/app/components/tabbarMetrics'
@@ -415,9 +417,16 @@ export default function TripTeamsClient({
   teams: initialTeams,
   players: initialPlayers,
   memberships: initialMemberships,
+  pinSet = false,
 }: {
   tripId: string
   tripCode: string
+  /**
+   * Whether the trip has a Trip Setup passcode. Teams stay the group's, but
+   * which leaderboards they play for is the trips row, which only the
+   * passcode's holder changes (row-level security stage 4, D65).
+   */
+  pinSet?: boolean
   /** Everything the trip plays for, individual boards included. */
   boards: Leaderboard[]
   /** Every team on the trip, on every sheet. */
@@ -426,6 +435,8 @@ export default function TripTeamsClient({
   memberships: Membership[]
 }) {
   const router = useRouter()
+  const [unlocked, setUnlocked] = useUnlocked(tripCode)
+  const [askPin, setAskPin] = useState(false)
 
   const [boards, setBoards]           = useState<Leaderboard[]>(initialBoards)
   const [teams, setTeams]             = useState<Team[]>(initialTeams)
@@ -734,6 +745,11 @@ export default function TripTeamsClient({
     setBusy(true)
 
     if (sheetChanges(boards, selected, sheet)) {
+      if (pinSet && !unlocked) {
+        setAskPin(true)
+        setBusy(false)
+        return
+      }
       const next = withSheet(boards, selected, sheet)
       const { error: err } = await supabase
         .from('trips').update({ leaderboards: next }).eq('id', tripId)
@@ -929,6 +945,15 @@ className="fixed left-1/2 -translate-x-1/2 max-w-[92vw] px-5 py-3 bg-surface bor
           </p>
         )}
 
+        {askPin && !unlocked && (
+          <div className="mb-3">
+            <InlineUnlock
+              tripCode={tripCode}
+              onUnlocked={() => { setUnlocked(true); setAskPin(false) }}
+              prompt="Which leaderboards these teams play for needs the passcode — enter it"
+            />
+          </div>
+        )}
         <div className="hide-with-keyboard sticky z-30" style={{ bottom: ABOVE_TABBAR }}>
           <button
             type="button"

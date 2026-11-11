@@ -142,6 +142,7 @@ export default async function TripTeamsPage({
             teams={teams}
             players={players}
             memberships={memberships}
+            pinSet={isLocked(trip.settings_passcode_hash as string | null)}
           />
         </div>
         <SupportLink className="px-4 pb-12" />
@@ -154,7 +155,6 @@ export default async function TripTeamsPage({
         <PasscodeGate
           tripCode={tripCode}
           tripName={trip.name}
-          passcodeHash={trip.settings_passcode_hash as string}
           title="Organisers only"
           hint={`Enter the organiser PIN for ${trip.name}.`}
         >
@@ -210,7 +210,7 @@ export default async function TripTeamsPage({
     ).assign_tag
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!event} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip.settings_passcode_hash as string | null) ?? null)} isTrip={!event} />
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
@@ -242,7 +242,7 @@ export default async function TripTeamsPage({
           tripId={trip.id}
           tripCode={tripCode}
           isTrip={!event}
-          passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
+          pinSet={isLocked((trip.settings_passcode_hash as string | null) ?? null)}
           sheets={sheets}
           teams={teams}
           memberships={pickerMembers}

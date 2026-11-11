@@ -72,6 +72,7 @@ import DrawCountdown from './DrawCountdown'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -638,7 +639,7 @@ export default async function TripPage({ params, searchParams }: {
     tripId: trip.id,
     tripCode,
     startDate: trip.start_date,
-    passcodeHash: tripRaw.settings_passcode_hash ?? null,
+    pinSet: isLocked(tripRaw.settings_passcode_hash ?? null),
     fieldMayAddCourses: allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_courses'),
   } : null
   const leagueLastVenue = [...league].reverse().find(r => r.courseId)?.courseId ?? null
@@ -830,7 +831,7 @@ export default async function TripPage({ params, searchParams }: {
   const [koView, myDetails] = await Promise.all([knockoutView, myMatchDetails])
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={tripRaw.settings_passcode_hash ?? null} isTrip={!isEvent} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked(tripRaw.settings_passcode_hash ?? null)} isTrip={!isEvent} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -1068,7 +1069,7 @@ export default async function TripPage({ params, searchParams }: {
                     players={players}
                     fieldMayAdd={allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_players')}
                     fieldSetsHandicaps={allowsParticipant(trip.kind, tripRaw.event_permissions, 'edit_handicaps')}
-                    passcodeHash={tripRaw.settings_passcode_hash ?? null}
+                    pinSet={isLocked(tripRaw.settings_passcode_hash ?? null)}
                   />
                 ) : null}
               />,

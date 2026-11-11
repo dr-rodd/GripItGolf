@@ -6,7 +6,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
-import { isLocked } from '@/lib/passcode'
 import {
   REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
   sessionResult, shotsOn, shouldWrite,
@@ -65,7 +64,7 @@ type Conceded = Record<number, CardSideKey>
 const MAX_GROSS = 20
 
 export default function MatchCardClient({
-  tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, passcodeHash,
+  tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, pinSet,
   stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null,
   session = false, startOn = 'card',
 }: {
@@ -92,7 +91,7 @@ export default function MatchCardClient({
   extraPlan?: ExtraHolePlan
   /** This phone's side of the match, or null when they are not in it. */
   mySide: CardSideKey | null
-  passcodeHash: string | null
+  pinSet: boolean
   stored: { winner: string | null; result: string | null }
   /** Top red, bottom blue — or the sides' team colours. */
   colours?: Record<CardSideKey, SideColour>
@@ -119,7 +118,7 @@ export default function MatchCardClient({
     setPanel(next)
   }
   const [unlocked, setUnlocked] = useUnlocked(tripCode)
-  const organiser = unlocked || !isLocked(passcodeHash)
+  const organiser = unlocked || !pinSet
 
   const inMatch = mySide !== null
   const decided = stored.winner !== null
@@ -696,7 +695,7 @@ export default function MatchCardClient({
         </div>
       )}
 
-      {!canEdit && !(decided && organiser) && passcodeHash && (
+      {!canEdit && !(decided && organiser) && pinSet && (
         <div className={`p-4 ${cardClass()}`}>
           <p className="text-ink text-sm font-medium">
             {decided ? 'The result is in the draw' : 'The players score this match'}
@@ -706,7 +705,7 @@ export default function MatchCardClient({
               ? 'Reopening it to amend the card needs the admin PIN.'
               : 'The organiser can score or finish it with the admin PIN.'}
           </p>
-          <InlineUnlock tripCode={tripCode} passcodeHash={passcodeHash} onUnlocked={() => setUnlocked(true)} prompt="Enter the admin PIN" />
+          <InlineUnlock tripCode={tripCode} onUnlocked={() => setUnlocked(true)} prompt="Enter the admin PIN" />
         </div>
       )}
 

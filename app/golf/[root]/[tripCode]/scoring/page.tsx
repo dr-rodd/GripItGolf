@@ -31,6 +31,7 @@ import { describeShortDate } from '@/lib/itinerary'
 import CourseName from '@/app/components/CourseName'
 import { IconChevronRight } from '@/app/components/icons'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -230,7 +231,7 @@ export default async function TripCoursePortalPage({
     tripId: trip.id,
     tripCode,
     startDate: trip.start_date,
-    passcodeHash: setupRow?.settings_passcode_hash ?? null,
+    pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
     fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
   } : null
   const positionsByDay: Record<number, number> = {}
@@ -299,7 +300,7 @@ export default async function TripCoursePortalPage({
     .at(-1) ?? null
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={setupRow?.settings_passcode_hash ?? null} isTrip={!event} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked(setupRow?.settings_passcode_hash ?? null)} isTrip={!event} />
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
@@ -331,7 +332,7 @@ export default async function TripCoursePortalPage({
             <StartPeriodCard
               door={{
                 tripId: trip.id, tripCode,
-                passcodeHash: setupRow?.settings_passcode_hash ?? null,
+                pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
                 fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
               }}
               periods={periodsLeague.periods}
@@ -355,7 +356,7 @@ export default async function TripCoursePortalPage({
         {knockoutView && (
           <div className="mb-8">
             <KnockoutPortal tripCode={tripCode} view={knockoutView} live={knockoutRead?.live ?? []} today={todayString(new Date())} scoring={{
-              passcodeHash: setupRow?.settings_passcode_hash ?? null,
+              pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
               anyoneScores: allowsParticipant(kind, permsRaw, 'score_matches'),
               details: knockoutRead?.details ?? {},
               arranged: knockoutRead?.arranged ?? [],
@@ -475,7 +476,7 @@ export default async function TripCoursePortalPage({
                     toScore
                     scoring={{
                       me: mine,
-                      passcodeHash: setupRow?.settings_passcode_hash ?? null,
+                      pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
                       anyoneScores: allowsParticipant(kind, permsRaw, 'score_session_matches'),
                     }}
                   />

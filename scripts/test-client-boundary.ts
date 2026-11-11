@@ -111,6 +111,60 @@ section('Every server module under app/ and lib/')
   ok(breaches.length === 0, 'no server module calls a function from a client file — rules go in lib/')
 }
 
+// ─── No PIN hash reaches a browser (row-level security stage 4, D64) ─────
+//
+// Every PIN prompt and the padlock ask the server; a page is handed whether
+// the event has a PIN (`pinSet`) and nothing more. So no client file, and no
+// browser-side store, may name a hash column or the hashing itself; and a
+// server page may hand a hash column to a component only through
+// `isLocked(…)`, which turns it into a yes or no.
+
+/** A value with every `isLocked(…)` taken out — what is left must name no hash. */
+function unwrapped(value: string): string {
+  return value.replace(/isLocked\((?:[^()]|\([^()]*\))*\)/g, 'true')
+}
+
+/** The props in a server module's JSX whose value names a hash column without `isLocked(…)`. */
+export function hashProps(src: string): string[] {
+  const out: string[] = []
+  const re = /\b([A-Za-z]\w*)=\{/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(src))) {
+    let i = m.index + m[0].length, depth = 1
+    while (i < src.length && depth > 0) { if (src[i] === '{') depth++; else if (src[i] === '}') depth--; i++ }
+    const value = src.slice(m.index + m[0].length, i - 1).trim()
+    if (/passcode_hash/.test(unwrapped(value))) out.push(`${m[1]}={${value.slice(0, 60)}}`)
+  }
+  for (const k of src.matchAll(/^\s*(\w+):\s*([^\n]*passcode_hash[^\n]*?),?\s*$/gm)) {
+    if (/passcode_hash/.test(unwrapped(k[2])) && !/^\s*(string|boolean)/.test(k[2]) && !/select\(/.test(k[2])) out.push(`${k[1]}: ${k[2].slice(0, 60)}`)
+  }
+  return out
+}
+
+const HASH_WORDS = /settings_passcode_hash|public_passcode_hash|passcodeHash|publicHash|adminHash|hashPasscode|legacyPinHash|lib\/pinHash/
+
+section('No PIN hash reaches a browser (stage 4, D64)')
+{
+  ok(hashProps('<Lock pinSet={isLocked(trip.settings_passcode_hash)} />').length === 0, 'the rule passes a hash turned into a yes or no')
+  ok(hashProps('<Lock hash={trip.settings_passcode_hash} />').length === 1, '  …and catches one handed on as it is')
+  ok(hashProps('  pinSet: setupRow?.settings_passcode_hash ?? null,').length === 1, '  …in an object handed on too')
+
+  const files = [...walk(path.join(root, 'app')), ...walk(path.join(root, 'lib'))]
+  const rel = (f: string) => path.relative(root, f)
+  const read = (f: string) => fs.readFileSync(f, 'utf8')
+  const browserStore = (src: string) => /from '(\.\/supabase|@\/lib\/supabase)'/.test(src)
+  const clientNaming = files
+    .filter(f => { const s = read(f); return (isClientModule(s) || (rel(f).startsWith('lib/') && browserStore(s))) && HASH_WORDS.test(s) })
+    .map(rel)
+  for (const f of clientNaming) console.log(`    ${f}`)
+  ok(clientNaming.length === 0, 'no client file or browser-side store names a PIN hash, or hashes a PIN')
+
+  const serverPages = files.filter(f => rel(f).startsWith('app/') && !rel(f).startsWith('app/api/') && !isClientModule(read(f)))
+  const leaks = serverPages.flatMap(f => hashProps(read(f)).map(p => `${rel(f)}: ${p}`))
+  for (const l of leaks) console.log(`    ${l}`)
+  ok(serverPages.length > 50 && leaks.length === 0, 'no server page hands a hash column to a component, only isLocked(…)')
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) {
   console.log('\nFailures:')

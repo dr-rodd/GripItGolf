@@ -11,6 +11,7 @@ import { fetchTripKind } from '../../kind'
 import TeamPickerWizard from './TeamPickerWizard'
 import { insideTrip } from '@/lib/tripPaths'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -104,7 +105,7 @@ export default async function TeamPickPage({ params, searchParams }: {
   }
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip.settings_passcode_hash as string | null) ?? null} isTrip={!isEvent(kind)} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip.settings_passcode_hash as string | null) ?? null)} isTrip={!isEvent(kind)} />
 
   return (
     <main className="min-h-dvh paper has-tabbar">
@@ -113,7 +114,7 @@ export default async function TeamPickPage({ params, searchParams }: {
         tripId={trip.id}
         tripCode={tripCode}
         isTrip={!isEvent(kind)}
-        passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
+        pinSet={isLocked((trip.settings_passcode_hash as string | null) ?? null)}
         sheet={sheet}
         team={team}
         teamsOnSheet={teams.filter(t => (t.team_set ?? 'main') === sheet.id)}

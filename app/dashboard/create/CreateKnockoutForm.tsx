@@ -9,9 +9,9 @@ import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import {
-  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
+  MIN_PASSCODE, MAX_PASSCODE, passcodeError,
 } from '@/lib/passcode'
-import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import { NO_PUBLIC_PIN, publicPinIssue } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { parseHandicap, isPlusHandicap, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
 import { NO_FIELD_SEED, drawStandings, seedPairs, type FieldPlayer, type FieldSeed } from '@/lib/fieldSeed'
@@ -182,27 +182,10 @@ export default function CreateKnockoutForm({ onExit }: {
 
     const code = generateCode()
 
-    let passcodeHash: string
-    try {
-      passcodeHash = await hashPasscode(passcode)
-    } catch {
-      setError('Could not set the PIN on this device — try again.')
-      setSubmitting(false)
-      return
-    }
+    // The PINs as typed: sent beside the row and stored salted and slow by
+    // the server (row-level security stage 4, D64) — no hash is made here.
+    const pins = { adminPin: passcode, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
 
-    // The public PIN, when one was asked for — hashed here too, and only
-    // sent when set, so an un-migrated database still creates events.
-    let publicHash: string | null = null
-    if (publicIssue === null && publicPin.on) {
-      try {
-        publicHash = await hashPasscode(publicPin.pin)
-      } catch {
-        setError('Could not set the public PIN on this device — try again.')
-        setSubmitting(false)
-        return
-      }
-    }
 
     // 1. The trip row. No rounds and no itinerary follow — the golf comes
     // later, when bracket rounds are linked to real days — so the row is
@@ -220,8 +203,6 @@ export default function CreateKnockoutForm({ onExit }: {
       start_date: startDate || null,
       end_date: endDate || null,
       kind: 'tournament',
-      settings_passcode_hash: passcodeHash,
-      ...(publicHash ? { public_passcode_hash: publicHash } : {}),
       formats: {
         ...NO_FORMATS,
         league: { ...NO_FORMATS.league },
@@ -243,7 +224,7 @@ export default function CreateKnockoutForm({ onExit }: {
     const leadEmail = normaliseEmail(email)
     if (leadEmail) tripRow.lead_email = leadEmail
 
-    const { data: trip, error: tripErr } = await createTripRow(tripRow)
+    const { data: trip, error: tripErr } = await createTripRow(tripRow, pins)
 
     if (tripErr || !trip) {
       setError(`Could not create the event. ${describeError(tripErr)}`)
@@ -314,12 +295,9 @@ export default function CreateKnockoutForm({ onExit }: {
       }).catch(() => { /* the event is created; the email is best-effort */ })
     }
 
-    // The device that just set the PIN plainly knows it — remember the
-    // unlock now, so the organiser's own tee sheet and organiser area
-    // are editable without being asked for the code they just typed.
-    rememberUnlock(code)
-    void enterEvent(code, { adminPin: passcode })
-    if (publicHash) rememberEntry(code, publicHash)
+    // The device that just set the PIN is the organiser already: the server
+    // made it so with the event (createTripRow remembers until when), and
+    // set the public PIN's cookie on the way back.
 
     setResultCode(code)
     setStep('done')

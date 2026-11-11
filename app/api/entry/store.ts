@@ -4,8 +4,9 @@
 
 import type { NextRequest } from 'next/server'
 import type { createAdminClient } from '@/lib/supabase-admin'
-import type { AttemptWindow, Membership } from '@/lib/membership'
+import { fieldOpenEnded, type AttemptWindow, type Membership } from '@/lib/membership'
 import type { EntryStore } from './entry'
+import type { ActionStore } from '../event/actions'
 
 export function serviceStore(db: ReturnType<typeof createAdminClient>): EntryStore {
   return {
@@ -17,15 +18,22 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       const { data, error } = await db.from('trips')
         .select('id, end_date, settings_passcode_hash').eq('trip_code', code).maybeSingle()
       if (error || !data) return null
-      // The public PIN in its own query, as the trip layout reads it
-      // (kind.ts): a column the main select must never depend on.
-      const pub = await db.from('trips').select('public_passcode_hash').eq('id', data.id).maybeSingle()
+      // The public PIN, and what says whether the field may still add
+      // rounds, each in its own query, as the trip layout reads them
+      // (kind.ts): columns the main select must never depend on.
       const row = data as { id: string; end_date: string | null; settings_passcode_hash: string | null }
+      const [pub, shape] = await Promise.all([
+        db.from('trips').select('public_passcode_hash').eq('id', row.id).maybeSingle(),
+        db.from('trips').select('kind, bracket_setup, event_permissions').eq('id', row.id).maybeSingle(),
+      ])
+      const s = (shape.error ? null : shape.data) as { kind?: unknown; bracket_setup?: unknown; event_permissions?: unknown } | null
       return {
         id: row.id,
+        code,
         endDate: row.end_date ?? null,
         adminHash: row.settings_passcode_hash || null,
         publicHash: pub.error ? null : ((pub.data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash || null),
+        openEnded: fieldOpenEnded({ kind: s?.kind, bracketSetup: s?.bracket_setup, eventPermissions: s?.event_permissions }),
       }
     },
     async claimedPlayer(tripId, playerId) {
@@ -58,6 +66,11 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       }
       return out
     },
+    async upgradePin(tripId, kind, hash) {
+      const column = kind === 'admin' ? 'settings_passcode_hash' : 'public_passcode_hash'
+      const { error } = await db.from('trips').update({ [column]: hash }).eq('id', tripId)
+      if (error) throw error
+    },
     async writeAttempt(key, tripId, w) {
       const { error } = await db.from('entry_attempts').upsert(
         { key, trip_id: tripId, failures: w.failures, window_started: w.windowStarted },
@@ -71,4 +84,19 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
 export function addressOf(req: NextRequest): string {
   const fwd = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
   return fwd || req.headers.get('x-real-ip')?.trim() || 'unknown'
+}
+
+/** The same store, with the event row's own reads and writes (../event/actions.ts). */
+export function actionStore(db: ReturnType<typeof createAdminClient>): ActionStore {
+  return {
+    ...serviceStore(db),
+    async tripColumns(tripId, columns) {
+      const { data, error } = await db.from('trips').select(columns.join(', ')).eq('id', tripId).maybeSingle()
+      return error || !data ? null : (data as unknown as Record<string, unknown>)
+    },
+    async updateTrip(tripId, patch) {
+      const { error } = await db.from('trips').update(patch).eq('id', tripId)
+      if (error) throw error
+    },
+  }
 }

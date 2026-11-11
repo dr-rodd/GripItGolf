@@ -4,7 +4,6 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isLocked } from '@/lib/passcode'
 import { MAX_MATCH_SLOTS, MAX_SESSION_NAME } from '@/lib/sessions'
 import { setSessionName, setSessionSlots } from '@/lib/sessionMatchStore'
 import { useUnlocked } from '@/app/components/useUnlocked'
@@ -25,12 +24,12 @@ import { FIELD, FIELD_LABEL, cardClass } from '@/app/components/ui'
  * and a Matches session's matches carry on as its order of play.
  */
 export default function RoundOrganiser({
-  tripId, tripCode, roundId, passcodeHash, isTrip, teeTimes, sheetOpen, links, session,
+  tripId, tripCode, roundId, pinSet, isTrip, teeTimes, sheetOpen, links, session,
 }: {
   tripId: string
   tripCode: string
   roundId: string
-  passcodeHash: string | null
+  pinSet: boolean
   isTrip: boolean
   /** The round starts from a tee sheet (`rounds.start_format`). */
   teeTimes: boolean
@@ -47,7 +46,7 @@ export default function RoundOrganiser({
   const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  if (!unlocked && isLocked(passcodeHash)) return null
+  if (!unlocked && pinSet) return null
 
   async function toggleTeeTimes(on: boolean) {
     const prev = tee

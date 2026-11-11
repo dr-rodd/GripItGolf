@@ -7,7 +7,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import TripHeader from '@/app/components/TripHeader'
-import { isLocked } from '@/lib/passcode'
 import {
   type SlotPlayer, type RoundSheet, type SeatCell, type SeatTarget, type PickerUnit,
   SEATS_ACROSS, groupSlot, seatGrid, seatTargets, listName, pickerUnits, unitMatches,
@@ -141,7 +140,7 @@ type RoundTeams = {
 export default function TeeSheetClient({
   tripId, tripCode, rounds, players, initialAssignments,
   roundTeams, tagOf, playingForTags = false,
-  fieldMayEdit, fieldMaySet = false, passcodeHash = null,
+  fieldMayEdit, fieldMaySet = false, pinSet = false,
   storageReady = true, meId = null, initialRoundId = null, isTrip = false, bookerRecorded = false,
   addedRecorded = false, editSlot = null, matchSessions = null,
 }: {
@@ -192,7 +191,7 @@ export default function TeeSheetClient({
   /** Who put each player in their team is recorded (migration 066). */
   addedRecorded?: boolean
   /** For the inline organiser unlock; null when the event has no PIN. */
-  passcodeHash?: string | null
+  pinSet?: boolean
   /** False when the assignments table could not be read — nothing will save. */
   storageReady?: boolean
 }) {
@@ -217,7 +216,7 @@ export default function TeeSheetClient({
   // The organiser places anybody — the PIN unlocked here, or an event
   // with no PIN at all, the soft lock's fail-open. A player picking their
   // own time places themselves and nobody else.
-  const organiser = unlocked || !isLocked(passcodeHash)
+  const organiser = unlocked || !pinSet
   const selfPickAllowed = !organiser && fieldMayEdit && !!meId
 
   const round = rounds.find(r => r.id === roundId) ?? null
@@ -859,7 +858,7 @@ export default function TeeSheetClient({
 
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={passcodeHash} isTrip={isTrip} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={pinSet} isTrip={isTrip} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -978,7 +977,7 @@ export default function TeeSheetClient({
             <Link href={setupHref!} className={`${buttonClass('secondary')} mt-4`}>
               Open the tee sheet
             </Link>
-            {!fieldMaySet && isLocked(passcodeHash) && !unlocked && (
+            {!fieldMaySet && pinSet && !unlocked && (
               <p className="t-cap text-ink/65 mt-2 text-center">
                 {isTrip ? 'Asks for the Trip Setup passcode.' : 'Asks for the organiser PIN.'}
               </p>

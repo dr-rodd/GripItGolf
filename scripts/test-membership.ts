@@ -19,8 +19,13 @@ import {
   isMember, mayWrite, mergeGrant, needsEntry, roleOf,
   type AttemptWindow, type EventFacts, type Membership,
 } from '../lib/membership'
-import { hashPasscode } from '../lib/passcode'
+import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '../lib/pinHash'
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
+import { runDoor, runExtend, runPlayTogether, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
+import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
+
+// The door's token and a re-stored PIN are keyed by the server's secret.
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -139,7 +144,8 @@ section('Remembering an entry on the phone')
 const ADMIN = '4321', PUBLIC = '1111'
 
 async function world(trip: Partial<EntryTrip> = {}) {
-  const t: EntryTrip = { id: 'trip-1', endDate: null, adminHash: await hashPasscode(ADMIN), publicHash: null, ...trip }
+  const t: EntryTrip = { id: 'trip-1', code: 'GX7K2P', endDate: null, adminHash: await hashPasscode(ADMIN), publicHash: null, openEnded: false, ...trip }
+  const cols: Record<string, unknown> = { leaderboards: [{ id: 'b1', competition: 'league' }], event_permissions: {} }
   const members = new Map<string, Membership>()
   const attempts = new Map<string, AttemptWindow>()
   const claimed = new Set([`trip-1:${P1}`])
@@ -151,8 +157,20 @@ async function world(trip: Partial<EntryTrip> = {}) {
     async writeMembership(u, tr, m) { members.set(`${u}:${tr}`, m) },
     async readAttempts(keys) { return new Map(keys.filter(k => attempts.has(k)).map(k => [k, attempts.get(k)!])) },
     async writeAttempt(key, _tr, w) { attempts.set(key, w) },
+    async upgradePin(_tr, kind, hash) { if (kind === 'admin') t.adminHash = hash; else t.publicHash = hash },
   }
-  return { t, members, attempts, store }
+  const actions: ActionStore = {
+    ...store,
+    async tripColumns() { return cols },
+    async updateTrip(_tr, patch) {
+      for (const [k, v] of Object.entries(patch)) {
+        if (k === 'public_passcode_hash') t.publicHash = v as string | null
+        else if (k === 'end_date') t.endDate = v as string | null
+        else cols[k] = v
+      }
+    },
+  }
+  return { t, members, attempts, store, actions, cols }
 }
 const base = { token: 'tok-u1', code: 'gx7k2p', address: '203.0.113.7' }
 
@@ -273,8 +291,14 @@ function wiringTests() {
       const enters = (src.match(/\benterEvent\(/g) ?? []).length
       ok(enters >= calls, `${f}: every rememberUnlock/rememberPlayer is followed by enterEvent (${calls} and ${enters})`)
     }
-    ok(/enterEvent\(tripCode, asAdmin \? \{ adminPin: code \} : \{ publicPin: code \}\)/.test(read('app/enter/[tripCode]/EntryGate.tsx')),
+    ok(/if \(r\.body\.organiser === true\) void unlockWithPin\(code, pin\)\s*else void enterEvent\(code, \{ publicPin: pin \}\)/.test(read('lib/entryClient.ts')),
       'the public PIN door enters with whichever PIN it was given')
+    // Stage 4 (D64): an unlock is only ever the server's answer, remembered.
+    const unlockers = files('app').filter(f => /\brememberUnlock\(/.test(read(f)))
+    eq(unlockers, [], 'no screen remembers an unlock of its own — only lib/entryClient.ts, with what the server said')
+    const lock = read('app/components/OrganiserLock.tsx')
+    ok(lock.includes('lockShut(tripCode)') && !lock.includes('forgetUnlock('), 'shutting the padlock tells the server (D61)')
+    ok(/settleOrganiser\(code\)/.test(read('lib/entryClient.ts')), 'a page load checks a remembered unlock against the server, and tells a shut padlock it missed')
   }
 
   section('Nobody is signed in before migration 068 is in')
@@ -369,8 +393,130 @@ function wiringTests() {
   }
 }
 
+async function stageFourTests() {
+  section('Stage 4: who changes the event (D65, D66) and the cap (D59)')
+  {
+    const pin = { adminPinSet: true, endDate: null }
+    const open = { adminPinSet: false, endDate: null }
+    const guest: Membership = { role: 'guest', playerId: null, organiserUntil: null }
+    const organiser: Membership = { ...guest, organiserUntil: new Date(NOW.getTime() + 3_600_000).toISOString() }
+    ok(!mayChangeEvent(guest, pin, NOW), 'a guest on an event with a PIN may not change the event')
+    ok(mayChangeEvent(organiser, pin, NOW), '  …the organiser with the PIN may')
+    ok(mayChangeEvent(guest, open, NOW), 'on an event with no PIN every member may, as now')
+    ok(!mayChangeEvent({ ...guest, role: 'spectator' }, open, NOW), '  …but never a spectator')
+    ok(!mayChangeEvent(guest, { ...open, endDate: '2026-09-01' }, NOW), '  …nor the field of an event read-only for 30 days past its end')
+    eq(closeOrganiser(organiser).organiserUntil, null, 'shutting the padlock ends the twelve hours (D61)')
+    eq(closeOrganiser(organiser).role, 'guest', '  …and leaves the phone what it was in the field')
+
+    const series = (over: Record<string, unknown> = {}, perms: Record<string, unknown> = { add_rounds: true }) =>
+      fieldOpenEnded({ kind: 'tournament', bracketSetup: { format: 'league', schedule: 'series', entry: 'organiser', ...over }, eventPermissions: perms })
+    ok(series(), 'an ad hoc series whose field may add rounds is open-ended')
+    ok(!series({}, { add_rounds: false }), '  …not once the organiser turns add_rounds off')
+    ok(!series({ repeat: { every: 1, unit: 'week' } }), '  …nor a recurring series, made whole at creation')
+    ok(!series({ schedule: 'continuous' }), '  …nor a continuous league')
+    ok(!series({}, { add_rounds: 'true' }), '  …and a permission that is not a real true counts for nothing, as in the SQL')
+    ok(!fieldOpenEnded({ kind: null, bracketSetup: null, eventPermissions: null }), '  …nor a trip')
+    const ended = { adminPinSet: true, endDate: '2026-09-01' }
+    ok(!mayWrite(guest, ended, NOW), 'the field of an event that ended in September reads only in November')
+    ok(mayWrite(guest, { ...ended, openEnded: true }, NOW), '  …unless it is an open-ended series')
+  }
+
+  section('/api/entry: peek and close (D64, D61)')
+  {
+    const { store, members } = await world()
+    await runEntry({ ...base, adminPin: ADMIN }, store, NOW)
+    const peek = await runEntry({ ...base, peek: true }, store, NOW)
+    eq(peek.body.ok && peek.body.role, 'organiser', 'peek says what the phone is')
+    ok(peek.body.ok && !!peek.body.organiserUntil, '  …and when the twelve hours end')
+    ok(!JSON.stringify(peek.body).match(/hash|[0-9a-f]{64}|s1\$/), '  …and nothing about the PIN')
+    const shut = await runEntry({ ...base, close: true }, store, NOW)
+    eq(shut.body.ok && shut.body.role, 'guest', 'close drops the phone back to what it was')
+    eq(members.get('u1:trip-1')?.organiserUntil, null, '  …on the server')
+    const stranger = await runEntry({ ...base, token: 'tok-u9', peek: true }, store, NOW)
+    eq(stranger.body.ok && stranger.body.role, null, 'peek enters nobody')
+    ok(!members.has('u9:trip-1'), '  …and writes nothing')
+  }
+
+  section('PINs stored salted and slow, upgraded on the next right PIN (D64)')
+  {
+    const { store, t } = await world()
+    ok(/^[0-9a-f]{64}$/.test(t.adminHash!), 'an event made before stage 4 holds the plain hash')
+    await runEntry({ ...base, adminPin: '0000' }, store, NOW)
+    ok(/^[0-9a-f]{64}$/.test(t.adminHash!), '  …a wrong PIN changes nothing')
+    await runEntry({ ...base, adminPin: ADMIN }, store, NOW)
+    ok(t.adminHash!.startsWith('s1$'), '  …the right one re-stores it salted and slow, silently')
+    ok((await verifyPin(ADMIN, t.adminHash)).ok, '  …and it still opens')
+    const again = await runEntry({ ...base, token: 'tok-u2', adminPin: ADMIN }, store, NOW)
+    eq(again.body.ok && again.body.role, 'organiser', '  …from any phone')
+  }
+
+  section('The door: the public PIN checked on the server, its cookie set there')
+  {
+    const { actions, t } = await world({ publicHash: await hashPasscode(PUBLIC) })
+    const at = { code: 'gx7k2p', address: '203.0.113.9' }
+    const ok1 = await runDoor({ ...at, pin: PUBLIC }, actions, NOW)
+    eq(ok1.status, 200, 'the public PIN opens the door')
+    ok(ok1.status === 200 && ok1.cookie === entryToken(t.publicHash!, 'GX7K2P') && ok1.cookie !== t.publicHash,
+      '  …with a server-keyed token for a cookie, never the hash')
+    ok(ok1.status === 200 && !ok1.body.organiser, '  …as the field')
+    const asAdmin = await runDoor({ ...at, pin: ADMIN }, actions, NOW)
+    ok(asAdmin.status === 200 && asAdmin.body.organiser, 'the admin PIN opens it too, and says so')
+    eq((await runDoor({ ...at, pin: '9999' }, actions, NOW)).status, 403, 'a wrong PIN does not')
+    for (let i = 0; i < 12; i++) await runDoor({ ...at, pin: '9999' }, actions, NOW)
+    eq((await runDoor({ ...at, pin: PUBLIC }, actions, NOW)).status, 429, '  …and the door has the retry limit')
+    const upgraded = await hashPin(PUBLIC, 'GX7K2P')
+    ok(ok1.status === 200 && entryToken(upgraded, 'GX7K2P') === ok1.cookie, 'a PIN re-stored salted and slow keeps the same door token — nobody is sent back to the door')
+  }
+
+  section('The public PIN set, changed and taken off through the server (D65)')
+  {
+    const { actions, t } = await world()
+    const ask = { token: 'tok-u1', code: 'GX7K2P', address: '203.0.113.10' }
+    eq((await runSetPublicPin({ ...ask, adminPin: null, pin: '5678' }, actions, NOW)).status, 403, 'it asks for the admin PIN')
+    eq((await runSetPublicPin({ ...ask, adminPin: '0000', pin: '5678' }, actions, NOW)).status, 403, '  …the right one')
+    eq((await runSetPublicPin({ ...ask, adminPin: ADMIN, pin: ADMIN }, actions, NOW)).status, 400, 'the admin PIN itself is refused as the public one')
+    eq((await runSetPublicPin({ ...ask, adminPin: ADMIN, pin: '12' }, actions, NOW)).status, 400, '  …and a PIN too short')
+    const set = await runSetPublicPin({ ...ask, adminPin: ADMIN, pin: '5678' }, actions, NOW)
+    eq(set.status, 200, 'with the admin PIN it is set')
+    ok(t.publicHash!.startsWith('s1$') && (await verifyPin('5678', t.publicHash)).ok, '  …stored salted and slow')
+    ok(set.status === 200 && set.cookie === entryToken(t.publicHash!, 'GX7K2P'), '  …and this phone let straight back in')
+    eq((await runSetPublicPin({ ...ask, adminPin: ADMIN, pin: null }, actions, NOW)).status, 200, 'and taken off')
+    eq(t.publicHash, null, '  …gone')
+    const { actions: noPin } = await world({ adminHash: null })
+    eq((await runSetPublicPin({ ...ask, token: 'tok-u5', adminPin: null, pin: '5678' }, noPin, NOW)).status, 403,
+      'with no admin PIN, a phone that is not a member may not')
+  }
+
+  section('An ad hoc series\' end moved on by the field (D59, D65)')
+  {
+    const { store, actions, t } = await world({ endDate: '2026-11-01' })
+    await runEntry(base, store, NOW)
+    const ask = { token: 'tok-u1', code: 'GX7K2P' }
+    eq((await runExtend({ ...ask, date: '2026-11-20' }, actions, NOW)).status, 403, 'a guest may not move an event\'s end')
+    t.openEnded = true
+    eq((await runExtend({ ...ask, date: '2026-11-20' }, actions, NOW)).status, 200, '  …but may when the field adds rounds')
+    eq(t.endDate, '2026-11-20', '  …and the end moves on')
+    await runExtend({ ...ask, date: '2026-11-05' }, actions, NOW)
+    eq(t.endDate, '2026-11-20', '  …only ever later')
+    eq((await runExtend({ ...ask, date: '2031-01-01' }, actions, NOW)).status, 400, '  …and never years ahead')
+  }
+
+  section('"Do players play in their teams?", answered through the server')
+  {
+    const { store, actions, cols } = await world()
+    await runEntry(base, store, NOW)
+    const ask = { token: 'tok-u1', code: 'GX7K2P', boardId: 'b1', together: false }
+    eq((await runPlayTogether(ask, actions, NOW)).status, 403, 'a guest may not, while only the organiser opens sheets')
+    cols.event_permissions = { set_tee_sheets: true }
+    eq((await runPlayTogether(ask, actions, NOW)).status, 200, '  …may while anyone may open the sheets')
+    eq(((cols.leaderboards as { teeTeams?: string }[])[0]).teeTeams, 'separate', '  …and the answer lands on that board')
+    eq((await runPlayTogether({ ...ask, boardId: 'nope' }, actions, NOW)).status, 404, '  …and only on a board that exists')
+  }
+}
+
 async function main() {
   await routeTests()
+  await stageFourTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

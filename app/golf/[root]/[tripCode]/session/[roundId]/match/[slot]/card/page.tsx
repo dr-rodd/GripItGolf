@@ -17,6 +17,7 @@ import MatchCardClient from '../../../../../match/[matchId]/card/MatchCardClient
 import SessionTees from './SessionTees'
 import { readSessionCards, type SessionMatchRow } from '../../../../sessionMatches'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -105,7 +106,7 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
   const format = MATCH_FORMATS.find(f => f.key === setup.format)?.label ?? 'Match'
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -122,7 +123,7 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
               underWay={underWay}
               finished={!!row.result}
               tripCode={tripCode}
-              passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+              pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)}
               inMatch={mySide !== null}
             />
             <MatchCardClient
@@ -138,7 +139,7 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
               b={card.b}
               holes={card.holes}
               mySide={mySide}
-              passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+              pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)}
               stored={stored}
               colours={sideColours(tagColour(row.side_a), tagColour(row.side_b))}
               anyoneScores={allowsParticipant(

@@ -30,7 +30,6 @@ import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isLocked } from '@/lib/passcode'
 import {
   type MatchFormat, type SessionMatchResult, matchLine, matchSidesIssue, sideSize, slotFloor, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
@@ -49,7 +48,7 @@ type Tag = { id: string; name: string; color: string }
 
 export default function MatchesSheet({
   tripId, tripCode, roundId, title, format, matches: saved, clocks, players, tags, tagOfPlayer,
-  myId, passcodeHash, playersPick, opensLabel = null, slots = 0, open: expanded, onToggle,
+  myId, pinSet, playersPick, opensLabel = null, slots = 0, open: expanded, onToggle,
   setupHref,
 }: {
   /**
@@ -84,14 +83,14 @@ export default function MatchesSheet({
   /** Player id → their tag id. */
   tagOfPlayer: Record<string, string>
   myId: string | null
-  passcodeHash: string | null
+  pinSet: boolean
   /** Whether a player may put themselves on a side (`edit_tee_sheet`). */
   playersPick: boolean
 }) {
   const router = useRouter()
   const tripHome = useTripBase(tripCode)
   const [unlocked] = useUnlocked(tripCode)
-  const organiser = unlocked || !isLocked(passcodeHash)
+  const organiser = unlocked || !pinSet
   const size = sideSize(format)
   const twoTags = tags.length === 2 ? tags : null
   const tagged = tags.length > 0

@@ -3,7 +3,6 @@ import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '@/app/golf/[root]/[tripCode]/setup/PasscodeGate'
 import { describeRange } from '@/lib/confirmationEmail'
 import { todayString } from '@/lib/tripStatus'
-import { isLocked } from '@/lib/passcode'
 import { isRunChallenge, describeProgress } from '@/lib/runChallenge'
 import { fetchRunChallenge } from '../data'
 import RunOrganiserClient from './RunOrganiserClient'
@@ -51,13 +50,12 @@ export default async function RunOrganiserPage({ params }: {
     />
   )
 
-  if (!isLocked(challenge.passcodeHash)) return client
+  if (!challenge.pinSet) return client
 
   return (
     <PasscodeGate
       tripCode={challenge.code}
       tripName={challenge.name}
-      passcodeHash={challenge.passcodeHash as string}
       title="Organiser area"
       hint={`Enter the PIN set when ${challenge.name} was created.`}
     >

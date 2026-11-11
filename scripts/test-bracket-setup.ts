@@ -17,7 +17,8 @@ import {
   isKnockoutEvent, knockoutSeed, knockoutBoards, drawDeadlines, deadlineNote, rawDrawPlan,
 } from '../lib/bracketSetup'
 import { hasMatchplay } from '../lib/leaderboards'
-import { entryAllowed, entryCookie, publicPinIssue } from '../lib/publicPin'
+import { entryCookie, publicPinIssue } from '../lib/publicPin'
+import { entryAllowed, entryToken, legacyPinHash } from '../lib/pinHash'
 import { DRAW_TIMINGS, newDraft } from '../lib/bracketDraw'
 import { layoutFromSlots } from '../lib/bracketEditor'
 import { creationPlan, creationDrawIssue, creationRounds } from '../app/dashboard/create/CreationDraw'
@@ -427,11 +428,20 @@ section('When the draw happens — one screen, and a moment it goes live (Ross, 
 
 section('The public PIN: entry to the event, beside the admin PIN')
 {
-  eq(entryAllowed(null, undefined), true, 'no public PIN: open to anybody with the code, as ever')
-  eq(entryAllowed('', undefined), true, '  …an empty one too')
-  eq(entryAllowed('abc', undefined), false, 'a public PIN: a phone that has not entered is sent to the door')
-  eq(entryAllowed('abc', 'abc'), true, '  …and one that has goes straight through')
-  eq(entryAllowed('def', 'abc'), false, '  …until the PIN changes, which asks everybody again')
+  // The door's rule is the server's now (lib/pinHash.ts, stage 4): its
+  // cookie is a token keyed by the server, never the PIN's hash.
+  process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
+  const CODE = 'GX7K2P'
+  const stored = legacyPinHash('5678')
+  const token = entryToken(stored, CODE)!
+  eq(entryAllowed(null, undefined, CODE), true, 'no public PIN: open to anybody with the code, as ever')
+  eq(entryAllowed('', undefined, CODE), true, '  …an empty one too')
+  eq(entryAllowed(stored, undefined, CODE), false, 'a public PIN: a phone that has not entered is sent to the door')
+  eq(entryAllowed(stored, token, CODE), true, '  …and one the door let in goes straight through')
+  ok(token !== stored && !token.includes(stored), '  …its cookie holding a server-keyed token, not the hash')
+  eq(entryAllowed(stored, stored, CODE), true, '  …and a cookie written before stage 4, which held the hash, still works')
+  eq(entryAllowed(legacyPinHash('9999'), token, CODE), false, '  …until the PIN changes, which asks everybody again')
+  eq(entryAllowed(stored, token, 'OTHER1'), false, '  …and one event\'s cookie opens no other')
   eq(entryCookie('gx7k2p'), 'gd_entry_GX7K2P', 'one cookie per event, whatever the case of the link')
   const draft = (pin: string, confirm = pin) => ({ on: true, pin, confirm })
   eq(publicPinIssue({ on: false, pin: '', confirm: '' }, '1234'), null, 'off is fine — it is optional')
@@ -449,14 +459,16 @@ section('The public PIN: entry to the event, beside the admin PIN')
   ok(kind.includes(".select('public_passcode_hash')") && /if \(error\) return null/.test(kind),
     '  …in its own query, fail-soft — before migration 060 there is no lock')
   const gate = read('app/enter/[tripCode]/EntryGate.tsx')
-  ok(gate.includes('hash === adminHash') && gate.includes('rememberUnlock(tripCode)'),
-    'the admin PIN opens the door too, and unlocks the organiser\'s side with it')
+  ok(gate.includes('openDoor(tripCode, code)') && !/passcode_hash|publicHash|adminHash|hashPasscode/.test(gate),
+    'the door asks the server, and holds no hash')
+  ok(/if \(r\.body\.organiser === true\) void unlockWithPin\(code, pin\)/.test(read('lib/entryClient.ts')),
+    '  …the admin PIN opens it too, and unlocks the organiser\'s side with it')
   ok(read('app/enter/[tripCode]/page.tsx').includes("select('*')"), 'the door reads the trip whole, so no column means no lock')
   for (const form of ['CreateKnockoutForm', 'CreateLeagueForm', 'CreateTripForm']) {
     const src = read(`app/dashboard/create/${form}.tsx`)
-    ok(src.includes('<PublicPinField') && src.includes('rememberEntry(code, publicHash)')
-      && /public_passcode_hash/.test(src) && src.includes('!publicIssue'),
-      `${form} offers the public PIN, writes it only when set, and lets its own device in`)
+    ok(src.includes('<PublicPinField') && src.includes('publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null')
+      && !/passcode_hash|publicHash/.test(src) && src.includes('!publicIssue'),
+      `${form} offers the public PIN and sends it, only when set, for the server to store — no hash on the phone`)
   }
   ok(read('app/golf/[root]/[tripCode]/organiser/page.tsx').includes('<PublicPinCard'), 'the organiser can change or take it off')
 }

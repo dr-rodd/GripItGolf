@@ -129,3 +129,82 @@ SELECT set_config('request.jwt.claims', '{"sub":"00000000-0000-0000-0000-0000000
 SELECT (SELECT count(*) FROM live_rounds) AS live_rounds_seen, (SELECT count(*) FROM match_scores) AS match_scores_seen;
 ROLLBACK;
 
+
+-- ─── Stage 4: roles told apart (after migration 071) ────────────────────
+--
+-- 071's own "Did it land?" first. Then, pretending to be phones, inside
+-- BEGIN … ROLLBACK so nothing is changed.
+
+-- (4) A guest cannot change the event's own row. Takes the most recent guest
+-- on an event with a PIN and tries to "change" its name to itself. Should
+-- say 0 — refused, silently, as row-level security refuses an update.
+
+BEGIN;
+SELECT set_config('gd.guest', (
+  SELECT m.user_id::text || '|' || m.trip_id::text
+  FROM trip_members m JOIN trips t ON t.id = m.trip_id
+  WHERE m.role = 'guest' AND (m.organiser_until IS NULL OR m.organiser_until < now())
+    AND COALESCE(t.settings_passcode_hash, '') <> ''
+  ORDER BY m.updated_at DESC LIMIT 1), true);
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', split_part(current_setting('gd.guest'), '|', 1), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE trips SET name = name WHERE id = split_part(current_setting('gd.guest'), '|', 2)::uuid RETURNING id
+) SELECT count(*) AS guest_changed_event FROM changed;
+ROLLBACK;
+
+-- (5) The same phone given the PIN's twelve hours can. Should say 1.
+
+BEGIN;
+SELECT set_config('gd.guest', (
+  SELECT m.user_id::text || '|' || m.trip_id::text
+  FROM trip_members m JOIN trips t ON t.id = m.trip_id
+  WHERE m.role = 'guest' AND COALESCE(t.settings_passcode_hash, '') <> ''
+  ORDER BY m.updated_at DESC LIMIT 1), true);
+UPDATE trip_members SET organiser_until = now() + interval '1 hour'
+  WHERE user_id = split_part(current_setting('gd.guest'), '|', 1)::uuid
+    AND trip_id = split_part(current_setting('gd.guest'), '|', 2)::uuid;
+SELECT set_config('request.jwt.claims',
+  json_build_object('sub', split_part(current_setting('gd.guest'), '|', 1), 'role', 'authenticated')::text, true);
+SET LOCAL ROLE authenticated;
+WITH changed AS (
+  UPDATE trips SET name = name WHERE id = split_part(current_setting('gd.guest'), '|', 2)::uuid RETURNING id
+) SELECT count(*) AS organiser_changed_event FROM changed;
+ROLLBACK;
+
+-- (6) No phone reads a PIN's hash. Should stop with "permission denied for
+-- table trips" — that error is the pass.
+
+BEGIN;
+SET LOCAL ROLE authenticated;
+SELECT settings_passcode_hash FROM trips LIMIT 1;
+ROLLBACK;
+
+-- (7) Which events' fields are read-only now (the 30-day cap), and which
+-- ad hoc series stay open because their field may add rounds. Read as the
+-- database owner, so it lists everything.
+
+SELECT trip_code, name, end_date,
+       ((end_date + 31)::timestamp AT TIME ZONE 'Europe/Dublin') AS field_read_only_from
+FROM trips
+WHERE end_date IS NOT NULL AND now() >= ((end_date + 31)::timestamp AT TIME ZONE 'Europe/Dublin')
+ORDER BY end_date DESC;
+
+SELECT trip_code, name, end_date AS last_round_so_far
+FROM trips
+WHERE kind = 'tournament'
+  AND bracket_setup -> 'format' = '"league"'::jsonb
+  AND bracket_setup -> 'schedule' = '"series"'::jsonb
+  AND COALESCE(bracket_setup -> 'repeat', 'null'::jsonb) = 'null'::jsonb
+  AND event_permissions -> 'add_rounds' = 'true'::jsonb;
+
+-- (8) How many PINs are stored salted and slow yet — they move over as each
+-- is typed. `legacy` falls as organisers use their events.
+
+SELECT
+  count(*) FILTER (WHERE settings_passcode_hash ~ '^[0-9a-f]{64}$') AS admin_legacy,
+  count(*) FILTER (WHERE settings_passcode_hash LIKE 's1$%')        AS admin_slow,
+  count(*) FILTER (WHERE public_passcode_hash ~ '^[0-9a-f]{64}$')   AS public_legacy,
+  count(*) FILTER (WHERE public_passcode_hash LIKE 's1$%')          AS public_slow
+FROM trips;

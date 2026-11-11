@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { runCreate, type CreateStore } from './create'
 
-// POST /api/trip/create — `{ row }` with the phone's Supabase token as
+// POST /api/trip/create — `{ row, adminPin?, publicPin? }` with the phone's Supabase token as
 // `Authorization: Bearer …`: makes a new event's row and the phone's
 // membership of it (row-level security, stage 3). Answers in supabase-js's own
 // shape, `{ data: { id }, error }`, so the create forms read it as they read
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic'
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null) as { row?: unknown } | null
+  const body = await req.json().catch(() => null) as { row?: unknown; adminPin?: unknown; publicPin?: unknown } | null
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
     const db = createAdminClient()
@@ -38,8 +39,16 @@ export async function POST(req: NextRequest) {
         await db.from('trips').delete().eq('id', tripId)
       },
     }
-    const out = await runCreate({ token, row: body?.row }, store, new Date())
-    return NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
+    const out = await runCreate({ token, row: body?.row, adminPin: body?.adminPin, publicPin: body?.publicPin }, store, new Date())
+    const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
+    if (out.status === 200 && out.doorCookie) {
+      const code = String((body?.row as { trip_code?: unknown } | undefined)?.trip_code ?? '')
+      res.cookies.set(entryCookie(code), out.doorCookie, {
+        httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',
+        path: '/', maxAge: ENTRY_COOKIE_DAYS * 86_400,
+      })
+    }
+    return res
   } catch (e) {
     console.error('create failed:', e)
     return NextResponse.json({ data: null, error: { message: 'Could not create the event — try again.' } }, { status: 503, headers: NO_STORE })

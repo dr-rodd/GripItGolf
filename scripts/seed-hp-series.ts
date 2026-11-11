@@ -27,7 +27,7 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 import type { LeagueSetup } from '../lib/leagueSetup'
 import type { Leaderboard } from '../lib/leaderboards'
 import { NO_FORMATS } from '../lib/formats'
-import { hashPasscode } from '../lib/passcode'
+import { legacyPinHash as hashPasscode } from '../lib/pinHash'
 import { toItemRow } from '../lib/itinerarySync'
 import type { ItineraryItem } from '../lib/itinerary'
 

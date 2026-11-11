@@ -261,7 +261,8 @@ section('The tee sheet and its wizard read the one copy')
   ok(setup.includes('playTogetherQuestion(boards, round.id'), 'the wizard asks the one question')
   const wizard = read('app/golf/[root]/[tripCode]/teesheet/[roundId]/setup/TeeSheetWizard.tsx')
   ok(wizard.includes('Do players play in their teams?'), '  …in Ross\'s words')
-  ok(wizard.includes('withPlayTogether('), '  …and stores the answer through the one writer')
+  ok(wizard.includes('answerPlayTogether(') && read('app/api/event/actions.ts').includes('withPlayTogether(boards, boardId, input.together)'),
+    '  …and stores the answer through the one writer, on the server (stage 4)')
 
   const form = read('app/components/LeaderboardSetup.tsx')
   ok(!form.includes('How do teams meet the tee sheet?'),

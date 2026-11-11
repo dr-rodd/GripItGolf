@@ -28,7 +28,6 @@ import { sideColours, sideTint, type SideColour } from '@/lib/matchSides'
 import { tagOfTeam } from '@/lib/tagBoards'
 import type { Membership } from '@/lib/teamSets'
 import { mayScoreCard } from '@/lib/matchCard'
-import { isLocked } from '@/lib/passcode'
 import { useUnlocked } from '@/app/components/useUnlocked'
 import { cardClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
@@ -47,7 +46,7 @@ export default function SessionMatchList({
    */
   toScore?: boolean
   /** The Scoring tab's rule for who scores: this phone's player, the PIN, the permission. */
-  scoring?: { me: string | null; passcodeHash: string | null; anyoneScores: boolean } | null
+  scoring?: { me: string | null; pinSet: boolean; anyoneScores: boolean } | null
   matches: SessionMatchResult[]
   players: P[]
   teams: T[]
@@ -62,7 +61,7 @@ export default function SessionMatchList({
 }) {
   const tripHome = useTripBase(tripCode)
   const [unlocked] = useUnlocked(tripCode)
-  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? null)
+  const organiser = unlocked || !!!(scoring?.pinSet ?? null)
   // The one match open beneath its row, and every one opened so far — kept
   // drawn so closing slides as opening does.
   const [openSlot, setOpenSlot] = useState<number | null>(null)

@@ -265,7 +265,6 @@ export default async function TripSetupPage({ params }: { params: Promise<{ trip
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         {...(event ? {
           title: 'Organisers only',
           hint: `Enter the organiser PIN for ${trip.name}.`,

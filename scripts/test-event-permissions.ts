@@ -19,7 +19,7 @@ import {
 } from '../lib/eventPermissions'
 import { confirmationHtml, confirmationText } from '../lib/confirmationEmail'
 import { ORGANISER_HOURS, ORGANISER_MS } from '../lib/membership'
-import { unlockExpiry, unlockOpen } from '../lib/passcode'
+import { unlockOpen } from '../lib/passcode'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -332,14 +332,15 @@ section('The event email carries the admin link, never the PIN')
   ok(!html.includes('until the browser or app is closed'),
     '  …and no longer promises the old close-the-browser lock')
   ok(ORGANISER_HOURS === 12, '  …which is twelve hours')
-  ok(read('lib/passcode.ts').includes('localStorage.setItem(key(tripCode), unlockExpiry(')
-     && read('lib/passcode.ts').includes('ORGANISER_MS'),
-    '  …and the unlock on the phone is kept for exactly that long, so the sentence stays true')
+  ok(read('lib/passcode.ts').includes('localStorage.setItem(key(tripCode), until)')
+     && /rememberUnlock\(code, (until|body\.organiserUntil|out\.organiserUntil \?\? null)\)/.test(read('lib/entryClient.ts')),
+    '  …and the unlock on the phone is kept until the server\'s own twelve hours end, so the sentence stays true')
   {
     const t0 = Date.UTC(2026, 10, 10, 9, 0)
-    ok(unlockOpen(unlockExpiry(t0), t0 + ORGANISER_MS - 1), '  an unlock is open a moment before twelve hours')
-    ok(!unlockOpen(unlockExpiry(t0), t0 + ORGANISER_MS), '  …and shut at twelve hours')
-    ok(!unlockOpen('1', t0) && !unlockOpen(null, t0), '  …and anything unreadable is shut')
+    const until = new Date(t0 + ORGANISER_MS).toISOString()
+    ok(unlockOpen(until, t0 + ORGANISER_MS - 1), '  an unlock is open a moment before twelve hours')
+    ok(!unlockOpen(until, t0 + ORGANISER_MS), '  …and shut at twelve hours')
+    ok(!unlockOpen('1x', t0) && !unlockOpen(null, t0), '  …and anything unreadable is shut')
   }
 
   const text = confirmationText(eventDetails)
@@ -392,7 +393,7 @@ section('Handicaps: the field\'s own, or the organiser\'s (Ross, 4 Nov 2026)')
   ok(match.includes("!underWay && allowsParticipant(kind, perms, 'edit_handicaps')") && match.includes("from('match_scores').select('match_id', { count: 'exact', head: true })"),
     'a player changes their own on their match page only while the field may, and until the card is under way')
   const add = read('app/golf/[root]/[tripCode]/AddToField.tsx')
-  ok(add.includes('const maySetHandicap = fieldSetsHandicaps || unlocked || !isLocked(passcodeHash)'),
+  ok(add.includes('const maySetHandicap = fieldSetsHandicaps || unlocked || !pinSet'),
     'adding a name to the field gives its handicap only where the field may — or the organiser, with the PIN')
   const toggles = read('app/components/EventPermissionToggles.tsx')
   ok(toggles.includes('p.offWarning && !value[p.key]'), 'switched off, the toggle says what it costs')

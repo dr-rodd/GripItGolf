@@ -22,6 +22,7 @@ import { dayNumber, type ItineraryItem } from './itinerary'
 import { cardKey, cardsOffWith, parseLeagueSetup, tidyCardsOff, isPeriodLeague, periodsIssue, type LeaguePeriod } from './leagueSetup'
 import { withRoundAllowance } from './handicapAllowance'
 import { teeSheetInUse } from './eventHub'
+import { extendEventEnd } from './entryClient'
 
 type Result = { ok: true } | { ok: false; error: string }
 /** `made` says whether the round row exists, whatever else went wrong. */
@@ -131,6 +132,8 @@ async function shiftRoundNumbers(tripId: string, from: number): Promise<boolean>
  */
 export async function addLeagueRound(args: {
   tripId: string
+  /** The event's code — moving its end date on goes through the server. */
+  tripCode: string
   startDate: string
   endDate: string | null
   date: string
@@ -141,11 +144,10 @@ export async function addLeagueRound(args: {
   players: readonly Player[]
 }): Promise<Result> {
   if (!args.endDate || args.date > args.endDate) {
-    const { error } = await supabase
-      .from('trips')
-      .update({ end_date: args.date })
-      .eq('id', args.tripId)
-    if (error) return { ok: false, error: 'Could not add the round — try again.' }
+    // Through the server (row-level security stage 4, D65): the field may
+    // add a round to an ad hoc series, but never writes the trips row.
+    const moved = await extendEventEnd(args.tripCode, args.date)
+    if (!moved.ok) return { ok: false, error: moved.error }
   }
 
   if (!(await shiftRoundNumbers(args.tripId, args.number))) {

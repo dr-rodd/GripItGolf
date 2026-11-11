@@ -221,7 +221,6 @@ export default async function BracketSetupPage({ params }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         title="The bracket"
         hint={`Enter the organiser PIN for ${trip.name}.`}
       >

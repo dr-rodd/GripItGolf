@@ -15,6 +15,7 @@ import { readKnockout } from '../../../knockout'
 import { readCardSetups } from '../../matchCards'
 import MatchCardClient from './MatchCardClient'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,7 +59,7 @@ export default async function MatchCardPage({
     : match.sideA === view.entrantId ? 'A' as const : 'B' as const
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">
@@ -78,7 +79,7 @@ export default async function MatchCardPage({
             holes={card.holes}
             extraPlan={card.extraPlan}
             mySide={mySide}
-            passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null}
+            pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)}
             stored={{ winner: match.winner, result: match.result }}
             colours={sideColours(
               match.sideA ? view.colours[match.sideA] : null,

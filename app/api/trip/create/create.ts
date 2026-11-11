@@ -9,8 +9,15 @@
 //
 // Handed its store, so `test:rls` runs it on a stand-in; ./route.ts is the
 // service-role store.
+//
+// **The PINs arrive as PINs** (stage 4, D64): the form sends what was typed,
+// beside the row, and they are stored here salted and slow — no hash is
+// ever made on, or sent from, a phone. The row itself may not name either
+// hash column.
 
 import { mergeGrant, type Membership } from '@/lib/membership'
+import { passcodeError } from '@/lib/passcode'
+import { entryToken, hashPin } from '@/lib/pinHash'
 
 /**
  * Every column a create form puts on a new event. Anything else is refused
@@ -21,8 +28,7 @@ import { mergeGrant, type Membership } from '@/lib/membership'
 export const CREATE_COLUMNS = [
   'name', 'slug', 'trip_code', 'status', 'start_date', 'end_date', 'description',
   'formats', 'leaderboards', 'kind', 'bracket_setup', 'event_permissions', 'run_setup',
-  'track_stats', 'team_scoring',
-  'settings_passcode_hash', 'public_passcode_hash', 'lead_email',
+  'track_stats', 'team_scoring', 'lead_email',
 ] as const
 
 export interface CreateStore {
@@ -35,14 +41,14 @@ export interface CreateStore {
 }
 
 export type CreateOutcome =
-  | { status: 200; body: { data: { id: string }; error: null } }
+  | { status: 200; body: { data: { id: string }; organiserUntil: string | null; error: null }; doorCookie: string | null }
   | { status: 400 | 401 | 409 | 503; body: { data: null; error: { message: string; code?: string } } }
 
 const fail = (status: 400 | 401 | 409 | 503, message: string, code?: string): CreateOutcome =>
   ({ status, body: { data: null, error: { message, ...(code ? { code } : {}) } } })
 
 export async function runCreate(
-  input: { token: string | null; row: unknown },
+  input: { token: string | null; row: unknown; adminPin?: unknown; publicPin?: unknown },
   store: CreateStore,
   now: Date,
 ): Promise<CreateOutcome> {
@@ -58,17 +64,40 @@ export async function runCreate(
   if (typeof r.name !== 'string' || !r.name.trim()) return fail(400, 'The event needs a name.')
   if (typeof r.trip_code !== 'string' || !/^[A-Z0-9]{6}$/.test(r.trip_code)) return fail(400, 'The event needs its six-character code.')
 
-  const made = await store.insertTrip(r)
+  const pinOf = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : null)
+  const adminPin = pinOf(input.adminPin)
+  const publicPin = pinOf(input.publicPin)
+  for (const pin of [adminPin, publicPin]) {
+    const issue = pin ? passcodeError(pin) : null
+    if (issue) return fail(400, issue)
+  }
+  if (adminPin && publicPin && adminPin === publicPin) return fail(400, 'Use a different PIN from the admin PIN.')
+  const [adminHash, publicHash] = await Promise.all([
+    adminPin ? hashPin(adminPin, r.trip_code) : null,
+    publicPin ? hashPin(publicPin, r.trip_code) : null,
+  ])
+
+  const made = await store.insertTrip({
+    ...r,
+    ...(adminHash ? { settings_passcode_hash: adminHash } : {}),
+    ...(publicHash ? { public_passcode_hash: publicHash } : {}),
+  })
   if ('error' in made) return fail(made.error.code === '23505' ? 409 : 503, made.error.message, made.error.code)
 
   // The phone that made it is in it from the first moment — the organiser
   // for twelve hours if it set the PIN (it knows it), and on an event with
   // no PIN every member is the organiser anyway (lib/membership.ts).
+  const membership = mergeGrant(null, { organiser: !!adminHash }, now)
   try {
-    await store.writeMembership(userId, made.id, mergeGrant(null, { organiser: typeof r.settings_passcode_hash === 'string' && r.settings_passcode_hash.length > 0 }, now))
+    await store.writeMembership(userId, made.id, membership)
   } catch {
     await store.deleteTrip(made.id).catch(() => undefined)
     return fail(503, 'Could not create the event — try again.')
   }
-  return { status: 200, body: { data: { id: made.id }, error: null } }
+  return {
+    status: 200,
+    body: { data: { id: made.id }, organiserUntil: membership.organiserUntil, error: null },
+    // The maker goes straight through the public PIN's door.
+    doorCookie: publicHash ? entryToken(publicHash, r.trip_code) : null,
+  }
 }

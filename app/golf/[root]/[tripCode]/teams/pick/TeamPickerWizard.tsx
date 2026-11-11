@@ -4,7 +4,6 @@ import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
-import { isLocked } from '@/lib/passcode'
 import { boardNames } from '@/lib/displayNames'
 import { partnershipName, isMadeName } from '@/lib/partnerships'
 import { PRESET_COLORS } from '@/lib/teamColors'
@@ -31,13 +30,13 @@ const TITLES = ['Who’s in the team?', 'Check the team'] as const
  * time (lib/partnerships.ts). Every write goes through ../teamWrites.ts.
  */
 export default function TeamPickerWizard({
-  tripId, tripCode, isTrip, passcodeHash, sheet, team: givenTeam, teamsOnSheet,
+  tripId, tripCode, isTrip, pinSet, sheet, team: givenTeam, teamsOnSheet,
   memberships, players, meId, addedRecorded, backHref,
 }: {
   tripId: string
   tripCode: string
   isTrip: boolean
-  passcodeHash: string | null
+  pinSet: boolean
   sheet: PickerSheet
   /** The team being changed, or null for a new one. */
   team: TeamRow | null
@@ -50,7 +49,7 @@ export default function TeamPickerWizard({
 }) {
   const router = useRouter()
   const [unlocked, setUnlocked] = useUnlocked(tripCode)
-  const organiser = isTrip || unlocked || !isLocked(passcodeHash)
+  const organiser = isTrip || unlocked || !pinSet
   const viewer: PickerViewer = { organiser, meId, selfPick: sheet.selfPick, addedRecorded }
 
   const onSheet = useMemo(() => memberships.filter(m => m.team_set === sheet.id), [memberships, sheet.id])
@@ -189,10 +188,9 @@ export default function TeamPickerWizard({
               ? 'Claim your spot on the players screen first, then you can start one.'
               : `Only the organiser picks the ${sheet.noun.many} for this leaderboard.`}
         </p>
-        {passcodeHash && !organiser && (
+        {pinSet && !organiser && (
           <InlineUnlock
             tripCode={tripCode}
-            passcodeHash={passcodeHash}
             onUnlocked={() => setUnlocked(true)}
             prompt={isTrip ? 'Lead player? Enter the passcode to change teams.' : 'Organiser? Enter your PIN to change teams.'}
           />

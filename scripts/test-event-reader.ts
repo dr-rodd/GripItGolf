@@ -13,7 +13,9 @@
 
 import fs from 'fs'
 import { makeEventReader, scopeOf, SCOPES, type Reads } from '../lib/eventReader'
-import { hashPasscode } from '../lib/passcode'
+import { legacyPinHash as hashPasscode } from '../lib/pinHash'
+
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
 import { ATTEMPT_LIMITS, type AttemptWindow } from '../lib/membership'
 import { runSeed, type SeedDeps, type SeedTrip } from '../app/api/event/seed/seed'
 
@@ -191,6 +193,7 @@ async function seedTests() {
       attempts: {
         async readAttempts(keys) { return new Map(keys.filter(k => attempts.has(k)).map(k => [k, attempts.get(k)!])) },
         async writeAttempt(key, _t, w) { attempts.set(key, w) },
+        async upgradePin() { /* re-stored on the server; nothing to see here */ },
       },
     }
     return { t, d, attempts, reads: () => playersRead }

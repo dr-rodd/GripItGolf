@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
-import { isLocked } from '@/lib/passcode'
 import { cardHasScores, voidMatchCard } from '@/lib/matchCardVoid'
 import { useUnlocked } from '@/app/components/useUnlocked'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
@@ -21,7 +20,7 @@ import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
  * is fixed for good here; the organiser reopens it on the card.
  */
 export default function SessionTees({
-  tripId, matchId, players, tees, choices, underWay = false, finished = false, tripCode, passcodeHash, inMatch = false,
+  tripId, matchId, players, tees, choices, underWay = false, finished = false, tripCode, pinSet, inMatch = false,
 }: {
   tripId: string
   matchId: string
@@ -33,7 +32,7 @@ export default function SessionTees({
   /** The match has a result. */
   finished?: boolean
   tripCode: string
-  passcodeHash: string | null
+  pinSet: boolean
   /** This phone is one of the match's players. */
   inMatch?: boolean
 }) {
@@ -43,7 +42,7 @@ export default function SessionTees({
   const [confirmVoid, setConfirmVoid] = useState(false)
   const [voiding, setVoiding] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const mayVoid = inMatch || unlocked || !isLocked(passcodeHash)
+  const mayVoid = inMatch || unlocked || !pinSet
   const fixed = underWay || finished
   const nameOf = (pid: string) => choices[pid]?.find(t => t.id === tees[pid])?.name ?? '—'
   const set = async (pid: string, teeId: string) => {

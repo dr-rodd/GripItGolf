@@ -6,6 +6,7 @@ import {
   parseRunSetup, parseRunPermissions,
 } from '@/lib/runChallenge'
 import { type FinalResults, parseFinalResults } from '@/lib/runBoards'
+import { isLocked } from '@/lib/passcode'
 
 /**
  * A run challenge, as both its pages need it — the hub and the organiser
@@ -30,7 +31,8 @@ export type RunChallenge = {
   startDate: string | null
   endDate: string | null
   kind: string | null
-  passcodeHash: string | null
+  /** Whether the challenge has an organiser PIN — never its hash (D64). */
+  pinSet: boolean
   setup: RunSetup
   perms: RunPermissions
   teams: RunTeam[]
@@ -123,7 +125,7 @@ export async function fetchRunChallenge(tripCode: string): Promise<RunChallenge 
     startDate: trip.start_date ?? null,
     endDate: trip.end_date ?? null,
     kind,
-    passcodeHash: trip.settings_passcode_hash ?? null,
+    pinSet: isLocked(trip.settings_passcode_hash ?? null),
     setup: parseRunSetup(extras.run_setup),
     perms: parseRunPermissions(extras.event_permissions),
     final: parseFinalResults((finalRes.data as { run_results?: unknown } | null)?.run_results),

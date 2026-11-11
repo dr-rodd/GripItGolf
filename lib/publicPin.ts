@@ -12,11 +12,9 @@
 // first (the trip layout decides, `entryAllowed`); the admin PIN opens that
 // door too, so the organiser is never locked out of their own event.
 //
-// **The same soft lock as the admin PIN** — lib/passcode.ts's note holds
-// word for word. The hash is readable by anybody holding the code, and the
-// database is open to the browser's key, so this keeps the field's pages
-// from people who have only the code; it is not a security control. Real
-// protection arrives with accounts. Pure.
+// **Checked on the server only** (row-level security stage 4, D64): the
+// door asks /api/event/door, which sets this phone's cookie; the hash never
+// reaches a browser (lib/pinHash.ts). Pure.
 
 import { passcodeError } from './passcode'
 
@@ -26,15 +24,9 @@ export const ENTRY_COOKIE_DAYS = 400
 /** The cookie a phone that has entered this event carries. */
 export const entryCookie = (tripCode: string) => `gd_entry_${tripCode.toUpperCase()}`
 
-/**
- * May this phone see the event? Always when no public PIN is set. Else only
- * when it carries the PIN's own hash — so changing the PIN sends everybody
- * back to the door, and removing it opens it.
- */
-export function entryAllowed(publicHash: string | null | undefined, cookie: string | null | undefined): boolean {
-  if (typeof publicHash !== 'string' || publicHash.length === 0) return true
-  return cookie === publicHash
-}
+// Whether a phone may see the event is the server's question —
+// `entryAllowed` in lib/pinHash.ts, which keeps the hash and the door's
+// cookie away from every browser (row-level security stage 4, D64).
 
 export type PublicPinDraft = { on: boolean; pin: string; confirm: string }
 
@@ -50,12 +42,4 @@ export function publicPinIssue(draft: PublicPinDraft, adminPin: string | null): 
   return passcodeError(draft.pin)
     ?? (draft.pin !== draft.confirm ? 'The two PINs do not match.' : null)
     ?? (adminPin && draft.pin === adminPin ? 'Use a different PIN from the admin PIN.' : null)
-}
-
-/** Remembers on this phone that it has entered the event. Browser only. */
-export function rememberEntry(tripCode: string, publicHash: string): void {
-  try {
-    const secure = location.protocol === 'https:' ? '; Secure' : ''
-    document.cookie = `${entryCookie(tripCode)}=${publicHash}; Max-Age=${ENTRY_COOKIE_DAYS * 86_400}; Path=/; SameSite=Lax${secure}`
-  } catch { /* unavailable — the door asks again next time */ }
 }

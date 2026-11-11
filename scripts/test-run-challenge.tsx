@@ -332,10 +332,10 @@ section('Creation writes in the platform\'s order, through the shared writers')
   ok(form.includes('kind: RUN_KIND'), 'the trip row is a run challenge')
   ok(form.includes('run_setup: { rules, boards: defaultBoards(draft.teamScore) }'),
     'carrying the rules and the two starting boards')
-  ok(form.includes('settings_passcode_hash: passcodeHash'), 'and the organiser PIN, always')
+  ok(form.includes('const pins = { adminPin: passcode, publicPin: null }'), 'and the organiser PIN, always — sent for the server to store (stage 4)')
   ok(form.includes('storedRunPermissions(perms)'), 'permissions only when one was changed')
   // The row is made through /api/trip/create (row-level security, stage 3).
-  const iTrip = form.indexOf('createTripRow(tripRow)')
+  const iTrip = form.indexOf('createTripRow(tripRow, pins)')
   const iTeams = form.indexOf(".from('teams')")
   const iPlayers = form.indexOf(".from('players')")
   ok(iTrip > -1 && iTrip < iTeams && iTeams < iPlayers, 'trips, then teams, then players')
@@ -344,7 +344,8 @@ section('Creation writes in the platform\'s order, through the shared writers')
   ok(form.includes('is_lead: true') && form.includes('claimed: true') && form.includes('rememberPlayer(code, lead.id)'),
     'a running organiser is the lead, claimed, and this phone\'s player')
   ok(form.includes('if (organiserRunning && pickedTeam)'), 'and no player row exists when they are not running')
-  ok(form.includes('rememberUnlock(code)'), 'the device that set the PIN is not locked out of its own challenge')
+  ok(form.includes('createTripRow(tripRow, pins)') && /if \(out\.data && code && pins\.adminPin\) rememberUnlock\(code, out\.organiserUntil \?\? null\)/.test(read('lib/entryClient.ts')),
+    'the device that set the PIN is not locked out of its own challenge — the server made it the organiser')
   ok(form.includes("fetch('/api/trip-confirmation'"), 'the confirmation email is asked for')
   ok(form.includes('migrationMissing(tripErr)'), 'a missing migration gets its own plain message')
   ok(!/handicap|HandicapField|CourseSelect|from\('(courses|rounds|round_handicaps|itinerary_items)'\)/i.test(form),

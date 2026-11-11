@@ -601,7 +601,7 @@ section('Tee times add times to the matches already set (Ross, 10 Nov 2026)')
   ])
   const common = {
     tripId: 't', tripCode: 'ABCDEF', players: [], tags: [], tagOfPlayer: {}, myId: null,
-    passcodeHash: null, playersPick: true, isTrip: false,
+    pinSet: false, playersPick: true, isTrip: false,
   }
   const { sheets, initialOpen } = buildMatchSheets({
     boards, rounds: [{ id: s3, round_number: 3 }, { id: s1, round_number: 1 }, { id: s2, round_number: 2 }, { id: 'stroke', round_number: 4 }],
@@ -684,12 +684,12 @@ section('The organiser’s lock, and a round’s own settings (Ross, 10 Nov 2026
   const pass = read('lib/passcode.ts')
   ok(pass.includes("export const UNLOCK_EVENT = 'gd-organiser-unlock'") && /export function rememberUnlock[\s\S]*?announce\(\)/.test(pass),
     'unlocking says so on the window, so every control on the page hears it')
-  ok(/export function forgetUnlock[\s\S]*?removeItem\(key\(tripCode\)\)[\s\S]*?announce\(\)/.test(pass), '  …and the lock can be shut again')
+  ok(/export function forgetUnlock[\s\S]*?rememberUnlock\(tripCode, null\)/.test(pass) && /else localStorage\.removeItem\(key\(tripCode\)\)/.test(pass), '  …and the lock can be shut again')
   const hook = read('app/components/useUnlocked.ts')
   ok(hook.includes('window.addEventListener(UNLOCK_EVENT, read)'), 'useUnlocked follows the unlock as it changes')
   const lock = read('app/components/OrganiserLock.tsx')
-  ok(lock.includes('if (!isLocked(passcodeHash)) return null'), 'the lock is drawn only where there is a PIN to open')
-  ok(lock.includes('forgetUnlock(tripCode)') && lock.includes('rememberUnlock(tripCode)'), '  …a tap shuts it, the right PIN opens it')
+  ok(lock.includes('if (!pinSet) return null'), 'the lock is drawn only where there is a PIN to open')
+  ok(lock.includes('lockShut(tripCode)') && lock.includes('await unlockWithPin(tripCode, code)'), '  …a tap shuts it (on the server too), the right PIN — checked by the server — opens it')
   ok(lock.includes("className={`inline-flex ${wobble ? 'lock-wobble' : ''}`}") && lock.includes('key={wobble}'), '  …wobbling on every tap')
   ok(lock.includes('absolute right-0 top-full'), '  …the PIN in a small box under it')
   const css = read('app/globals.css')
@@ -708,7 +708,7 @@ section('The organiser’s lock, and a round’s own settings (Ross, 10 Nov 2026
     'the page-wide PIN rows it replaces are gone')
 
   const ro = read(base + 'round/[roundNumber]/RoundOrganiser.tsx')
-  ok(ro.includes('if (!unlocked && isLocked(passcodeHash)) return null'), 'a round’s settings show once the lock is open')
+  ok(ro.includes('if (!unlocked && pinSet) return null'), 'a round’s settings show once the lock is open')
   ok(ro.includes(".update({ start_format: on ? 'tee_sheet' : null })"), '  …tee times on or off for the round, nothing else touched')
   ok(ro.includes('setSessionName(supabase, tripId, roundId, name)') && ro.includes('setSessionSlots(supabase, tripId, roundId, n)'),
     '  …a session’s name and how many matches it holds')

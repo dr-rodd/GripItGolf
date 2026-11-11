@@ -15,7 +15,7 @@ import {
 } from '../lib/fieldSeed'
 import { byStandings } from '../lib/bracketDraw'
 import { copyAcross } from '../app/api/event/import/copyAcross'
-import { hashPasscode } from '../lib/passcode'
+import { legacyPinHash as hashPasscode } from '../lib/pinHash'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -83,8 +83,8 @@ section('The draw seeded from that event\'s leaderboard (Ross, 4 Nov 2026)')
   eq(drawStandings(NO_FIELD_SEED, rows, n => n), [], '  …and nothing offered without a seeded field')
   const route = read('app/api/event/standings/route.ts')
   ok(route.includes("lb.audience === 'individual' && lb.competition === 'league'") && route.includes('buildRows(lb, ctx).map(r => r.id)')
-    && route.includes('publicHash &&'),
-    'the standings are each individual table\'s own order, from the board\'s own rows, behind the event\'s public PIN where it has one')
+    && route.includes('if (publicHash) {') && route.includes("await checkPin(serviceStore(createAdminClient()), { tripId: trip.id, code, kind: 'public'"),
+    'the standings are each individual table\'s own order, from the board\'s own rows, behind the event\'s public PIN where it has one — under the retry limit (stage 4)')
   const draw = read('app/components/DrawPlanner.tsx')
   ok(draw.includes('Seed from {from ?? \'the other event\'}&apos;s leaderboard') && draw.includes("method: 'seeded', order: byStandings(draft.order, board.order)")
     && draw.includes('Pick which leaderboard'),

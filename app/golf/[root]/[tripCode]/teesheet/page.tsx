@@ -21,6 +21,7 @@ import { readSheetSettings } from './sheets'
 import { TAG_SET } from '@/lib/tagBoards'
 import BackButton from '@/app/components/BackButton'
 import TeeSheetClient from './TeeSheetClient'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -338,7 +339,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
           tags,
           tagOfPlayer: tagIdOf,
           myId: me && isConfirmed(me) ? me.id : null,
-          passcodeHash: (trip.settings_passcode_hash as string | null) ?? null,
+          pinSet: isLocked((trip.settings_passcode_hash as string | null) ?? null),
           playersPick: access.playersPick,
           isTrip: !isEvent(kind),
         },
@@ -381,7 +382,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       addedRecorded={!addedResult.error}
       editSlot={editSlot}
       isTrip={!isEvent(kind)}
-      passcodeHash={(trip.settings_passcode_hash as string | null) ?? null}
+      pinSet={isLocked((trip.settings_passcode_hash as string | null) ?? null)}
     />
   )
 }

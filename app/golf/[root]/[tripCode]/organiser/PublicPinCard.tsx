@@ -2,65 +2,70 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
-import { hashPasscode } from '@/lib/passcode'
-import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import { MAX_PASSCODE } from '@/lib/passcode'
+import { NO_PUBLIC_PIN, publicPinIssue } from '@/lib/publicPin'
+import { setPublicPin } from '@/lib/entryClient'
 import PublicPinField from '@/app/components/PublicPinField'
-import { buttonClass } from '@/app/components/ui'
+import { FIELD, buttonClass } from '@/app/components/ui'
 
 /**
  * Who can see the event: the public PIN set, changed or taken off
- * (lib/publicPin.ts). Behind the organiser area's own PIN gate, so whoever
- * is holding this already has the admin PIN — which is why a new public
- * PIN cannot be checked against it here and is simply written.
+ * (lib/publicPin.ts). **Through the server** (row-level security stage 4,
+ * D65): a PIN is never written from a phone. The server asks for the admin
+ * PIN when the event has one, refuses a public PIN equal to it, stores it
+ * salted and slow, and lets this phone straight back through the door.
  *
- * Changing it sends every phone back to the door, this one excepted;
- * taking it off opens the event to anybody with its code again.
+ * Changing it sends every other phone back to the door; taking it off opens
+ * the event to anybody with its code again.
  */
-export default function PublicPinCard({ tripId, tripCode, hasPin }: {
-  tripId: string
+export default function PublicPinCard({ tripCode, hasPin, adminPinSet }: {
   tripCode: string
   hasPin: boolean
+  /** Whether the event has an admin PIN, which the server will ask for. */
+  adminPinSet: boolean
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState(NO_PUBLIC_PIN)
   const [editing, setEditing] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [adminPin, setAdminPin] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const issue = publicPinIssue({ ...draft, on: true }, null)
+  const needsAdmin = adminPinSet && adminPin.length === 0
 
-  async function write(hash: string | null) {
+  function reset() {
+    setEditing(false); setRemoving(false); setDraft(NO_PUBLIC_PIN); setAdminPin(''); setError(null)
+  }
+
+  async function write(pin: string | null) {
     setSaving(true)
     setError(null)
-    const { error: err } = await supabase.from('trips')
-      .update({ public_passcode_hash: hash }).eq('id', tripId)
+    const r = await setPublicPin(tripCode, adminPinSet ? adminPin : null, pin)
     setSaving(false)
-    if (err) {
-      console.error('Public PIN write failed:', err)
-      setError(/public_passcode_hash/.test(err.message ?? '')
-        ? 'The public PIN needs a database update first.'
-        : 'Could not save the public PIN — try again.')
+    if (!r.ok) {
+      setError(r.error)
+      setAdminPin('')
       return
     }
-    if (hash) rememberEntry(tripCode, hash)
-    setEditing(false)
-    setDraft(NO_PUBLIC_PIN)
+    reset()
     router.refresh()
   }
 
-  async function save() {
-    if (issue) return
-    try {
-      await write(await hashPasscode(draft.pin))
-    } catch {
-      setError('Could not set the PIN on this device — try again.')
-    }
-  }
-
-  function remove() {
-    if (!window.confirm('Take the public PIN off? Anybody with the event code will be able to see the event again.')) return
-    write(null)
-  }
+  const adminField = adminPinSet && (
+    <label className="block">
+      <span className="t-label text-ink block mb-1">Your admin PIN, to confirm</span>
+      <input
+        type="password"
+        inputMode="numeric"
+        autoComplete="off"
+        value={adminPin}
+        onChange={e => setAdminPin(e.target.value.replace(/\D/g, ''))}
+        maxLength={MAX_PASSCODE}
+        className={`${FIELD} field-code`}
+      />
+    </label>
+  )
 
   return (
     <section className="mb-10">
@@ -73,11 +78,27 @@ export default function PublicPinCard({ tripId, tripCode, hasPin }: {
       {editing ? (
         <div className="space-y-3">
           <PublicPinField value={{ ...draft, on: true }} onChange={d => setDraft({ ...d, on: true })} issue={issue} />
+          {adminField}
           <div className="flex gap-2">
-            <button type="button" disabled={saving || !!issue} onClick={save} className={buttonClass('primary', false)}>
+            <button type="button" disabled={saving || !!issue || needsAdmin} onClick={() => { void write(draft.pin) }} className={buttonClass('primary', false)}>
               {saving ? 'Saving…' : 'Save the public PIN'}
             </button>
-            <button type="button" disabled={saving} onClick={() => { setEditing(false); setDraft(NO_PUBLIC_PIN); setError(null) }} className={buttonClass('quiet', false)}>
+            <button type="button" disabled={saving} onClick={reset} className={buttonClass('quiet', false)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : removing ? (
+        <div className="space-y-3">
+          <p className="text-ink/65 text-[13px] leading-snug">
+            Anybody with the event code will be able to see the event again.
+          </p>
+          {adminField}
+          <div className="flex gap-2">
+            <button type="button" disabled={saving || needsAdmin} onClick={() => { void write(null) }} className={buttonClass('primary', false)}>
+              {saving ? 'Saving…' : 'Take the public PIN off'}
+            </button>
+            <button type="button" disabled={saving} onClick={reset} className={buttonClass('quiet', false)}>
               Cancel
             </button>
           </div>
@@ -88,7 +109,7 @@ export default function PublicPinCard({ tripId, tripCode, hasPin }: {
             {hasPin ? 'Change the public PIN' : 'Set a public PIN'}
           </button>
           {hasPin && (
-            <button type="button" disabled={saving} onClick={remove} className={buttonClass('quiet', false)}>
+            <button type="button" disabled={saving} onClick={() => setRemoving(true)} className={buttonClass('quiet', false)}>
               Take it off
             </button>
           )}

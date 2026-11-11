@@ -3,27 +3,25 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { MAX_PASSCODE, hashPasscode, rememberUnlock } from '@/lib/passcode'
-import { rememberEntry } from '@/lib/publicPin'
+import { MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import LegalLinks from '@/app/components/LegalLinks'
-import { enterEvent } from '@/lib/entryClient'
+import { openDoor } from '@/lib/entryClient'
+import { unlockError } from '@/app/components/OrganiserLock'
 
 /**
  * The public PIN, asked once per phone. The event's own PIN lets the field
  * in; the admin PIN does too — and unlocks the organiser's side for the
  * session as well, so the organiser types one code, not two.
  *
- * The same soft lock as the admin PIN: the browser compares hashes the
- * server already sent (lib/passcode.ts's note holds).
+ * The server checks it and sets this phone's cookie (/api/event/door,
+ * row-level security stage 4, D64): no hash ever reaches the phone.
  */
-export default function EntryGate({ tripCode, home, eventName, publicHash, adminHash }: {
+export default function EntryGate({ tripCode, home, eventName }: {
   tripCode: string
   /** Where the event lives once entered — `/event/X` (lib/tripPaths.ts). */
   home: string
   eventName: string
-  publicHash: string
-  adminHash: string | null
 }) {
   const router = useRouter()
   const [code, setCode] = useState('')
@@ -34,25 +32,13 @@ export default function EntryGate({ tripCode, home, eventName, publicHash, admin
     e.preventDefault()
     setBusy(true)
     setError('')
-    let hash: string
-    try {
-      hash = await hashPasscode(code)
-    } catch {
-      setError('Could not check the PIN on this device — try again.')
-      setBusy(false)
-      return
-    }
-    const asAdmin = !!adminHash && hash === adminHash
-    if (hash !== publicHash && !asAdmin) {
-      setError('That PIN is not this event’s.')
+    const r = await openDoor(tripCode, code)
+    if (r !== 'ok') {
+      setError(r === 'wrong' ? 'That PIN is not this event’s.' : unlockError(r))
       setCode('')
       setBusy(false)
       return
     }
-    rememberEntry(tripCode, publicHash)
-    if (asAdmin) rememberUnlock(tripCode)
-    // Told to the server too (row-level security, stage 1) — silently.
-    void enterEvent(tripCode, asAdmin ? { adminPin: code } : { publicPin: code })
     router.replace(home)
     router.refresh()
   }

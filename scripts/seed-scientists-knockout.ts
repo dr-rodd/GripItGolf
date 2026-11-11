@@ -23,7 +23,7 @@ dotenv.config({ path: resolve(process.cwd(), '.env.local') })
 
 import { createClient } from '@supabase/supabase-js'
 import { NO_FORMATS } from '../lib/formats'
-import { hashPasscode } from '../lib/passcode'
+import { legacyPinHash as hashPasscode } from '../lib/pinHash'
 import { knockoutBoards, knockoutSeed } from '../lib/bracketSetup'
 import { generateBracket, bracketToRows, rowsInInsertOrder } from '../lib/matchplay'
 import { firstDuplicateIndex } from '../lib/roster'

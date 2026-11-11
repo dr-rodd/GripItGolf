@@ -10,7 +10,9 @@ import { addressOf, serviceStore } from './store'
 //      granted it. Checks `entry_attempts`, the last table 068 makes, which
 //      it makes after the grants.
 // POST /api/entry — enter an event: `{ code, playerId?, adminPin?, publicPin? }`
-//      with the phone's Supabase token as `Authorization: Bearer …`. The rules
+//      with the phone's Supabase token as `Authorization: Bearer …`; or
+//      `{ code, peek: true }` — what this phone is there, entering nothing —
+//      or `{ code, close: true }`, the padlock shut (stage 4). The rules
 //      are ./entry.ts; this file is the service-role store and the plumbing.
 
 export const dynamic = 'force-dynamic'
@@ -48,6 +50,8 @@ export async function POST(req: NextRequest) {
       playerId: body.playerId,
       adminPin: body.adminPin,
       publicPin: body.publicPin,
+      peek: body.peek,
+      close: body.close,
       entryCookie: code ? req.cookies.get(entryCookie(code))?.value ?? null : null,
       address: addressOf(req),
     }, serviceStore(db), new Date())

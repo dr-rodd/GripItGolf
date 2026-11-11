@@ -1,7 +1,8 @@
 import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { eventReader } from '@/lib/eventReader'
-import { entryAllowed, entryCookie } from '@/lib/publicPin'
+import { entryCookie } from '@/lib/publicPin'
+import { entryAllowed } from '@/lib/pinHash'
 import EntryGate from './EntryGate'
 import { tripBase } from '@/lib/tripPaths'
 
@@ -28,15 +29,13 @@ export default async function EnterPage({ params }: { params: Promise<{ tripCode
   if (!trip) notFound()
   const lock = trip.public_passcode_hash ?? null
   const home = tripBase(tripCode, trip.kind)
-  if (entryAllowed(lock, jar.get(entryCookie(tripCode))?.value)) redirect(home)
+  if (entryAllowed(lock, jar.get(entryCookie(tripCode))?.value, tripCode)) redirect(home)
 
   return (
     <EntryGate
       tripCode={tripCode}
       home={home}
       eventName={trip.name}
-      publicHash={lock as string}
-      adminHash={trip.settings_passcode_hash ?? null}
     />
   )
 }

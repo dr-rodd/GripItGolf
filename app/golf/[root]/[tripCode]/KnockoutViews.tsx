@@ -10,7 +10,6 @@ import {
   bracketScoreLinks, currentRound, describeProgress, describeResult, myNextMatch, opponentOf, portalRounds,
 } from '@/lib/knockoutPortal'
 import { mayScoreCard, type MatchCardDetail } from '@/lib/matchCard'
-import { isLocked } from '@/lib/passcode'
 import { useUnlocked } from '@/app/components/useUnlocked'
 import type { KnockoutView } from './knockout'
 import type { LiveMatch } from './match/matchCards'
@@ -109,7 +108,7 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
  * beneath the row. `scoring` is null where nobody scores from here.
  */
 export type PortalScoring = {
-  passcodeHash: string | null
+  pinSet: boolean
   anyoneScores: boolean
   /** Every match with a card, hole by hole — the viewer's. */
   details: Record<string, MatchCardDetail>
@@ -120,7 +119,7 @@ export type PortalScoring = {
 /** Which of a row's two faces this phone gets. */
 function useMayScore(tripCode: string, scoring: PortalScoring | null) {
   const [unlocked] = useUnlocked(tripCode)
-  const organiser = unlocked || !isLocked(scoring?.passcodeHash ?? null)
+  const organiser = unlocked || !!!(scoring?.pinSet ?? null)
   return (decided: boolean, inMatch: boolean) =>
     mayScoreCard({ decided, organiser, inMatch, anyoneScores: scoring?.anyoneScores ?? true })
 }

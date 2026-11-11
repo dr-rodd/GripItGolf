@@ -63,6 +63,12 @@ export interface EventFacts {
   adminPinSet: boolean
   /** `trips.end_date`, 'YYYY-MM-DD', or null for an event with no end. */
   endDate: string | null
+  /**
+   * The field may still add rounds to an ad hoc series (`fieldOpenEnded`),
+   * so its end date is only ever the last round so far: the 30-day cap
+   * waits until the organiser turns `add_rounds` off (D59, 11 Nov 2026).
+   */
+  openEnded?: boolean
 }
 
 /** What one entry asks for. The route has already checked every part of it. */
@@ -152,8 +158,46 @@ export function mayWrite(m: Membership | null, event: EventFacts, now: Date): bo
   if (organiserByPin(m, now)) return true
   const role = roleOf(m, event, now)
   if (!isMember(role)) return false
+  if (event.openEnded) return true
   const cap = fieldReadOnlyFrom(event.endDate)
   return !cap || now.getTime() < cap.getTime()
+}
+
+/**
+ * May this phone change the event itself — the trips row, and deleting a
+ * player, a round, a team or a notice (stage 4, D65/D66)? The organiser
+ * holding the PIN; on an event with no PIN, any member who may write. The
+ * database's `organiser_trips()` (migration 071) says the same in SQL.
+ */
+export function mayChangeEvent(m: Membership | null, event: EventFacts, now: Date): boolean {
+  if (organiserByPin(m, now)) return true
+  return !event.adminPinSet && mayWrite(m, event, now)
+}
+
+/**
+ * Whether an event's field may still add rounds to it: an ad hoc series
+ * (a league, `schedule: 'series'`, no `repeat`) with `add_rounds` on. Read
+ * off the raw columns exactly as migration 071's `writable_trips()` reads
+ * them, so the two can never disagree about a half-readable setup.
+ */
+export function fieldOpenEnded(trip: { kind: unknown; bracketSetup: unknown; eventPermissions: unknown }): boolean {
+  if (trip.kind !== 'tournament') return false
+  const b = trip.bracketSetup
+  const p = trip.eventPermissions
+  if (!b || typeof b !== 'object' || Array.isArray(b)) return false
+  if (!p || typeof p !== 'object' || Array.isArray(p)) return false
+  const setup = b as Record<string, unknown>
+  return setup.format === 'league' && setup.schedule === 'series'
+    && (setup.repeat === undefined || setup.repeat === null)
+    && (p as Record<string, unknown>).add_rounds === true
+}
+
+/**
+ * The padlock tapped shut (D61): the phone's PIN grant ends now, and it is
+ * what it was in the field again. Nothing else on the row changes.
+ */
+export function closeOrganiser(m: Membership): Membership {
+  return { ...m, organiserUntil: null }
 }
 
 // ─── The retry limit on a PIN ──────────────────────────────────

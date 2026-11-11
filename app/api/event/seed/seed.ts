@@ -63,7 +63,7 @@ export async function runSeed(input: SeedInput, deps: SeedDeps, now: Date): Prom
   const adminPin = str(input.adminPin)
   if (adminPin) {
     if (!trip.adminHash) return { status: 403, body: { error: WRONG } }
-    const r = await checkPin(deps.attempts, { tripId: trip.id, kind: 'admin', address: input.address, pin: adminPin, hash: trip.adminHash }, now)
+    const r = await checkPin(deps.attempts, { tripId: trip.id, code, kind: 'admin', address: input.address, pin: adminPin, hash: trip.adminHash }, now)
     if (r === 'blocked') return { status: 429, body: { error: TOO_MANY } }
     if (r === 'wrong') return { status: 403, body: { error: WRONG } }
     adminOk = true
@@ -74,7 +74,7 @@ export async function runSeed(input: SeedInput, deps: SeedDeps, now: Date): Prom
   if (trip.publicHash && !adminOk) {
     const pin = str(input.publicPin)
     if (!pin) return { status: 200, body: { needsPublicPin: true, name: trip.name } }
-    const r = await checkPin(deps.attempts, { tripId: trip.id, kind: 'public', address: input.address, pin, hash: trip.publicHash }, now)
+    const r = await checkPin(deps.attempts, { tripId: trip.id, code, kind: 'public', address: input.address, pin, hash: trip.publicHash }, now)
     if (r === 'blocked') return { status: 429, body: { error: TOO_MANY } }
     if (r === 'wrong') return { status: 403, body: { error: WRONG } }
   }

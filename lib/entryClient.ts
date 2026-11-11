@@ -20,10 +20,11 @@
 // Browser only: on the server every function returns null at once.
 
 import { entryStamp, needsEntry, type Role } from './membership'
+import { forgetUnlock, hasUnlocked, rememberUnlock } from './passcode'
 import { playerCookieName, readPlayerId } from './playerCookie'
 
 export interface EntryExtras {
-  /** The admin PIN, typed and already checked on this phone. */
+  /** The admin PIN, as typed — the server checks it (stage 4). */
   adminPin?: string | null
   /** The public PIN, from the event's door. */
   publicPin?: string | null
@@ -118,6 +119,34 @@ function cookiePlayer(code: string): string | null {
 /** One entry at a time per event, so two never read the same row and the second overwrite the first. */
 const queues = new Map<string, Promise<unknown>>()
 
+/** A route that answers this phone, signed in — `null` when it could not be asked. */
+async function ask(
+  url: string,
+  body: Record<string, unknown>,
+  opts: { signIn?: boolean } = {},
+): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  if (opts.signIn !== false && !(await databaseReady())) return null
+  const session = opts.signIn === false ? null : await phoneSession()
+  if (opts.signIn !== false && !session) return null
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(session ? { Authorization: `Bearer ${session.token}` } : {}),
+      },
+      body: JSON.stringify(body),
+      credentials: 'same-origin',
+    })
+    const json = await res.json().catch(() => ({})) as Record<string, unknown>
+    return { status: res.status, body: json && typeof json === 'object' ? json : {} }
+  } catch {
+    return null
+  }
+}
+
+const isoOrNull = (v: unknown) => (typeof v === 'string' && v.length > 0 ? v : null)
+
 async function post(code: string, extras: EntryExtras): Promise<EntryResult | null> {
   if (!(await databaseReady())) return null
   const session = await phoneSession()
@@ -135,6 +164,8 @@ async function post(code: string, extras: EntryExtras): Promise<EntryResult | nu
     if (!res.ok) return null
     const body = await res.json() as EntryResult & { ok?: boolean }
     writeLocal(stampKey(code), entryStamp(session.userId, playerId))
+    // A PIN entry's twelve hours, as the server counts them.
+    if (extras.adminPin) rememberUnlock(code, body.organiserUntil)
     return { tripId: body.tripId, role: body.role, organiserUntil: body.organiserUntil, readOnly: body.readOnly }
   } catch {
     return null
@@ -160,7 +191,9 @@ export function enterEvent(tripCode: string, extras: EntryExtras = {}): Promise<
 /**
  * Once per phone per event: enter with the code (and the cookie's player)
  * unless this phone has already, as this identity and this player. Called
- * by `EnsureMember` after the page has painted.
+ * by `EnsureMember` after the page has painted. Also, once a page load: a
+ * padlock shut while the server could not be told is told now, and an
+ * unlock this phone remembers is checked against the server's own (D64).
  */
 export async function ensureMember(tripCode: string): Promise<void> {
   if (!inBrowser() || !tripCode) return
@@ -168,8 +201,123 @@ export async function ensureMember(tripCode: string): Promise<void> {
   if (!(await databaseReady())) return
   const session = await phoneSession()
   if (!session) return
-  if (!needsEntry(readLocal(stampKey(code)), session.userId, cookiePlayer(code))) return
-  await enterEvent(code)
+  if (needsEntry(readLocal(stampKey(code)), session.userId, cookiePlayer(code))) await enterEvent(code)
+  await settleOrganiser(code)
+}
+
+// ─── The organiser's padlock (stage 4: D61, D64) ───────────────
+
+export type UnlockResult = 'ok' | 'wrong' | 'blocked' | 'failed'
+
+/**
+ * The organiser PIN, typed into the padlock or an in-place prompt, checked
+ * by the server — which records this phone as organiser for twelve hours
+ * and says until when. Nothing about the PIN is known on the phone.
+ */
+export async function unlockWithPin(tripCode: string, pin: string): Promise<UnlockResult> {
+  if (!inBrowser() || !tripCode || !pin) return 'failed'
+  const code = tripCode.trim().toUpperCase()
+  const run = (queues.get(code) ?? Promise.resolve()).catch(() => null).then(async (): Promise<UnlockResult> => {
+    const r = await ask('/api/entry', { code, adminPin: pin, playerId: cookiePlayer(code) })
+    if (!r) return 'failed'
+    if (r.status === 403) return 'wrong'
+    if (r.status === 429) return 'blocked'
+    if (r.status !== 200) return 'failed'
+    const until = isoOrNull(r.body.organiserUntil)
+    rememberUnlock(code, until)
+    return until ? 'ok' : 'failed'
+  }).catch((): UnlockResult => 'failed')
+  queues.set(code, run)
+  return run
+}
+
+const closeKey = (code: string) => `gd.close.${code}.v1`
+
+/**
+ * The padlock tapped shut (D61): shut on this phone at once, and the
+ * server's grant ended — at once if it can be reached, else on the next
+ * page load (`ensureMember`), and at most when its twelve hours run out.
+ */
+export function lockShut(tripCode: string): void {
+  if (!inBrowser() || !tripCode) return
+  const code = tripCode.trim().toUpperCase()
+  forgetUnlock(code)
+  writeLocal(closeKey(code), '1')
+  void tellShut(code)
+}
+
+async function tellShut(code: string): Promise<boolean> {
+  const r = await ask('/api/entry', { code, close: true })
+  if (r?.status === 200) {
+    try { window.localStorage.removeItem(closeKey(code)) } catch { /* unavailable */ }
+    return true
+  }
+  return false
+}
+
+const settled = new Set<string>()
+
+/** Once a page load per event: a shut padlock told, a remembered unlock checked. */
+async function settleOrganiser(code: string): Promise<void> {
+  if (settled.has(code)) return
+  settled.add(code)
+  if (readLocal(closeKey(code)) === '1' && !(await tellShut(code))) return
+  if (!hasUnlocked(code)) return
+  const r = await ask('/api/entry', { code, peek: true })
+  if (r?.status !== 200) return
+  const until = isoOrNull(r.body.organiserUntil)
+  // The server's word: its time if it has one running, else shut.
+  rememberUnlock(code, until)
+}
+
+// ─── The public PIN's door ─────────────────────────────────────
+
+/**
+ * The public PIN, typed at the event's door: checked by the server, which
+ * sets this phone's entry cookie. The admin PIN opens the door too, and
+ * unlocks the organiser's side with it. Needs no sign-in for the door
+ * itself — the phone enters the event afterwards, silently.
+ */
+export async function openDoor(tripCode: string, pin: string): Promise<UnlockResult> {
+  if (!inBrowser() || !tripCode || !pin) return 'failed'
+  const code = tripCode.trim().toUpperCase()
+  const r = await ask('/api/event/door', { code, pin }, { signIn: false })
+  if (!r) return 'failed'
+  if (r.status === 403) return 'wrong'
+  if (r.status === 429) return 'blocked'
+  if (r.status !== 200) return 'failed'
+  if (r.body.organiser === true) void unlockWithPin(code, pin)
+  else void enterEvent(code, { publicPin: pin })
+  return 'ok'
+}
+
+// ─── Writes to the event's own row (stage 4, D65) ──────────────
+
+/** What a server write answered: done, or the calm sentence to show. */
+export type Saved = { ok: true } | { ok: false; error: string }
+
+async function save(url: string, body: Record<string, unknown>): Promise<Saved> {
+  if (!inBrowser()) return { ok: false, error: 'Could not save — try again.' }
+  const r = await ask(url, body)
+  if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
+  if (r.status === 200) return { ok: true }
+  const error = typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.'
+  return { ok: false, error }
+}
+
+/** The public PIN set (`pin`), changed, or taken off (`null`) — the admin PIN asked when the event has one. */
+export function setPublicPin(tripCode: string, adminPin: string | null, pin: string | null): Promise<Saved> {
+  return save('/api/event/pin', { code: tripCode.trim().toUpperCase(), adminPin, pin })
+}
+
+/** An ad hoc series' end date moved on to a round added past it. */
+export function extendEventEnd(tripCode: string, date: string): Promise<Saved> {
+  return save('/api/event/extend', { code: tripCode.trim().toUpperCase(), date })
+}
+
+/** The tee sheet wizard's "Do players play in their teams?", onto its board. */
+export function answerPlayTogether(tripCode: string, boardId: string, together: boolean): Promise<Saved> {
+  return save('/api/event/play-together', { code: tripCode.trim().toUpperCase(), boardId, together })
 }
 
 /**
@@ -182,6 +330,7 @@ export async function ensureMember(tripCode: string): Promise<void> {
  */
 export async function createTripRow(
   row: Record<string, unknown>,
+  pins: { adminPin?: string | null; publicPin?: string | null } = {},
 ): Promise<{ data: { id: string } | null; error: { message: string; code?: string } | null }> {
   const failed = (message: string) => ({ data: null, error: { message } })
   if (!inBrowser()) return failed('Could not create the event — try again.')
@@ -192,12 +341,19 @@ export async function createTripRow(
     const res = await fetch('/api/trip/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
-      body: JSON.stringify({ row }),
+      // The PINs as typed, beside the row: hashed on the server (D64).
+      body: JSON.stringify({ row, adminPin: pins.adminPin ?? null, publicPin: pins.publicPin ?? null }),
       credentials: 'same-origin',
     })
-    const out = await res.json().catch(() => null) as { data: { id: string } | null; error: { message: string; code?: string } | null } | null
+    const out = await res.json().catch(() => null) as {
+      data: { id: string } | null; organiserUntil?: string | null; error: { message: string; code?: string } | null
+    } | null
     if (!out) return failed('Could not create the event — try again.')
-    return out
+    // The phone that set the PIN is the organiser from the first moment,
+    // for as long as the server says; the public PIN's cookie came back set.
+    const code = typeof row.trip_code === 'string' ? row.trip_code : ''
+    if (out.data && code && pins.adminPin) rememberUnlock(code, out.organiserUntil ?? null)
+    return { data: out.data, error: out.error }
   } catch {
     return failed('Could not create the event — try again.')
   }

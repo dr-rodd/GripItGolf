@@ -72,7 +72,6 @@ export default async function SessionsPage({ params }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         title="Session formats"
         hint={event ? `Enter the organiser PIN for ${trip.name}.` : `Enter the passcode for ${trip.name}.`}
       >

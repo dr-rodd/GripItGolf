@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { hashPasscode } from '@/lib/passcode'
+import { verifyPin } from '@/lib/pinHash'
 import { MAX_SEEDED_NOTICES } from '@/lib/fieldSeed'
 
 /**
@@ -25,9 +25,11 @@ export async function copyAcross(admin: SupabaseClient, { from, to, fromPin, toP
   if (!source || !target) return { status: 404, body: { ok: false, message: 'Those events could not be found.' } }
   // Both locks, each with its own key. An event with no organiser PIN has
   // nobody to vouch for copying what its players shared — nothing comes.
-  const [fromHash, toHash] = await Promise.all([hashPasscode(fromPin), hashPasscode(toPin)])
-  if (!source.settings_passcode_hash || fromHash !== source.settings_passcode_hash) return { status: 403, body: { ok: false, message: 'That PIN is not right.' } }
-  if (!target.settings_passcode_hash || toHash !== target.settings_passcode_hash) return { status: 403, body: { ok: false, message: 'That PIN is not right.' } }
+  const [fromOk, toOk] = await Promise.all([
+    verifyPin(fromPin, source.settings_passcode_hash),
+    verifyPin(toPin, target.settings_passcode_hash),
+  ])
+  if (!fromOk.ok || !toOk.ok) return { status: 403, body: { ok: false, message: 'That PIN is not right.' } }
 
   // Only players who really are each event's: the pairs came from a browser.
   const [{ data: fromPlayers }, { data: toPlayers }] = await Promise.all([

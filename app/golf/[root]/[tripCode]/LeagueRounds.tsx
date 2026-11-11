@@ -16,7 +16,7 @@ import { type Leaderboard, boardTitle, offersAllowance, parseLeaderboards } from
 import { ALLOWANCE_PRESETS, allowanceOf } from '@/lib/handicapAllowance'
 import { readLiveScores, readScores } from '@/lib/scoreReads'
 import type { RoundCard } from '@/lib/golfIreland'
-import { hasUnlocked, isLocked } from '@/lib/passcode'
+import { hasUnlocked } from '@/lib/passcode'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import { Sheet } from '@/app/components/ItineraryForms'
@@ -53,7 +53,7 @@ export type LeagueDoor = {
   tripCode: string
   /** The first round's date — the trip's start. */
   startDate: string
-  passcodeHash: string | null
+  pinSet: boolean
   /** `add_courses` is on: the field may add a missing course from the picker. */
   fieldMayAddCourses: boolean
 }
@@ -109,7 +109,7 @@ function useCourses(enabled: boolean) {
 function OrganiserOnly({ door, what, onUnlocked }: {
   door: LeagueDoor; what: string; onUnlocked: () => void
 }) {
-  if (!door.passcodeHash) return null
+  if (!door.pinSet) return null
   return (
     <div className={`p-4 ${cardClass()}`}>
       <p className="text-ink text-sm font-medium">The organiser {what}</p>
@@ -118,7 +118,6 @@ function OrganiserOnly({ door, what, onUnlocked }: {
       </p>
       <InlineUnlock
         tripCode={door.tripCode}
-        passcodeHash={door.passcodeHash}
         onUnlocked={onUnlocked}
         prompt="Enter the PIN"
       />
@@ -162,7 +161,7 @@ export function AddLeagueRound({
   const { courses, upsert } = useCourses(open)
   const { players, failed } = usePlayers(door.tripId, open)
 
-  const organiser = unlocked || !isLocked(door.passcodeHash)
+  const organiser = unlocked || !!!(door.pinSet)
   const mayAdd = fieldMayAdd || organiser
   const roundDates = rounds.flatMap(r => (r.date ? [r.date] : []))
   const rules = { startDate: door.startDate, roundDates, lastPlayedDate }
@@ -198,7 +197,7 @@ export function AddLeagueRound({
     setError(null)
     const dayIndex = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${door.startDate}T00:00:00Z`)) / 86_400_000)
     const result = await addLeagueRound({
-      tripId: door.tripId, startDate: door.startDate, endDate, date,
+      tripId: door.tripId, tripCode: door.tripCode, startDate: door.startDate, endDate, date,
       courseId: tbc ? null : courseId, number: insertedRoundNumber(rounds, date),
       position: positionsByDay[dayIndex] ?? 0, players,
     })
@@ -276,7 +275,7 @@ export function AddLeagueRound({
  * offers those and no others, and adding one is never offered there.
  */
 export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
-  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash' | 'fieldMayAddCourses'>
+  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'pinSet' | 'fieldMayAddCourses'>
   periods: LeaguePeriod[]
   /** The league's courses, or null for any course. */
   courseIds: string[] | null
@@ -299,7 +298,7 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
     [all, courseIds],
   )
 
-  const organiser = unlocked || !isLocked(door.passcodeHash)
+  const organiser = unlocked || !!!(door.pinSet)
   const mayStart = fieldMayStart || organiser
 
   function openSheet() {
@@ -448,7 +447,7 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
   const { courses, upsert } = useCourses(open)
   const { players, failed } = usePlayers(door.tripId, open)
 
-  const organiser = unlocked || !isLocked(door.passcodeHash)
+  const organiser = unlocked || !!!(door.pinSet)
   const mayChoose = fieldMaySetVenue || organiser
 
   function openSheet() {
@@ -548,7 +547,7 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
 const NO_CARDS: RoundCard[] = []
 
 export function RoundSettings({ door, roundId, number, casual, golfIrelandCards = NO_CARDS }: {
-  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'passcodeHash'>
+  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'pinSet'>
   roundId: string
   number: number
   /** The round does not count towards the league just now. */
@@ -568,7 +567,7 @@ export function RoundSettings({ door, roundId, number, casual, golfIrelandCards 
   const [saving, setSaving] = useState(false)
   const { data, reload } = useRoundGear(door.tripId, roundId, open, golfIrelandCards)
 
-  const organiser = unlocked || !isLocked(door.passcodeHash)
+  const organiser = unlocked || !!!(door.pinSet)
 
   function openSheet() {
     setUnlocked(hasUnlocked(door.tripCode))
@@ -624,7 +623,7 @@ export function RoundSettings({ door, roundId, number, casual, golfIrelandCards 
           addLabel="Done"
           error={error}
         >
-          {!organiser && door.passcodeHash && (
+          {!organiser && door.pinSet && (
             <div className={`p-4 ${cardClass()}`}>
               <p className="text-ink text-sm font-medium">The organiser changes a round</p>
               <p className="text-ink/65 text-[13px] mt-0.5 mb-3 leading-snug">
@@ -632,7 +631,6 @@ export function RoundSettings({ door, roundId, number, casual, golfIrelandCards 
               </p>
               <InlineUnlock
                 tripCode={door.tripCode}
-                passcodeHash={door.passcodeHash}
                 onUnlocked={() => setUnlocked(true)}
                 prompt="Enter the PIN"
               />

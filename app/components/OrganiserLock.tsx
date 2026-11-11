@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { verifyPasscode, rememberUnlock, forgetUnlock, isLocked, MAX_PASSCODE } from '@/lib/passcode'
+import { MAX_PASSCODE } from '@/lib/passcode'
 import { useUnlocked } from './useUnlocked'
 import { IconLock, IconLockOpen } from './icons'
 import { FIELD, buttonClass, cardClass } from './ui'
-import { enterEvent } from '@/lib/entryClient'
+import { lockShut, unlockWithPin } from '@/lib/entryClient'
 
 /**
  * The organiser's lock, at the header's right edge on every page that has
@@ -15,14 +15,17 @@ import { enterEvent } from '@/lib/entryClient'
  * again — on every page, for this device — so a phone handed round is not
  * left unlocked by accident.
  *
- * One memory, the same soft lock as ever (lib/passcode.ts): the unlock is
- * this phone's storage, and `useUnlocked` tells every control on the
- * page the moment it changes. An event or trip with no PIN has nothing to
- * unlock, so draws no lock at all.
+ * The PIN is checked by the server (row-level security stage 4, D64),
+ * which makes this phone the organiser for twelve hours; shutting the lock
+ * ends that on the server too (D61). The phone remembers only when the
+ * twelve hours end, and `useUnlocked` tells every control on the page the
+ * moment that changes. An event or trip with no PIN has nothing to unlock,
+ * so draws no lock at all.
  */
-export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }: {
+export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
   tripCode: string
-  passcodeHash: string | null | undefined
+  /** Whether the event has an organiser PIN at all — never the PIN's hash. */
+  pinSet: boolean
   /** A trip's: its Trip Setup passcode, never an organiser PIN. */
   isTrip?: boolean
 }) {
@@ -45,7 +48,7 @@ export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }
     return () => document.removeEventListener('pointerdown', away)
   }, [open])
 
-  if (!isLocked(passcodeHash)) return null
+  if (!pinSet) return null
 
   const what = isTrip ? 'Trip Setup passcode' : 'organiser PIN'
 
@@ -53,7 +56,7 @@ export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }
     setWobble(n => n + 1)
     setError('')
     if (unlocked) {
-      forgetUnlock(tripCode)
+      lockShut(tripCode)
       setOpen(false)
       return
     }
@@ -64,16 +67,14 @@ export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }
     e.preventDefault()
     setBusy(true)
     setError('')
-    const ok = await verifyPasscode(code, passcodeHash ?? null)
+    const r = await unlockWithPin(tripCode, code)
     setBusy(false)
     setWobble(n => n + 1)
-    if (ok) {
-      rememberUnlock(tripCode)
-      void enterEvent(tripCode, { adminPin: code })
+    if (r === 'ok') {
       setOpen(false)
       setCode('')
     } else {
-      setError(`That isn’t the ${what}.`)
+      setError(unlockError(r, what))
       setCode('')
     }
   }
@@ -130,4 +131,11 @@ export default function OrganiserLock({ tripCode, passcodeHash, isTrip = false }
       )}
     </div>
   )
+}
+
+/** What a PIN that did not open says — the same words in the padlock and every in-place prompt. */
+export function unlockError(r: 'wrong' | 'blocked' | 'failed', what = 'PIN'): string {
+  if (r === 'wrong') return `That isn’t the ${what}.`
+  if (r === 'blocked') return 'Too many tries — wait a few minutes and try again.'
+  return 'Could not check the PIN — try again.'
 }

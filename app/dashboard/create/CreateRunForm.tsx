@@ -10,7 +10,7 @@ import EventPermissionToggles from '@/app/components/EventPermissionToggles'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import {
-  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
+  MIN_PASSCODE, MAX_PASSCODE, passcodeError,
 } from '@/lib/passcode'
 import { PRESET_COLORS } from '@/lib/teamColors'
 import { MAIN_SET } from '@/lib/teamSets'
@@ -151,14 +151,9 @@ export default function CreateRunForm() {
 
     const code = generateCode()
 
-    let passcodeHash: string
-    try {
-      passcodeHash = await hashPasscode(passcode)
-    } catch {
-      setError('Could not set the PIN on this device — try again.')
-      setSubmitting(false)
-      return
-    }
+    // The PINs as typed: sent beside the row and stored salted and slow by
+    // the server (row-level security stage 4, D64) — no hash is made here.
+    const pins = { adminPin: passcode, publicPin: null }
 
     // 1. The trip row — the whole challenge's settings, in one write.
     const tripRow: Record<string, unknown> = {
@@ -169,14 +164,13 @@ export default function CreateRunForm() {
       start_date: startDate,
       end_date: endDate,
       kind: RUN_KIND,
-      settings_passcode_hash: passcodeHash,
       run_setup: { rules, boards: defaultBoards(draft.teamScore) },
       ...(storedRunPermissions(perms) ? { event_permissions: perms } : {}),
     }
     const leadEmail = normaliseEmail(email)
     if (leadEmail) tripRow.lead_email = leadEmail
 
-    const { data: trip, error: tripErr } = await createTripRow(tripRow)
+    const { data: trip, error: tripErr } = await createTripRow(tripRow, pins)
 
     if (tripErr || !trip) {
       setError(migrationMissing(tripErr)
@@ -244,9 +238,8 @@ export default function CreateRunForm() {
       }).catch(() => { /* the challenge is created; the email is best-effort */ })
     }
 
-    // The device that just set the PIN plainly knows it.
-    rememberUnlock(code)
-    void enterEvent(code, { adminPin: passcode })
+    // The device that just set the PIN is the organiser already: the server
+    // made it so with the challenge (createTripRow remembers until when).
 
     setResultCode(code)
     setStep('done')

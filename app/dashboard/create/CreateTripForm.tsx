@@ -15,9 +15,9 @@ import { type ItineraryItem, golfItems, dateForDay } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import Toggle from '@/app/components/Toggle'
 import {
-  MIN_PASSCODE, MAX_PASSCODE, hashPasscode, passcodeError, rememberUnlock,
+  MIN_PASSCODE, MAX_PASSCODE, passcodeError,
 } from '@/lib/passcode'
-import { NO_PUBLIC_PIN, publicPinIssue, rememberEntry } from '@/lib/publicPin'
+import { NO_PUBLIC_PIN, publicPinIssue } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
 import { todayString } from '@/lib/tripStatus'
 import CreationDraw, {
@@ -321,33 +321,10 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
 
     const code = generateCode()
 
-    // Hashed here so the passcode itself never leaves the device
-    let passcodeHash: string | null = null
-    if (lockOn) {
-      try {
-        passcodeHash = await hashPasscode(passcode)
-      } catch {
-        // An event cannot be made without its PIN, so it is only offered the retry.
-        setError(isTournament
-          ? 'Could not set the PIN on this device — try again.'
-          : 'Could not set the passcode on this device. Try again, or create the trip without one.')
-        setSubmitting(false)
-        return
-      }
-    }
+    // The PINs as typed: sent beside the row and stored salted and slow by
+    // the server (row-level security stage 4, D64) — no hash is made here.
+    const pins = { adminPin: lockOn ? passcode : null, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
 
-    // The public PIN, when one was asked for — hashed here too, and only
-    // sent when set, so an un-migrated database still creates events.
-    let publicHash: string | null = null
-    if (publicIssue === null && publicPin.on) {
-      try {
-        publicHash = await hashPasscode(publicPin.pin)
-      } catch {
-        setError('Could not set the public PIN on this device — try again.')
-        setSubmitting(false)
-        return
-      }
-    }
 
     // 1. Trip
     // The players' ids, given now — before the trip row, which carries a
@@ -378,10 +355,6 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
         matchplay: { ...NO_FORMATS.matchplay },
       },
     }
-    // Only sent when a passcode was actually set, so a database that has not
-    // had that column added yet can still create ordinary trips.
-    if (passcodeHash) tripRow.settings_passcode_hash = passcodeHash
-    if (publicHash) tripRow.public_passcode_hash = publicHash
 
     // Only when boards were actually built. Skipped, nothing is written and
     // the column keeps its empty default — the trip the wizard has always
@@ -421,7 +394,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
     const desc = normalizeDescription(description)
     if (desc) tripRow.description = desc
 
-    const { data: trip, error: tripErr } = await createTripRow(tripRow)
+    const { data: trip, error: tripErr } = await createTripRow(tripRow, pins)
 
     if (tripErr || !trip) {
       setError(`Could not create the ${noun}. ${describeError(tripErr)}`)
@@ -609,10 +582,9 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
       }
     }
 
-    // The device that set a passcode plainly knows it — remember the
-    // unlock, so the creator is not asked for the code they just typed.
-    if (lockOn) { rememberUnlock(code); void enterEvent(code, { adminPin: passcode }) }
-    if (publicHash) rememberEntry(code, publicHash)
+    // The device that set a passcode is the organiser already: the server
+    // made it so with the event (createTripRow remembers until when), and
+    // set the public PIN's cookie on the way back.
 
     setResultCode(code)
     setStep('done')

@@ -2,24 +2,25 @@
 
 import { useCallback, useState, useSyncExternalStore } from 'react'
 import BackButton from '@/app/components/BackButton'
-import { verifyPasscode, rememberUnlock, hasUnlocked, MAX_PASSCODE } from '@/lib/passcode'
+import { hasUnlocked, MAX_PASSCODE, UNLOCK_EVENT } from '@/lib/passcode'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
-import { enterEvent } from '@/lib/entryClient'
+import { unlockWithPin } from '@/lib/entryClient'
+import { unlockError } from '@/app/components/OrganiserLock'
 
 /**
  * Stands in front of trip settings when the trip was created with a passcode.
  *
- * A soft lock — see the note at the top of lib/passcode.ts. It keeps a player
- * from wandering into settings and changing the format mid-trip; it is not a
- * security boundary, and should be replaced by real ownership when auth lands.
+ * Drawn only where there is a PIN. The server checks it (row-level security
+ * stage 4, D64) and makes this phone the organiser for twelve hours — and
+ * from stage 4 the database itself refuses an organiser's writes from any
+ * other phone. Shutting the header's padlock shuts this gate again.
  */
 export default function PasscodeGate({
-  tripCode, tripName, passcodeHash, children, title, hint,
+  tripCode, tripName, children, title, hint,
 }: {
   tripCode: string
   tripName: string
-  passcodeHash: string
   children: React.ReactNode
   /**
    * What the locked screen calls itself. The defaults are Trip Setup's; the
@@ -35,12 +36,14 @@ export default function PasscodeGate({
   // rather than an effect: the server renders locked, and the client corrects
   // it on hydration. Failing closed is the right way round for a lock.
   const remembered = useSyncExternalStore(
-    useCallback(() => () => {}, []),   // does not change while the page is open
+    useCallback((changed: () => void) => {
+      window.addEventListener(UNLOCK_EVENT, changed)
+      return () => window.removeEventListener(UNLOCK_EVENT, changed)
+    }, []),
     useCallback(() => hasUnlocked(tripCode), [tripCode]),
     () => false,
   )
-  const [justUnlocked, setJustUnlocked] = useState(false)
-  const unlocked = remembered || justUnlocked
+  const unlocked = remembered
 
   const [code, setCode]   = useState('')
   const [error, setError] = useState('')
@@ -50,13 +53,9 @@ export default function PasscodeGate({
     e.preventDefault()
     setBusy(true)
     setError('')
-    const ok = await verifyPasscode(code, passcodeHash)
-    if (ok) {
-      rememberUnlock(tripCode)
-      void enterEvent(tripCode, { adminPin: code })
-      setJustUnlocked(true)
-    } else {
-      setError('Incorrect code.')
+    const r = await unlockWithPin(tripCode, code)
+    if (r !== 'ok') {
+      setError(unlockError(r, 'passcode'))
       setCode('')
     }
     setBusy(false)

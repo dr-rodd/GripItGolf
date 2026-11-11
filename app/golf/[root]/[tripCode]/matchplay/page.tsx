@@ -39,6 +39,7 @@ import MatchplayBracket, {
 } from './MatchplayBracket'
 import { buttonClass } from '@/app/components/ui'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -189,7 +190,7 @@ export default async function MatchplayPage({
   // On an event, a result already in is changed with the admin PIN.
   const setupRow = setupRes.data as { kind?: unknown; settings_passcode_hash?: string | null } | null
   const lock = isEvent(setupRow?.kind) && setupRow?.settings_passcode_hash
-    ? { tripCode, passcodeHash: setupRow.settings_passcode_hash } : null
+    ? { tripCode, pinSet: true } : null
 
   // The tags' tally, where the event keeps one: the bracket's played
   // results as sides of players, counted by the board's own shell.
@@ -240,13 +241,13 @@ export default async function MatchplayPage({
   const scoreLinks = cardRead.view ? bracketScoreLinks(cardRead.view, arranged, tripHome) : null
   const scoring = scoreLinks ? {
     tripCode,
-    passcodeHash: setupRow?.settings_passcode_hash ?? null,
+    pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
     anyoneScores: allowsParticipant(setupRow?.kind, (permsRes.data as { event_permissions?: unknown } | null)?.event_permissions, 'score_matches'),
     ...scoreLinks,
   } : null
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={lock ? lock.passcodeHash : null} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={!!lock} />
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">

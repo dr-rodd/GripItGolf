@@ -12,6 +12,7 @@ import OrderOfPlayList from './OrderOfPlayList'
 import { readSessionCards, readSessionMatchRows } from '../session/sessionMatches'
 import { buildMatchSheets, readSessionTimes } from '../session/matchSheets'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { isLocked } from '@/lib/passcode'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,14 +67,14 @@ export default async function OrderOfPlayPage({ params, searchParams }: {
       tags,
       tagOfPlayer,
       myId: me?.id ?? null,
-      passcodeHash: (trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null,
+      pinSet: isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null),
       playersPick: access.playersPick,
       isTrip: !isEvent((trip as { kind?: unknown }).kind),
     },
   })
 
   // The organiser's lock, at the header's right edge (OrganiserLock).
-  const organiserLock = <OrganiserLock tripCode={tripCode} passcodeHash={(trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
+  const organiserLock = <OrganiserLock tripCode={tripCode} pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)} isTrip={!isEvent((trip as { kind?: unknown }).kind)} />
 
   return (
     <main className="min-h-dvh paper has-tabbar page-enter">

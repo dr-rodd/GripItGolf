@@ -22,7 +22,7 @@ import Toggle from '../app/components/Toggle'
 import { parseFormats } from '../lib/formats'
 import {
   MIN_PASSCODE, MAX_PASSCODE, passcodeError, isPasscodeValid,
-  hashPasscode, verifyPasscode, isLocked,
+  isLocked,
 } from '../lib/passcode'
 
 let passed = 0, failed = 0
@@ -563,24 +563,22 @@ section('Passcode rules')
 
 // Hashing is async, and CJS output has no top-level await
 async function main() {
-  section('Hashing')
+  section('Hashing — the server\'s, never the phone\'s (stage 4, D64)')
   {
-    const hash = await hashPasscode('4821')
-    eq(hash.length, 64, 'a SHA-256 digest is 64 hex characters')
-    ok(/^[0-9a-f]{64}$/.test(hash), 'and is lower-case hex, matching the column constraint')
-    ok(!hash.includes('4821'), 'the passcode itself does not appear in the hash')
-
-    eq(await hashPasscode('4821'), hash, 'the same code always hashes the same')
-    ok(await hashPasscode('4822') !== hash, 'a different code hashes differently')
-
-    ok(await verifyPasscode('4821', hash), 'the right code verifies')
-    ok(!(await verifyPasscode('4822', hash)), 'a wrong code does not')
-    ok(!(await verifyPasscode('', hash)), 'nor does an empty one')
-
-    // No passcode set means settings are simply open
-    ok(await verifyPasscode('', null), 'with no passcode set, anything passes')
-    ok(await verifyPasscode('9999', null), 'because there is nothing to check')
-
+    process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
+    const { hashPin, verifyPin, legacyPinHash } = await import('../lib/pinHash')
+    const hash = await hashPin('4821', 'ABC123')
+    ok(hash.startsWith('s1$') && hash.split('$').length === 4, 'a PIN is stored as scrypt: scheme, salt, key and door token')
+    ok(!hash.includes('4821'), 'the PIN itself does not appear in what is stored')
+    ok(await hashPin('4821', 'ABC123') !== hash, 'salted: the same PIN stores differently twice')
+    ok((await verifyPin('4821', hash)).ok, 'the right PIN verifies')
+    ok(!(await verifyPin('4822', hash)).ok, 'a wrong PIN does not')
+    ok(!(await verifyPin('', hash)).ok, 'nor does an empty one')
+    const legacy = legacyPinHash('4821')
+    ok(/^[0-9a-f]{64}$/.test(legacy), 'a PIN stored before stage 4 is plain SHA-256 hex')
+    const old = await verifyPin('4821', legacy)
+    ok(old.ok && old.stale, '  …still opens, and asks to be re-stored salted and slow')
+    ok(!(await verifyPin('4822', legacy)).ok, '  …and a wrong one still does not')
     ok(isLocked(hash), 'a trip with a hash is locked')
     ok(!isLocked(null), 'a trip without one is not')
     ok(!isLocked(''), 'and neither is an empty string')
@@ -596,16 +594,12 @@ async function main() {
     // trip settings" on a trip, "Lock event settings" on a tournament.
     ok(source.includes('Lock {noun} settings'), 'the option is on the form')
     ok(source.includes('label={`Lock ${noun} settings`}'), 'as a labelled switch')
-    ok(source.includes('tripRow.settings_passcode_hash = passcodeHash'),
-      'and the hash is stored on the trip')
-    // Sent only when a passcode exists: a database that has not had that
-    // column added yet must still be able to create ordinary trips.
-    ok(source.includes('if (passcodeHash) tripRow.settings_passcode_hash'),
-      'but only when one was actually set')
+    ok(source.includes('adminPin: lockOn ? passcode : null'),
+      'the passcode is sent to the server, only when one was set')
+    ok(!/passcode_hash|hashPasscode/.test(source),
+      'and no hash is made or named on the phone (stage 4, D64)')
     ok(source.includes('describeError'),
       'and a failed insert reports what the database actually said')
-    ok(source.includes('hashPasscode(passcode)'),
-      'hashed on the device, so the code itself is never sent')
     ok(source.includes('This can only be set now'),
       'the warning states it is a one-time choice')
     // The reason it cannot be handed over later was cut in the copy review;

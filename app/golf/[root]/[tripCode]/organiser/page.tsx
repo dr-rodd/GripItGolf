@@ -266,7 +266,7 @@ export default async function OrganiserPage({ params }: {
       golfIreland={gi}
       knockout={isKnockoutEvent(setupRaw)}
       drawSummary={rawDrawPlan(setupRaw)?.when === 'date' ? describeDrawPlan(rawDrawPlan(setupRaw), d => describeShortDate(d) ?? d, describeTime) : null}
-      accessCard={<PublicPinCard tripId={trip.id} tripCode={tripCode} hasPin={!!publicLock} />}
+      accessCard={<PublicPinCard tripCode={tripCode} hasPin={!!publicLock} adminPinSet={isLocked(trip.settings_passcode_hash)} />}
       // The door to the team picker, while a leaderboard plays in teams.
       hasTeamBoards={boards.some(b => b.audience === 'team' && !b.tagMode)}
       dayFormatSummary={
@@ -285,7 +285,6 @@ export default async function OrganiserPage({ params }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        passcodeHash={trip.settings_passcode_hash as string}
         title="Organiser area"
         hint={`Enter the organiser PIN for ${trip.name}.`}
       >
