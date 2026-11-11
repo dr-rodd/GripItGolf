@@ -142,6 +142,23 @@ async function createTests() {
     ok(/UPDATE public\.trips SET lead_email = NULL/.test(m), '  …and empties it once copied')
   }
 
+  section('Stage 8: the stroke scoring tables answer members only')
+  {
+    const m = read('supabase/migrations/20260101000079_lock_scoring_tables.sql')
+    for (const t of ['scores', 'live_scores', 'round_handicaps', 'composite_holes', 'live_rounds', 'live_player_locks']) {
+      ok(new RegExp(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`).test(m), `${t}: row-level security on`)
+      for (const verb of ['read', 'insert', 'update', 'delete']) {
+        ok(new RegExp(`CREATE POLICY ${t}_member_${verb}\\s+ON ${t} FOR \\w+ TO authenticated`).test(m), `  …${verb} for members, never anon`)
+      }
+    }
+    ok(!/USING \(true\)|WITH CHECK \(true\)/.test(m.split('-- ─── Did it land?')[0]), 'no policy that lets everybody through')
+    ok(/writable_rounds\(\)[\s\S]*writable_trips\(\)/.test(m), 'writes ride on writable_trips(), the 30-day cap and the organiser\'s hours included')
+    const flow = read('app/scoring/LiveScoringFlow.tsx')
+    ok(/refusal\(e\) && !retried && tripCode && await recoverEvents/.test(flow), 'a refused commit signs back in and runs once more')
+    ok(/refusal\(err\) && !retried && tripCode && await recoverEvents/.test(flow), 'a refused start does too')
+    ok(/\.from\("live_rounds"\)\s*\.update\(\{ status: "finalised"[\s\S]{0,120}\.select\("id"\)/.test(flow), 'closing the card checks it hit a row — "0 rows" is a refusal')
+  }
+
   section('Every column a create form sends is one the route takes')
   for (const f of FORMS) {
     const src = read(f)

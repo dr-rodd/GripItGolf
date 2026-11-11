@@ -232,3 +232,8 @@ ROLLBACK;
 
 -- Match card writes (match_scores, session_match_scores) are not gated here:
 -- they are closed properly by row-level security stages 7 and 8.
+
+-- ─── Stage 8 (migration 079): the stroke scoring tables ─────────────
+-- Six rows, every one true:
+SELECT relname, relrowsecurity FROM pg_class
+WHERE relname IN ('scores', 'live_scores', 'round_handicaps', 'composite_holes', 'live_rounds', 'live_player_locks');

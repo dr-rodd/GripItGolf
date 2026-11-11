@@ -12,7 +12,8 @@ import {
 } from "@/lib/handicap"
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { type ScoreRow } from "@/lib/scoreOutbox"
-import { scoreOutbox } from "./outbox"
+import { scoreOutbox, refusal } from "./outbox"
+import { recoverEvents } from "@/lib/entryClient"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./activeLiveRound"
@@ -795,7 +796,7 @@ export default function LiveScoringFlow({
       )
     : null
 
-  async function handleActivate() {
+  async function handleActivate(retried = false) {
     if (!activatingRoundId) return
     setSaving(true)
     setError(null)
@@ -816,7 +817,13 @@ export default function LiveScoringFlow({
       .select("id, course_id, round_id, activated_by, rounds(round_number), courses(name)")
       .single()
 
-    if (err) { setError(err.message); setSaving(false); return }
+    // Refused by the server (row-level security, stage 8): this phone's
+    // sign-in lapsed or it is not in the event yet. Sign back in, enter the
+    // event, and try once more before saying anything.
+    if (err && refusal(err) && !retried && tripCode && await recoverEvents([tripCode])) {
+      return handleActivate(true)
+    }
+    if (err) { setError(refusal(err) ? "Could not start the card — try again" : err.message); setSaving(false); return }
 
     syncLiveRound(data as unknown as ActiveLiveRound)
     setSaving(false)
@@ -932,7 +939,7 @@ export default function LiveScoringFlow({
     setEditingPlayerId(null)
   }
 
-  async function handleCommit() {
+  async function handleCommit(retried = false) {
     if (!roundId || courseHoles.length === 0 || !liveRound) return
     setSaving(true)
     setError(null)
@@ -1056,10 +1063,15 @@ export default function LiveScoringFlow({
       // 6. Finalise the live round and return to the course portal
       // Note: player locks are intentionally kept so the live leaderboard
       // continues to display finalised players. Locks are only removed on discard.
-      const { error: closeErr } = await supabase
+      const { data: closed, error: closeErr } = await supabase
         .from("live_rounds")
         .update({ status: "finalised", closed_at: new Date().toISOString() })
         .eq("id", liveRound.id)
+        .select("id")
+      // Row-level security refuses an update as "0 rows", not an error (stage 8).
+      if (!closeErr && (closed ?? []).length === 0) {
+        throw Object.assign(new Error("refused"), { code: "42501" })
+      }
 
       // These two used to go unchecked, and a failure here is not cosmetic:
       // the scores above are already in, so walking away leaves a card that
@@ -1067,6 +1079,7 @@ export default function LiveScoringFlow({
       // badge — with nothing wrong on the leaderboard to hint at why. Say so
       // and stay put instead: every write in this function is an upsert, so
       // pressing Commit again finishes the job.
+      if (refusal(markErr) || refusal(closeErr)) throw markErr ?? closeErr
       if (markErr || closeErr) {
         throw new Error(
           "The scores are saved, but the card could not be closed — " +
@@ -1082,7 +1095,14 @@ export default function LiveScoringFlow({
       outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
       onBack()
     } catch (e: any) {
-      setError(e?.message ?? "Could not save the scores — try again")
+      // Refused rather than lost (stage 8): sign back in, enter the event,
+      // and run the commit once more — every write in it is an upsert.
+      if (refusal(e) && !retried && tripCode && await recoverEvents([tripCode])) {
+        return await handleCommit(true)
+      }
+      setError(refusal(e)
+        ? "Could not save the scores — this phone could not sign in to the event. The scores are safe on this phone; try again."
+        : e?.message ?? "Could not save the scores — try again")
     } finally {
       setSaving(false)
     }
@@ -1203,7 +1223,7 @@ export default function LiveScoringFlow({
           />
         ) : (
         <button
-          onClick={handleActivate}
+          onClick={() => handleActivate()}
           disabled={!activatingRoundId || saving || availableRounds.length === 0}
           className={`w-full py-4 text-base transition-colors
             ${activatingRoundId && !saving
@@ -2003,7 +2023,7 @@ export default function LiveScoringFlow({
           </button>
           )}
           <button
-            onClick={handleCommit}
+            onClick={() => handleCommit()}
             disabled={saving}
             className="flex-[2] py-4 bg-accent-deep text-white text-base font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
           >
