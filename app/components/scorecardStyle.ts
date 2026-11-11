@@ -140,3 +140,17 @@ export const TEE_DOT: Record<string, string> = {
 /** A tee's swatch, falling back to a neutral for a colour we do not know. */
 export const teeDot = (name: string | null | undefined) =>
   (name && TEE_DOT[name]) || `bg-bark/25 ${TEE_RING}`
+
+/**
+ * A tee's swatch where its stored colour is known (`tees.colour`, migration
+ * 075 — the card check's approximation, from the card or the tee's name;
+ * Ross, 11 Nov 2026). The stored colour wins, because it came from this
+ * course's own card; else the name's, else the neutral. Spread both:
+ * `<span className={`… ${s.className}`} style={s.style} />`.
+ */
+export function teeSwatch(name: string | null | undefined, colour?: string | null): {
+  className: string; style?: { backgroundColor: string }
+} {
+  if (colour && /^#[0-9a-f]{6}$/i.test(colour)) return { className: TEE_RING, style: { backgroundColor: colour } }
+  return { className: teeDot(name) }
+}

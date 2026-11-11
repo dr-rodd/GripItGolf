@@ -17,7 +17,7 @@ import { usePoll } from "./usePoll"
 import { readLiveScores } from "@/lib/scoreReads"
 import {
   SC_SF, SC_NUM, SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL,
-  SC_MUTED, SC_DARK, scRow, scPoints, teeDot,
+  SC_MUTED, SC_DARK, scRow, scPoints, teeSwatch,
 } from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
@@ -72,6 +72,8 @@ interface RoundHandicap {
 interface Tee {
   id: string; name: string
   slope?: number; course_rating?: number; par?: number
+  /** Its marker's colour, where the card check gave one (migration 075). */
+  colour?: string | null
 }
 
 interface LiveScoreRow {
@@ -188,9 +190,11 @@ function compareRows(a: PlayerRow, b: PlayerRow, mode: Mode, sv: StrokesView): n
 // ─── Inline Scorecard ─────────────────────────────────────
 
 export function InlineScorecard({
-  playingHcp, teeName, courseHoles, playerScores, gender,
+  playingHcp, teeName, teeColour = null, courseHoles, playerScores, gender,
   allowance = FULL_ALLOWANCE,
 }: {
+  /** The tee's stored colour, where it has one. */
+  teeColour?: string | null
   /** Already reduced to the board's allowance, if it has one. */
   playingHcp: number
   /** The tee they played off, once the session has recorded one. */
@@ -272,7 +276,7 @@ export function InlineScorecard({
         {teeName && (
           <span className="flex items-center gap-1.5">
             <span className={SC_LABEL}>Tee</span>
-            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeDot(teeName)}`} />
+            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeSwatch(teeName, teeColour).className}`} style={teeSwatch(teeName, teeColour).style} />
             <span className={`${SC_NUM} font-semibold ${SC_DARK}`} style={SC_SF}>{teeName}</span>
           </span>
         )}
@@ -377,7 +381,7 @@ export default function LiveLeaderboardPanel({
       ? exactCourseHandicap(player.handicap,
           { slope: tee!.slope!, course_rating: tee!.course_rating!, par: tee!.par! })
       : rh?.playing_handicap ?? 0
-    return { hcp: allowedHandicap(exact, allowance), teeName: tee?.name ?? null }
+    return { hcp: allowedHandicap(exact, allowance), teeName: tee?.name ?? null, teeColour: tee?.colour ?? null }
   }
 
   /**
@@ -743,7 +747,7 @@ export default function LiveLeaderboardPanel({
             // ── Col 4: holes through or F ─────────────────
             const col4 = isFinalised ? "F" : `${holesCompleted}`
 
-            const { hcp: playingHcp, teeName } = handicapFor(player)
+            const { hcp: playingHcp, teeName, teeColour } = handicapFor(player)
 
             return (
               <Fragment key={player.id}>
@@ -798,6 +802,7 @@ export default function LiveLeaderboardPanel({
                     <InlineScorecard
                       playingHcp={playingHcp}
                       teeName={teeName}
+                      teeColour={teeColour}
                       gender={player.gender}
                       allowance={allowance}
                       courseHoles={courseHoles}

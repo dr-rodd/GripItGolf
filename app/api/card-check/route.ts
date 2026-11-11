@@ -3,7 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   CARD_SCHEMA, EXTRACTION_PROMPT, HOLE_COLUMNS,
-  normalizeCard, validateCard, diffCard, diffIsEmpty, newCourseRows,
+  normalizeCard, validateCard, diffCard, diffIsEmpty, newCourseRows, teeColourFills,
   type StoredHole, type StoredTee,
 } from '@/lib/cardCheck'
 
@@ -96,9 +96,12 @@ async function handle(req: NextRequest) {
     return NextResponse.json({ ok: false, reason: 'no-course', message: 'No such course.' }, { status: 404 })
   }
 
-  const [holesRes, teesRes] = await Promise.all([
+  const [holesRes, teesRes, colourRes] = await Promise.all([
     supabaseAdmin.from('holes').select(HOLE_COLUMNS).eq('course_id', courseId).order('hole_number'),
     supabaseAdmin.from('tees').select('id, course_id, name, gender, par, course_rating, slope').eq('course_id', courseId),
+    // Each tee's colour (migration 075) in a query of its own: before 075
+    // is pasted it fails, and the check simply offers no colours.
+    supabaseAdmin.from('tees').select('id, colour').eq('course_id', courseId),
   ])
   if (holesRes.error || teesRes.error) {
     console.error('card-check card query failed:', holesRes.error ?? teesRes.error)
@@ -106,7 +109,10 @@ async function handle(req: NextRequest) {
   }
 
   const storedHoles = (holesRes.data ?? []) as unknown as StoredHole[]
-  const storedTees = (teesRes.data ?? []) as unknown as StoredTee[]
+  const colourOf = new Map(((colourRes.error ? null : colourRes.data) ?? [])
+    .map(r => [(r as { id: string }).id, (r as { colour: string | null }).colour]))
+  const storedTees = ((teesRes.data ?? []) as unknown as StoredTee[])
+    .map(t => ({ ...t, colour: colourOf.get(t.id) ?? null }))
 
   // ── Ask Claude to read the photo ──
   const client = new Anthropic({ apiKey })
@@ -169,11 +175,17 @@ async function handle(req: NextRequest) {
       mode: 'create',
       courseName: course.name,
       readCourseName: card.courseName,
-      newCard: newCourseRows(card),
+      // Without 075 there is nowhere to keep a colour: the new tees go in without one.
+      newCard: colourRes.error
+        ? (({ tees, ...rest }) => ({ ...rest, tees: tees.map(({ colour: _c, ...t }) => t) }))(newCourseRows(card))
+        : newCourseRows(card),
     })
   }
 
   const diff = diffCard(card, storedHoles, storedTees)
+  // Stored tees with no colour that the photo suggests one for — offered
+  // beside the diff, written only on a yes (Ross, 11 Nov 2026).
+  const teeColours = colourRes.error ? [] : teeColourFills(card, storedTees)
 
   // A photo that agrees with the record on every figure is the confirmation
   // this flag exists for. Best-effort: a failed write here costs the badge,
@@ -191,5 +203,6 @@ async function handle(req: NextRequest) {
     courseName: course.name,
     readCourseName: card.courseName,
     diff,
+    teeColours,
   })
 }

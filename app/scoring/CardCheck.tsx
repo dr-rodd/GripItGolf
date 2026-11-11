@@ -12,7 +12,7 @@
 // photo always wins.
 
 import React, { useRef, useState } from "react"
-import type { CardDiff, HoleChange, NewCard } from "@/lib/cardCheck"
+import type { CardDiff, HoleChange, NewCard, TeeColourFill } from "@/lib/cardCheck"
 import { buttonClass, cardClass } from "@/app/components/ui"
 import { IconCamera } from "@/app/components/icons"
 import { GATE_TITLE } from "@/lib/courseCard"
@@ -31,6 +31,8 @@ type CheckResponse = {
   /** 'create' when the course had no card and the photo is offered as one. */
   mode?: string
   newCard?: NewCard
+  /** Stored tees with no colour, given the one the photo suggests. */
+  teeColours?: TeeColourFill[]
 }
 
 type ApplyResponse = {
@@ -45,7 +47,7 @@ type Step =
   | { kind: "idle" }
   | { kind: "reading" }
   | { kind: "match" }
-  | { kind: "diff"; diff: CardDiff; readCourseName: string | null }
+  | { kind: "diff"; diff: CardDiff; readCourseName: string | null; colours: TeeColourFill[] }
   | { kind: "new-card"; newCard: NewCard; readCourseName: string | null }
   | { kind: "applying" }
   | { kind: "done"; changed: number; rescored: number; reloadNeeded: boolean; created?: boolean }
@@ -133,17 +135,18 @@ export default function CardCheck({
         return
       }
       const diff = body.diff!
-      if (diff.holeChanges.length === 0 && diff.teeChanges.length === 0) {
+      const colours = body.teeColours ?? []
+      if (diff.holeChanges.length === 0 && diff.teeChanges.length === 0 && colours.length === 0) {
         setStep({ kind: "match" })
       } else {
-        setStep({ kind: "diff", diff, readCourseName: body.readCourseName ?? null })
+        setStep({ kind: "diff", diff, readCourseName: body.readCourseName ?? null, colours })
       }
     } catch {
       setStep({ kind: "error", message: "Could not check the card — try again.", problems: [] })
     }
   }
 
-  async function apply(diff: CardDiff) {
+  async function apply(diff: CardDiff, colours: TeeColourFill[] = []) {
     setStep({ kind: "applying" })
     // Grouped here rather than in the route so what is sent is exactly what
     // was shown. Same shape lib/cardCheck.ts's holeUpdates/teeUpdates build.
@@ -168,6 +171,7 @@ export default function CardCheck({
           tripCode: tripCode ?? "",
           holes: [...holesByNumber.entries()].map(([holeNumber, fields]) => ({ holeNumber, fields })),
           tees: [...teesById.entries()].map(([teeId, fields]) => ({ teeId, fields })),
+          teeColours: colours.map(c => ({ teeId: c.teeId, colour: c.colour })),
         }),
       })
       const body = (await res.json().catch(() => null)) as ApplyResponse | null
@@ -179,7 +183,7 @@ export default function CardCheck({
       if (!reloadNeeded) onApplied(body.holes!, body.tees!)
       setStep({
         kind: "done",
-        changed: diff.holeChanges.length + diff.teeChanges.length,
+        changed: diff.holeChanges.length + diff.teeChanges.length + colours.length,
         rescored: body.rescored ?? 0,
         reloadNeeded,
       })
@@ -216,6 +220,10 @@ export default function CardCheck({
   }
 
   const camera = <IconCamera size={20} />
+  // A tee's suggested colour as a dot, ringed so a pale one still shows.
+  const swatch = (colour?: string | null) => colour
+    ? <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-line-strong" style={{ backgroundColor: colour }} aria-hidden="true" />
+    : null
 
   // One hidden input serves every photo — first, or another after a bad one.
   // No `capture` attribute on purpose: the phone offers camera or library.
@@ -363,8 +371,9 @@ export default function CardCheck({
         <ul className="text-ink/80 text-sm space-y-1 tabular-nums">
           <li>18 holes, par {parTotal}{ladiesTotal != null ? ` — ladies par ${ladiesTotal}` : ""}</li>
           {newCard.tees.map((t, i) => (
-            <li key={i}>
-              {t.name} tee ({genderWord(t.gender)}) — par {t.par}, CR {t.course_rating}, slope {t.slope}
+            <li key={i} className="flex items-center gap-2">
+              {swatch(t.colour)}
+              <span>{t.name} tee ({genderWord(t.gender)}) — par {t.par}, CR {t.course_rating}, slope {t.slope}</span>
             </li>
           ))}
         </ul>
@@ -394,7 +403,7 @@ export default function CardCheck({
   }
 
   // ── The difference, and the question ──
-  const { diff } = step
+  const { diff, colours } = step
   const scoringChanges = diff.holeChanges.filter(c => !isYardage(c))
   const yardageChanges = diff.holeChanges.filter(isYardage)
   const yardageByTee = new Map<string, number>()
@@ -407,8 +416,11 @@ export default function CardCheck({
     <div className={`${cardClass("raised")} px-4 py-4 space-y-3`}>
       {fileInput}
       <p className="text-ink text-sm font-semibold">
-        The photo disagrees with the recorded card
-        {step.readCourseName ? ` (${step.readCourseName})` : ""}:
+        {diff.holeChanges.length + diff.teeChanges.length === 0
+          ? "The card matches the photo"
+          : "The photo disagrees with the recorded card"}
+        {step.readCourseName ? ` (${step.readCourseName})` : ""}
+        {diff.holeChanges.length + diff.teeChanges.length === 0 ? "." : ":"}
       </p>
 
       {scoringChanges.length > 0 && (
@@ -445,6 +457,22 @@ export default function CardCheck({
         </p>
       )}
 
+      {/* Colours for tees that have none yet — read off the card, or
+          worked out from a name like Granite or Sandstone. */}
+      {colours.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-ink/65 text-sm">Tee colours, from the card or the tee&apos;s name:</p>
+          <ul className="flex flex-wrap gap-x-4 gap-y-1 text-ink/80 text-sm">
+            {colours.map(c => (
+              <li key={c.teeId} className="flex items-center gap-1.5">
+                {swatch(c.colour)}
+                {c.teeName} ({genderWord(c.gender)})
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {diff.unmatchedTees.length > 0 && (
         <p className="text-ink/50 text-sm">
           On the card but not recorded here: {diff.unmatchedTees.join(", ")}.
@@ -454,10 +482,10 @@ export default function CardCheck({
       <div className="flex gap-2 pt-1">
         <button
           type="button"
-          onClick={() => apply(diff)}
+          onClick={() => apply(diff, colours)}
           className={`${buttonClass("primary", false, true)} flex-1`}
         >
-          Use the photo&apos;s card
+          {diff.holeChanges.length + diff.teeChanges.length === 0 ? "Save the colours" : "Use the photo\u2019s card"}
         </button>
         <button
           type="button"

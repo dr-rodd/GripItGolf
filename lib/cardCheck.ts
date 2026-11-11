@@ -63,6 +63,14 @@ export type ExtractedTee = {
   par: number | null
   courseRating: number | null
   slope: number | null
+  /**
+   * The tee's colour as a hex approximation (Ross, 11 Nov 2026), from the
+   * colour it is printed in on the card or, where the card does not show
+   * one, from its name — Granite a stone grey, Sandstone a sandy tan.
+   * Null (or absent, from a research file) when neither says. A swatch,
+   * never a scoring figure.
+   */
+  colour?: string | null
 }
 
 export type ExtractedCard = {
@@ -113,13 +121,14 @@ export const CARD_SCHEMA = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['name', 'gender', 'par', 'courseRating', 'slope'],
+        required: ['name', 'gender', 'par', 'courseRating', 'slope', 'colour'],
         properties: {
           name: { type: 'string' },
           gender: { type: 'string', enum: ['M', 'F'] },
           par: { type: ['integer', 'null'] },
           courseRating: { type: ['number', 'null'] },
           slope: { type: ['integer', 'null'] },
+          colour: { type: ['string', 'null'] },
         },
       },
     },
@@ -141,6 +150,7 @@ Rules — accuracy matters more than completeness:
 - Ignore OUT, IN and TOTAL columns — holes only.
 - Yardage tee names are the colour printed on the card (e.g. "Blue", "Red"), one entry per tee per hole. Skip a tee's yardage on a hole you cannot read.
 - For each tee box shown on the card: its colour name, whether it is a men's or ladies tee (ladies tees are usually Red or Claret and carry the ladies ratings), its total par, and its course rating and slope if printed (often in a ratings box, e.g. "CR 71.4 / Slope 125"). Null for anything not printed.
+- For each tee, colour is an approximate hex colour (#RRGGBB) for its marker: the colour the tee is printed in on the card where it is shown, otherwise what its name suggests — a plain colour as itself, a rock or material by its look (Granite a stone grey, Sandstone a sandy tan, Slate a blue-grey), Claret a deep red. Null if neither the card nor the name gives any idea.
 - courseName is the club or course name printed on the card, null if unreadable.`
 
 // ─── Raw shapes off the wire ──────────────────────────────────
@@ -196,6 +206,7 @@ export function normalizeCard(raw: RawCard): ExtractedCard {
       par: t.par ?? null,
       courseRating: t.courseRating ?? null,
       slope: t.slope ?? null,
+      colour: teeColourOf(t.colour),
     })),
   }
 }
@@ -542,6 +553,8 @@ export type NewTeeRow = {
   par: number
   course_rating: number
   slope: number
+  /** The approximate colour, where the photo gave one (migration 075). */
+  colour?: string
 }
 
 export type NewCard = {
@@ -603,6 +616,7 @@ export function newCourseRows(card: ExtractedCard): NewCard {
       par,
       course_rating: t.courseRating,
       slope: t.slope,
+      ...(t.colour ? { colour: t.colour } : {}),
     })
   }
 
@@ -678,4 +692,38 @@ export function validTeeUpdate(u: unknown): u is TeeUpdate {
     && typeof fields === 'object' && fields !== null
     && Object.keys(fields).length > 0
     && withinRanges(fields, TEE_COLUMN_RANGE, true)
+}
+
+// ─── Tee colours ──────────────────────────────────────────────
+
+/** A tee colour as stored — `#RRGGBB`, upper case — or null for anything else. */
+export function teeColourOf(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const c = v.trim()
+  return /^#[0-9a-f]{6}$/i.test(c) ? c.toUpperCase() : null
+}
+
+/** A stored tee given the colour the photo suggests. */
+export type TeeColourFill = { teeId: string; teeName: string; gender: 'M' | 'F'; colour: string }
+
+/**
+ * The stored tees with no colour yet that the photo suggests one for —
+ * matched by name and gender as `diffCard` matches them. Never a tee that
+ * already has a colour: a colour somebody chose is not second-guessed.
+ * Offered beside the diff and written only on a yes.
+ */
+export function teeColourFills(
+  card: ExtractedCard,
+  storedTees: readonly (StoredTee & { colour?: string | null })[],
+): TeeColourFill[] {
+  const out: TeeColourFill[] = []
+  for (const t of card.tees) {
+    if (!t.colour) continue
+    const stored = storedTees.find(
+      s => s.name.trim().toLowerCase() === t.name.toLowerCase() && s.gender === t.gender,
+    )
+    if (!stored || teeColourOf(stored.colour) || out.some(f => f.teeId === stored.id)) continue
+    out.push({ teeId: stored.id, teeName: stored.name, gender: stored.gender as 'M' | 'F', colour: t.colour })
+  }
+  return out
 }

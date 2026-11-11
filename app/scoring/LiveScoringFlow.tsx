@@ -27,7 +27,7 @@ import DotBloom from "@/app/components/DotBloom"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
   SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
-  scRow, teeDot,
+  scRow, teeSwatch,
 } from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
@@ -62,6 +62,8 @@ interface Hole {
 interface Tee {
   id: string; course_id: string; name: string; gender: string
   par: number; course_rating: number; slope: number
+  /** Its marker's colour, where the card check gave one (migration 075). */
+  colour?: string | null
 }
 interface RoundHandicap {
   round_id: string; player_id: string; playing_handicap: number
@@ -1361,7 +1363,7 @@ export default function LiveScoringFlow({
                                 aria-pressed={selectedTeeId === tee.id}
                                 className={optionClass(selectedTeeId === tee.id, "compact")}
                               >
-                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${teeDot(tee.name)}`} aria-hidden="true" />
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${teeSwatch(tee.name, tee.colour).className}`} style={teeSwatch(tee.name, tee.colour).style} aria-hidden="true" />
                                 {tee.name}
                               </button>
                             ))}
@@ -1901,7 +1903,7 @@ export default function LiveScoringFlow({
                   )}
                   <span className="flex items-center gap-1.5">
                     <span className={SC_LABEL}>Tee</span>
-                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeDot(tee.name)}`} />
+                    <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${teeSwatch(tee.name, tee.colour).className}`} style={teeSwatch(tee.name, tee.colour).style} />
                     <span className={`text-[15px] font-semibold ${dark}`} style={sf}>{tee.name}</span>
                   </span>
                   <span className="flex items-baseline gap-1.5">

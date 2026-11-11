@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   HOLE_COLUMNS, validHoleUpdate, validTeeUpdate, validateNewHoleRows,
-  type NewHoleRow, type NewTeeRow,
+  type NewHoleRow, type NewTeeRow, teeColourOf,
 } from '@/lib/cardCheck'
 import { validNewTee } from '@/lib/courseDirectory'
 
@@ -58,12 +58,19 @@ async function handle(req: NextRequest) {
     tees?: unknown[]
     newHoles?: unknown[]
     newTees?: unknown[]
+    /** Stored tees given the colour the photo suggests (`teeColourFills`). */
+    teeColours?: unknown[]
   } | null
 
   const courseId = body?.courseId ?? ''
   const tripCode = (body?.tripCode ?? '').trim().toUpperCase()
   const holes = Array.isArray(body?.holes) ? body!.holes! : []
   const tees = Array.isArray(body?.tees) ? body!.tees! : []
+  // Only what reads as a tee id and a colour; anything else is dropped.
+  const colours = (Array.isArray(body?.teeColours) ? body!.teeColours! : [])
+    .map(c => c as { teeId?: unknown; colour?: unknown })
+    .filter(c => typeof c.teeId === 'string' && UUID.test(c.teeId) && teeColourOf(c.colour))
+    .map(c => ({ teeId: c.teeId as string, colour: teeColourOf(c.colour)! }))
 
   if (!UUID.test(courseId)) {
     return NextResponse.json({ ok: false, message: 'A course id is required.' }, { status: 400 })
@@ -77,7 +84,7 @@ async function handle(req: NextRequest) {
     )
   }
 
-  if (holes.length === 0 && tees.length === 0) {
+  if (holes.length === 0 && tees.length === 0 && colours.length === 0) {
     return NextResponse.json({ ok: false, message: 'There is nothing to change.' }, { status: 400 })
   }
   const holeUps = holes.filter(validHoleUpdate)
@@ -119,6 +126,17 @@ async function handle(req: NextRequest) {
       console.error('card-check tee update failed:', error)
       return NextResponse.json({ ok: false, message: 'Could not update the card — try again.' })
     }
+  }
+
+  // The tees' colours — a swatch, never a figure, so best-effort: a failed
+  // write (before migration 075, say) costs the colour, never the apply.
+  for (const c of colours) {
+    const { error } = await supabaseAdmin
+      .from('tees')
+      .update({ colour: c.colour })
+      .eq('id', c.teeId)
+      .eq('course_id', courseId)
+    if (error) { console.error('card-check tee colour failed:', error); break }
   }
 
   // A card corrected from a photo is a card a photo has confirmed.
@@ -250,15 +268,18 @@ async function handleCreate(courseId: string, newHoles: unknown[], newTees: unkn
     const existing = (existingTees ?? []).find(
       e => e.name.trim().toLowerCase() === t.name.trim().toLowerCase() && e.gender === t.gender,
     )
-    const { error } = existing
-      ? await supabaseAdmin
-          .from('tees')
-          .update({ par: t.par, course_rating: t.course_rating, slope: t.slope })
-          .eq('id', existing.id)
-          .eq('course_id', courseId)
-      : await supabaseAdmin
-          .from('tees')
-          .insert({ course_id: courseId, ...t })
+    // Named field by field — what arrives is what was sent, not what was shown.
+    const figures = { par: t.par, course_rating: t.course_rating, slope: t.slope }
+    const colour = teeColourOf((t as { colour?: unknown }).colour)
+    const write = (withColour: boolean) => {
+      const extra = withColour && colour ? { colour } : {}
+      return existing
+        ? supabaseAdmin.from('tees').update({ ...figures, ...extra }).eq('id', existing.id).eq('course_id', courseId)
+        : supabaseAdmin.from('tees').insert({ course_id: courseId, name: t.name, gender: t.gender, ...figures, ...extra })
+    }
+    let { error } = await write(true)
+    // Before migration 075 there is no colour column: the tee goes in without one.
+    if (error && colour && /colour/.test(error.message ?? '')) ({ error } = await write(false))
     if (error) {
       console.error('card-check create tee write failed:', error)
       return NextResponse.json({ ok: false, message: 'Could not save the card — try again.' })

@@ -71,7 +71,7 @@ export default async function TripCoursePage({
   // a trip's dots are its teams', and asks for nothing more.
   const event = isEvent((trip as { kind?: unknown }).kind)
 
-  const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes, picksRes, teamsRes] = await Promise.all([
+  const [playersRes, holesRes, teesRes, hcpsRes, nicknamesRes, picksRes, teamsRes, teeColoursRes] = await Promise.all([
     db
       .from('players')
       .select('id, name, role, handicap, gender, is_composite, teams(name, color)')
@@ -113,7 +113,13 @@ export default async function TripCoursePage({
     event
       ? db.from('teams').select('id, name, team_set').eq('trip_id', trip.id)
       : Promise.resolve({ data: null }),
+    // Each tee's marker colour (migration 075), on its own and fail-soft:
+    // before 075 is pasted the dots fall back to the tee's name.
+    db.from('tees').select('id, colour').eq('course_id', courseId),
   ])
+  const teeColour = new Map(((teeColoursRes.error ? null : teeColoursRes.data) ?? [])
+    .map(r => [(r as { id: string }).id, (r as { colour: string | null }).colour]))
+  const tees = (teesRes.data ?? []).map(t => ({ ...t, colour: teeColour.get((t as { id: string }).id) ?? null }))
 
   // Merged in code, never in the select — the panel reads `player.nickname`
   // and pre-047 it is simply null everywhere.
@@ -146,7 +152,7 @@ export default async function TripCoursePage({
         players={players as any}
         rounds={(allRounds ?? []) as any}
         holes={(holesRes.data ?? []) as any}
-        tees={(teesRes.data ?? []) as any}
+        tees={tees as any}
         roundHandicaps={hcpsRes.data ?? []}
         backHref={`${tripHome}/scoring`}
         roundId={thisRound.id}

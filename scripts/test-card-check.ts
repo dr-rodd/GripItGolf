@@ -14,10 +14,11 @@
  *      the whitelist or a value outside its range is refused whole.
  */
 
+import fs from 'fs'
 import {
   normalizeCard, validateCard, diffCard, diffIsEmpty,
   holeUpdates, teeUpdates, validHoleUpdate, validTeeUpdate,
-  newCourseRows, validateNewHoleRows,
+  newCourseRows, validateNewHoleRows, teeColourOf, teeColourFills, CARD_SCHEMA,
   EXTRACTION_PROMPT, YARDAGE_TEES,
   type ExtractedCard, type ExtractedHole, type StoredHole, type StoredTee,
 } from '../lib/cardCheck'
@@ -327,6 +328,54 @@ ok(/[Ll]adies/.test(EXTRACTION_PROMPT), 'the ladies rows are called out')
 ok(/OUT, IN and TOTAL/.test(EXTRACTION_PROMPT), 'totals are excluded')
 ok(/slope/i.test(EXTRACTION_PROMPT), 'tee ratings are asked for')
 eq(YARDAGE_TEES.length, 8, 'the eight yardage columns, no more')
+
+section('Tee colours — from the card, or the tee\'s name (Ross, 11 Nov 2026)')
+{
+  ok((CARD_SCHEMA.properties.tees.items.required as readonly string[]).includes('colour'),
+    'the extraction is asked a colour for every tee')
+  ok(/Granite/.test(EXTRACTION_PROMPT) && /Sandstone/.test(EXTRACTION_PROMPT) && /#RRGGBB/.test(EXTRACTION_PROMPT),
+    '  …from the card, else what its name suggests — a rock by its look')
+  eq([teeColourOf('#a8a29e'), teeColourOf(' #C8B07A '), teeColourOf('grey'), teeColourOf('#fff'), teeColourOf(null)],
+    ['#A8A29E', '#C8B07A', null, null, null], 'only a six-digit hex is kept, upper case')
+  const read = normalizeCard({
+    courseName: null, holes: [],
+    tees: [
+      { name: 'Granite', gender: 'M', par: 72, courseRating: 70.1, slope: 124, colour: '#8f8a85' },
+      { name: 'Odd', gender: 'M', par: 72, courseRating: null, slope: null, colour: 'mauve' },
+    ],
+  })
+  eq(read.tees.map(t => t.colour), ['#8F8A85', null], 'the read keeps a hex and drops a word')
+
+  const rows = newCourseRows(goodCard({
+    tees: [
+      { name: 'Granite', gender: 'M', par: 72, courseRating: 70.1, slope: 124, colour: '#8F8A85' },
+      { name: 'Blue', gender: 'M', par: 72, courseRating: 71.4, slope: 125, colour: null },
+    ],
+  })).tees
+  eq(rows.map(t => t.colour ?? null), ['#8F8A85', null], 'a new card\'s tees carry the colour where the photo gave one')
+  ok(!('colour' in rows[1]), '  …and leave the column out where it did not')
+
+  const stored = [
+    { ...storedTees()[0], colour: null },
+    { ...storedTees()[1], colour: '#C62F3A' },
+  ]
+  const fills = teeColourFills(goodCard({
+    tees: [
+      { name: 'Blue', gender: 'M', par: 72, courseRating: 71.4, slope: 125, colour: '#3D6FB6' },
+      { name: 'Red', gender: 'F', par: 74, courseRating: 72.8, slope: 128, colour: '#DD2222' },
+      { name: 'Granite', gender: 'M', par: 72, courseRating: 70.1, slope: 124, colour: '#8F8A85' },
+    ],
+  }), stored)
+  eq(fills, [{ teeId: 't-blue', teeName: 'Blue', gender: 'M', colour: '#3D6FB6' }],
+    'a stored tee with no colour is offered the photo\'s; one with a colour is never second-guessed; an unknown tee is not invented')
+
+  const route = fs.readFileSync('app/api/card-check/apply/route.ts', 'utf-8')
+  ok(/update\(\{ colour: c\.colour \}\)/.test(route) && route.includes('teeColourOf(c.colour)'),
+    'the apply route writes only checked colours, after the yes')
+  ok(/if \(error && colour && \/colour\//.test(route), '  …and a new tee still saves before migration 075')
+  const swatch = fs.readFileSync('app/components/scorecardStyle.ts', 'utf-8')
+  ok(swatch.includes('export function teeSwatch'), 'a stored colour is drawn on the tee dot, the name\'s guess behind it')
+}
 
 // ─── Result ────────────────────────────────────────────────────
 
