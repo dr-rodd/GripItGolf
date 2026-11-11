@@ -205,6 +205,34 @@ export async function ensureMember(tripCode: string): Promise<void> {
   await settleOrganiser(code)
 }
 
+/**
+ * A score the server refused (stage 6): the phone's sign-in may have lapsed
+ * or been lost, or its membership never written. Refresh the session — or,
+ * where the server no longer knows it, sign in afresh — and enter each event
+ * again with the code and the cookie's player. Resolves true when at least
+ * one event was entered, so the outbox tries again at once. Never throws.
+ */
+export async function recoverEvents(tripCodes: string[]): Promise<boolean> {
+  if (!inBrowser() || tripCodes.length === 0) return false
+  if (!(await databaseReady())) return false
+  try {
+    const { supabase } = await import('./supabase')
+    const { data } = await supabase.auth.getSession()
+    if (data.session) {
+      const { error } = await supabase.auth.refreshSession()
+      // The server answered and does not know this sign-in: start a new one.
+      // A network failure (no status, or a 5xx) keeps the one we have.
+      if (error && typeof error.status === 'number' && error.status >= 400 && error.status < 500) {
+        await supabase.auth.signOut({ scope: 'local' })
+      }
+    }
+  } catch {
+    return false
+  }
+  const results = await Promise.all(tripCodes.map(code => enterEvent(code)))
+  return results.some(r => r !== null)
+}
+
 // ─── The organiser's padlock (stage 4: D61, D64) ───────────────
 
 export type UnlockResult = 'ok' | 'wrong' | 'blocked' | 'failed'

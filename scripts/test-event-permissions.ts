@@ -361,7 +361,7 @@ section('The event email carries the admin link, never the PIN')
     'the email module has no password field to leak')
 
   const route = read('app/api/trip-confirmation/route.ts')
-  ok(route.includes('to: trip.lead_email'),
+  ok(route.includes('to: leadEmail,') && route.includes('readLeadEmail(admin, trip.id)'),
     'the recipient is the stored address, on the service role')
   ok(!/body\?\.(email|to|address)/.test(route),
     'and never anything from the request payload')

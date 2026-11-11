@@ -1,3 +1,4 @@
+import { readLeadEmail } from '@/lib/leadEmail'
 import { NextRequest, NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { styledQrPng } from '@/lib/qrPng'
@@ -79,7 +80,7 @@ export async function POST(req: NextRequest) {
   const [{ data: trip, error: tripErr }, kindResult] = await Promise.all([
     admin
       .from('trips')
-      .select('id, name, trip_code, start_date, end_date, lead_email, confirmation_sent_at')
+      .select('id, name, trip_code, start_date, end_date, confirmation_sent_at')
       .eq('trip_code', tripCode)
       .single(),
     admin
@@ -93,7 +94,9 @@ export async function POST(req: NextRequest) {
     if (tripErr) console.error('trip-confirmation: trip lookup failed:', tripErr)
     return NextResponse.json({ ok: false, reason: 'not-found' }, { status: 404 })
   }
-  if (!trip.lead_email) return NextResponse.json({ ok: true, reason: 'no-email' })
+  // Kept where no phone can read it (stage 5): lib/leadEmail.ts.
+  const leadEmail = await readLeadEmail(admin, trip.id).catch(e => { console.error('trip-confirmation: email lookup failed:', e); return null })
+  if (!leadEmail) return NextResponse.json({ ok: true, reason: 'no-email' })
   if (trip.confirmation_sent_at) return NextResponse.json({ ok: true, reason: 'already-sent' })
 
   // ── Claim before sending ──
@@ -152,7 +155,7 @@ export async function POST(req: NextRequest) {
     const resend = new Resend(key)
     const send = resend.emails.send({
       from: CONFIRMATION_FROM,
-      to: trip.lead_email,
+      to: leadEmail,
       subject: confirmationSubject(details.tripName, details.sport),
       html: confirmationHtml(details),
       text: confirmationText(details),

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
+import { writeLeadEmail } from '@/lib/leadEmail'
 import { runCreate, type CreateStore } from './create'
 
 // POST /api/trip/create — `{ row, adminPin?, publicPin? }` with the phone's Supabase token as
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
         }, { onConflict: 'user_id,trip_id' })
         if (error) throw error
       },
+      writeLeadEmail: (tripId, email) => writeLeadEmail(db, tripId, email),
       async deleteTrip(tripId) {
         await db.from('trips').delete().eq('id', tripId)
       },

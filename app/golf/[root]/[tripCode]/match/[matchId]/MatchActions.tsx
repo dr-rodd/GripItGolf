@@ -4,6 +4,7 @@ import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { scoreOutbox } from '@/app/scoring/outbox'
 import { teesForPlayer } from '@/lib/courseHandicap'
 import { WALKOVER, withTee, type MatchTees } from '@/lib/matchArrangements'
 import { cardHasScores, voidMatchCard } from '@/lib/matchCardVoid'
@@ -117,6 +118,8 @@ export function MatchArrange({
     setVoiding(false)
     setConfirmVoid(false)
     if (!res.ok) { setError(res.reason); return }
+    // Anything this phone still held for the card goes with it, or a late send would put it back.
+    scoreOutbox().discardMatch(matchId)
     setScored(false)
     router.refresh()
   }

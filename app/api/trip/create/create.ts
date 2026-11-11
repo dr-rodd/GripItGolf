@@ -36,6 +36,8 @@ export interface CreateStore {
   /** The new row's id, or the database's refusal (a code already taken is 23505). */
   insertTrip(row: Record<string, unknown>): Promise<{ id: string } | { error: { message: string; code?: string } }>
   writeMembership(userId: string, tripId: string, m: Membership): Promise<void>
+  /** The address the event was made with, kept where no phone can read it (stage 5). */
+  writeLeadEmail(tripId: string, email: string): Promise<void>
   /** Takes back a row whose membership could not be written. */
   deleteTrip(tripId: string): Promise<void>
 }
@@ -77,8 +79,11 @@ export async function runCreate(
     publicPin ? hashPin(publicPin, r.trip_code) : null,
   ])
 
+  // The address never goes on the trips row, which every member reads
+  // (stage 5, D62): it is kept apart once the row exists.
+  const { lead_email: leadEmail, ...onRow } = r
   const made = await store.insertTrip({
-    ...r,
+    ...onRow,
     ...(adminHash ? { settings_passcode_hash: adminHash } : {}),
     ...(publicHash ? { public_passcode_hash: publicHash } : {}),
   })
@@ -90,6 +95,7 @@ export async function runCreate(
   const membership = mergeGrant(null, { organiser: !!adminHash }, now)
   try {
     await store.writeMembership(userId, made.id, membership)
+    if (typeof leadEmail === 'string' && leadEmail.trim()) await store.writeLeadEmail(made.id, leadEmail.trim())
   } catch {
     await store.deleteTrip(made.id).catch(() => undefined)
     return fail(503, 'Could not create the event — try again.')

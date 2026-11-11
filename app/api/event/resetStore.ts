@@ -6,6 +6,7 @@
 import { Resend } from 'resend'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
+import { readLeadEmail } from '@/lib/leadEmail'
 import { serviceStore } from '../entry/store'
 import type { ResetStore, ResetTrip } from './pinReset'
 
@@ -17,21 +18,23 @@ export function resetStore(db: ReturnType<typeof createAdminClient>): ResetStore
 
   async function trip(column: 'trip_code' | 'id', value: string): Promise<ResetTrip | null> {
     const { data, error } = await db.from('trips')
-      .select('id, trip_code, name, lead_email').eq(column, value).maybeSingle()
+      .select('id, trip_code, name').eq(column, value).maybeSingle()
     if (error || !data) return null
-    const row = data as { id: string; trip_code: string; name: string; lead_email: string | null }
+    const row = data as { id: string; trip_code: string; name: string }
     // The kind and the public PIN in their own queries, fail-soft, as the
     // trip layout reads them: columns the main select must never depend on.
-    const [k, pub] = await Promise.all([
+    const [k, pub, email] = await Promise.all([
       db.from('trips').select('kind').eq('id', row.id).maybeSingle(),
       db.from('trips').select('public_passcode_hash').eq('id', row.id).maybeSingle(),
+      // Kept where no phone can read it (stage 5): lib/leadEmail.ts.
+      readLeadEmail(db, row.id).catch(() => null),
     ])
     return {
       id: row.id,
       code: row.trip_code,
       name: row.name,
       kind: k.error ? null : ((k.data as { kind?: string | null } | null)?.kind ?? null),
-      email: row.lead_email || null,
+      email,
       publicHash: pub.error ? null : ((pub.data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash || null),
     }
   }

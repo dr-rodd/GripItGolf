@@ -65,9 +65,30 @@ export interface ClearTarget {
   hole_number: number
 }
 
+/**
+ * One box on a match play card (stage 7; Ross, 11 Nov 2026: players scoring
+ * may have bad signal). A knockout's card is `match_scores`, a session
+ * match's `session_match_scores`; `gross` null is an NR, and `clear` takes
+ * the box off the card. Same table, match, player and hole is the same box.
+ */
+export interface MatchCell {
+  table: 'match_scores' | 'session_match_scores'
+  match_id: string
+  trip_id: string
+  player_id: string
+  hole_number: number
+  gross: number | null
+}
+
+/**
+ * `trip` is the event's code, stamped when the hole is queued (CLAUDE.md's
+ * iron-clad rule: stamp at enqueue, never at flush) — so a phone whose
+ * sign-in was lost knows which event to enter again before it retries.
+ */
 export type Entry =
-  | { kind: 'save'; key: string; seq: number; at: number; row: ScoreRow }
-  | { kind: 'clear'; key: string; seq: number; at: number; target: ClearTarget }
+  | { kind: 'save'; key: string; seq: number; at: number; trip?: string; row: ScoreRow }
+  | { kind: 'clear'; key: string; seq: number; at: number; trip?: string; target: ClearTarget }
+  | { kind: 'match'; key: string; seq: number; at: number; trip?: string; cell: MatchCell; clear: boolean }
 
 /**
  * What a flush hands to whoever is doing the talking.
@@ -79,6 +100,25 @@ export type Entry =
 export interface Batch {
   saves: ScoreRow[]
   clears: ClearTarget[]
+  /** Match play card boxes, in the order they were first entered. */
+  match: { cell: MatchCell; clear: boolean }[]
+}
+
+/**
+ * The server said no rather than the network failing (stage 6): a lost or
+ * expired sign-in, a phone that is no longer a member, or a row-level
+ * security refusal — which for an update or a delete arrives as "0 rows",
+ * not as an error, and the sender turns into this. The outbox answers it by
+ * asking `recover` to sign the phone back in and enter the event again, then
+ * tries at once; the holes are never dropped for it.
+ */
+export class Refused extends Error {
+  readonly refused = true
+  constructor(message: string, readonly cause?: unknown) { super(message) }
+}
+
+export function isRefused(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as { refused?: unknown }).refused === true
 }
 
 export interface OutboxStorage {
@@ -99,6 +139,12 @@ export interface OutboxDeps {
   clearTimer?: (handle: unknown) => void
   /** Whether the device believes it has a connection. Absent means assume yes. */
   isOnline?: () => boolean
+  /**
+   * Sign the phone back in and enter these events again, after a send was
+   * `Refused`. Resolves true when it did something worth retrying at once.
+   * Absent: a refusal is retried on the backoff like any other failure.
+   */
+  recover?: (tripCodes: string[]) => Promise<boolean>
 }
 
 export const STORAGE_KEY = 'gdg.scoreOutbox.v1'
@@ -127,6 +173,13 @@ export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
 export function keyOf(playerId: string, roundId: string, holeNumber: number): string {
   return `${playerId}:${roundId}:${holeNumber}`
 }
+
+export function matchKeyOf(c: Pick<MatchCell, 'table' | 'match_id' | 'player_id' | 'hole_number'>): string {
+  return `m:${c.table}:${c.match_id}:${c.player_id}:${c.hole_number}`
+}
+
+/** After a refusal, at most one recovery this often — a phone the server keeps refusing backs off. */
+export const RECOVER_GAP_MS = 60_000
 
 /**
  * Fold new entries into a queue, newest answer per hole winning.
@@ -161,6 +214,7 @@ export function parseQueue(raw: string | null): Entry[] {
     if (!item || typeof item !== 'object') continue
     const e = item as Record<string, unknown>
     if (typeof e.key !== 'string' || typeof e.seq !== 'number' || typeof e.at !== 'number') continue
+    const trip = typeof e.trip === 'string' && e.trip ? { trip: e.trip } : {}
 
     if (e.kind === 'save') {
       const r = e.row as Record<string, unknown> | undefined
@@ -169,7 +223,7 @@ export function parseQueue(raw: string | null): Entry[] {
       if (typeof r.hole_number !== 'number' || typeof r.gross_score !== 'number') continue
       if (typeof r.stableford_points !== 'number') continue
       out.push({
-        kind: 'save', key: e.key, seq: e.seq, at: e.at,
+        kind: 'save', key: e.key, seq: e.seq, at: e.at, ...trip,
         row: {
           player_id: r.player_id, round_id: r.round_id, hole_number: r.hole_number,
           gross_score: r.gross_score, stableford_points: r.stableford_points,
@@ -187,8 +241,26 @@ export function parseQueue(raw: string | null): Entry[] {
       if (typeof t.player_id !== 'string' || typeof t.round_id !== 'string') continue
       if (typeof t.hole_number !== 'number') continue
       out.push({
-        kind: 'clear', key: e.key, seq: e.seq, at: e.at,
+        kind: 'clear', key: e.key, seq: e.seq, at: e.at, ...trip,
         target: { player_id: t.player_id, round_id: t.round_id, hole_number: t.hole_number },
+      })
+      continue
+    }
+
+    if (e.kind === 'match') {
+      const c = e.cell as Record<string, unknown> | undefined
+      if (!c || typeof c !== 'object') continue
+      if (c.table !== 'match_scores' && c.table !== 'session_match_scores') continue
+      if (typeof c.match_id !== 'string' || typeof c.trip_id !== 'string' || typeof c.player_id !== 'string') continue
+      if (typeof c.hole_number !== 'number') continue
+      if (c.gross !== null && typeof c.gross !== 'number') continue
+      if (typeof e.clear !== 'boolean') continue
+      out.push({
+        kind: 'match', key: e.key, seq: e.seq, at: e.at, ...trip, clear: e.clear,
+        cell: {
+          table: c.table, match_id: c.match_id, trip_id: c.trip_id,
+          player_id: c.player_id, hole_number: c.hole_number, gross: c.gross as number | null,
+        },
       })
     }
   }
@@ -200,24 +272,29 @@ export function batchOf(queue: Entry[]): Batch {
   return {
     saves: queue.filter((e): e is Extract<Entry, { kind: 'save' }> => e.kind === 'save').map(e => e.row),
     clears: queue.filter((e): e is Extract<Entry, { kind: 'clear' }> => e.kind === 'clear').map(e => e.target),
+    match: queue.filter((e): e is Extract<Entry, { kind: 'match' }> => e.kind === 'match').map(e => ({ cell: e.cell, clear: e.clear })),
   }
 }
 
 export interface Outbox {
-  /** Queue a hole (or several). Returns once it is safely stored, not once sent. */
-  save(rows: ScoreRow[]): void
+  /** Queue a hole (or several). Returns once it is safely stored, not once sent. `trip`: the event's code. */
+  save(rows: ScoreRow[], trip?: string): void
   /** Queue the removal of a hole from the card. */
-  clear(targets: ClearTarget[]): void
-  /** How many holes are still waiting. */
-  pending(): number
+  clear(targets: ClearTarget[], trip?: string): void
+  /** Queue one box on a match play card — a gross, an NR (null), or `clear` to take it off. */
+  match(cell: MatchCell, clear: boolean, trip?: string): void
+  /** How many holes are still waiting — all of them, or those `which` picks. */
+  pending(which?: (e: Entry) => boolean): number
   /** The queue itself, for a caller that needs to know whose holes are waiting. */
   entries(): Entry[]
   /** Try now. Resolves to the number still waiting afterwards — 0 means clean. */
   flush(): Promise<number>
   /** Forget everything queued for this round, after it has been committed or voided. */
   discardRound(roundId: string, playerIds?: string[]): void
-  /** Told whenever the pending count changes, so a screen can show it. */
-  subscribe(listener: (pending: number) => void): () => void
+  /** Forget a match card's queued boxes, after it has been voided. */
+  discardMatch(matchId: string): void
+  /** Told whenever the pending count changes — of all, or those `which` picks — so a screen can show it. */
+  subscribe(listener: (pending: number) => void, which?: (e: Entry) => boolean): () => void
   /** Stop the retry timer. For a component unmounting in a test. */
   stop(): void
 }
@@ -231,7 +308,8 @@ export function createOutbox(deps: OutboxDeps): Outbox {
 
   let queue: Entry[] = fresh(parseQueue(storage?.getItem(STORAGE_KEY) ?? null))
   let seq = queue.reduce((n, e) => Math.max(n, e.seq), 0)
-  let listeners: ((pending: number) => void)[] = []
+  let listeners: { fn: (pending: number) => void; which?: (e: Entry) => boolean }[] = []
+  let lastRecover = -Infinity
   let timer: unknown = null
   let attempt = 0
   let flushing = false
@@ -256,8 +334,10 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     }
   }
 
+  const count = (which?: (e: Entry) => boolean) => (which ? queue.filter(which).length : queue.length)
+
   function announce() {
-    for (const l of listeners) l(queue.length)
+    for (const l of listeners) l.fn(count(l.which))
   }
 
   function changed() {
@@ -297,6 +377,7 @@ export function createOutbox(deps: OutboxDeps): Outbox {
 
     flushing = true
     const sent = queue.slice()
+    let retryNow = false
     try {
       await deps.send(batchOf(sent))
       // Only what actually went, and only where it has not been answered
@@ -305,41 +386,58 @@ export function createOutbox(deps: OutboxDeps): Outbox {
       queue = queue.filter(e => sentSeq.get(e.key) !== e.seq)
       attempt = 0
       changed()
-    } catch {
-      attempt++
-      schedule()
+    } catch (e) {
+      // Refused by the server, not lost on the radio: sign back in and enter
+      // the events these holes belong to, then try again straight away —
+      // at most once a minute, so a phone the server keeps refusing falls
+      // back to the ordinary backoff and the holes simply wait.
+      if (isRefused(e) && deps.recover && now() - lastRecover >= RECOVER_GAP_MS) {
+        lastRecover = now()
+        const trips = [...new Set(sent.map(x => x.trip).filter((t): t is string => !!t))]
+        retryNow = await deps.recover(trips).catch(() => false)
+      }
+      if (!retryNow) {
+        attempt++
+        schedule()
+      }
     } finally {
       flushing = false
     }
+
+    if (retryNow) { again = false; return flush() }
 
     if (again) { again = false; return flush() }
     return queue.length
   }
 
   return {
-    save(rows) {
+    save(rows, trip) {
       if (rows.length === 0) return
       const at = now()
       enqueue(rows.map(row => ({
         kind: 'save' as const,
         key: keyOf(row.player_id, row.round_id, row.hole_number),
-        seq: ++seq, at, row,
+        seq: ++seq, at, ...(trip ? { trip } : {}), row,
       })))
     },
-    clear(targets) {
+    clear(targets, trip) {
       if (targets.length === 0) return
       const at = now()
       enqueue(targets.map(target => ({
         kind: 'clear' as const,
         key: keyOf(target.player_id, target.round_id, target.hole_number),
-        seq: ++seq, at, target,
+        seq: ++seq, at, ...(trip ? { trip } : {}), target,
       })))
     },
-    pending: () => queue.length,
+    match(cell, clear, trip) {
+      enqueue([{ kind: 'match', key: matchKeyOf(cell), seq: ++seq, at: now(), ...(trip ? { trip } : {}), cell, clear }])
+    },
+    pending: count,
     entries: () => queue.slice(),
     flush,
     discardRound(roundId, playerIds) {
       queue = queue.filter(e => {
+        if (e.kind === 'match') return true
         const rid = e.kind === 'save' ? e.row.round_id : e.target.round_id
         const pid = e.kind === 'save' ? e.row.player_id : e.target.player_id
         if (rid !== roundId) return true
@@ -347,10 +445,15 @@ export function createOutbox(deps: OutboxDeps): Outbox {
       })
       changed()
     },
-    subscribe(listener) {
-      listeners.push(listener)
-      listener(queue.length)
-      return () => { listeners = listeners.filter(l => l !== listener) }
+    discardMatch(matchId) {
+      queue = queue.filter(e => !(e.kind === 'match' && e.cell.match_id === matchId))
+      changed()
+    },
+    subscribe(listener, which) {
+      const l = { fn: listener, which }
+      listeners.push(l)
+      listener(count(which))
+      return () => { listeners = listeners.filter(x => x !== l) }
     },
     stop: cancel,
   }

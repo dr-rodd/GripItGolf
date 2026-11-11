@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { readAllLeadEmails } from '@/lib/leadEmail'
 import { tripState, todayString } from '@/lib/tripStatus'
 import { FIELD, Pill } from '@/app/components/ui'
 import { requireAdmin } from '../adminGate'
@@ -53,11 +54,13 @@ export default async function AdminTripsPage({
 
   const { data, error } = await db
     .from('trips')
-    .select('id, name, trip_code, lead_email, created_at, start_date, end_date')
+    .select('id, name, trip_code, created_at, start_date, end_date')
     .order('created_at', { ascending: false })
 
   if (error) console.error('AdminTripsPage trips query failed:', error)
-  const allTrips = (data ?? []) as TripRow[]
+  // The address lives apart from the row from stage 5 (lib/leadEmail.ts).
+  const emails = await readAllLeadEmails(db).catch(() => new Map<string, string>())
+  const allTrips = ((data ?? []) as Omit<TripRow, 'lead_email'>[]).map(t => ({ ...t, lead_email: emails.get(t.id) ?? null })) as TripRow[]
 
   // Search narrows by name, code or lead email, case-blind. In memory: the
   // whole table is already here for the header counts, and it is small.

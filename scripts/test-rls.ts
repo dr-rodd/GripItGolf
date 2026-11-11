@@ -55,6 +55,7 @@ const NOW = new Date('2026-11-11T09:00:00Z')
 function standIn(opts: { taken?: boolean; membershipFails?: boolean } = {}) {
   const trips = new Map<string, Record<string, unknown>>()
   const members = new Map<string, Membership>()
+  const emails = new Map<string, string>()
   const store: CreateStore = {
     async userFromToken(t) { return t.startsWith('tok-') ? t.slice(4) : null },
     async insertTrip(row) {
@@ -67,9 +68,10 @@ function standIn(opts: { taken?: boolean; membershipFails?: boolean } = {}) {
       if (opts.membershipFails) throw new Error('down')
       members.set(`${u}:${t}`, m)
     },
+    async writeLeadEmail(t, e) { emails.set(t, e) },
     async deleteTrip(id) { trips.delete(id) },
   }
-  return { store, trips, members }
+  return { store, trips, members, emails }
 }
 const ROW = { name: 'Winter League', trip_code: 'GX7K2P', slug: 'gx7k2p', status: 'upcoming' }
 
@@ -109,6 +111,13 @@ async function createTests() {
       '  …and a PIN too short')
   }
   {
+    const { store, trips, emails } = standIn()
+    const out = await runCreate({ token: 'tok-u9', row: { ...ROW, lead_email: ' lead@example.com ' } }, store, NOW)
+    eq(out.status, 200, 'an event made with an address is made')
+    ok(!('lead_email' in (trips.get('trip-1') ?? {})), '  …the address never on the trips row every member reads (stage 5, D62)')
+    eq(emails.get('trip-1'), 'lead@example.com', '  …kept apart instead')
+  }
+  {
     const { store } = standIn({ taken: true })
     const out = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)
     eq([out.status, out.body.error?.code], [409, '23505'], 'a code already taken says so, as the insert did')
@@ -118,6 +127,19 @@ async function createTests() {
     const out = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)
     eq(out.status, 503, 'the membership not written: refused')
     eq(trips.size, 0, '  …and the row taken back, never an event its maker cannot touch')
+  }
+
+  section('Stage 5: the address is read only on the server, from the closed table')
+  {
+    const helper = read('lib/leadEmail.ts')
+    ok(/from\('trip_private'\)/.test(helper), 'lib/leadEmail.ts reads and writes trip_private')
+    for (const f of ['app/api/trip-confirmation/route.ts', 'app/api/event/resetStore.ts', 'app/admin/trips/page.tsx']) {
+      const src = read(f)
+      ok(/LeadEmail/.test(src) && !/select\('[^']*lead_email/.test(src), `${f} reads the address through lib/leadEmail.ts`)
+    }
+    const m = read('supabase/migrations/20260101000078_hide_lead_email.sql')
+    ok(/REVOKE SELECT \(lead_email\), UPDATE \(lead_email\) ON public\.trips FROM authenticated/.test(m), 'migration 078 closes the old column to phones')
+    ok(/UPDATE public\.trips SET lead_email = NULL/.test(m), '  …and empties it once copied')
   }
 
   section('Every column a create form sends is one the route takes')

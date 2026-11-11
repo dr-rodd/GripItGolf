@@ -16,8 +16,8 @@
 
 import { readFileSync } from 'fs'
 import {
-  createOutbox, mergeEntries, parseQueue, batchOf, keyOf,
-  MAX_AGE_MS, BACKOFF_MS, STORAGE_KEY,
+  createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused,
+  MAX_AGE_MS, BACKOFF_MS, STORAGE_KEY, RECOVER_GAP_MS,
   type Batch, type Entry, type ScoreRow, type OutboxStorage,
 } from '../lib/scoreOutbox'
 
@@ -375,7 +375,7 @@ section('Score entry writes to the outbox and nowhere else')
 {
   const flow = read('app/scoring/LiveScoringFlow.tsx')
 
-  ok(/outbox\.save\(rows as ScoreRow\[\]\)/.test(flow),
+  ok(/outbox\.save\(rows as ScoreRow\[\], tripCode\)/.test(flow),
     'a hole submitted on the card is queued')
   ok(!/live_scores"\)\s*\n?\s*\.upsert/.test(flow.replace(/\/\*[\s\S]*?\*\//g, '')),
     'and no live_scores upsert is left hand-rolled beside it')
@@ -492,11 +492,138 @@ section('The outbox is one instance, wired once')
   const wired = read('app/scoring/outbox.ts')
   ok(/let instance: Outbox \| null = null/.test(wired),
     'there is a single queue behind one storage key')
-  ok(/if \(error\) throw error/.test(wired),
+  ok(/if \(error\) throw failed\(error\)/.test(wired),
     'a failed write is thrown, so the queue holds the hole and tries again')
+  ok(/\.upsert\(batch\.saves[\s\S]{0,80}\.select\(/.test(wired) && /< batch\.saves\.length\) throw new Refused/.test(wired),
+    'an upsert counts what came back: fewer rows is a refusal, not a success (stage 6)')
+  ok((wired.match(/stillThere\(/g) ?? []).length >= 3,
+    'a delete that took fewer rows asks what is still there — "0 rows" is how row-level security says no')
+  ok(/recover: browser \? recoverEvents/.test(wired), 'a refusal signs the phone back in and enters the event again')
+  ok(/'42501'/.test(wired) && /PGRST301/.test(wired), 'a policy refusal and a bad token are both told apart from a lost radio')
+  const card = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
+  ok(/outbox\.match\(/.test(card) && !/from\(table\)\.upsert/.test(card),
+    'the match card writes its boxes through the outbox, never straight to the network (stage 7)')
+  ok(/outbox\.entries\(\)/.test(card), '  …and lays its unsent boxes over every read, so a poll never undoes a tap')
+  ok(/outbox\.pending\(mine\) > 0/.test(card), '  …and Finalise waits until every box has reached the server')
+  for (const f of ['app/golf/[root]/[tripCode]/match/[matchId]/MatchActions.tsx', 'app/golf/[root]/[tripCode]/session/[roundId]/match/[slot]/card/SessionTees.tsx']) {
+    ok(/discardMatch\(matchId\)/.test(read(f)), `  …and voiding the card takes its unsent boxes with it (${f.split('/').slice(-2).join('/')})`)
+  }
   ok(/addEventListener\('online'/.test(wired), 'the radio coming back flushes it')
   ok(/visibilitychange/.test(wired), 'and so does the phone coming out of a pocket')
   ok(STORAGE_KEY.startsWith('gdg.'), 'the storage key is namespaced to this app')
+}
+
+
+// ─── Stage 6: a refused send signs back in ─────────────────────
+
+section('A refused send signs the phone back in and tries again at once')
+{
+  let refuse = true
+  const sent: Batch[] = []
+  const asked: string[][] = []
+  let t = 1_000_000
+  const timers = clockwork()
+  let online = false
+  const box = createOutbox({
+    send: async b => { sent.push(b); if (refuse) throw new Refused('refused') },
+    recover: async trips => { asked.push(trips); refuse = false; return true },
+    now: () => t, isOnline: () => online, ...timers,
+  })
+  box.save([row(1)], 'ABC123')
+  box.save([row(2, 5, { player_id: 'p2' })], 'XYZ999')
+  online = true
+  await box.flush(); await settle()
+  eq(asked.length, 1, 'one recovery, not one per hole')
+  eq(asked[0].sort(), ['ABC123', 'XYZ999'], '  …entering every event the waiting holes belong to')
+  eq(box.pending(), 0, '  …and the retry straight after sends them')
+  box.stop()
+}
+
+section('A server that keeps refusing falls back to the backoff, and the holes wait')
+{
+  let t = 1_000_000
+  let recovered = 0
+  const timers = clockwork()
+  const box = createOutbox({
+    send: async () => { throw new Refused('refused') },
+    recover: async () => { recovered++; return true },
+    now: () => t, ...timers,
+  })
+  box.save([row(1)], 'ABC123')
+  await settle(); await settle()
+  eq(recovered, 1, 'one recovery')
+  eq(box.pending(), 1, '  …the hole still on the phone')
+  ok(timers.waiting() > 0, '  …and a retry booked rather than a loop')
+  timers.fire(); await settle()
+  eq(recovered, 1, 'no second recovery inside the minute')
+  t += RECOVER_GAP_MS
+  timers.fire(); await settle()
+  eq(recovered, 2, 'another once the minute is up')
+  eq(box.pending(), 1, 'never dropped for being refused')
+  box.stop()
+}
+
+section('A lost radio is not a refusal: no sign-in is disturbed')
+{
+  let recovered = 0
+  const box = createOutbox({ send: radio(false).send, recover: async () => { recovered++; return true }, ...clockwork() })
+  box.save([row(1)], 'ABC123')
+  await settle()
+  eq(recovered, 0, 'a network failure just waits')
+  box.stop()
+}
+
+section('The event is stamped when the hole is queued, and survives a reload')
+{
+  const store = memoryStore()
+  const box = createOutbox({ send: radio(false).send, storage: store, ...clockwork() })
+  box.save([row(3)], 'ABC123')
+  await settle()
+  box.stop()
+  eq(parseQueue(store.raw())[0]?.trip, 'ABC123', 'the code rides with the hole')
+  eq(parseQueue(JSON.stringify([{ kind: 'save', key: 'k', seq: 1, at: 1, row: row(1) }]))[0]?.trip, undefined,
+    'a hole queued before stage 6 still reads, with no event')
+}
+
+// ─── Stage 7: the match play card ──────────────────────────────
+
+section('A match card box waits on the phone like a hole does')
+{
+  const net = radio(false)
+  const store = memoryStore()
+  const timers = clockwork()
+  const box = createOutbox({ send: net.send, storage: store, ...timers })
+  const cell = { table: 'match_scores' as const, match_id: 'm1', trip_id: 't1', player_id: 'p1', hole_number: 4, gross: 5 }
+  box.match(cell, false, 'ABC123')
+  box.match({ ...cell, gross: 4 }, false, 'ABC123')
+  box.match({ ...cell, player_id: 'p2', gross: null }, false, 'ABC123')
+  await settle()
+  eq(box.pending(), 2, 'the same box twice is one entry; an NR is a box of its own')
+  eq(parseQueue(store.raw()).filter(e => e.kind === 'match').length, 2, '  …and both survive a reload')
+  eq(matchKeyOf(cell), 'm:match_scores:m1:p1:4', 'a box is keyed by table, match, player and hole')
+  box.save([row(1)], 'ABC123')
+  await settle()
+  eq(box.pending(e => e.kind === 'match'), 2, 'counted apart from the stroke card\'s holes')
+  box.discardRound('r1')
+  eq(box.pending(), 2, 'committing a round leaves the match card alone')
+  net.state.up = true
+  timers.fire(); await settle(); await settle()
+  const last = net.sent[net.sent.length - 1]
+  eq(last.match.map(m => m.cell.gross), [4, null], 'the newest answer per box is what is sent')
+  eq(box.pending(), 0, '  …and the queue empties')
+  box.match(cell, true, 'ABC123')
+  box.discardMatch('m1')
+  eq(box.pending(), 0, 'voiding the card takes its boxes with it')
+  box.stop()
+}
+
+section('An unreadable match box is dropped, never guessed at')
+{
+  const good = { kind: 'match', key: 'k', seq: 1, at: 1, clear: false, cell: { table: 'match_scores', match_id: 'm', trip_id: 't', player_id: 'p', hole_number: 1, gross: 4 } }
+  eq(parseQueue(JSON.stringify([good])).length, 1, 'a whole box reads')
+  eq(parseQueue(JSON.stringify([{ ...good, cell: { ...good.cell, table: 'scores' } }])).length, 0, 'another table is refused')
+  eq(parseQueue(JSON.stringify([{ ...good, cell: { ...good.cell, gross: '4' } }])).length, 0, 'a gross that is not a number or NR is refused')
+  eq(parseQueue(JSON.stringify([{ ...good, clear: undefined }])).length, 0, 'a box that does not say whether it clears is refused')
 }
 
 // ─── Report ────────────────────────────────────────────────────

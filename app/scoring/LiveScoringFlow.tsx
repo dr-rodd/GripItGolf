@@ -516,7 +516,7 @@ export default function LiveScoringFlow({
   // the card can say so rather than leaving somebody to guess.
   const outbox = scoreOutbox()
   const [unsent, setUnsent] = useState(0)
-  useEffect(() => outbox.subscribe(setUnsent), [outbox])
+  useEffect(() => outbox.subscribe(setUnsent, e => e.kind !== 'match'), [outbox])
 
   // Swipe gesture tracking
   const touchStartX = useRef<number | null>(null)
@@ -917,8 +917,8 @@ export default function LiveScoringFlow({
     // is. A hole cleared here is a `clear`, not an absent `save`: the outbox
     // has to know the difference, or the row would sit on the server for ever
     // while the card in the hand shows the hole as blank.
-    outbox.save(upsertRows as ScoreRow[])
-    outbox.clear(deleteHoleNums.map(hole_number => ({ player_id: playerId, round_id: roundId, hole_number })))
+    outbox.save(upsertRows as ScoreRow[], tripCode)
+    outbox.clear(deleteHoleNums.map(hole_number => ({ player_id: playerId, round_id: roundId, hole_number })), tripCode)
 
     setScores(prev => {
       const next = { ...prev }
@@ -944,7 +944,10 @@ export default function LiveScoringFlow({
       //    mechanism exists to protect. The commit is the one place that is
       //    allowed to wait for the network, because it is a deliberate act
       //    with a button and a spinner rather than a tap between shots.
-      if (await outbox.flush() > 0) {
+      // Only this round's holes hold the commit back: a match card's box
+      // waiting on the same phone is not this card's business.
+      await outbox.flush()
+      if (outbox.pending(e => e.kind !== 'match' && (e.kind === 'save' ? e.row.round_id : e.target.round_id) === roundId) > 0) {
         throw new Error(
           "Some holes have not reached the server yet. Move somewhere with signal " +
           "and press Submit again — the scores are safe on this phone until then."
@@ -1490,7 +1493,7 @@ export default function LiveScoringFlow({
       // here was a fire-and-forget upsert with a `TODO(error-handling)` on it
       // — in patchy service the request failed, the card advanced as though it
       // had saved, and the hole was gone. See lib/scoreOutbox.ts.
-      if (rows.length > 0) outbox.save(rows as ScoreRow[])
+      if (rows.length > 0) outbox.save(rows as ScoreRow[], tripCode)
 
       const updated: Record<string, HoleScore> = {}
       for (const { player, playingHcp } of playerSetups) {

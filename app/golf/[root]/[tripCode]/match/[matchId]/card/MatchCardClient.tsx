@@ -1,7 +1,7 @@
 'use client'
 
 import { useUnlocked } from '@/app/components/useUnlocked'
-import { useCallback, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
@@ -13,6 +13,8 @@ import {
 } from '@/lib/matchCard'
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
+import { onMatchRejected, scoreOutbox } from '@/app/scoring/outbox'
+import type { Entry } from '@/lib/scoreOutbox'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
@@ -32,10 +34,13 @@ import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
  * to any number, and two halve the hole. Previous and next move between
  * holes. lib/matchCard.ts decides who won each hole and when it is over.
  *
- * Every tap is saved as it is made (`match_scores`, `match_concessions`,
- * migration 058), one write at a time per box so a fast + + + lands in
- * order. The card re-reads every fifteen seconds while it is on screen,
- * so the other side's phone shows up.
+ * Every tap is kept on the phone first and sent from there (`match_scores`,
+ * migration 058) through the app's one score outbox (lib/scoreOutbox.ts —
+ * stage 7, Ross 11 Nov 2026: players scoring may have bad signal), so a box
+ * entered in a dead spot is never lost and reaches the server when signal
+ * returns; the newest answer per box wins. The card re-reads every fifteen
+ * seconds while it is on screen, so the other side's phone shows up, with
+ * this phone's unsent boxes laid over what the server holds.
  *
  * **Once the match is settled a sheet asks whether the last score is right**
  * (MatchFinish.tsx, Ross 26 Oct 2026), and its Finalise puts the result into
@@ -127,6 +132,23 @@ export default function MatchCardClient({
   const decided = stored.winner !== null
   const canEdit = mayScoreCard({ decided, organiser, inMatch, anyoneScores })
 
+  // ── This phone's unsent boxes (the outbox) ──
+  const scoreTable = session ? 'session_match_scores' : 'match_scores'
+  const outbox = scoreOutbox()
+  const mine = useCallback((e: Entry) => e.kind === 'match' && e.cell.match_id === matchId && e.cell.table === scoreTable, [matchId, scoreTable])
+  const [unsent, setUnsent] = useState(0)
+  useEffect(() => outbox.subscribe(setUnsent, mine), [outbox, mine])
+  useEffect(() => onMatchRejected(r => {
+    if (r.cell.match_id !== matchId) return
+    // Before migration 059 the card's tables stop at the 18th; before 062
+    // a score row must carry a number. The box is taken off the queue.
+    setError(r.code === '23502'
+      ? 'Saving an NR needs a database update — enter a score for now.'
+      : r.cell.hole_number > REGULATION_HOLES
+        ? 'Extra holes need a database update — the organiser can record the result on the bracket for now.'
+        : 'That score could not be saved — enter it again.')
+  }), [matchId])
+
   // ── Reading the card ──
   const dirty = useRef(0)
   const load = useCallback(async () => {
@@ -156,6 +178,13 @@ export default function MatchCardClient({
     for (const r of (s.data ?? []) as { player_id: string; hole_number: number; gross: number | null }[]) {
       (nextScores[r.player_id] ??= {})[r.hole_number] = r.gross
     }
+    // What this phone has entered and not yet sent wins over the server's
+    // older answer — or the next read would undo a tap made in a dead spot.
+    for (const e of outbox.entries()) {
+      if (e.kind !== 'match' || !mine(e)) continue
+      const row = (nextScores[e.cell.player_id] ??= {})
+      if (e.clear) delete row[e.cell.hole_number]; else row[e.cell.hole_number] = e.cell.gross
+    }
     const nextConceded: Conceded = {}
     for (const r of (c.data ?? []) as { hole_number: number; conceded_by: string }[]) {
       nextConceded[r.hole_number] = r.conceded_by === 'B' ? 'B' : 'A'
@@ -165,7 +194,7 @@ export default function MatchCardClient({
     if (!x.error && x.data) setPlan(parseExtraPlan((x.data as { extra_holes?: unknown }).extra_holes))
     setLoaded(true)
     setUnavailable(false)
-  }, [tripId, matchId, loaded, session])
+  }, [tripId, matchId, loaded, session, outbox, mine])
   usePoll(load, 15_000, true)
 
   // ── The card, worked out ──
@@ -231,14 +260,12 @@ export default function MatchCardClient({
       if (value === undefined) delete mine[n]; else mine[n] = value
       return { ...prev, [playerId]: mine }
     })
-    const table = session ? 'session_match_scores' : 'match_scores'
-    queue(`s:${playerId}:${n}`, n, () => value === undefined
-      ? supabase.from(table).delete().eq('trip_id', tripId).eq('match_id', matchId)
-          .eq('player_id', playerId).eq('hole_number', n)
-      : supabase.from(table).upsert({
-          match_id: matchId, trip_id: tripId, player_id: playerId, hole_number: n, gross: value,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'match_id,player_id,hole_number' }))
+    // Onto the phone first, never straight onto the network: the outbox
+    // sends it, retries through a dead spot, and signs back in if refused.
+    outbox.match({
+      table: scoreTable, match_id: matchId, trip_id: tripId, player_id: playerId,
+      hole_number: n, gross: value ?? null,
+    }, value === undefined, tripCode)
   }
 
   /** Which course hole this extra hole is played off — everybody's card follows. */
@@ -270,14 +297,23 @@ export default function MatchCardClient({
     setSaving(true)
     setError(null)
     try {
+      // Every box this phone holds reaches the server before the result
+      // does, or the stored card would be missing the hole that settled it.
+      await outbox.flush()
+      if (outbox.pending(mine) > 0) {
+        setError('Some scores are still on this phone. Move somewhere with signal and Finalise again — they are safe until then.')
+        return false
+      }
       if (session) {
         // Onto the session's own row, never a bracket.
         const res = sessionResult(state as Parameters<typeof sessionResult>[0])
         if (!res) return false
-        const { error: err } = await supabase.from('session_matches')
+        const { data: hit, error: err } = await supabase.from('session_matches')
           .update({ result: res.result, margin: res.margin, updated_at: new Date().toISOString() })
-          .eq('id', matchId).eq('trip_id', tripId)
+          .eq('id', matchId).eq('trip_id', tripId).select('id')
         if (err) throw err
+        // Row-level security says no as "0 rows", not an error (stage 7).
+        if ((hit ?? []).length === 0) throw new Error('refused')
         setStored({ winner: res.result === 'halved' ? 'halved' : winnerId, result: res.margin })
         router.refresh()
         return true
@@ -296,7 +332,7 @@ export default function MatchCardClient({
       writing.current = false
       setSaving(false)
     }
-  }, [state, winnerId, tripId, matchId, router, session])
+  }, [state, winnerId, tripId, matchId, router, session, outbox, mine])
 
   // ── The end of the match: confirm, finalise, then the card ──
   // Nothing interrupts while scores are going in (Ross, 26 Oct 2026: the
@@ -335,10 +371,12 @@ export default function MatchCardClient({
     try {
       if (session) {
         // A session match feeds no later match: it simply opens again.
-        const { error: err } = await supabase.from('session_matches')
+        const { data: hit, error: err } = await supabase.from('session_matches')
           .update({ result: null, margin: null, updated_at: new Date().toISOString() })
-          .eq('id', matchId).eq('trip_id', tripId)
+          .eq('id', matchId).eq('trip_id', tripId).select('id')
         if (err) throw err
+        // Row-level security says no as "0 rows", not an error (stage 7).
+        if ((hit ?? []).length === 0) throw new Error('refused')
         setStored({ winner: null, result: null })
         setAsking(false)
         router.refresh()
@@ -651,6 +689,12 @@ export default function MatchCardClient({
       )}
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
+      {unsent > 0 && (
+        <p className="t-cap text-ink/65 text-center leading-snug flex items-center justify-center gap-2" role="status">
+          <span className="w-1.5 h-1.5 rounded-full bg-rust dot-live flex-shrink-0" aria-hidden="true" />
+          {unsent === 1 ? '1 score' : `${unsent} scores`} saved on phone, will send when signal available.
+        </p>
+      )}
 
       {awaitingFinal && !finaliseHere && sheetPhase === null && (
         <button type="button" onClick={() => setAsking(true)} className={buttonClass('primary')}>

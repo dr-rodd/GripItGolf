@@ -165,6 +165,17 @@ section('No PIN hash reaches a browser (stage 4, D64)')
   ok(serverPages.length > 50 && leaks.length === 0, 'no server page hands a hash column to a component, only isLocked(…)')
 }
 
+section('The lead player\'s email never reaches a browser (stage 5, D62)')
+{
+  const files = [...walk(path.join(root, 'app')), ...walk(path.join(root, 'lib'))]
+  const rel = (f: string) => path.relative(root, f)
+  const reading = files
+    .filter(f => { const s = fs.readFileSync(f, 'utf8'); return isClientModule(s) && /lib\/leadEmail|trip_private|select\([^)]*lead_email/.test(s) })
+    .map(rel)
+  for (const f of reading) console.log(`    ${f}`)
+  ok(reading.length === 0, 'no client file reads the address or imports lib/leadEmail.ts')
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) {
   console.log('\nFailures:')

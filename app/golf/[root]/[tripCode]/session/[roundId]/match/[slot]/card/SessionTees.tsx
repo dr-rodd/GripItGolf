@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
+import { scoreOutbox } from '@/app/scoring/outbox'
 import { cardHasScores, voidMatchCard } from '@/lib/matchCardVoid'
 import { useUnlocked } from '@/app/components/useUnlocked'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
@@ -66,6 +67,8 @@ export default function SessionTees({
     setVoiding(false)
     setConfirmVoid(false)
     if (!res.ok) { setError(res.reason); return }
+    // Anything this phone still held for the card goes with it, or a late send would put it back.
+    scoreOutbox().discardMatch(matchId)
     router.refresh()
   }
   return (
