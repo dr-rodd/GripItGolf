@@ -2783,6 +2783,24 @@ section('The scorecard check wears the parts kit (D68)')
     '  …a t-card title and the screen\'s one emerald action, 56px')
 }
 
+section('The card start sheet wears the parts kit (D72)')
+{
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  const setup = flow.slice(flow.indexOf('if (step === "setup") {'), flow.indexOf('// ─── Hole by hole'))
+  ok(setup.includes('Who&apos;s on this card?') && setup.includes('t-h1'), 'the sheet asks its question as a t-h1')
+  ok(!setup.includes('Select Players') && !setup.includes('Select a tee to continue'), '  …the old label and the red per-player lines are gone')
+  ok(setup.includes('cardClass(isSelected ? "chosen" : "raised")'), 'each player is one rounded card, chosen in the wash')
+  ok(setup.includes('optionClass(selectedTeeId === tee.id, "compact")'), '  …its tees are compact tiles inside it, never pills')
+  ok(setup.includes('grid-rows-[0fr]') && setup.includes('duration-[160ms] ease-out'), '  …opening in 160ms')
+  ok(setup.includes('hide-with-keyboard sticky') && setup.includes('buttonClass("primary")') && setup.includes('Start round'),
+    'Start round is the kit\'s primary button in a sticky bar that steps aside for a keyboard')
+  ok(!/rounded-xl|border-accent\/|bg-accent\/\d/.test(setup), 'no hand-made boxes or washes left on the sheet')
+  const compact = optionClass(true, 'compact')
+  ok(compact.includes('rounded-tile') && compact.includes('min-h-11') && compact.includes('bg-accent-deep') && !compact.includes('rounded-full'),
+    'the compact tile is square-cornered at chip height, deep emerald when chosen')
+  ok(chipClass(false).includes('rounded-full'), '  …and a chip stays fully round')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

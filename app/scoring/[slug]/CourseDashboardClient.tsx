@@ -1038,6 +1038,7 @@ export default function CourseDashboardClient({
           trackStats={trackStats}
           allowScoreEdits={allowScoreEdits}
           event={event}
+          bottomInset={bottomInset}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

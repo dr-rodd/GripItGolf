@@ -20,12 +20,14 @@ import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
 import CardCheck from "./CardCheck"
 import ScorecardGate from "@/app/components/ScorecardGate"
+import { buttonClass, cardClass, optionClass } from "@/app/components/ui"
+import { IconCheck } from "@/app/components/icons"
 import { cardBlocker, ratedTeeCount } from "@/lib/courseCard"
 import DotBloom from "@/app/components/DotBloom"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
   SC_RULE, SC_BAND, SC_BAND_TOTAL, SC_HEAD, SC_HEAD_TEXT, SC_LABEL, SC_STICKY,
-  scRow, teeDot, TEE_ACTIVE,
+  scRow, teeDot,
 } from "@/app/components/scorecardStyle"
 
 // ─── Types ────────────────────────────────────────────────
@@ -190,6 +192,11 @@ interface Props {
   allowScoreEdits?: boolean
   /** An event: the scorecard gate's unrated line asks the organiser. */
   event?: boolean
+  /**
+   * The room the tab bar takes at the foot, where there is one — the start
+   * sheet's sticky Start round rests just above it.
+   */
+  bottomInset?: string
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -468,7 +475,7 @@ export default function LiveScoringFlow({
   trackStats = false,
   tripCode,
   onCourseDataUpdated,
-  allowScoreEdits = true, event = false,
+  allowScoreEdits = true, event = false, bottomInset = "0",
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -1236,8 +1243,24 @@ export default function LiveScoringFlow({
       setPlayerTeeIds(prev => ({ ...prev, [pid]: tid }))
     }
 
+    // What Start round is still waiting for, said once under it (D72) —
+    // the red per-player lines it replaces said the same thing four times.
+    const teeMissing = selectedPlayerIds.some(id => !playerTeeIds[id])
+    const startLine = selectedPlayerIds.length === 0
+      ? "Pick who's playing."
+      : teeMissing ? "Pick a tee for each player."
+      : pendingReason
+    const available = players.filter(p => !lockedPlayerIds.includes(p.id))
+    const full = selectedPlayerIds.length >= 4
+
     return (
-      <div className="max-w-lg mx-auto w-full px-4 py-6 flex flex-col gap-5">
+      <>
+      <div className="max-w-lg mx-auto w-full px-4 pt-7 pb-6 flex flex-col gap-5">
+        <div>
+          <h1 className="t-h1 text-ink text-balance">Who&apos;s on this card?</h1>
+          <p className="text-[17px] leading-snug text-ink/65 mt-2">Up to four players, each on their own tees.</p>
+        </div>
+
         {/* The card check lives on this screen because this is the last
             moment before the numbers matter: a wrong index caught here is a
             thirty-second fix, and caught on the 14th green it is last trip's
@@ -1270,11 +1293,9 @@ export default function LiveScoringFlow({
         })()}
 
         <div className="flex flex-col gap-3">
-          <label className="text-ink/65 text-sm ">
-            Select Players (1–4)
-          </label>
+          <p className="t-label text-ink/80">Players · {selectedPlayerIds.length} of 4</p>
 
-          {players.filter(p => !lockedPlayerIds.includes(p.id)).map(player => {
+          {available.map(player => {
             const isSelected = selectedPlayerIds.includes(player.id)
             const playerCourseTees = teesForPlayer(courseTees, player.gender)
             const selectedTeeId = playerTeeIds[player.id] ?? ""
@@ -1283,128 +1304,128 @@ export default function LiveScoringFlow({
             // the same function. These two screens used to work it out two
             // different ways and disagree by several shots.
             // A pending player has no index, so there is no course handicap
-            // to show — the row says `HCP pending` and Start Round is inert.
-            const hcpIndex = isHandicapPending(player.handicap) ? null : player.handicap as number
+            // to show — the card says so and Start round waits.
+            const pending = isHandicapPending(player.handicap)
+            const hcpIndex = pending ? null : player.handicap as number
             const exactHcp = selectedTee && hcpIndex !== null
               ? exactCourseHandicap(hcpIndex, selectedTee)
               : null
             const playingHcp = selectedTee && hcpIndex !== null
               ? courseHandicap(hcpIndex, selectedTee) : null
+            const inert = !isSelected && full
 
+            // One card a player (D72): the tick, the name and handicap,
+            // and — once chosen — its tees inside the same card, opening
+            // over 160ms (at once under Reduce Motion).
             return (
-              <div key={player.id}>
-                {/* Player toggle */}
+              <div key={player.id} className={`${cardClass(isSelected ? "chosen" : "raised")} ${inert ? "opacity-60" : ""}`}>
                 <button
+                  type="button"
                   onClick={() => togglePlayer(player.id)}
-                  className={`w-full flex items-center justify-between px-4 py-3 border text-base transition-colors
-                    ${isSelected
-                      ? "border-accent text-accent-deep bg-accent/10"
-                      : "border-line text-ink/80 hover:border-line-strong"}`}
+                  disabled={inert}
+                  aria-pressed={isSelected}
+                  className="press w-full min-h-14 px-4 py-3 flex items-center gap-3 text-left rounded-card disabled:cursor-not-allowed"
                 >
-                  <div className="flex items-center gap-2">
-                    {dotColour(player) && (
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: dotColour(player)! }} />
-                    )}
-                    <span>{player.name}</span>
-                  </div>
-                  <span className="text-sm opacity-50">
-                    {isHandicapPending(player.handicap)
-                      ? HANDICAP_PENDING_LABEL
-                      : `HCP ${formatHandicap(player.handicap as number)}`}
+                  <span
+                    aria-hidden="true"
+                    className={`w-[22px] h-[22px] rounded-full flex items-center justify-center flex-shrink-0 ${
+                      isSelected ? "bg-accent-deep text-white" : "border-[1.5px] border-line-strong"}`}
+                  >
+                    {isSelected && <IconCheck size={14} />}
+                  </span>
+                  {dotColour(player) && (
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} aria-hidden="true" />
+                  )}
+                  <span className="flex-1 min-w-0 truncate text-[17px] font-medium text-ink">{player.name}</span>
+                  <span className="t-cap text-ink/65 flex-shrink-0 tabular-nums">
+                    {pending ? HANDICAP_PENDING_LABEL : `HCP ${formatHandicap(player.handicap as number)}`}
                   </span>
                 </button>
 
-                {/* Tee selector — only for selected players */}
-                {isSelected && (
-                  <div className="bg-surface border-x border-b border-accent/20 px-4 py-3">
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {playerCourseTees.length === 0 ? (
-                        <span className="text-ink/50 text-sm">No tees for this course</span>
-                      ) : (
-                        playerCourseTees.map(tee => {
-                          const style = { dot: teeDot(tee.name), active: TEE_ACTIVE[tee.name] ?? "border-line-strong text-ink/80" }
-                          const isActive = selectedTeeId === tee.id
-                          return (
-                            <button
-                              key={tee.id}
-                              onClick={() => setTeeForPlayer(player.id, tee.id)}
-                              className={`flex items-center gap-1.5 px-3 py-1.5 border text-sm transition-colors
-                                ${isActive ? style.active + " bg-tint" : "border-line text-ink/65 hover:border-line-strong"}`}
-                            >
-                              <span className={`w-2 h-2 rounded-full ${style.dot}`} />
-                              {tee.name}
-                            </button>
-                          )
-                        })
-                      )}
-                    </div>
-                    {/* The playing handicap, and what it becomes on every
-                        allowance the trip's boards are played off. There is
-                        room to the right of one number for the two or three
-                        that actually matter, and knowing them before the
-                        round starts is worth more than finding out at the
-                        prize-giving. */}
-                    {playingHcp !== null && exactHcp !== null && (
-                      <p className="text-ink/65 text-sm flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                        <span>
-                          Playing HC: <span className="text-accent-deep font-semibold">{formatHandicap(playingHcp)}</span>
-                        </span>
-                        {allowances
-                          .filter(pct => pct !== FULL_ALLOWANCE)
-                          .map(pct => (
-                            <span key={pct} className="text-ink/50 tabular-nums">
-                              {pct}%: <span className="text-ink/80 font-semibold">
-                                {formatHandicap(allowedHandicap(exactHcp, pct))}
-                              </span>
-                            </span>
-                          ))}
-                      </p>
-                    )}
-                    {/* Said whether or not there is anything to pick. With no
-                        tees at all the Start button is disabled either way, so
-                        suppressing the reason left a dead control and no
-                        explanation for it. */}
-                    {!selectedTeeId && (
-                      <p className="text-rust-deep/60 text-sm">
-                        {playerCourseTees.length > 0
-                          ? "Select a tee to continue"
-                          : "This course has no tees yet — add one in Trip Setup to start the round"}
-                      </p>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-[160ms] ease-out ${isSelected ? "grid-rows-[1fr]" : "grid-rows-[0fr]"}`}
+                  aria-hidden={!isSelected}
+                >
+                  <div className="overflow-hidden min-h-0">
+                    {isSelected && (
+                      <div className="px-4 pb-4 flex flex-col gap-3">
+                        {playerCourseTees.length === 0 ? (
+                          <p className="t-cap text-ink/65">No tees for this course yet.</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-2">
+                            {playerCourseTees.map(tee => (
+                              <button
+                                key={tee.id}
+                                type="button"
+                                onClick={() => setTeeForPlayer(player.id, tee.id)}
+                                aria-pressed={selectedTeeId === tee.id}
+                                className={optionClass(selectedTeeId === tee.id, "compact")}
+                              >
+                                <span className={`w-2 h-2 rounded-full flex-shrink-0 ${teeDot(tee.name)}`} aria-hidden="true" />
+                                {tee.name}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {/* The playing handicap, and what it becomes on every
+                            allowance the trip's boards are played off —
+                            knowing them before the round starts is worth more
+                            than finding out at the prize-giving. */}
+                        {pending ? (
+                          <p className="t-cap text-ink/65">
+                            {event ? "No handicap yet. The organiser can add one." : "No handicap yet. Add it in Trip Setup."}
+                          </p>
+                        ) : playingHcp !== null && exactHcp !== null ? (
+                          <p className="t-cap text-ink/65 tabular-nums">
+                            {[`Playing handicap ${formatHandicap(playingHcp)}`,
+                              ...allowances.filter(pct => pct !== FULL_ALLOWANCE)
+                                .map(pct => `${pct}%: ${formatHandicap(allowedHandicap(exactHcp, pct))}`),
+                            ].join(" · ")}
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             )
           })}
+
+          <button type="button" onClick={() => setCloseConfirm(true)} className={`${buttonClass("quiet", false)} self-center`}>
+            Close live round
+          </button>
         </div>
-
-        <button
-          onClick={async () => {
-            setScores({}); setHoleIdx(0)
-            await lockPlayers()
-            setStep("holes")
-            window.scrollTo({ top: 0, behavior: "instant" })
-          }}
-          disabled={!canStart}
-          className={`w-full py-4 text-base transition-colors
-            ${canStart ? "bg-accent-deep text-white hover:bg-accent" : "bg-tint text-ink/50 cursor-not-allowed"}`}
-        >
-          Start Round →
-        </button>
-
-        {/* A greyed button with no reason is the worst of both — the group
-            is standing on the tee working out what it wants. This names the
-            player and where to fix it. */}
-        {pendingReason && (
-          <p className="text-ink/65 text-sm text-center leading-snug -mt-2">
-            {pendingReason}
-          </p>
-        )}
-
-        <button onClick={() => setCloseConfirm(true)} className="text-center text-ink/50 text-sm hover:text-rust transition-colors">
-          Close Live Round
-        </button>
       </div>
+
+      {/* Start round, pinned at the foot like a wizard's Continue (D72) —
+          above the tab bar where there is one, and out of the way while a
+          keyboard is up. */}
+      <div
+        className="hide-with-keyboard sticky z-20 paper border-t border-line"
+        style={{ bottom: bottomInset }}
+      >
+        <div className={`max-w-lg mx-auto px-4 pt-3 ${bottomInset !== "0" ? "pb-3" : "pb-[calc(28px+env(safe-area-inset-bottom))]"}`}>
+          <button
+            type="button"
+            onClick={async () => {
+              setScores({}); setHoleIdx(0)
+              await lockPlayers()
+              setStep("holes")
+              window.scrollTo({ top: 0, behavior: "instant" })
+            }}
+            disabled={!canStart}
+            className={buttonClass("primary")}
+          >
+            Start round
+          </button>
+          {/* A greyed button with no reason is the worst of both — the
+              group is standing on the tee working out what it wants. */}
+          {!canStart && startLine && (
+            <p className="t-cap text-ink/65 text-center leading-snug mt-2">{startLine}</p>
+          )}
+        </div>
+      </div>
+      </>
     )
   }
 

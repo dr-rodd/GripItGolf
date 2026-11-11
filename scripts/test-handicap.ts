@@ -325,7 +325,8 @@ section('A pending player cannot be put on a scorecard')
   // be handed one even if the button were somehow pressed.
   const flow = readFileSync('app/scoring/LiveScoringFlow.tsx', 'utf-8')
   ok(/pendingReason === null/.test(flow), 'Start Round waits on every handicap')
-  ok(/\{pendingReason && \(/.test(flow), '  …and says which player it is waiting on')
+  ok(/: teeMissing \? "Pick a tee for each player\."\s*: pendingReason/.test(flow) && /\{!canStart && startLine && \(/.test(flow),
+    '  …and says which player it is waiting on, under Start round (D72)')
   const setups = flow.slice(flow.indexOf('const playerSetups'), flow.indexOf('const canStart'))
   ok(setups.includes('isHandicapPending'),
     'a pending player never becomes a player setup')

@@ -243,3 +243,7 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D69 | Choosing a course is never refused, starting a card is. "No scorecard"/"No ratings" is a plain line where it blocks, never a pill | Built |
 | D70 | The server refuses a live card on a blocked course (migration 073); match card writes are closed with RLS stages 7–8 | Built (073 to paste) |
 | D71 | Whoever may start a card may photograph its scorecard, trips and events alike | Built |
+
+| # | Decision | Status |
+|---|---|---|
+| D72 | The card start sheet moves onto the parts kit: rounded player cards with tees inside, 12px tee tiles (not pills), a sticky "Start round" | Built |

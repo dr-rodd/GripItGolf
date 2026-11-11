@@ -289,16 +289,28 @@ export const chipClass = (selected: boolean, compact = false) =>
  * Three shapes, so a caller never adds a second `display` or padding on top
  * (two of either resolve in whatever order the stylesheet happens to hold):
  * a full-width card, a full-width row laid out across (a name with its
- * figures), or a small tile for a strip of them — a trip's days.
+ * figures), or a small tile for a strip of them — a trip's days. A fourth,
+ * `compact`, is that tile at a chip's height, 44px: the tees inside a
+ * player's card on the card start sheet.
  */
-export const optionClass = (selected: boolean, shape: 'card' | 'row' | 'tile' = 'card') =>
-  (shape === 'tile'
-    ? 'flex-shrink-0 rounded-tile px-3 py-2'
-    : `${shape === 'row' ? 'flex items-center gap-3' : 'block'} w-full rounded-card px-4 py-3.5`) +
-  ' text-left press border ' +
-  (selected
-    ? 'bg-accent-tint border-accent-deep'
-    : 'bg-surface border-line shadow-raised hover:border-line-strong')
+export const optionClass = (selected: boolean, shape: 'card' | 'row' | 'tile' | 'compact' = 'card') =>
+  shape === 'compact'
+    // A tile at a chip's height — the tees on the card start sheet (D72).
+    // Square-cornered like the card around it, never a pill: a chip stays
+    // fully round elsewhere. Chosen is the chip's deep emerald with white
+    // words, because it sits inside a card already wearing the wash.
+    ? 'inline-flex items-center gap-2 min-h-11 rounded-tile px-[14px] text-[15px] font-semibold leading-tight press border ' +
+      'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ' +
+      (selected
+        ? 'bg-accent-deep border-accent-deep text-white'
+        : 'bg-surface border-line text-ink shadow-raised hover:border-line-strong')
+    : (shape === 'tile'
+      ? 'flex-shrink-0 rounded-tile px-3 py-2'
+      : `${shape === 'row' ? 'flex items-center gap-3' : 'block'} w-full rounded-card px-4 py-3.5`) +
+    ' text-left press border ' +
+    (selected
+      ? 'bg-accent-tint border-accent-deep'
+      : 'bg-surface border-line shadow-raised hover:border-line-strong')
 
 /**
  * A row of chips answering one question — a form's either/or, a setting's

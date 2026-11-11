@@ -68,3 +68,18 @@ off. It sits between the handicap index and the board.
 per league or follows the player into other events (almost certainly per
 league); whether Golf Ireland cards in a mixed league are cut too, given
 their Stableford is Golf Ireland's official figure and cannot be re-scored.
+
+## Checking courses and scorecards that players add
+
+Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
+
+**The idea.** Anyone can add a course from a course picker, and anyone who may start a card can photograph its scorecard (D68–D71). Those courses and cards are shared by every event on the platform, so one bad card is bad for everyone. Every course and scorecard a player adds should be recorded internally against whoever added it, and a review system should check them.
+
+**What already exists.** Courses, holes and tees are written only by the server (migration 040). `card_verified` records that a photo confirmed a card. `/admin/courses` lists every course by card state and edits names, counties and tees. Nothing records **who** added a course or a photo, or from which event.
+
+**What it needs.**
+- **An audit record.** Each added course and each applied card check, with who (the phone's anonymous user id from row-level security stage 1), which event, when, and what changed (the photo's diff). It must be server only, with RLS on and no phone grant.
+- **A review queue in `/admin`.** New courses and photo corrections are waiting to be looked at. Each can be accepted, corrected, or rolled back to the card before the change.
+- **Rules worth checking automatically.** A new course whose name is very close to an existing one. A photo correction that moves pars rather than indexes. Several corrections to one course from different events.
+
+**Open questions.** Whether a correction should go live at once, as it does now, or wait for review on a course other events are already using. How long the record is kept, and what the privacy notice says about it. Whether an organiser can see who changed a course their event plays.
