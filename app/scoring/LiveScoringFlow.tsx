@@ -13,6 +13,8 @@ import {
 import { voidScorecard as voidScorecardData } from "@/lib/scorecardVoid"
 import { type ScoreRow } from "@/lib/scoreOutbox"
 import { scoreOutbox, refusal } from "./outbox"
+import { unsentLine } from "@/lib/scoreOutbox"
+import { IconSignalWeak } from "@/app/components/icons"
 import { recoverEvents } from "@/lib/entryClient"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
@@ -288,10 +290,11 @@ function yardageForTee(hole: Hole, teeName: string): number | null {
  *
  * The one thing a scorer on a bad connection has to be told, and the tone is
  * the whole design: **nothing is wrong and nothing needs doing.** The score is
- * safe, entry carries on exactly as before, and the phone will send it when
- * there is signal to send it with. A warning would be a lie — there is no
- * action to take — and silence would be worse, because the one screen that
- * must not surprise anybody is the one that says Submit.
+ * safe, entry carries on exactly as before, and the phone sends it itself the
+ * moment there is signal. So it reads as status, not as a fault (Ross, 11 Nov
+ * 2026): "Weak signal · 3 scores pending submission", a quiet signal mark in
+ * the ink colours, no red, no pulse. The words are `unsentLine` in
+ * lib/scoreOutbox.ts, shared with the match card.
  *
  * Rendered nowhere when the queue is empty, which on a normal round is always.
  */
@@ -299,18 +302,13 @@ function UnsentNote({ count, inline = false }: { count: number; inline?: boolean
   if (count <= 0) return null
   return (
     <div
-      className={`flex items-start gap-2 rounded-xl border border-line bg-surface px-3 py-2 ${
+      role="status"
+      className={`flex items-center gap-2.5 rounded-xl border border-line bg-tint px-3 py-2 text-ink/65 ${
         inline ? '' : 'mx-4 mt-3'
       }`}
     >
-      <span
-        className="w-1.5 h-1.5 rounded-full bg-rust flex-shrink-0 mt-1.5 dot-live"
-        aria-hidden="true"
-      />
-      <p className="t-cap text-ink/65 leading-snug">
-        {count === 1 ? '1 hole' : `${count} holes`} saved on phone, leaderboard will sync
-        when signal available.
-      </p>
+      <IconSignalWeak />
+      <p className="t-cap text-ink/65 leading-snug">{unsentLine(count)}</p>
     </div>
   )
 }

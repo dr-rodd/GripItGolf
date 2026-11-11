@@ -168,7 +168,24 @@ export const MAX_AGE_MS = 24 * 60 * 60 * 1000
  * immediately, so the long waits only ever apply to a connection that is
  * present and failing rather than absent.
  */
-export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 15_000, 30_000]
+export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 10_000]
+
+/**
+ * A send that has not answered by then is a failure, not a wait. On a radio
+ * that has just come back, a request opened on the dead one can hang for a
+ * minute; without a limit the held holes sat behind it while the signal was
+ * fine (Ross, 11 Nov 2026: "takes a while after being turned back on").
+ */
+export const SEND_TIMEOUT_MS = 6_000
+
+/**
+ * What a phone with scores waiting says, the one copy (Ross, 11 Nov 2026):
+ * status, not a fault — "Weak signal · 3 scores pending submission". Nothing
+ * is wrong and nothing needs doing, so no "failed", "error" or "could not".
+ */
+export function unsentLine(count: number): string {
+  return `Weak signal · ${count === 1 ? '1 score' : `${count} scores`} pending submission`
+}
 
 export function keyOf(playerId: string, roundId: string, holeNumber: number): string {
   return `${playerId}:${roundId}:${holeNumber}`
@@ -289,6 +306,8 @@ export interface Outbox {
   entries(): Entry[]
   /** Try now. Resolves to the number still waiting afterwards — 0 means clean. */
   flush(): Promise<number>
+  /** The signal is back (or the phone woke): forget the backoff and send at once. */
+  nudge(): Promise<number>
   /** Forget everything queued for this round, after it has been committed or voided. */
   discardRound(roundId: string, playerIds?: string[]): void
   /** Forget a match card's queued boxes, after it has been voided. */
@@ -379,7 +398,18 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     const sent = queue.slice()
     let retryNow = false
     try {
-      await deps.send(batchOf(sent))
+      // The limit uses the real clock, not the injected retry timers: it is
+      // about the radio, and a test that walks the backoff by hand must not
+      // fire it.
+      let limit: ReturnType<typeof setTimeout> | undefined
+      try {
+        await Promise.race([
+          deps.send(batchOf(sent)),
+          new Promise<never>((_, reject) => { limit = setTimeout(() => reject(new Error('send timed out')), SEND_TIMEOUT_MS) }),
+        ])
+      } finally {
+        clearTimeout(limit)
+      }
       // Only what actually went, and only where it has not been answered
       // again since: a hole re-entered mid-flight keeps its newer value.
       const sentSeq = new Map(sent.map(e => [e.key, e.seq]))
@@ -431,6 +461,11 @@ export function createOutbox(deps: OutboxDeps): Outbox {
     },
     match(cell, clear, trip) {
       enqueue([{ kind: 'match', key: matchKeyOf(cell), seq: ++seq, at: now(), ...(trip ? { trip } : {}), cell, clear }])
+    },
+    nudge() {
+      attempt = 0
+      cancel()
+      return flush()
     },
     pending: count,
     entries: () => queue.slice(),

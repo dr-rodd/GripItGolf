@@ -407,3 +407,16 @@ export const IconCamera = (p: IconProps) => (
     <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
   </Svg>
 )
+
+// ─── Weak signal ───────────────────────────────────────────────
+// Bars of a phone's signal, the first lit and the rest faint: status, not a
+// fault, so it wears the ink colour and never red. Scores waiting to send.
+
+export const IconSignalWeak = (p: IconProps) => (
+  <Svg {...p} size={p.size ?? 16}>
+    <path d="M6 19v-3" />
+    <path d="M11 19v-6" opacity="0.3" />
+    <path d="M16 19v-10" opacity="0.3" />
+    <path d="M21 19v-14" opacity="0.3" />
+  </Svg>
+)

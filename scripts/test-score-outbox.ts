@@ -17,7 +17,7 @@
 import { readFileSync } from 'fs'
 import {
   createOutbox, mergeEntries, parseQueue, batchOf, keyOf, matchKeyOf, Refused,
-  MAX_AGE_MS, BACKOFF_MS, STORAGE_KEY, RECOVER_GAP_MS,
+  MAX_AGE_MS, BACKOFF_MS, SEND_TIMEOUT_MS, STORAGE_KEY, RECOVER_GAP_MS,
   type Batch, type Entry, type ScoreRow, type OutboxStorage,
 } from '../lib/scoreOutbox'
 
@@ -285,8 +285,34 @@ section('Retries back off rather than hammering a struggling radio')
   ok(BACKOFF_MS.every((ms, i) => i === 0 || ms >= BACKOFF_MS[i - 1]),
     'each wait is at least as long as the one before')
   ok(BACKOFF_MS[0] <= 2000, 'the first retry is quick')
-  ok(BACKOFF_MS[BACKOFF_MS.length - 1] <= 60_000,
-    'and the longest is under a minute, so coming back into signal is not a long wait')
+  ok(BACKOFF_MS[BACKOFF_MS.length - 1] <= 10_000,
+    'and the longest is ten seconds, so coming back into signal is not a long wait')
+}
+
+section('Signal coming back sends at once, whatever the backoff had reached')
+{
+  const net = radio(false)
+  const timers = clockwork()
+  let online = false
+  const box = createOutbox({ send: net.send, isOnline: () => online, ...timers })
+  box.save([row(1)])
+  await settle()
+  eq(box.pending(), 1, 'held while offline')
+  online = true; net.state.up = true
+  await box.nudge()
+  eq(box.pending(), 0, 'one nudge and it is sent, with no wait for the booked retry')
+  box.stop()
+}
+
+section('A send that never answers is a failure, not a wait')
+{
+  let calls = 0
+  const hang = createOutbox({ send: () => { calls++; return new Promise(() => {}) }, ...clockwork() })
+  hang.save([row(1)])
+  await settle()
+  eq(calls, 1, 'the hole is tried')
+  ok(SEND_TIMEOUT_MS <= 10_000, 'and a send is given up on within ten seconds, so a revived radio is not stuck behind a dead one')
+  hang.stop()
 }
 
 section('A newly entered hole tries immediately, however long the last wait was')

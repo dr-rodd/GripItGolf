@@ -14,13 +14,13 @@ import {
 import { DEFAULT_SIDE_COLOURS, type SideColour } from '@/lib/matchSides'
 import { usePoll } from '@/app/scoring/usePoll'
 import { onMatchRejected, scoreOutbox } from '@/app/scoring/outbox'
-import type { Entry } from '@/lib/scoreOutbox'
+import { unsentLine, type Entry } from '@/lib/scoreOutbox'
 import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
 import MatchStrip from './MatchStrip'
 import CardCheck from '@/app/scoring/CardCheck'
-import { IconChevronLeft } from '@/app/components/icons'
+import { IconChevronLeft, IconSignalWeak } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
 /**
@@ -690,9 +690,9 @@ export default function MatchCardClient({
 
       {error && <p className="text-rust-deep text-sm text-center leading-snug">{error}</p>}
       {unsent > 0 && (
-        <p className="t-cap text-ink/65 text-center leading-snug flex items-center justify-center gap-2" role="status">
-          <span className="w-1.5 h-1.5 rounded-full bg-rust dot-live flex-shrink-0" aria-hidden="true" />
-          {unsent === 1 ? '1 score' : `${unsent} scores`} saved on phone, will send when signal available.
+        <p className="t-cap text-ink/65 text-center leading-snug flex items-center justify-center gap-2.5" role="status">
+          <IconSignalWeak />
+          {unsentLine(unsent)}
         </p>
       )}
 

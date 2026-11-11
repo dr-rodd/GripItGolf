@@ -151,9 +151,9 @@ export function scoreOutbox(): Outbox {
     // a backoff that was measured against a connection which has since come
     // back: the radio reconnecting, and the phone coming out of a pocket.
     // A group walking from a dead hollow onto the next tee is both at once.
-    window.addEventListener('online', () => { void instance!.flush() })
+    window.addEventListener('online', () => { void instance!.nudge() })
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') void instance!.flush()
+      if (document.visibilityState === 'visible') void instance!.nudge()
     })
   }
 
