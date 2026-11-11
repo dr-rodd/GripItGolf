@@ -163,3 +163,112 @@ export const CARD_STATE_TONE: Record<CardState, 'win' | 'neutral' | 'loss'> = {
   unrated: 'loss',
   none: 'loss',
 }
+
+/**
+ * A tee a card can be played off: a course rating, a slope and a par, the
+ * three a course handicap needs. Migration 073's trigger asks the same.
+ */
+export function isRatedTee(t: {
+  course_rating?: number | null; slope?: number | null; par?: number | null
+}): boolean {
+  return t.course_rating != null && t.slope != null && t.par != null
+}
+
+/** How many of a course's tees a card can be played off. */
+export function ratedTeeCount(tees: readonly {
+  course_rating?: number | null; slope?: number | null; par?: number | null
+}[]): number {
+  return tees.filter(isRatedTee).length
+}
+
+/**
+ * Why no card can start on this course, or null when one can (D68, Ross,
+ * 11 Nov 2026) — **the one question every door asks**: the stroke round,
+ * the knockout and session match cards, a league period's Start a card, and
+ * the server (`startPeriodCard`, migration 073's trigger on `live_rounds`).
+ *
+ *   · `none`    — fewer than eighteen holes. A photo of the printed card
+ *                 fixes it in place (`ScorecardGate`).
+ *   · `unrated` — the holes, but no tee with a rating, a slope and a par.
+ *                 A photo will not fix it: Irish cards print SSS.
+ *
+ * Read off `cardState`, so the label a picker shows and the refusal a door
+ * gives can never disagree. **Choosing a course is never refused** (D69) —
+ * only starting a card on one.
+ */
+export type CardBlocker = 'none' | 'unrated'
+
+export function cardBlocker(holeCount: number, teeCount: number): CardBlocker | null {
+  if (holeCount < 18) return 'none'
+  const state = cardState(holeCount, null, teeCount)
+  return state === 'none' || state === 'unrated' ? state : null
+}
+
+/** The plain line under a course's name where a card cannot start (D69) — never a pill. */
+export const CARD_BLOCKER_LABEL: Record<CardBlocker, string> = {
+  none: 'No scorecard',
+  unrated: 'No ratings',
+}
+
+/** What `ScorecardGate` says, and what a refused start says. */
+export const GATE_TITLE: Record<CardBlocker, string> = {
+  none: 'No scorecard for this course yet',
+  unrated: 'No tee ratings for this course yet',
+}
+
+export function gateLine(blocker: CardBlocker, event: boolean): string {
+  if (blocker === 'none') return 'Photograph the printed card to add its pars and indexes.'
+  return event
+    ? 'This course has no tee ratings yet, so handicaps can’t be worked out. Ask the organiser.'
+    : 'This course has no tee ratings yet, so handicaps can’t be worked out. Add them in Trip Setup.'
+}
+
+/**
+ * A listed course's blocker, from the counts read with the list
+ * (`DirectoryCourse.hole_count`/`rated_tees`). Null where the counts were
+ * not read — no line is drawn rather than a guess.
+ */
+export function listedBlocker(c: { hole_count?: number | null; rated_tees?: number | null }): CardBlocker | null {
+  if (c.hole_count == null) return null
+  return cardBlocker(c.hole_count, c.rated_tees ?? 0)
+}
+
+/**
+ * A course read with its card's counts embedded — `courses(…, holes(count),
+ * tees(course_rating, slope, par))` alongside what a page already reads —
+ * as a blocker. Null where the embed was not asked for.
+ */
+export function embeddedBlocker(course: unknown): CardBlocker | null {
+  const c = course as {
+    holes?: { count: number }[]
+    tees?: { course_rating?: number | null; slope?: number | null; par?: number | null }[]
+  } | null
+  if (!c || !Array.isArray(c.holes) || !Array.isArray(c.tees)) return null
+  return cardBlocker(c.holes[0]?.count ?? 0, ratedTeeCount(c.tees))
+}
+
+/**
+ * The blockers of the courses some rows point at, by course id — the rows
+ * read **in a query of their own**, fail-soft, with each course's counts
+ * embedded (`course_id, courses(holes(count), tees(course_rating, slope,
+ * par))`). A refused read draws no lines rather than costing the page.
+ */
+export function blockersByCourse(
+  res: { data: unknown[] | null; error: unknown },
+): Map<string, CardBlocker> {
+  const out = new Map<string, CardBlocker>()
+  if (res.error) return out
+  for (const r of (res.data ?? []) as { id?: string; course_id?: string | null; courses?: unknown }[]) {
+    // A row pointing at a course (`CARD_COUNTS`), or a course itself (`COURSE_CARD_COUNTS`).
+    const id = 'courses' in r ? r.course_id : r.id
+    const b = id ? embeddedBlocker('courses' in r ? r.courses : r) : null
+    if (id && b) out.set(id, b)
+  }
+  return out
+}
+
+/** The embed `blockersByCourse` reads — one copy, so every page asks the same. */
+export const CARD_COUNTS = 'course_id, courses(holes(count), tees(course_rating, slope, par))'
+
+/** The same counts asked of the courses themselves, by id. */
+export const COURSE_CARD_COUNTS = 'id, holes(count), tees(course_rating, slope, par)'

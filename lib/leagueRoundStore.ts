@@ -15,6 +15,7 @@
 // lib/leagueSetup.ts). Confirming its venue sets the item's course and makes
 // the round — which is the moment it can first be scored.
 
+import { cardBlocker, gateLine, ratedTeeCount } from './courseCard'
 import { supabase } from './supabase'
 import { isHandicapPending } from './handicap'
 import { toItemRow } from './itinerarySync'
@@ -344,7 +345,20 @@ export async function setRoundAllowance(args: {
  */
 export async function startPeriodCard(args: {
   tripId: string; courseId: string; date: string
+  /** An event: a refusal for no ratings asks the organiser, never Trip Setup. */
+  event?: boolean
 }): Promise<{ ok: true; roundNumber: number } | { ok: false; error: string }> {
+  // The one scorecard gate (D68), asked of the database before anything is
+  // made: a card never starts on a course with no scorecard or no rated tee,
+  // whatever the screen in front of it showed.
+  const [holesRes, teesRes] = await Promise.all([
+    supabase.from('holes').select('id', { count: 'exact', head: true }).eq('course_id', args.courseId),
+    supabase.from('tees').select('course_rating, slope, par').eq('course_id', args.courseId),
+  ])
+  if (holesRes.error || teesRes.error) return { ok: false, error: 'Could not start the card — try again.' }
+  const blocker = cardBlocker(holesRes.count ?? 0, ratedTeeCount(teesRes.data ?? []))
+  if (blocker) return { ok: false, error: gateLine(blocker, args.event ?? true) }
+
   for (let attempt = 0; attempt < 4; attempt++) {
     const { data: found, error: findError } = await supabase
       .from('rounds')

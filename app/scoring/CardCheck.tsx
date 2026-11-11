@@ -13,6 +13,9 @@
 
 import React, { useRef, useState } from "react"
 import type { CardDiff, HoleChange, NewCard } from "@/lib/cardCheck"
+import { buttonClass, cardClass } from "@/app/components/ui"
+import { IconCamera } from "@/app/components/icons"
+import { GATE_TITLE } from "@/lib/courseCard"
 
 // The client-side halves of the two route calls. The shapes mirror the
 // routes' JSON exactly; lib/cardCheck.ts owns the real types.
@@ -84,13 +87,23 @@ async function toJpegBase64(file: File): Promise<{ data: string; mediaType: stri
 const isYardage = (c: HoleChange) => c.column.startsWith("yardage_")
 
 export default function CardCheck({
-  courseId, tripCode, onApplied,
+  courseId, tripCode, onApplied, face = "row", summary, gateLine,
 }: {
   courseId: string
   /** Scopes the re-score of already-committed cards. Absent on the legacy route. */
   tripCode?: string
   /** The corrected card, for the screens already holding the old one. */
   onApplied: (holes: unknown[], tees: unknown[]) => void
+  /**
+   * How it waits to be asked. `gate` — a course with no scorecard: the
+   * screen's one emerald action (ScorecardGate draws it). `row` — a course
+   * that has one: a quiet row, "Something wrong?", with a camera button.
+   */
+  face?: "gate" | "row"
+  /** The row's first line — "Scorecard · 18 holes · par 72". */
+  summary?: string
+  /** The gate's line under its title. */
+  gateLine?: string
 }) {
   const [step, setStep] = useState<Step>({ kind: "idle" })
   const inputRef = useRef<HTMLInputElement>(null)
@@ -202,12 +215,7 @@ export default function CardCheck({
     }
   }
 
-  const camera = (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
-      <circle cx="12" cy="13" r="4" />
-    </svg>
-  )
+  const camera = <IconCamera size={20} />
 
   // One hidden input serves every photo — first, or another after a bad one.
   // No `capture` attribute on purpose: the phone offers camera or library.
@@ -229,7 +237,7 @@ export default function CardCheck({
     <button
       type="button"
       onClick={() => inputRef.current?.click()}
-      className="flex items-center gap-2 px-4 py-2.5 border border-accent/40 text-accent-deep text-sm hover:bg-accent/10 transition-colors rounded-xl"
+      className={buttonClass("secondary", false, true)}
     >
       {camera}
       {label}
@@ -237,20 +245,48 @@ export default function CardCheck({
   )
 
   if (step.kind === "idle") {
+    if (face === "gate") {
+      return (
+        <div className={`${cardClass("raised")} p-5 flex flex-col gap-4`}>
+          {fileInput}
+          <div className="flex items-start gap-3">
+            <span className="w-11 h-11 rounded-tile bg-tint text-ink/65 flex items-center justify-center flex-shrink-0" aria-hidden>
+              {camera}
+            </span>
+            <div className="min-w-0">
+              <p className="t-card text-ink">{GATE_TITLE.none}</p>
+              <p className="t-cap text-ink/65 mt-1 leading-snug">{gateLine}</p>
+            </div>
+          </div>
+          <button type="button" onClick={() => inputRef.current?.click()} className={buttonClass("primary")}>
+            Photograph the scorecard
+          </button>
+        </div>
+      )
+    }
     return (
-      <div className="border border-line rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+      <div className="bg-tint rounded-card px-4 py-3 flex items-center justify-between gap-3">
         {fileInput}
-        <p className="text-ink/65 text-sm leading-snug min-w-0">
-          Check pars, indices and slopes against the printed card before teeing off.
-        </p>
-        {takePhoto("Confirm card")}
+        <div className="min-w-0">
+          {summary && <p className="t-label text-ink">{summary}</p>}
+          <p className="t-cap text-ink/65 leading-snug">Something wrong? Check it against a photo.</p>
+        </div>
+        <button
+          type="button"
+          aria-label="Check the scorecard against a photo"
+          title="Check the scorecard against a photo"
+          onClick={() => inputRef.current?.click()}
+          className="w-11 h-11 rounded-tile bg-surface shadow-raised text-ink/80 flex items-center justify-center flex-shrink-0 press"
+        >
+          {camera}
+        </button>
       </div>
     )
   }
 
   if (step.kind === "reading" || step.kind === "applying") {
     return (
-      <div className="border border-line rounded-xl px-4 py-3 flex items-center gap-3">
+      <div className={`${cardClass("raised")} px-4 py-3 flex items-center gap-3`}>
         <span className="w-2 h-2 rounded-full bg-accent dot-live flex-shrink-0" />
         <p className="text-ink/80 text-sm">
           {step.kind === "reading" ? "Reading the card…" : "Updating the card…"}
@@ -261,7 +297,7 @@ export default function CardCheck({
 
   if (step.kind === "match") {
     return (
-      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+      <div className={`${cardClass("chosen")} px-4 py-3 flex items-center justify-between gap-3`}>
         {fileInput}
         <p className="text-accent-deep text-sm">✓ The card matches the photo — nothing to change.</p>
         {takePhoto("Retake")}
@@ -271,7 +307,7 @@ export default function CardCheck({
 
   if (step.kind === "error") {
     return (
-      <div className="border border-rust/40 bg-rust/[0.06] rounded-xl px-4 py-3 space-y-2">
+      <div className={`${cardClass("raised")} px-4 py-3 space-y-2`}>
         {fileInput}
         <p className="text-rust-deep text-sm">{step.message}</p>
         {step.problems.length > 0 && (
@@ -284,7 +320,7 @@ export default function CardCheck({
           <button
             type="button"
             onClick={() => setStep({ kind: "idle" })}
-            className="text-ink/50 text-sm hover:text-ink/80 transition-colors"
+            className={buttonClass("quiet", false, true)}
           >
             Skip
           </button>
@@ -295,7 +331,7 @@ export default function CardCheck({
 
   if (step.kind === "done") {
     return (
-      <div className="border border-accent/30 bg-accent/[0.07] rounded-xl px-4 py-3">
+      <div className={`${cardClass("chosen")} px-4 py-3`}>
         {fileInput}
         <p className="text-accent-deep text-sm">
           {step.created
@@ -318,7 +354,7 @@ export default function CardCheck({
       : null
     const genderWord = (g: string) => (g === "F" ? "ladies" : "men's")
     return (
-      <div className="border border-accent/40 bg-accent/[0.05] rounded-xl px-4 py-4 space-y-3">
+      <div className={`${cardClass("raised")} px-4 py-4 space-y-3`}>
         {fileInput}
         <p className="text-ink text-sm font-semibold">
           No card is recorded for this course yet. The photo reads
@@ -341,14 +377,14 @@ export default function CardCheck({
           <button
             type="button"
             onClick={() => applyNewCard(newCard)}
-            className="flex-1 py-2.5 bg-accent-deep text-white text-sm hover:bg-accent transition-colors rounded-xl"
+            className={`${buttonClass("primary", false, true)} flex-1`}
           >
             Save this card
           </button>
           <button
             type="button"
             onClick={() => setStep({ kind: "idle" })}
-            className="px-4 py-2.5 text-ink/65 text-sm border border-line hover:border-line-strong transition-colors rounded-xl"
+            className={buttonClass("secondary", false, true)}
           >
             Not now
           </button>
@@ -368,7 +404,7 @@ export default function CardCheck({
   const genderWord = (g: string) => (g === "F" ? "ladies" : "men's")
 
   return (
-    <div className="border border-accent/40 bg-accent/[0.05] rounded-xl px-4 py-4 space-y-3">
+    <div className={`${cardClass("raised")} px-4 py-4 space-y-3`}>
       {fileInput}
       <p className="text-ink text-sm font-semibold">
         The photo disagrees with the recorded card
@@ -419,14 +455,14 @@ export default function CardCheck({
         <button
           type="button"
           onClick={() => apply(diff)}
-          className="flex-1 py-2.5 bg-accent-deep text-white text-sm hover:bg-accent transition-colors rounded-xl"
+          className={`${buttonClass("primary", false, true)} flex-1`}
         >
           Use the photo&apos;s card
         </button>
         <button
           type="button"
           onClick={() => setStep({ kind: "idle" })}
-          className="px-4 py-2.5 text-ink/65 text-sm border border-line hover:border-line-strong transition-colors rounded-xl"
+          className={buttonClass("secondary", false, true)}
         >
           Keep current
         </button>

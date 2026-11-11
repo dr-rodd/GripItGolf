@@ -153,6 +153,7 @@ export default async function TripCoursePage({
         // For the card check on the pick-player screen: a correction re-scores
         // this trip's committed cards on this course, and nothing outside it.
         tripCode={tripCode}
+        event={event}
         // The trip came down as select('*'), so kind and permissions ride
         // free and fail soft — absent columns simply read as a trip with
         // open access (lib/eventPermissions.ts).

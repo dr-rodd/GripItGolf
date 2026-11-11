@@ -17,6 +17,7 @@ import InlineUnlock from '@/app/components/InlineUnlock'
 import MatchFinish from './MatchFinish'
 import { MatchScoresTable } from './MatchScorecard'
 import MatchStrip from './MatchStrip'
+import CardCheck from '@/app/scoring/CardCheck'
 import { IconChevronLeft } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 
@@ -65,7 +66,7 @@ const MAX_GROSS = 20
 
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, pinSet,
-  stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null,
+  stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null, courseId = null,
   session = false, startOn = 'card',
 }: {
   /**
@@ -97,6 +98,8 @@ export default function MatchCardClient({
   colours?: Record<CardSideKey, SideColour>
   /** Whether anybody with the code may score it, or only its players. */
   anyoneScores?: boolean
+  /** The course, for the Scorecard panel's quiet "Something wrong?" photo check. */
+  courseId?: string | null
 }) {
   const router = useRouter()
   const [scores, setScores] = useState<Scores>({})
@@ -736,6 +739,16 @@ export default function MatchCardClient({
         </p>
         {loaded && (
           <MatchScoresTable a={a} b={b} colours={colours} holes={holes} outcomes={outcomes} scores={scores} />
+        )}
+        {/* The pick-player screen's quiet row (D68): the card against a
+            photo, its corrections taken in by refreshing the page in place. */}
+        {courseId && (
+          <CardCheck
+            courseId={courseId}
+            tripCode={tripCode}
+            summary={`Scorecard · ${Math.min(holes.length, REGULATION_HOLES)} holes · par ${holes.slice(0, REGULATION_HOLES).reduce((sum, h) => sum + h.par, 0)}`}
+            onApplied={() => router.refresh()}
+          />
         )}
         <div className="h-4" aria-hidden="true" />
       </div>

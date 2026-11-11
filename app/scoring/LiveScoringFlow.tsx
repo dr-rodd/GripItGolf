@@ -19,6 +19,8 @@ import type { ActiveLiveRound } from "./activeLiveRound"
 import LiveLeaderboardPanel from "./LiveLeaderboardPanel"
 import BackButton from "@/app/components/BackButton"
 import CardCheck from "./CardCheck"
+import ScorecardGate from "@/app/components/ScorecardGate"
+import { cardBlocker, ratedTeeCount } from "@/lib/courseCard"
 import DotBloom from "@/app/components/DotBloom"
 import ScoreShape, { NoReturnShape } from "@/app/components/ScoreShape"
 import {
@@ -186,6 +188,8 @@ interface Props {
    * is here to do.
    */
   allowScoreEdits?: boolean
+  /** An event: the scorecard gate's unrated line asks the organiser. */
+  event?: boolean
 }
 
 type LiveStep = "activate" | "setup" | "holes" | "summary" | "committed" | "resuming"
@@ -464,7 +468,7 @@ export default function LiveScoringFlow({
   trackStats = false,
   tripCode,
   onCourseDataUpdated,
-  allowScoreEdits = true,
+  allowScoreEdits = true, event = false,
 }: Props) {
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
@@ -568,7 +572,7 @@ export default function LiveScoringFlow({
 
   const canStart = selectedPlayerIds.length >= 1 &&
     selectedPlayerIds.every(id => !!playerTeeIds[id]) &&
-    courseHoles.length > 0 &&
+    cardBlocker(courseHoles.length, ratedTeeCount(tees.filter(t => t.course_id === courseId))) === null &&
     pendingReason === null
 
   // Fetch players locked in other scorecards for this round (active OR finalised)
@@ -774,12 +778,24 @@ export default function LiveScoringFlow({
 
   // ─── Activate ─────────────────────────────────────────────
 
+  const activatingCourseId = rounds.find(r => r.id === activatingRoundId)?.courses?.id ?? ""
+  const activateBlocker = activatingCourseId
+    ? cardBlocker(
+        holes.filter(h => h.course_id === activatingCourseId).length,
+        ratedTeeCount(tees.filter(t => t.course_id === activatingCourseId)),
+      )
+    : null
+
   async function handleActivate() {
     if (!activatingRoundId) return
     setSaving(true)
     setError(null)
     const round = rounds.find(r => r.id === activatingRoundId)
     if (!round?.courses) { setError("Round has no course"); setSaving(false); return }
+    // The one scorecard gate (D68): no live round on a course that cannot be
+    // scored. The screen shows the gate in this button's place; this holds
+    // the line should anything still call it.
+    if (activateBlocker) { setSaving(false); return }
 
     const { data, error: err } = await supabase
       .from("live_rounds")
@@ -1165,6 +1181,15 @@ export default function LiveScoringFlow({
 
         {error && <p className="text-rust-deep text-base">{error}</p>}
 
+        {activateBlocker ? (
+          <ScorecardGate
+            blocker={activateBlocker}
+            courseId={activatingCourseId}
+            tripCode={tripCode}
+            event={event}
+            onReady={(h, t) => onCourseDataUpdated?.(h as unknown as Hole[], t as unknown as Tee[])}
+          />
+        ) : (
         <button
           onClick={handleActivate}
           disabled={!activatingRoundId || saving || availableRounds.length === 0}
@@ -1175,6 +1200,7 @@ export default function LiveScoringFlow({
         >
           {saving ? "Activating…" : "Activate Live Round →"}
         </button>
+        )}
       </div>
     )
   }
@@ -1215,25 +1241,33 @@ export default function LiveScoringFlow({
         {/* The card check lives on this screen because this is the last
             moment before the numbers matter: a wrong index caught here is a
             thirty-second fix, and caught on the 14th green it is last trip's
-            headache all over again. */}
-        {courseId && onCourseDataUpdated && (
-          <CardCheck
-            courseId={courseId}
-            tripCode={tripCode}
-            onApplied={(newHoles, newTees) =>
-              onCourseDataUpdated(newHoles as unknown as Hole[], newTees as unknown as Tee[])
-            }
-          />
-        )}
-
-        {/* A course added to the platform arrives without a card — pars and
-            indices only ever come from a scorecard. Until one is
-            photographed and confirmed above, there is nothing to score. */}
-        {courseHoles.length === 0 && (
-          <p className="text-rust-deep text-sm leading-snug">
-            No scorecard for this course yet. Photograph one above to start scoring.
-          </p>
-        )}
+            headache all over again. One quiet row — the course got here
+            through the scorecard gate (D68), so it has a card to check. */}
+        {courseId && onCourseDataUpdated && (() => {
+          const blocker = cardBlocker(courseHoles.length, ratedTeeCount(courseTees))
+          if (blocker) {
+            return (
+              <ScorecardGate
+                blocker={blocker}
+                courseId={courseId}
+                tripCode={tripCode}
+                event={event}
+                onReady={(h, t) => onCourseDataUpdated(h as unknown as Hole[], t as unknown as Tee[])}
+              />
+            )
+          }
+          const par = courseHoles.reduce((sum, h) => sum + h.par, 0)
+          return (
+            <CardCheck
+              courseId={courseId}
+              tripCode={tripCode}
+              summary={`Scorecard · ${courseHoles.length} holes · par ${par}`}
+              onApplied={(newHoles, newTees) =>
+                onCourseDataUpdated(newHoles as unknown as Hole[], newTees as unknown as Tee[])
+              }
+            />
+          )
+        })()}
 
         <div className="flex flex-col gap-3">
           <label className="text-ink/65 text-sm ">

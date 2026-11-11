@@ -1,5 +1,7 @@
 'use client'
 
+import ScorecardGate from '@/app/components/ScorecardGate'
+import { gateLine, listedBlocker, ratedTeeCount } from '@/lib/courseCard'
 import { useUnlocked } from '@/app/components/useUnlocked'
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -94,8 +96,11 @@ function useCourses(enabled: boolean) {
   const { courses } = usePlatformCourses(enabled)
   const [added, setAdded] = useState<DirectoryCourse[]>([])
   const all = useMemo(() => {
+    // An upsert wins over the list — a course whose card was just
+    // photographed carries its new counts (the scorecard gate, D68).
+    const mine = new Map(added.map(c => [c.id, c]))
     const known = new Set(courses.map(c => c.id))
-    return [...courses, ...added.filter(c => !known.has(c.id))]
+    return [...courses.map(c => mine.get(c.id) ?? c), ...added.filter(c => !known.has(c.id))]
       .sort((a, b) => a.name.localeCompare(b.name))
   }, [courses, added])
   const upsert = (course: DirectoryCourse) =>
@@ -300,6 +305,11 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
 
   const organiser = unlocked || !!!(door.pinSet)
   const mayStart = fieldMayStart || organiser
+  // The one scorecard gate (D68): a course with no scorecard stays
+  // choosable, and the gate shows under it; Start card makes nothing until
+  // the photo is in. The same counts the picker's line reads (D69).
+  const chosen = courses.find(c => c.id === courseId) ?? null
+  const blocker = chosen ? listedBlocker(chosen) : null
 
   function openSheet() {
     // Read on tap, never during render: the unlock lives in this phone's storage
@@ -319,9 +329,10 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
     if (issue) { setError(issue); return }
     if (!courseId) { setError('Pick the course it was played on.'); return }
     if (courseIds && !courseIds.includes(courseId)) { setError('That course doesn’t count in this league.'); return }
+    if (blocker) { setError(gateLine(blocker, true)); return }
     setSaving(true)
     setError(null)
-    const result = await startPeriodCard({ tripId: door.tripId, courseId, date })
+    const result = await startPeriodCard({ tripId: door.tripId, courseId, date, event: true })
     setSaving(false)
     if (!result.ok) { setError(result.error); return }
     setOpen(false)
@@ -380,6 +391,20 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
               </p>
             )}
           </div>
+
+          {blocker && mayStart && chosen && (
+            <ScorecardGate
+              blocker={blocker}
+              courseId={chosen.id}
+              tripCode={door.tripCode}
+              event
+              onReady={(holes, tees) => upsert({
+                ...chosen, card_verified: true,
+                hole_count: holes.length,
+                rated_tees: ratedTeeCount(tees as { course_rating: number | null; slope: number | null; par: number | null }[]),
+              })}
+            />
+          )}
         </Sheet>
       )}
     </>

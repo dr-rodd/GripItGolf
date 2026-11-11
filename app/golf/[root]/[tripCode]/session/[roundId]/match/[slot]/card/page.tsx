@@ -13,6 +13,7 @@ import { tagOfTeam } from '@/lib/tagBoards'
 import TripHeader from '@/app/components/TripHeader'
 import { IconChevronLeft } from '@/app/components/icons'
 import { buttonClass, cardClass } from '@/app/components/ui'
+import ScorecardGate from '@/app/components/ScorecardGate'
 import MatchCardClient from '../../../../../match/[matchId]/card/MatchCardClient'
 import SessionTees from './SessionTees'
 import { readSessionCards, type SessionMatchRow } from '../../../../sessionMatches'
@@ -132,6 +133,7 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
               backHref={back}
               roundName={`${label} · ${format}`}
               club={named?.club ?? null}
+              courseId={setup.courseId ?? null}
               tripId={trip.id}
               tripCode={tripCode}
               matchId={row.id}
@@ -152,11 +154,30 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
         ) : (
           <>
             {header}
+            {(setup.blocked === 'scorecard' || setup.blocked === 'unrated') && setup.courseId ? (
+              // The one scorecard gate (D68): the photo, then the card in place.
+              <ScorecardGate
+                blocker={setup.blocked === 'scorecard' ? 'none' : 'unrated'}
+                courseId={setup.courseId}
+                tripCode={tripCode}
+                event={isEvent((trip as { kind?: unknown }).kind)}
+                match={{
+                  decided: !!row.result,
+                  inMatch: mySide !== null,
+                  anyoneScores: allowsParticipant(
+                    (trip as { kind?: unknown }).kind,
+                    (trip as { event_permissions?: unknown }).event_permissions,
+                    'score_session_matches',
+                  ),
+                  pinSet: isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null),
+                }}
+              />
+            ) : (
             <p className="text-ink/80 text-sm text-center leading-snug">
               {setup.blocked === 'sides' ? 'Both sides of this match are not set yet.'
-                : setup.blocked === 'scorecard' ? 'This course has no scorecard yet, so the match cannot be scored here.'
                 : 'Every player needs a handicap and a rated tee before the shots can be worked out.'}
             </p>
+            )}
             <div className="text-center"><Link href={back} className={`${buttonClass('secondary')} mt-4`}>Back to Scoring</Link></div>
           </>
         )}

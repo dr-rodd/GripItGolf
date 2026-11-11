@@ -398,3 +398,12 @@ export const IconMapPin = (p: IconProps) => (
     <path d="M17.657 16.657l-4.243 4.243a2 2 0 0 1 -2.827 0l-4.244 -4.243a8 8 0 1 1 11.314 0z" />
   </Svg>
 )
+
+// ─── The scorecard photo ───────────────────────────────────────
+
+export const IconCamera = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 7h1a2 2 0 0 0 2 -2a1 1 0 0 1 1 -1h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v9a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2" />
+    <path d="M9 13a3 3 0 1 0 6 0a3 3 0 0 0 -6 0" />
+  </Svg>
+)

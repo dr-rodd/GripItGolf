@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import CardStateLine from '@/app/components/CardStateLine'
+import { CARD_COUNTS, COURSE_CARD_COUNTS, blockersByCourse, type CardBlocker } from '@/lib/courseCard'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { boardFacts } from '@/lib/leaderboards'
@@ -150,7 +152,8 @@ export default async function TripCoursePortalPage({
   // Trips too (stage 8): an Overall is what turns a round into a session.
   const overall = overallOf(sessionBoards)
   const hasMatchSessions = !!overall && sessionBoards.some(b => b.competition === 'matches')
-  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead, sessionRead] = await Promise.all([
+  const roundCourseIds = [...new Set(((trip.rounds ?? []) as { course_id: string | null }[]).map(r => r.course_id).filter((c): c is string => !!c))]
+  const [{ data: openData, error: openErr }, itemsRes, roundCards, knockoutRead, sessionRead, cardCountsRes] = await Promise.all([
     roundIds.length > 0
       ? db.from('live_rounds').select('round_id, live_player_locks(player_id)')
           .eq('status', 'active').in('round_id', roundIds)
@@ -173,16 +176,27 @@ export default async function TripCoursePortalPage({
           // The matches being played now, every match's card for the
           // viewer's scorecard, and which matches are arranged (a course
           // chosen — their card is ready to score), the last fail-soft.
-          const [live, details, arrangedRes] = view
+          const [live, details, arrangedRes, countsRes] = view
             ? await Promise.all([
                 readLiveMatches(db, trip, view, roster),
                 readMatchDetails(db, trip, view, roster),
                 db.from('matchplay_matches').select('id, course_id').eq('trip_id', trip.id),
+                // The arranged courses' card counts, fail-soft (D69).
+                db.from('matchplay_matches').select(CARD_COUNTS).eq('trip_id', trip.id)
+                  .then(r => r, () => ({ data: null, error: true })),
               ])
-            : [[], {}, { data: [], error: null }]
-          const arranged = ((arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[])
-            .filter(r => r.course_id).map(r => r.id)
-          return view ? { view, live, details, arranged } : null
+            : [[], {}, { data: [], error: null }, { data: null, error: null }]
+          const arrangedRows = (arrangedRes.error ? [] : arrangedRes.data ?? []) as { id: string; course_id: string | null }[]
+          const arranged = arrangedRows.filter(r => r.course_id).map(r => r.id)
+          // "No scorecard" under a match arranged on a course a card cannot
+          // start on (D69) — one read for every row, never one per row.
+          const byCourse = blockersByCourse(countsRes as { data: unknown[] | null; error: unknown })
+          const blocked: Record<string, CardBlocker> = {}
+          for (const r of arrangedRows) {
+            const b = r.course_id ? byCourse.get(r.course_id) : undefined
+            if (b) blocked[r.id] = b
+          }
+          return view ? { view, live, details, arranged, blocked } : null
         }).catch(e => { console.error('TripCoursePortal knockout read failed:', e); return null })
       : Promise.resolve(null),
     hasMatchSessions
@@ -199,7 +213,14 @@ export default async function TripCoursePortalPage({
           return { roster, teams, memberships, results, me: roster.some(p => p.id === meId) ? meId : null }
         }).catch(e => { console.error('TripCoursePortal session read failed:', e); return null })
       : Promise.resolve(null),
+    // Each round's course card counts, for the tiles' "No scorecard" line
+    // (D69) — a query of its own and fail-soft, never in the tab's way.
+    roundCourseIds.length > 0
+      ? db.from('courses').select(COURSE_CARD_COUNTS).in('id', roundCourseIds)
+          .then(r => r, () => ({ data: null, error: true }))
+      : Promise.resolve({ data: [], error: null }),
   ])
+  const cardBlockers = blockersByCourse(cardCountsRes as { data: unknown[] | null; error: unknown })
   if (openErr) console.error('TripCoursePortal live rounds query failed:', openErr)
   const knockoutView = knockoutRead?.view ?? null
   // A Matches session's rows the leaderboard's way round: the two tags left
@@ -360,6 +381,7 @@ export default async function TripCoursePortalPage({
               anyoneScores: allowsParticipant(kind, permsRaw, 'score_matches'),
               details: knockoutRead?.details ?? {},
               arranged: knockoutRead?.arranged ?? [],
+              blocked: knockoutRead?.blocked ?? {},
             }} />
           </div>
         )}
@@ -388,6 +410,7 @@ export default async function TripCoursePortalPage({
                       <p className="t-card text-ink truncate">
                         <CourseName name={course?.name ?? 'Card'} />
                       </p>
+                      <CardStateLine blocker={(round.course_id && cardBlockers.get(round.course_id)) || null} />
                       <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>{ROUND_NOTE[tone]}</p>
                     </div>
                     {tone === 'live' && (
@@ -461,7 +484,11 @@ export default async function TripCoursePortalPage({
                     <p className="t-card text-ink">{sessionName(overall.overall, round.id, round.round_number)}</p>
                     <Link href={`${tripHome}/order?round=${round.id}`} className="t-label text-accent-deep">Set the matches</Link>
                   </div>
-                  <p className="t-cap text-ink/65 mb-2">{boardFacts(session).join(' · ')}</p>
+                  <p className="t-cap text-ink/65 mb-2">
+                    {boardFacts(session).join(' · ')}
+                    {/* Every match in the session plays its course (D69). */}
+                    <CardStateLine blocker={(round.course_id && cardBlockers.get(round.course_id)) || null} />
+                  </p>
                   {/* Every session the same (Ross, 10 Nov 2026): its matches
                       in order of play, a row each, vacant until they are set. */}
                   <SessionMatchList
@@ -507,6 +534,7 @@ export default async function TripCoursePortalPage({
                   <p className="t-card text-ink truncate">
                     <CourseName name={course?.name ?? `Round ${round.round_number}`} />
                   </p>
+                  <CardStateLine blocker={(round.course_id && cardBlockers.get(round.course_id)) || null} />
                   <p className={`t-cap mt-1 truncate ${ROUND_NOTE_TONE[tone]}`}>
                     {course?.location ? `${course.location} · ` : ''}{ROUND_NOTE[tone]}
                     {offLeague ? ' · Doesn’t count' : ''}

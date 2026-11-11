@@ -1,5 +1,7 @@
 'use client'
 
+import CardStateLine from '@/app/components/CardStateLine'
+import type { CardBlocker } from '@/lib/courseCard'
 import MatchDetailView from './match/[matchId]/card/MatchDetailView'
 import { useRef, useState } from 'react'
 import Link from 'next/link'
@@ -114,6 +116,8 @@ export type PortalScoring = {
   details: Record<string, MatchCardDetail>
   /** Matches already arranged (a course chosen), whose card is ready to score. */
   arranged: string[]
+  /** Matches on a course a card cannot start on — "No scorecard" under the row (D69). */
+  blocked?: Record<string, CardBlocker>
 }
 
 /** Which of a row's two faces this phone gets. */
@@ -252,6 +256,7 @@ export function KnockoutPortal({ tripCode, view, live = [], today, scoring = nul
                             {result ?? (m.mine ? 'Your match' : 'To play')}
                           </span>
                         )}
+                        {!result && <CardStateLine blocker={scoring?.blocked?.[m.id] ?? null} />}
                       </span>
                       {(scoreHref || m.mine) && (
                         <span className="text-ink/50 flex-shrink-0" aria-hidden="true"><IconChevronRight size={20} /></span>

@@ -9,6 +9,8 @@ import {
 } from '@/lib/courseDirectory'
 import type { SuggestedTee } from '@/lib/courseLookup'
 import CardCheck from '@/app/scoring/CardCheck'
+import CardStateLine from './CardStateLine'
+import { gateLine, listedBlocker, ratedTeeCount } from '@/lib/courseCard'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from './ui'
 import { IconChevronDown, IconX, IconPlus } from './icons'
 import CourseName from './CourseName'
@@ -40,41 +42,6 @@ type View =
   | { kind: 'add' }
   | { kind: 'created'; course: DirectoryCourse }
 
-/**
- * The mark on a course whose card has not been photographed yet — on the list
- * rows and on the field they collapse into, from here so the two cannot drift.
- *
- * Deliberately not a `Pill`. The old filled pill was 15px, uppercase and
- * tracked, which ran "AWAITING SCORECARD" to some 190px of a 320px phone row
- * and left the course name truncating inside the rest — and a pill that size
- * is the treatment for something happening now, where this is a footnote about
- * paperwork on a course you can still pick. Seventeen of the eighty-eight
- * carry it, so it is a common sight rather than an alarm.
- *
- * Semibold rather than the uppercase it once was (the refresh retired spaced
- * capitals), because unfilled text next to a name has to read as a status and
- * not as part of the name — or as part of the location line under it. 13px because that is the floor `scripts/test-branding.tsx`
- * holds for any hand-set size, and this is writing to be read rather than one
- * of the two marks it exempts. Between the shorter words, losing the fill and
- * losing the padding it still comes out at not much over half the width.
- * `ink/65` is the muted tier and is not a free choice either: the same suite
- * walks every `text-ink/N` in the app and reserves anything lighter for large
- * text.
- *
- * It says nothing about *which* card is missing, because the picker cannot
- * tell — `DirectoryCourse` carries no hole count, so a researched course that
- * plays perfectly well and a cardless one nobody can score look the same here.
- * `docs/gotchas-and-debt.md` has that one.
- */
-function AwaitingCard({ className = '' }: { className?: string }) {
-  return (
-    <span
-      className={`flex-shrink-0 text-[13px] leading-none font-semibold text-ink/65 whitespace-nowrap ${className}`.trim()}
-    >
-      Awaiting card
-    </span>
-  )
-}
 
 export default function CourseSelect({
   courses, value, onChange, onCourseAdded, allowAdd = true,
@@ -122,10 +89,12 @@ export default function CourseSelect({
       onClick={() => setView({ kind: 'browse' })}
       className={`${FIELD} flex items-center gap-3 text-left`}
     >
-      <span className={`flex-1 min-w-0 truncate ${chosen ? 'text-ink' : 'text-ink/60'}`}>
-        {chosen ? chosen.name : 'Choose a course'}
+      <span className="flex-1 min-w-0">
+        <span className={`block truncate ${chosen ? 'text-ink' : 'text-ink/60'}`}>
+          {chosen ? chosen.name : 'Choose a course'}
+        </span>
+        {chosen && <CardStateLine blocker={listedBlocker(chosen)} />}
       </span>
-      {chosen?.card_verified === false && <AwaitingCard />}
       <span className="flex-shrink-0 text-ink/65">
         <IconChevronDown size={16} />
       </span>
@@ -231,16 +200,11 @@ export default function CourseSelect({
                           <span className={`block truncate t-card ${on ? 'text-accent-deep font-semibold' : 'text-ink'}`}>
                             <CourseName name={c.name} />
                           </span>
+                          <CardStateLine blocker={listedBlocker(c)} />
                           {c.location && (
                             <span className="block truncate t-cap text-ink/65 mt-0.5">{c.location}</span>
                           )}
                         </span>
-                        {/* Both of these are nudged down onto the name's own
-                            line. The row is `items-start` so the label sits
-                            top-right rather than floating against the middle
-                            of a two-line block; the margins are half of what
-                            the 17px name leaves over each one. */}
-                        {c.card_verified === false && <AwaitingCard className="mt-1" />}
                         {/* The green dot, marking the one that counts. */}
                         <span
                           className={`w-2 h-2 mt-2.5 rounded-full flex-shrink-0 ${on ? 'bg-accent' : 'bg-transparent'}`}
@@ -265,7 +229,9 @@ export default function CourseSelect({
               <AddCourseForm
                 existing={courses}
                 prefillName={search.trim()}
-                onCreated={course => {
+                onCreated={added => {
+                  // A course made here has no holes yet — its line says so.
+                  const course = { ...added, hole_count: 0, rated_tees: 0 }
                   onCourseAdded(course)
                   onChange(course.id)
                   setView({ kind: 'created', course })
@@ -280,13 +246,18 @@ export default function CourseSelect({
                   on the list and chosen for this round.
                 </p>
                 <p className="t-cap text-ink/65 leading-snug">
-                  One thing left: the scorecard. Photograph it now or on the day.
+                  Photograph its scorecard now, or on the day — a card starts once it has one.
                 </p>
                 <CardCheck
+                  face="gate"
+                  gateLine={gateLine('none', false)}
                   courseId={view.course.id}
-                  onApplied={() => onCourseAdded({ ...view.course, card_verified: true })}
+                  onApplied={(holes, tees) => onCourseAdded({
+                    ...view.course, card_verified: true,
+                    hole_count: holes.length, rated_tees: ratedTeeCount(tees as { course_rating: number | null; slope: number | null; par: number | null }[]),
+                  })}
                 />
-                <button type="button" onClick={close} className={buttonClass('primary')}>
+                <button type="button" onClick={close} className={buttonClass('secondary')}>
                   Done
                 </button>
               </div>

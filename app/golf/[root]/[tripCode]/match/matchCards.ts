@@ -1,4 +1,5 @@
 import type { Reads } from '@/lib/eventReader'
+import { cardBlocker, ratedTeeCount } from '@/lib/courseCard'
 import { readAllRows } from '@/lib/allRows'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { allowanceOf } from '@/lib/handicapAllowance'
@@ -26,8 +27,14 @@ type Player = { id: string; name: string; handicap: number | null; gender: strin
 export type CardSetup = {
   /** Null when the match cannot be scored yet; `blocked` says why. */
   card: { a: CardSideView; b: CardSideView; holes: CardHole[]; extraPlan: ExtraHolePlan } | null
-  blocked: 'sides' | 'arrange' | 'scorecard' | null
+  /**
+   * `scorecard`/`unrated` — the course cannot be scored (`cardBlocker`,
+   * D68): the card page draws the scorecard gate in place.
+   */
+  blocked: 'sides' | 'arrange' | 'scorecard' | 'unrated' | null
   courseName: string | null
+  /** The arranged course, for the gate's photo. */
+  courseId?: string | null
 }
 
 /** Every listed match's card, ready to draw or the reason it is not. */
@@ -66,9 +73,10 @@ export async function readCardSetups(
           .in('course_id', courseIds).order('hole_number'),
       ])
   const courseName = new Map(((coursesRes.data ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]))
-  const teeById = new Map(((teesRes.data ?? []) as {
-    id: string; slope: number | null; course_rating: number | null; par: number | null
-  }[]).map(t => [t.id, t]))
+  const teeRows = (teesRes.data ?? []) as {
+    id: string; course_id: string; slope: number | null; course_rating: number | null; par: number | null
+  }[]
+  const teeById = new Map(teeRows.map(t => [t.id, t]))
   const holesOf = new Map<string, CardHole[]>()
   for (const h of (holesRes.data ?? []) as {
     course_id: string; hole_number: number; par: number; stroke_index: number; stroke_index_ladies: number | null
@@ -90,6 +98,12 @@ export async function readCardSetups(
     const courseId = row?.course_id ?? null
     const name = courseId ? courseName.get(courseId) ?? null : null
     if (!match || !match.sideA || !match.sideB) { out.set(id, { card: null, blocked: 'sides', courseName: name }); continue }
+    // The one scorecard gate (D68), ahead of the arrangement: a course with
+    // no card or no rated tee cannot be arranged into one either.
+    const gate = courseId
+      ? cardBlocker((holesOf.get(courseId) ?? []).length, ratedTeeCount(teeRows.filter(t => t.course_id === courseId)))
+      : null
+    if (gate) { out.set(id, { card: null, blocked: gate === 'none' ? 'scorecard' : 'unrated', courseName: name, courseId }); continue }
     const tees = parseMatchTees(row?.tees)
     const ids = [match.sideA, match.sideB].flatMap(s => view.members[s] ?? [])
     const strokes = matchStrokes(ids.map(pid => {
@@ -100,7 +114,6 @@ export async function readCardSetups(
     }), allowance)
     const holes = (courseId ? holesOf.get(courseId) ?? [] : []).slice(0, 18)
     if (!courseId || !strokes) { out.set(id, { card: null, blocked: 'arrange', courseName: name }); continue }
-    if (holes.length < 18) { out.set(id, { card: null, blocked: 'scorecard', courseName: name }); continue }
     const receives = new Map(strokes.map(s => [s.playerId, s.receives]))
     const side = (sid: string): CardSideView => ({
       id: sid,
@@ -114,6 +127,7 @@ export async function readCardSetups(
       card: { a: side(match.sideA), b: side(match.sideB), holes, extraPlan: extraOf.get(id) ?? {} },
       blocked: null,
       courseName: name,
+      courseId,
     })
   }
   return out

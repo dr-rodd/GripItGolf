@@ -2769,6 +2769,20 @@ section('The style lab is fenced in')
   ok(/style=\{\{\s*height: HEADER_H,/.test(header), '  …and the header is still HEADER_H tall')
 }
 
+section('The scorecard check wears the parts kit (D68)')
+{
+  const check = read('app/scoring/CardCheck.tsx')
+  ok(!check.includes('rounded-xl'), 'CardCheck has no rounded-xl left — cardClass, buttonClass, rounded-card')
+  ok(check.includes('cardClass(') && check.includes('buttonClass('), '  …its surfaces are the kit\'s')
+  ok(check.includes('bg-tint rounded-card') && check.includes('w-11 h-11 rounded-tile bg-surface shadow-raised'),
+    'the pick-player row is a quiet tint row with a 44px camera button')
+  const gate = read('app/components/ScorecardGate.tsx')
+  ok(gate.includes("cardClass('raised')") && gate.includes('w-11 h-11 rounded-tile bg-tint'),
+    'the gate is a raised card with a 44px icon tile')
+  ok(check.includes('<p className="t-card text-ink">{GATE_TITLE.none}</p>') && check.includes('buttonClass("primary")'),
+    '  …a t-card title and the screen\'s one emerald action, 56px')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

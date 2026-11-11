@@ -1,4 +1,6 @@
 import { cache } from 'react'
+import CardStateLine from '@/app/components/CardStateLine'
+import { CARD_COUNTS, blockersByCourse } from '@/lib/courseCard'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import { readSessionResults } from './session/sessionMatches'
 import { overallOf, sessionName, bySlot, itinerarySessions } from '@/lib/sessions'
@@ -168,6 +170,12 @@ export default async function TripPage({ params, searchParams }: {
   // that has not run migration 046 has no `kind`, and no kind is a trip.
   const isEvent = isEventKind(trip.kind)
 
+  // Each round's course card counts, for the tiles' "No scorecard" line
+  // (D69): started with the page's batch, a query of its own, fail-soft —
+  // a refusal draws no lines and costs the hub nothing.
+  const cardCounts = Promise.resolve(
+    db.from('rounds').select(CARD_COUNTS).eq('trip_id', trip.id),
+  ).then(r => blockersByCourse(r), () => blockersByCourse({ data: null, error: true }))
   const [
     roundsResult, playersResult, itineraryResult, endTimesResult, coursesResult,
     noticesResult, giLinked, casualResult, teeSettingsResult, teeRowsResult,
@@ -282,6 +290,8 @@ export default async function TripPage({ params, searchParams }: {
     start_format?: string | null
   }
   const rounds  = (roundsResult.data ?? []) as unknown as RoundRow[]
+  // "No scorecard" / "No ratings" under a round's course (D69), by course.
+  const blockerOf = await cardCounts
   const players = playersResult.data ?? []
   const leadName = players.find(p => p.is_lead === true)?.name.split(' ')[0] ?? null
   const notices = (noticesResult.data ?? []) as Notice[]
@@ -677,6 +687,7 @@ export default async function TripPage({ params, searchParams }: {
             <div className="min-w-0">
               <p className="t-label text-ink/65 mb-1">{r.scheduled_date ? describeShortDate(r.scheduled_date) : 'Card'}</p>
               <p className="t-card text-ink truncate"><CourseName name={courseMap[r.course_id] ?? 'Card'} /></p>
+              <CardStateLine blocker={blockerOf.get(r.course_id) ?? null} />
             </div>
             <span className="flex-shrink-0 ml-4 text-ink/50" aria-hidden="true"><IconChevronRight size={20} /></span>
           </Link>
@@ -708,6 +719,7 @@ export default async function TripPage({ params, searchParams }: {
             <p className="t-card text-ink truncate">
               <CourseName name={(lr.courseId && courseMap[lr.courseId]) || `Round ${lr.number}`} />
             </p>
+            <CardStateLine blocker={(lr.courseId && blockerOf.get(lr.courseId)) || null} />
             {offLeague.has(lr.roundId) && (
               <p className="t-cap text-ink/65 mt-1">Doesn’t count towards the league</p>
             )}

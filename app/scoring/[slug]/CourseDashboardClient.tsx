@@ -17,6 +17,8 @@ import {
 } from "@/lib/scorecardVoid"
 import { why } from "@/lib/writeFailure"
 import { readLiveScores } from "@/lib/scoreReads"
+import { cardBlocker, ratedTeeCount } from "@/lib/courseCard"
+import ScorecardGate from "@/app/components/ScorecardGate"
 
 // ─── Types ────────────────────────────────────────────────
 
@@ -137,6 +139,8 @@ interface Props {
    * The legacy /scoring/[slug] route has no trip and leaves it unset.
    */
   tripCode?: string
+  /** An event: the scorecard gate's unrated line asks the organiser, never Trip Setup. */
+  event?: boolean
 }
 
 type View = "dashboard" | "scoring" | "live-board" | "settings"
@@ -147,7 +151,7 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
-  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true,
+  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true, event = false,
 }: Props) {
   // The course card, held as state rather than read straight off the props:
   // the card check on the pick-player screen can correct it against a photo
@@ -158,6 +162,12 @@ export default function CourseDashboardClient({
   const [courseTees, setCourseTees] = useState<Tee[]>(tees)
   useEffect(() => setCourseHoles(holes), [holes])
   useEffect(() => setCourseTees(tees), [tees])
+
+  // The one scorecard gate (D68): no card starts — no `live_rounds` row is
+  // made — on a course without eighteen holes and a rated tee. The photo
+  // that fixes it hands the new card up through the same state as the
+  // card check's corrections, so the door carries on in place.
+  const blocker = cardBlocker(courseHoles.length, ratedTeeCount(courseTees))
 
   const [view, setView]                       = useState<View>("dashboard")
   const [scoringLiveRound, setScoringLiveRound] = useState<ActiveLiveRound | null>(null)
@@ -309,6 +319,7 @@ export default function CourseDashboardClient({
       ? rounds.find(r => r.id === roundId)
       : rounds.find(r => r.courses?.id === courseId)
     if (!courseRound) return
+    if (blocker) return
     setStarting(true)
     setStartError(null)
 
@@ -740,6 +751,15 @@ export default function CourseDashboardClient({
 
           {/* Actions */}
           <div className="space-y-3 pt-1">
+            {blocker ? (
+              <ScorecardGate
+                blocker={blocker}
+                courseId={courseId}
+                tripCode={tripCode}
+                event={event}
+                onReady={(h, t) => { setCourseHoles(h as unknown as Hole[]); setCourseTees(t as unknown as Tee[]) }}
+              />
+            ) : (
             <button
               onClick={startNewScorecard}
               disabled={starting}
@@ -747,6 +767,7 @@ export default function CourseDashboardClient({
             >
               {starting ? "Starting…" : "+ Start New Scorecard"}
             </button>
+            )}
             {startError && (
               <p className="text-rust-deep/80 text-sm text-center">{startError}</p>
             )}
@@ -1016,6 +1037,7 @@ export default function CourseDashboardClient({
           quotaScale={quotaScale}
           trackStats={trackStats}
           allowScoreEdits={allowScoreEdits}
+          event={event}
           onBack={goBack}
           onLiveRoundChange={r => {
             setScoringLiveRound(r)

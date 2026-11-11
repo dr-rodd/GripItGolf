@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { readAllRows } from '@/lib/allRows'
+import { ratedTeeCount } from '@/lib/courseCard'
 
 /**
  * The platform course list, fetched in the browser by whoever needs to pick
@@ -52,16 +53,28 @@ export function usePlatformCourses(enabled = true) {
     let live = true
     // Read whole: a catalogue past 1,000 courses would otherwise lose
     // whatever sorts last in the alphabet, with nothing to say so.
-    readAllRows<DirectoryCourse>(
-      () => supabase.from('courses').select('*', { count: 'exact' })
+    // Each course's hole count and its tees' ratings ride in the same
+    // request (PostgREST embeds), for the picker's "No scorecard" / "No
+    // ratings" line (D69) — no query per course. Should the embeds be
+    // refused, the plain list is read instead and the line simply not drawn.
+    const read = (cols: string) => readAllRows<DirectoryCourse & {
+      holes?: { count: number }[]; tees?: { course_rating: number | null; slope: number | null; par: number | null }[]
+    }>(
+      () => supabase.from('courses').select(cols, { count: 'exact' })
         .is('trip_id', null)
         .order('name').order('id'),
       c => c.id,
     )
+    read('*, holes(count), tees(course_rating, slope, par)')
+      .then(async first => (first.error ? read('*') : first))
       .then(({ data, error }) => {
         if (!live) return
         if (error) console.error('usePlatformCourses query failed:', error)
-        setCourses(data ?? [])
+        setCourses((data ?? []).map(({ holes, tees, ...c }) => ({
+          ...c,
+          ...(holes ? { hole_count: holes[0]?.count ?? 0 } : {}),
+          ...(tees ? { rated_tees: ratedTeeCount(tees) } : {}),
+        })))
         setLoaded(true)
       })
     return () => { live = false }

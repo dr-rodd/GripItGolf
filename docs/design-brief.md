@@ -234,3 +234,12 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D48 | The date-span freeze is fixed first, in the league form and the itinerary builder | Built |
 | D49 | No spectator mode; strict events control who scores matches | Built |
 | D50 | Two tags facing off: the Overall is a ticker of every point up for grabs (each tag filling in from its own edge, matches in play softened in the leader's colour), a session dropdown, and the session's matches one tappable row each; a Matches session's match count asked at creation | Built |
+
+**One scorecard gate** (Ross, 11 Nov 2026). A course with no scorecard used to be refused at one door, late — a stroke round went live before its photo was asked for, and a match card on one dead-ended. `cardBlocker` in `lib/courseCard.ts` is now the one question every door asks, and `ScorecardGate` the one answer:
+
+| # | Decision | Status |
+|---|---|---|
+| D68 | One scorecard gate: no card on a course with no scorecard ever starts, at any door; the same photo prompt fixes it in place | Built |
+| D69 | Choosing a course is never refused, starting a card is. "No scorecard"/"No ratings" is a plain line where it blocks, never a pill | Built |
+| D70 | The server refuses a live card on a blocked course (migration 073); match card writes are closed with RLS stages 7–8 | Built (073 to paste) |
+| D71 | Whoever may start a card may photograph its scorecard, trips and events alike | Built |

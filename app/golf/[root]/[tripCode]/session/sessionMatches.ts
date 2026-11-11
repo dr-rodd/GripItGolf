@@ -1,4 +1,5 @@
 import type { Reads } from '@/lib/eventReader'
+import { cardBlocker, ratedTeeCount } from '@/lib/courseCard'
 import { readAllRows } from '@/lib/allRows'
 import { readRoundHandicaps } from '@/lib/scoreReads'
 import type { Leaderboard } from '@/lib/leaderboards'
@@ -38,8 +39,11 @@ export type SessionCardSetup = {
   row: SessionMatchRow
   format: MatchFormat
   card: { a: CardSideView; b: CardSideView; holes: CardHole[] } | null
-  blocked: 'sides' | 'handicaps' | 'scorecard' | null
+  /** `scorecard`/`unrated` — `cardBlocker` (D68): the card page draws the scorecard gate. */
+  blocked: 'sides' | 'handicaps' | 'scorecard' | 'unrated' | null
   courseName: string | null
+  /** The round's course, for the gate's photo. */
+  courseId?: string | null
   /** Each player's tee id, as the shots were worked out. */
   tees: Record<string, string>
   /** The tees each player may choose from. */
@@ -139,7 +143,7 @@ export async function readSessionCards(
       const pick = chosen[pid] ?? roundTee.get(`${row.round_id}:${pid}`) ?? mine[defaultTeeIndex(mine.length)]?.id
       if (pick) teeOf[pid] = pick
     }
-    const base: SessionCardSetup = { row, format, card: null, blocked: null, courseName: course?.name ?? null, tees: teeOf, teeChoices }
+    const base: SessionCardSetup = { row, format, card: null, blocked: null, courseName: course?.name ?? null, courseId: round?.course_id ?? null, tees: teeOf, teeChoices }
     const result: SessionMatchResult = {
       id: row.id, roundId: row.round_id, slot: row.slot, sideA: row.side_a, sideB: row.side_b,
       result: row.result, margin: row.margin,
@@ -147,6 +151,10 @@ export async function readSessionCards(
     if (!row.side_a.length || !row.side_b.length) {
       setups.set(row.id, { ...base, blocked: 'sides' }); results.push(result); continue
     }
+    // The one scorecard gate (D68), ahead of the handicaps: with no rated tee
+    // nobody's shots can be worked out, and the gate says why.
+    const gate = round ? cardBlocker((holesOf.get(round.course_id) ?? []).length, ratedTeeCount(courseTees)) : null
+    if (gate) { setups.set(row.id, { ...base, blocked: gate === 'none' ? 'scorecard' : 'unrated' }); results.push(result); continue }
     const allowance = board ? allowanceOf(board) : 100
     const asPlayer = (pid: string) => {
       const t = tees.find(x => x.id === teeOf[pid])
@@ -166,7 +174,6 @@ export async function readSessionCards(
       : null
     const strokes = format === 'foursomes' ? null : matchStrokes(ids.map(asPlayer), allowance)
     if (format === 'foursomes' ? !foursomes : !strokes) { setups.set(row.id, { ...base, blocked: 'handicaps' }); results.push(result); continue }
-    if (holes.length < 18) { setups.set(row.id, { ...base, blocked: 'scorecard' }); results.push(result); continue }
     const receives = new Map((strokes ?? []).map(s => [s.playerId, s.receives]))
     const side = (key: 'A' | 'B', sideIds: string[]): CardSideView => {
       const name = sideName(sideIds, players, ctx.teams, ctx.memberships)

@@ -22,6 +22,13 @@ export type DirectoryCourse = {
   website?: string | null
   /** False until a scorecard photo has confirmed the record. */
   card_verified?: boolean | null
+  /**
+   * How many holes it has and how many tees a card can be played off — read
+   * with the list (`usePlatformCourses`), for the picker's plain line (D69).
+   * Absent where the list was read without them: no line, never a guess.
+   */
+  hole_count?: number
+  rated_tees?: number
 }
 
 export const MAX_COURSE_NAME = 80

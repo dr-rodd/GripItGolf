@@ -208,3 +208,27 @@ SELECT
   count(*) FILTER (WHERE public_passcode_hash ~ '^[0-9a-f]{64}$')   AS public_legacy,
   count(*) FILTER (WHERE public_passcode_hash LIKE 's1$%')          AS public_slow
 FROM trips;
+
+-- ─── Scorecard gate (after migration 073) ───────────────────────────────
+--
+-- (9) The trigger is there — one row.
+
+SELECT tgname FROM pg_trigger
+WHERE tgname = 'trg_live_rounds_scorecard_gate' AND NOT tgisinternal;
+
+-- (10) It refuses a live card on a course with no scorecard. Picks a
+-- platform course with fewer than 18 holes (if there is one) and a round,
+-- tries to go live, and rolls back. Expect: ERROR "This course has no
+-- scorecard yet". No such course? The SELECT returns nothing, nothing is
+-- tried, and there is nothing to check.
+
+BEGIN;
+INSERT INTO live_rounds (course_id, round_id, status)
+SELECT c.id, (SELECT id FROM rounds LIMIT 1), 'active'
+FROM courses c
+WHERE (SELECT count(*) FROM holes h WHERE h.course_id = c.id) < 18
+LIMIT 1;
+ROLLBACK;
+
+-- Match card writes (match_scores, session_match_scores) are not gated here:
+-- they are closed properly by row-level security stages 7 and 8.
