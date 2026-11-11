@@ -372,7 +372,7 @@ function wiringTests() {
     ok(/rpc\("anonymous_phones_to_forget"/.test(route), 'the job counts when it is not deleting')
     ok(/deleting: FORGET_ANONYMOUS_PHONES && !dryRun/.test(route) && /if \(anonymousPhones\.deleting/.test(route),
       '  …and deletes only with the switch on, never on a dry run')
-    ok(/FORGET_ANONYMOUS_PHONES = false/.test(read('lib/membership.ts')), 'the switch ships off: the dry-run count comes first')
+    ok(/FORGET_ANONYMOUS_PHONES = true/.test(read('lib/membership.ts')), 'the switch is on (Ross, 11 Nov 2026, after the dry-run count)')
     ok(/anonymous_phones_to_forget\(\)/.test(read('scripts/rls-check.sql')), 'scripts/rls-check.sql has the dry-run count, off the same function')
 
     // 081: lighter. The sessions lookup only for open-ended events, one call, weekly.

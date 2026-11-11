@@ -278,7 +278,7 @@ export function needsEntry(stamp: string | null | undefined, userId: string, pla
 // while this is on — switched on once the dry-run count in
 // scripts/rls-check.sql has been looked at.
 
-export const FORGET_ANONYMOUS_PHONES = false
+export const FORGET_ANONYMOUS_PHONES = true
 
 /**
  * The rule's three numbers, as migration 069 writes them in SQL — here so
