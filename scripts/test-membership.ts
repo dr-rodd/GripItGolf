@@ -23,7 +23,7 @@ import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '.
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runExtend, runPlayTogether, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
 import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
-import { runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
+import { SaveStepError, runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
 import { RESETS_PER_EVENT_HOUR, RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
 
 // The door's token and a re-stored PIN are keyed by the server's secret.
@@ -607,6 +607,7 @@ async function forgotPinTests() {
   const sent: { to: string; text: string; html: string }[] = []
   let adminHash: string | null = null
   let sendWorks = true
+  let failAt: string | null = null
   const store: ResetStore = {
     async userFromToken(t) { return t.startsWith('tok-') ? t.slice(4) : null },
     async tripByCode(code) { return trips.find(t => t.code === code) ?? null },
@@ -620,8 +621,10 @@ async function forgotPinTests() {
       r.usedAt = now
       return true
     },
-    async setAdminHash(_t, h) { adminHash = h },
+    async releaseReset(h) { const r = resets.get(h); if (r) r.usedAt = null },
+    async setAdminHash(_t, h) { if (failAt === 'store-pin') throw new Error('db down'); adminHash = h },
     async endOrganisers(tripId) {
+      if (failAt === 'end-organisers') throw new Error('db down')
       for (const [k, m] of members) if (k.endsWith(`|${tripId}`)) members.set(k, { ...m, organiserUntil: null })
     },
     async readMembership(u, t) { return members.get(`${u}|${t}`) ?? null },
@@ -701,6 +704,19 @@ async function forgotPinTests() {
   await ask('RESET1')
   const late = tokenIn(sent[0].text)
   eq((await runCheckReset({ resetToken: late }, store, later(RESET_LINK_MINUTES * 60_000 + 1))).status, 410, 'a link past thirty minutes has expired')
+  // A save that fails after the link was spent gives the link back and says where.
+  {
+    const again = await ask('RESET1', '9.9.9.9')
+    ok(again.status === 200, 'a fresh link is asked for')
+    const t2 = tokenIn(sent[sent.length - 1].text)
+    failAt = 'end-organisers'
+    let caught: unknown = null
+    try { await runSaveReset({ token: 'tok-me', resetToken: t2, pin: '2468', again: '2468' }, store, clock) } catch (e) { caught = e }
+    ok(caught instanceof SaveStepError && caught.step === 'end-organisers', 'a failing save names the step it was on')
+    eq((await runCheckReset({ resetToken: t2 }, store, clock)).status, 200, '  …and the link is given back, still good for another try')
+    failAt = null
+    eq((await runSaveReset({ token: 'tok-me', resetToken: t2, pin: '2468', again: '2468' }, store, clock)).status, 200, '  …and the second try saves')
+  }
   eq((await runSaveReset({ token: 'tok-me', resetToken: late, pin: '2468', again: '2468' }, store, later(RESET_LINK_MINUTES * 60_000 + 1))).status, 410,
     '  …and saves nothing')
   eq((await runCheckReset({ resetToken: 'made-up-token-made-up-token-made-up' }, store, NOW)).status, 410, 'a made-up link is no link')

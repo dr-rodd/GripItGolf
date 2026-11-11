@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { respond } from '../respond'
-import { runCheckReset, runSaveReset } from '../pinReset'
+import { SaveStepError, runCheckReset, runSaveReset } from '../pinReset'
 import { resetStore } from '../resetStore'
 
 // POST /api/event/reset — the reset page (D67, ../pinReset.ts):
@@ -29,7 +29,9 @@ export async function POST(req: NextRequest) {
       ? respond(out, { code: out.body.code, value: out.cookie })
       : NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
   } catch (e) {
-    console.error('pin reset failed:', e)
-    return NextResponse.json({ ok: false, error: 'Could not save — try again.' }, { status: 503, headers: NO_STORE })
+    console.error('pin reset failed:', e instanceof SaveStepError ? `${e.message}:` : '', e instanceof SaveStepError ? e.cause : e)
+    // A short code, not the error: where it failed, never what the database said.
+    const where = e instanceof SaveStepError ? e.step : 'before-save'
+    return NextResponse.json({ ok: false, error: `Could not save — try again. (${where})` }, { status: 503, headers: NO_STORE })
   }
 }

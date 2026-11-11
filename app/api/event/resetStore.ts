@@ -69,6 +69,10 @@ export function resetStore(db: ReturnType<typeof createAdminClient>): ResetStore
       if (error) throw error
       return (data ?? []).length === 1
     },
+    async releaseReset(tokenHash) {
+      const { error } = await db.from('pin_resets').update({ used_at: null }).eq('token_hash', tokenHash)
+      if (error) throw error
+    },
     async setAdminHash(tripId, hash) {
       const { error } = await db.from('trips').update({ settings_passcode_hash: hash }).eq('id', tripId)
       if (error) throw error

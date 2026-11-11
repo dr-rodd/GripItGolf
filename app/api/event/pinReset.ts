@@ -53,6 +53,8 @@ export interface ResetStore {
   findReset(tokenHash: string): Promise<ResetRow | null>
   /** Spend the link: true only for the one call that found it unused and unexpired. */
   claimReset(tokenHash: string, now: string): Promise<boolean>
+  /** Give a spent link back — only when the save failed after spending it. */
+  releaseReset(tokenHash: string): Promise<void>
   setAdminHash(tripId: string, hash: string): Promise<void>
   /** Organiser access ended on every phone in the event. */
   endOrganisers(tripId: string): Promise<void>
@@ -62,6 +64,13 @@ export interface ResetStore {
   writeAttempt(key: string, tripId: string, w: AttemptWindow): Promise<void>
   /** True once the email is handed to the sender. */
   sendEmail(to: string, subject: string, html: string, text: string): Promise<boolean>
+}
+
+/** A save that threw, and the step it was on — the route logs it and says it. */
+export class SaveStepError extends Error {
+  constructor(public step: string, public cause: unknown) {
+    super(`pin reset save failed at ${step}`)
+  }
 }
 
 type Fail = { status: 400 | 401 | 404 | 410 | 503; body: { ok: false; error: string } }
@@ -198,10 +207,22 @@ export async function runSaveReset(
   // Spent before anything changes: of two taps racing, one saves.
   if (!(await store.claimReset(tokenHash, now.toISOString()))) return fail(410, RESET_EXPIRED)
 
-  await store.setAdminHash(trip.id, await hashPin(pin, trip.code))
-  await store.endOrganisers(trip.id)
-  const next = mergeGrant(await store.readMembership(userId, trip.id), { organiser: true }, now)
-  await store.writeMembership(userId, trip.id, next)
+  // Each step is named, so a failure says where (`SaveStepError`) — and a
+  // failure after the link was spent gives it back, so one bad save never
+  // costs the person their email.
+  let at = 'hash'
+  let next: Membership
+  try {
+    const hash = await hashPin(pin, trip.code)
+    at = 'store-pin'; await store.setAdminHash(trip.id, hash)
+    at = 'end-organisers'; await store.endOrganisers(trip.id)
+    at = 'read-phone'; const held = await store.readMembership(userId, trip.id)
+    at = 'write-phone'; next = mergeGrant(held, { organiser: true }, now)
+    await store.writeMembership(userId, trip.id, next)
+  } catch (e) {
+    await store.releaseReset(tokenHash).catch(() => {})
+    throw new SaveStepError(at, e)
+  }
   return {
     status: 200,
     body: { ok: true, code: trip.code, organiserUntil: next.organiserUntil, home: resetHome(trip.code, trip.kind) },
