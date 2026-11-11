@@ -43,7 +43,7 @@ function useOrganiser(tripCode: string, pinSet: boolean) {
 // ─── Arranging ─────────────────────────────────────────────────
 
 export function MatchArrange({
-  tripId, tripCode, matchId, pinSet, inMatch, allowAddCourse, people,
+  tripId, tripCode, matchId, pinSet, inMatch, people,
   courseId, playedOn, tees, underWay = false,
 }: {
   /** The card has a score on it: the course and tees are fixed until it is voided. */
@@ -54,7 +54,6 @@ export function MatchArrange({
   pinSet: boolean
   /** This phone is one of the players in the match. */
   inMatch: boolean
-  allowAddCourse: boolean
   people: MatchPerson[]
   courseId: string | null
   playedOn: string | null
@@ -228,7 +227,6 @@ export function MatchArrange({
               value={course}
               onChange={setCourse}
               onCourseAdded={c => setAdded(prev => [...prev.filter(x => x.id !== c.id), c])}
-              allowAdd={allowAddCourse}
             />
           </div>
           )}

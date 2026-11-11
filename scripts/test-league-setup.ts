@@ -660,8 +660,8 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
     'the field adds rounds only when the organiser lets it')
   ok(page.includes("allowsParticipant(kind, permsRaw, 'set_venues')"),
     'and chooses a TBC venue only when the organiser lets it')
-  ok(page.includes("allowsParticipant(kind, permsRaw, 'add_courses')"),
-    'and adds a course only with add_courses — the gate the registry promised')
+  ok(!page.includes("'add_courses'"),
+    'and adds a missing course whenever it may choose one — no add_courses gate (Ross, 11 Nov 2026)')
   ok(page.includes(".select('bracket_setup, settings_passcode_hash')")
     && page.includes(".select('event_permissions')"),
     'the setup and permissions ride in their own fail-soft queries, never the main select')
@@ -690,8 +690,8 @@ section('A league grows from the Scoring tab and the hub, one round at a time')
     'both doors write through the league\'s own writer')
   ok(doors.includes('<InlineUnlock') && doors.includes('hasUnlocked(door.tripCode)'),
     'the organiser\'s PIN is asked in place, and remembered')
-  ok(doors.includes('allowAdd={organiser || door.fieldMayAddCourses}'),
-    'the picker hides its add-course door unless the person may use it')
+  ok(!doors.includes('fieldMayAddCourses'),
+    'the picker offers its add-course door to whoever may choose the venue')
   ok(doors.includes("failed ? 'Could not load the field"),
     'a failed fetch of the field stops the save rather than making a round with no handicaps')
 

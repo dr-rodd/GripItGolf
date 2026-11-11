@@ -345,7 +345,7 @@ section('Starting a card')
   ok(sheet.includes('export function StartPeriodCard') && sheet.includes('periodCardIssue(date, today, periods)'),
     'the sheet refuses a day in the future or outside every period')
   ok(sheet.includes('courseIds ? all.filter(c => courseIds.includes(c.id)) : all')
-    && sheet.includes('allowAdd={!courseIds && (organiser || door.fieldMayAddCourses)}'),
+    && sheet.includes('allowAdd={!courseIds}'),
     '  …offers only the league\'s courses where it names them, and never adding one there')
   ok(sheet.includes("router.push(`${tripHome}/scoring/${result.roundNumber}`)"), '  …and opens the card\'s scoring')
 

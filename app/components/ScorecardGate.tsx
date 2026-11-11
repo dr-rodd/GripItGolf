@@ -18,8 +18,8 @@ import { useUnlocked } from './useUnlocked'
  * screen's one emerald action. Once the eighteen are saved `onReady` hands
  * them up and the door carries on in place; a server page passes none and
  * is refreshed in place (`router.refresh()`, never a reload). `unrated`: the
- * same card with no button — a photo will not fix it — saying who can (never
- * Trip Setup on an event, whose field never sees it).
+ * same card with no button — a photo will not fix it — and on an event,
+ * asking the organiser.
  *
  * **Whoever may start the card may photograph it** (D71), trips and events
  * alike. A stroke round's and a period card's doors are already behind that
@@ -31,7 +31,7 @@ export default function ScorecardGate({ blocker, courseId, tripCode, event, onRe
   blocker: CardBlocker
   courseId: string
   tripCode?: string
-  /** An event: "Ask the organiser"; a trip: "Add them in Trip Setup". */
+  /** An event: "Ask the organiser". */
   event: boolean
   /** The new card's holes and tees, as the apply route returned them. */
   onReady?: (holes: unknown[], tees: unknown[]) => void

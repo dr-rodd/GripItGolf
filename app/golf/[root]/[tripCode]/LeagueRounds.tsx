@@ -45,8 +45,8 @@ import { useTripBase } from './TripBase'
  * the next one — wears `LockedRoundTile`: shown, pale, and inert.
  *
  * Who may: the organiser always, with the PIN asked in place; the field
- * when the organiser has switched on `add_rounds` or `set_venues`. Adding a
- * missing course from the picker is the field's only with `add_courses`.
+ * when the organiser has switched on `add_rounds` or `set_venues`. Whoever
+ * may choose a course may add a missing one from the picker (Ross, 11 Nov 2026).
  */
 
 /** What both doors are told about the league and the person holding the phone. */
@@ -56,8 +56,6 @@ export type LeagueDoor = {
   /** The first round's date — the trip's start. */
   startDate: string
   pinSet: boolean
-  /** `add_courses` is on: the field may add a missing course from the picker. */
-  fieldMayAddCourses: boolean
 }
 
 // ─── Shared pieces ─────────────────────────────────────────────
@@ -254,7 +252,6 @@ export function AddLeagueRound({
                 value={courseId}
                 onChange={setCourseId}
                 onCourseAdded={upsert}
-                allowAdd={organiser || door.fieldMayAddCourses}
               />
             )}
             <div className="flex items-center justify-between gap-4 mt-3">
@@ -280,7 +277,7 @@ export function AddLeagueRound({
  * offers those and no others, and adding one is never offered there.
  */
 export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
-  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'pinSet' | 'fieldMayAddCourses'>
+  door: Pick<LeagueDoor, 'tripId' | 'tripCode' | 'pinSet'>
   periods: LeaguePeriod[]
   /** The league's courses, or null for any course. */
   courseIds: string[] | null
@@ -383,7 +380,7 @@ export function StartPeriodCard({ door, periods, courseIds, fieldMayStart }: {
               value={courseId}
               onChange={setCourseId}
               onCourseAdded={upsert}
-              allowAdd={!courseIds && (organiser || door.fieldMayAddCourses)}
+              allowAdd={!courseIds}
             />
             {courseIds && (
               <p className="t-cap text-ink/65 mt-2 leading-snug">
@@ -537,7 +534,6 @@ export function TbcRoundTile({ door, itemId, date, number, lastVenueId, fieldMay
               value={courseId}
               onChange={setCourseId}
               onCourseAdded={upsert}
-              allowAdd={organiser || door.fieldMayAddCourses}
             />
           </div>
         </Sheet>

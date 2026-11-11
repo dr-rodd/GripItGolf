@@ -109,22 +109,31 @@ async function handle(req: NextRequest) {
   let slug = base
   for (let n = 2; taken.has(slug); n++) slug = `${base}-${n}`
 
-  const { data: course, error: courseError } = await supabaseAdmin
+  const row = {
+    trip_id: null,
+    name,
+    slug,
+    county,
+    location: location || null,
+    website,
+    card_verified: false,
+    // No ladies hole data exists yet, and saying otherwise would let a
+    // ladies card render from the men's numbers.
+    ladies_data_verified: false,
+  }
+  const insert = (r: Record<string, unknown>) => supabaseAdmin
     .from('courses')
-    .insert({
-      trip_id: null,
-      name,
-      slug,
-      county,
-      location: location || null,
-      website,
-      card_verified: false,
-      // No ladies hole data exists yet, and saying otherwise would let a
-      // ladies card render from the men's numbers.
-      ladies_data_verified: false,
-    })
+    .insert(r)
     .select('id, name, county, location, website, card_verified')
     .single()
+  // Marked as a user's course (migration 074; Ross, 11 Nov 2026) — live for
+  // everyone at once, told apart from the platform's own for a future
+  // review. Not who added it: no person is logged. Before 074 is pasted the
+  // column does not exist, so the course is added without it.
+  let { data: course, error: courseError } = await insert({ ...row, added_by: 'user' })
+  if (courseError && /added_by/.test(courseError.message ?? '')) {
+    ({ data: course, error: courseError } = await insert(row))
+  }
   if (courseError || !course) {
     console.error('add-course insert failed:', courseError)
     return NextResponse.json({ ok: false, message: 'Could not add the course — try again.' })

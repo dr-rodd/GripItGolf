@@ -253,7 +253,6 @@ export default async function TripCoursePortalPage({
     tripCode,
     startDate: trip.start_date,
     pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
-    fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
   } : null
   const positionsByDay: Record<number, number> = {}
   for (const i of items) positionsByDay[i.day_index] = (positionsByDay[i.day_index] ?? 0) + 1
@@ -354,7 +353,6 @@ export default async function TripCoursePortalPage({
               door={{
                 tripId: trip.id, tripCode,
                 pinSet: isLocked(setupRow?.settings_passcode_hash ?? null),
-                fieldMayAddCourses: allowsParticipant(kind, permsRaw, 'add_courses'),
               }}
               periods={periodsLeague.periods}
               courseIds={periodsLeague.courseIds ?? null}

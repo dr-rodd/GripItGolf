@@ -30,7 +30,6 @@
 import { isEvent } from './eventHub'
 
 export type EventPermissionKey =
-  | 'add_courses'
   | 'add_players'
   | 'edit_scores'
   | 'edit_tee_sheet'
@@ -76,9 +75,6 @@ export const EVENT_PERMISSIONS: {
    */
   teeSheet?: true
 }[] = [
-  { key: 'add_courses', dflt: false, does: 'add a missing course', strict: true,
-    label: 'Participants can add new courses',
-    hint: 'Let the field add a missing course to the platform.' },
   { key: 'add_players', dflt: false, does: 'add players to the field', strict: false,
     label: 'Participants can add new players',
     hint: 'Let anyone with the code put a new name on the roster.' },

@@ -70,7 +70,7 @@ section('The words')
   eq(gateLine('none', true), 'Photograph the printed card to add its pars and indexes.', 'the gate asks for the photo')
   ok(gateLine('unrated', true).endsWith('Ask the organiser.') && !gateLine('unrated', true).includes('Trip Setup'),
     'an event\'s field is never sent to Trip Setup, which it never sees')
-  ok(gateLine('unrated', false).endsWith('Add them in Trip Setup.'), '  …a trip is')
+  ok(!gateLine('unrated', false).includes('Trip Setup'), '  …nor a trip\'s, which has no way to add ratings (Ross, 11 Nov 2026)')
 }
 
 // ─── The doors ─────────────────────────────────────────────────
@@ -248,6 +248,26 @@ section('Labels, never pills (D69)')
   const courses = read('app/components/usePlatformCourses.ts')
   ok(courses.includes("'*, holes(count), tees(course_rating, slope, par)'"),
     'the picker\'s counts come with the list — no query per course')
+}
+
+section('Whoever may start a round may add its course (Ross, 11 Nov 2026)')
+{
+  const perms = read('lib/eventPermissions.ts')
+  ok(!perms.includes("'add_courses'"), 'the add-courses setting is gone from the registry')
+  for (const f of ['app/golf/[root]/[tripCode]/scoring/page.tsx', 'app/golf/[root]/[tripCode]/page.tsx',
+    'app/golf/[root]/[tripCode]/match/[matchId]/page.tsx', 'app/golf/[root]/[tripCode]/LeagueRounds.tsx',
+    'app/golf/[root]/[tripCode]/MatchDetails.tsx', 'app/golf/[root]/[tripCode]/match/[matchId]/MatchActions.tsx']) {
+    ok(!/add_courses|fieldMayAddCourses|allowAddCourse/.test(read(f)), `${path.basename(f)} no longer gates adding a course`)
+  }
+  const route = read('app/api/courses/route.ts')
+  ok(route.includes("added_by: 'user'"), 'a course added from a picker is marked as a user\'s (migration 074)')
+  ok(/courseError && \/added_by\//.test(route), '  …and still adds before 074 is pasted')
+  const m = read('supabase/migrations/20260101000074_course_added_by.sql')
+  ok(m.includes("DEFAULT 'system'") && m.includes("CHECK (added_by IN ('system', 'user'))"), 'the database knows system from user courses')
+  for (const f of fs.readdirSync('data/courses').filter(n => n.endsWith('.json'))) {
+    const slug = (JSON.parse(read(`data/courses/${f}`)) as { slug?: string }).slug
+    if (slug) ok(m.includes(`'${slug}'`), `  …the researched ${slug} is backfilled as the system's`)
+  }
 }
 
 section('Choosing is never refused')

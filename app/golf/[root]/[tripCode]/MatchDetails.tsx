@@ -25,7 +25,7 @@ import { FIELD, FIELD_LABEL, ListRow, optionClass } from '@/app/components/ui'
  * event's code can read it.
  */
 export default function MatchDetails({
-  tripId, tripCode, playerId, homeCourseId, homeCourseName, contact, allowAddCourse,
+  tripId, tripCode, playerId, homeCourseId, homeCourseName, contact,
 }: {
   tripId: string
   tripCode: string
@@ -33,7 +33,6 @@ export default function MatchDetails({
   homeCourseId: string | null
   homeCourseName: string | null
   contact: PlayerContact | null
-  allowAddCourse: boolean
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
@@ -120,7 +119,6 @@ export default function MatchDetails({
               value={home}
               onChange={setHome}
               onCourseAdded={c => setAdded(prev => [...prev.filter(x => x.id !== c.id), c])}
-              allowAdd={allowAddCourse}
             />
           </div>
 

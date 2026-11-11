@@ -73,13 +73,13 @@ their Stableford is Golf Ireland's official figure and cannot be re-scored.
 
 Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
-**The idea.** Anyone can add a course from a course picker, and anyone who may start a card can photograph its scorecard (D68–D71). Those courses and cards are shared by every event on the platform, so one bad card is bad for everyone. Every course and scorecard a player adds should be recorded internally against whoever added it, and a review system should check them.
+**The idea.** Whoever may start a round may add its course, from any course picker, and photograph its scorecard then or later (D68–D74). **A user's course is live for everyone at once**, and stays so. A review function then lets a course be **confirmed**: looked at and marked as checked, or corrected.
 
-**What already exists.** Courses, holes and tees are written only by the server (migration 040). `card_verified` records that a photo confirmed a card. `/admin/courses` lists every course by card state and edits names, counties and tees. Nothing records **who** added a course or a photo, or from which event.
+**What already exists.** Courses, holes and tees are written only by the server (migration 040). `courses.added_by` (migration 074) says whether a course came from the platform (`'system'`) or from a picker (`'user'`). **Who added it is deliberately not recorded** (Ross). `card_verified` records that a photo confirmed a card, and `/admin/courses` lists every course by card state and edits names, counties and tees.
 
 **What it needs.**
-- **An audit record.** Each added course and each applied card check, with who (the phone's anonymous user id from row-level security stage 1), which event, when, and what changed (the photo's diff). It must be server only, with RLS on and no phone grant.
-- **A review queue in `/admin`.** New courses and photo corrections are waiting to be looked at. Each can be accepted, corrected, or rolled back to the card before the change.
-- **Rules worth checking automatically.** A new course whose name is very close to an existing one. A photo correction that moves pars rather than indexes. Several corrections to one course from different events.
+- **A review list in `/admin`:** the user-added courses not yet confirmed (`added_by = 'user'`), newest first. Each can be confirmed, corrected, or merged into the platform course it duplicates. Confirming is a mark, never a gate: the course was live all along.
+- **Photo corrections in the same list.** A card check applied to a course since it was last confirmed.
+- **Checks worth doing automatically:** a new course whose name is very close to an existing one; a photo correction that moves pars rather than indexes; several corrections to one course.
 
-**Open questions.** Whether a correction should go live at once, as it does now, or wait for review on a course other events are already using. How long the record is kept, and what the privacy notice says about it. Whether an organiser can see who changed a course their event plays.
+**Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.

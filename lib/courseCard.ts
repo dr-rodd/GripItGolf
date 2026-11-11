@@ -218,9 +218,10 @@ export const GATE_TITLE: Record<CardBlocker, string> = {
 
 export function gateLine(blocker: CardBlocker, event: boolean): string {
   if (blocker === 'none') return 'Photograph the printed card to add its pars and indexes.'
+  // Never "Trip Setup" (Ross, 11 Nov 2026): it has no way to add ratings.
   return event
     ? 'This course has no tee ratings yet, so handicaps can’t be worked out. Ask the organiser.'
-    : 'This course has no tee ratings yet, so handicaps can’t be worked out. Add them in Trip Setup.'
+    : 'This course has no tee ratings yet, so handicaps can’t be worked out.'
 }
 
 /**

@@ -252,7 +252,6 @@ export default async function MatchPage({
                   matchId={match.id}
                   pinSet={pinSet}
                   inMatch={iAmIn}
-                  allowAddCourse={allowsParticipant(kind, perms, 'add_courses')}
                   people={inMatchIds.flatMap(id => {
                     const p = playerById.get(id)
                     return p ? [{ id, name: p.name, gender: p.gender, homeCourseId: homeOf.get(id) ?? null }] : []

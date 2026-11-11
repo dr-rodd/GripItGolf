@@ -41,8 +41,8 @@ const read = (p: string) => fs.readFileSync(p, 'utf-8')
 section('Three seeded permissions, conservative by default')
 {
   eq(EVENT_PERMISSIONS.map(p => p.key),
-    ['add_courses', 'add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches', 'score_session_matches', 'edit_handicaps', 'submit_cards'],
-    'the three seeded keys, then the tee sheet\'s two, the tag, a league\'s rounds and venues, scoring a match, scoring a session match, handicaps and starting a card — each the promised one-line addition')
+    ['add_players', 'edit_scores', 'edit_tee_sheet', 'set_tee_sheets', 'assign_tag', 'add_rounds', 'set_venues', 'score_matches', 'score_session_matches', 'edit_handicaps', 'submit_cards'],
+    'the seeded keys (adding a course is no longer a permission — Ross, 11 Nov 2026: whoever may start a round may add its course), then the tee sheet\'s two, the tag, a league\'s rounds and venues, scoring a match, scoring a session match, handicaps and starting a card — each the promised one-line addition')
   ok(EVENT_PERMISSIONS.every(p => p.dflt === (p.key === 'score_matches' || p.key === 'score_session_matches' || p.key === 'edit_tee_sheet' || p.key === 'edit_handicaps' || p.key === 'submit_cards')),
     'every default is off — the organiser opts in — except scoring a match (a Knockout\'s or a session\'s), open unless the organiser closes it, players booking their own tee times (Ross, 26 Oct 2026: the medium level is the default), setting their own handicaps (Ross, 4 Nov 2026) and starting their own cards in a continuous league (Ross, 8 Nov 2026)')
   const hcp = EVENT_PERMISSIONS.find(p => p.key === 'edit_handicaps')!
@@ -86,10 +86,10 @@ section('Adding a fourth permission is one line, structurally')
 section('Strict or relaxed, in one tap (Ross, 5 Nov 2026)')
 {
   const ko = permissionsFor(false, true)
-  eq(ko.map(p => p.key), ['add_courses', 'add_players', 'edit_scores', 'assign_tag', 'score_matches', 'edit_handicaps'],
+  eq(ko.map(p => p.key), ['add_players', 'edit_scores', 'assign_tag', 'score_matches', 'edit_handicaps'],
     'the match play list, in the order creation asks it')
   const strict = withCollabStyle(defaultPermissions(), 'strict', ko)
-  eq(ko.map(p => (strict[p.key] ? 'y' : 'n')).join(''), 'ynnyny', 'Strict is "ynnyny" down it, as Ross gave it')
+  eq(ko.map(p => (strict[p.key] ? 'y' : 'n')).join(''), 'nnyny', 'Strict is Ross\'s "ynnyny" down it, less the add-courses answer that is gone')
   const relaxed = withCollabStyle(defaultPermissions(), 'relaxed', ko)
   ok(ko.every(p => relaxed[p.key]), 'Relaxed is every one on')
   eq([relaxed.edit_tee_sheet, relaxed.set_tee_sheets], [true, false], '  …the tee times question keeping its own answers')
@@ -102,7 +102,7 @@ section('Strict or relaxed, in one tap (Ross, 5 Nov 2026)')
   eq(collabStyleOf(withCollabStyle(defaultPermissions(), 'relaxed', league), league), 'relaxed', '  …relaxed opens them')
   eq(collabAdvice('strict', ko), [
     COLLAB_STYLES[1].vibe,
-    'Players can add a missing course, pick their own tag and set their own handicaps.',
+    'Players can pick their own tag and set their own handicaps.',
     'Only you can add players to the field, fix a finished scorecard and score any match, with the PIN.',
     'Anything here can be changed later in the organiser area.',
   ], 'a style says what it means: the feel of it, what the field can do, what only you do')
@@ -129,11 +129,12 @@ section('Storage reads whole, falls soft, and never nulls')
   const parsed = parseEventPermissions(stored)
   eq(parsed.add_players, true, 'a real boolean is honoured')
   eq(parsed.edit_scores, false, 'a non-boolean falls to the default')
-  eq(parsed.add_courses, false, 'an absent key falls to the default')
+  eq(parsed.edit_handicaps, true, 'an absent key falls to the default')
+  ok(!('add_courses' in parseEventPermissions({ add_courses: true })), 'a stored add_courses answer is no longer carried')
   ok(!('mystery' in parsed), 'an unknown key is not carried')
 
   const full: EventPermissions = {
-    add_courses: true, add_players: false, edit_scores: true, edit_tee_sheet: false,
+    add_players: false, edit_scores: true, edit_tee_sheet: false,
     set_tee_sheets: true, assign_tag: true, add_rounds: true, set_venues: false, score_matches: false,
     score_session_matches: false, edit_handicaps: false, submit_cards: false,
   }
@@ -153,7 +154,7 @@ section('Creation writes only what differs from the defaults')
 
 section('The gate opens for anything that is not an event')
 {
-  const locked = { add_courses: false, add_players: false, edit_scores: false }
+  const locked = { add_players: false, edit_scores: false }
   ok(allowsParticipant('trip', locked, 'add_players'),
     'a trip is open whatever the column holds')
   ok(allowsParticipant(undefined, locked, 'add_players'),
@@ -175,13 +176,13 @@ section('The admin card sums it up')
   ok(describePermissions(defaultPermissions(), permissionsFor(false, true)).includes('anyone can score'),
     '  …and a match play event at its defaults says its matches are open to score')
   const two = {
-    add_courses: true, add_players: true, edit_scores: false, edit_tee_sheet: false,
+    add_players: true, edit_scores: true, edit_tee_sheet: false,
     set_tee_sheets: false, assign_tag: false, add_rounds: false, set_venues: false, score_matches: false,
     score_session_matches: false, edit_handicaps: false, submit_cards: false,
   }
-  ok(describePermissions(two, permissionsFor(false)).includes('2 of 5'),
+  ok(describePermissions(two, permissionsFor(false)).includes('2 of 4'),
     'partial says the count, out of what this event is asked')
-  ok(describePermissions(two, permissionsFor(true)).includes('2 of 7'),
+  ok(describePermissions(two, permissionsFor(true)).includes('2 of 6'),
     '  …which on a series includes its own')
   ok(permissionsFor(false, false, false, true).some(p => p.key === 'score_session_matches')
     && !permissionsFor(false, true).some(p => p.key === 'score_session_matches'),

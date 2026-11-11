@@ -56,10 +56,11 @@ export default function CourseSelect({
    */
   onCourseAdded: (course: DirectoryCourse) => void
   /**
-   * Whether this person may add a course to the platform from here. Open
-   * everywhere it always was; an event's field gets it only through the
-   * `add_courses` permission (lib/eventPermissions.ts), so a picker the
-   * field can reach on an event passes the gate in.
+   * Whether this person may add a course to the platform from here. **On
+   * in every picker** (Ross, 11 Nov 2026): whoever may start a round may add
+   * its course — the `add_courses` permission that barred an event's field
+   * is gone. Off only where the choice itself is narrowed, a league that
+   * names its courses.
    */
   allowAdd?: boolean
 }) {

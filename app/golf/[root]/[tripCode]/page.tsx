@@ -650,7 +650,6 @@ export default async function TripPage({ params, searchParams }: {
     tripCode,
     startDate: trip.start_date,
     pinSet: isLocked(tripRaw.settings_passcode_hash ?? null),
-    fieldMayAddCourses: allowsParticipant(trip.kind, tripRaw.event_permissions, 'add_courses'),
   } : null
   const leagueLastVenue = [...league].reverse().find(r => r.courseId)?.courseId ?? null
   const offLeague = new Set(
@@ -980,7 +979,6 @@ export default async function TripPage({ params, searchParams }: {
             homeCourseId={myDetails.homeCourseId}
             homeCourseName={myDetails.homeCourseName}
             contact={myDetails.contact}
-            allowAddCourse={allowsParticipant(trip.kind, (trip as { event_permissions?: unknown }).event_permissions, 'add_courses')}
           />
         )}
 
