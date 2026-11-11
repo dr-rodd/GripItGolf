@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
-import { FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT } from "@/lib/membership"
+import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT } from "@/lib/membership"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
@@ -186,7 +186,7 @@ export async function GET(req: NextRequest) {
   // this step, never the cleanup.
   let staleAttempts = 0
   try {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    const cutoff = new Date(Date.now() - ATTEMPT_KEEP_HOURS * 60 * 60 * 1000).toISOString()
     const q = dryRun
       ? supabaseAdmin.from("entry_attempts").select("key", { count: "exact", head: true }).lt("window_started", cutoff)
       : supabaseAdmin.from("entry_attempts").delete({ count: "exact" }).lt("window_started", cutoff)

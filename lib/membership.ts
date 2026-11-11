@@ -175,6 +175,13 @@ export const ATTEMPT_LIMITS = {
   event: { max: 100, windowMs: 60 * 60 * 1000 },
 } as const satisfies Record<string, AttemptLimit>
 
+/**
+ * The nightly cleanup deletes a count once its window started more than this
+ * long ago (`/api/cleanup`, step 4). It runs once a night, so a count can be
+ * nearly twice this old before it goes: the privacy notice says two days.
+ */
+export const ATTEMPT_KEEP_HOURS = 24
+
 /** One window as stored. */
 export interface AttemptWindow { failures: number; windowStarted: string }
 
@@ -226,6 +233,20 @@ export function needsEntry(stamp: string | null | undefined, userId: string, pla
 // scripts/rls-check.sql has been looked at.
 
 export const FORGET_ANONYMOUS_PHONES = false
+
+/**
+ * The rule's three numbers, as migration 069 writes them in SQL — here so
+ * the privacy notice imports them rather than typing them, and
+ * `test:membership` fails if the two copies part.
+ */
+export const FORGET_RULE = {
+  /** Made this long ago and entered no event. */
+  noEventDays: 7,
+  /** Unseen this long… */
+  unseenDays: 90,
+  /** …and every event it entered ended more than this long ago. */
+  afterEventDays: 30,
+} as const
 
 /** At most this many phones forgotten a night, so a backlog drains rather than lands at once. */
 export const FORGET_PER_NIGHT = 5000

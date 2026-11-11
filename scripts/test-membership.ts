@@ -15,7 +15,7 @@
 
 import fs from 'fs'
 import {
-  ATTEMPT_LIMITS, ORGANISER_MS, afterFailure, attemptBlocked, entryStamp, fieldReadOnlyFrom,
+  ATTEMPT_KEEP_HOURS, ATTEMPT_LIMITS, FORGET_RULE, ORGANISER_MS, afterFailure, attemptBlocked, entryStamp, fieldReadOnlyFrom,
   isMember, mayWrite, mergeGrant, needsEntry, roleOf,
   type AttemptWindow, type EventFacts, type Membership,
 } from '../lib/membership'
@@ -342,6 +342,24 @@ function wiringTests() {
       '  …and deletes only with the switch on, never on a dry run')
     ok(/FORGET_ANONYMOUS_PHONES = false/.test(read('lib/membership.ts')), 'the switch ships off: the dry-run count comes first')
     ok(/anonymous_phones_to_forget\(\)/.test(read('scripts/rls-check.sql')), 'scripts/rls-check.sql has the dry-run count, off the same function')
+
+    // The privacy notice prints FORGET_RULE; the SQL is what runs. One rule.
+    ok(code.includes(`interval '${FORGET_RULE.noEventDays} days'`), `069 forgets a phone with no event after ${FORGET_RULE.noEventDays} days, as FORGET_RULE says`)
+    ok(code.includes(`interval '${FORGET_RULE.unseenDays} days'`), `069 forgets a phone unseen ${FORGET_RULE.unseenDays} days, as FORGET_RULE says`)
+    ok(code.includes(`::date - ${FORGET_RULE.afterEventDays})`), `069 waits ${FORGET_RULE.afterEventDays} days after the last event ends, as FORGET_RULE says`)
+  }
+
+  section('The privacy notice prints the rules, never types them')
+  {
+    const notice = read('app/privacy/page.tsx')
+    for (const name of ['ATTEMPT_LIMITS', 'ATTEMPT_KEEP_HOURS', 'FORGET_RULE', 'FORGET_ANONYMOUS_PHONES', 'ORGANISER_HOURS']) {
+      ok(new RegExp(`import \\{[^}]*\\b${name}\\b[^}]*\\} from '@/lib/membership'`).test(notice), `the notice imports ${name}`)
+    }
+    ok(/FORGET_ANONYMOUS_PHONES\s*\?/.test(notice), 'the notice says deletion is coming until the switch is on')
+    ok(!/PIN is never sent to\s+us/.test(notice), 'the notice no longer says a PIN never reaches the server (/api/entry checks it)')
+    ok(!/settings, for the\s+session/.test(notice), 'the notice no longer says an unlock lasts the session')
+    ok(/ATTEMPT_KEEP_HOURS \* 60 \* 60 \* 1000/.test(read('app/api/cleanup/route.ts')), 'the nightly job clears wrong-PIN counts on ATTEMPT_KEEP_HOURS')
+    ok(ATTEMPT_KEEP_HOURS * 2 >= 24 && (ATTEMPT_KEEP_HOURS * 2) % 24 === 0, 'twice the keep (a nightly job) is whole days, as the notice prints it')
   }
 
   section('The realtime question has its query')

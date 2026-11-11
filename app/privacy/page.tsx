@@ -5,6 +5,9 @@ import { STRAVA_CACHE_DAYS, DEAD_CONNECTION_DAYS } from '@/lib/strava'
 import { FINAL_GRACE_DAYS } from '@/lib/runChallenge'
 import { BOARD_MAX_AGE_MS } from '@/app/run/[tripCode]/runs'
 import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
+import {
+  ATTEMPT_LIMITS, ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_RULE, ORGANISER_HOURS,
+} from '@/lib/membership'
 import { LegalPage, LegalSection, LEGAL_LINK } from '@/app/components/LegalPage'
 
 export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
@@ -30,13 +33,19 @@ export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
  *
  * The retention figures are imported, never typed: the seven days, the
  * twenty-five and the three are the constants the nightly job runs on, so
- * the notice cannot promise one thing while the code does another.
+ * the notice cannot promise one thing while the code does another. So are
+ * the PIN retry limit and the phone identity's clear-out (lib/membership.ts),
+ * and the clear-out is described as coming until FORGET_ANONYMOUS_PHONES is
+ * switched on — flipping it changes the sentence.
  *
  * Plain language on purpose. Have it read by somebody qualified before
  * Strava's review — docs/run.md.
  */
 
-const UPDATED = '4 November 2026'
+const UPDATED = '11 November 2026'
+
+const minutes = (ms: number) => ms / 60_000
+const hours = (ms: number) => ms / 3_600_000
 
 const B = ({ children }: { children: React.ReactNode }) => <strong className="text-ink">{children}</strong>
 
@@ -76,11 +85,20 @@ export default function PrivacyPage() {
           </li>
           <li>
             <B>The organiser&apos;s email address</B> — the lead player&apos;s, for a golf trip — used to
-            send one confirmation email with the event&apos;s links. An organiser PIN is never sent to
-            us: only a scrambled form of it, made on their own phone.
+            send one confirmation email with the event&apos;s links. An event&apos;s PINs are kept only in a
+            scrambled form. When somebody types one in, it is sent to us to be checked against that
+            and is not kept.
           </li>
           <li><B>Preferences</B>, such as dark mode, so they follow you between phones.</li>
         </ul>
+        <p className="mt-3">
+          To stop people guessing event PINs, we count wrong PINs for a short time: no more than{' '}
+          {ATTEMPT_LIMITS.address.max} wrong tries at an event&apos;s PIN from one network in{' '}
+          {minutes(ATTEMPT_LIMITS.address.windowMs)} minutes, and {ATTEMPT_LIMITS.event.max} from
+          everywhere in {hours(ATTEMPT_LIMITS.event.windowMs) === 1 ? 'an hour' : `${hours(ATTEMPT_LIMITS.event.windowMs)} hours`}.
+          The network address is scrambled before it is stored, never kept as the address itself,
+          and each count is deleted within {(ATTEMPT_KEEP_HOURS * 2) / 24} days.
+        </p>
       </LegalSection>
 
       <LegalSection title="Golf">
@@ -259,9 +277,21 @@ export default function PrivacyPage() {
         <p>
           A few small cookies and stored settings, all needed for the site to work, none for
           tracking: which player you are on each event, so the screens are yours; whether you have
-          seen the introduction; dark mode; that this phone unlocked an event&apos;s settings, for the
-          session; that this phone made an event; and golf scores entered but not yet sent, so a
+          seen the introduction; dark mode; that this phone unlocked an event&apos;s settings, for{' '}
+          {ORGANISER_HOURS} hours; that this phone made an event; and golf scores entered but not yet sent, so a
           bad signal on the course loses nothing. Clearing your browser&apos;s data removes them all.
+        </p>
+        <p className="mt-3">
+          When you open or make an event, your phone is given a random identity so Green Dot knows
+          which events it has entered and whether it may score or change settings. It carries no
+          name, email or phone number; once you claim your name in an event, it records which player
+          you are there. Supabase, which runs the sign-in, notes the network address and type of
+          browser each identity signs in from. An identity that enters no event within{' '}
+          {FORGET_RULE.noEventDays} days of being made, or goes {FORGET_RULE.unseenDays} days unused
+          once every event it entered ended more than {FORGET_RULE.afterEventDays} days ago,{' '}
+          {FORGET_ANONYMOUS_PHONES
+            ? 'is deleted, with its record of which events it entered.'
+            : 'is to be deleted, with its record of which events it entered, by a nightly clear-out that is not switched on yet. Until it is, identities are kept.'}
         </p>
       </LegalSection>
 
