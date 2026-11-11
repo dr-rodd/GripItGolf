@@ -196,7 +196,7 @@ export const SEND_TIMEOUT_MS = 6_000
  * score on good signal is on its way within a second; the line is for a
  * connection that is actually weak (Ross, 11 Nov 2026).
  */
-export const UNSENT_SHOW_DELAY_MS = 3_000
+export const UNSENT_SHOW_DELAY_MS = 10_000
 
 /**
  * What a phone with scores waiting says, the one copy (Ross, 11 Nov 2026):

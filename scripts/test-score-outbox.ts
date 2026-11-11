@@ -634,7 +634,7 @@ section('One entry the server will not take never holds the rest behind it')
 
 section('The waiting line does not flash up for a normal send')
 {
-  ok(UNSENT_SHOW_DELAY_MS >= 2_000 && UNSENT_SHOW_DELAY_MS <= 6_000, 'it waits a few seconds first, then speaks')
+  ok(UNSENT_SHOW_DELAY_MS === 10_000, 'it waits ten seconds first, then speaks (Ross, 11 Nov 2026)')
   const flow = read('app/scoring/LiveScoringFlow.tsx')
   const card = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
   ok(/useAfterDelay\(count > 0, UNSENT_SHOW_DELAY_MS\)/.test(flow), 'the stroke card holds it back')
