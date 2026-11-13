@@ -11,7 +11,7 @@ import { NO_FORMATS } from '@/lib/formats'
 import { normaliseEmail, emailWarning, MAX_EMAIL } from '@/lib/email'
 import { rememberPlayer } from '@/lib/playerCookie'
 import ItineraryBuilder from '@/app/components/ItineraryBuilder'
-import { type ItineraryItem, golfItems, dateForDay } from '@/lib/itinerary'
+import { type ItineraryItem, golfItems, dateForDay, describeDay } from '@/lib/itinerary'
 import { toItemRow } from '@/lib/itinerarySync'
 import Toggle from '@/app/components/Toggle'
 import {
@@ -37,7 +37,11 @@ import HandicapField from '@/app/components/HandicapField'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
-import { boardRules, boardTitle, isMatchTally, matchTallyBoard, type Leaderboard } from '@/lib/leaderboards'
+import { boardRules, boardTitle, boardFacts, isMatchTally, matchTallyBoard, MAX_DISCARD, type Leaderboard } from '@/lib/leaderboards'
+import { type SessionDraft, STROKE_FORMAT, resolvedFormats, formatIssue } from '@/lib/sessions'
+import { type ShapeAnswer, eventShape, answeredShape, boardsForCreation, shapeSentence } from '@/lib/eventShape'
+import { RoundList, ReadBack } from './SessionPicker'
+import { courseLabel } from '@/lib/courseDirectory'
 import {
   NO_DEADLINES_ANSWER, deadlinesAnswerIssue, knockoutBoards, knockoutSeed, storedDeadlines, type DeadlinesAnswer,
 } from '@/lib/bracketSetup'
@@ -48,7 +52,7 @@ import {
 } from '@/lib/eventPermissions'
 import CollaborationQuestion from '@/app/components/CollaborationQuestion'
 import { TeeTimesQuestion } from '@/app/components/TeeTimesAccess'
-import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
+import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
@@ -192,6 +196,15 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
   // always made.
   const [boards, setBoards] = useState<Leaderboard[]>(() => matchPlay ? knockoutBoards() : [])
 
+  // A trip's Format (D77, stage 8): its rounds — the itinerary's golf — a
+  // format each, and the leaderboard the platform reads from them. Optional,
+  // as a trip's leaderboards always were: until "Set the format" is tapped
+  // nothing is written and the trip is the one this wizard always made.
+  const [formatOn, setFormatOn] = useState(false)
+  const [tripDrafts, setTripDrafts] = useState<SessionDraft[]>([])
+  const [shapeAnswer, setShapeAnswer] = useState<ShapeAnswer | null>(null)
+  const [discard, setDiscard] = useState(0)
+
   // Tournaments only — how collaborative the event is, all off until the
   // organiser opts in (lib/eventPermissions.ts). A trip never asks and
   // never writes: its open access is the trip's whole way of working.
@@ -233,6 +246,38 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
       ? 'Add at least one round of golf — otherwise what\'s the point?'
       : roundCountError(plannedGolf.length, noun)
 
+  // The Format's rounds: the itinerary's golf, each keeping the answers
+  // given to it by position (D77). Round 1 always plays a format of its own.
+  const formatRounds: SessionDraft[] = plannedGolf.map((g, i) => {
+    const had = tripDrafts[i]
+    const format = had?.format ?? (i === 0 ? STROKE_FORMAT : 'same')
+    return {
+      ...(had ?? {}),
+      key: `g-${i}`, dayIndex: g.dayIndex, courseId: g.courseId ?? '',
+      format: i === 0 && (format === 'same' || format === 'tbc') ? STROKE_FORMAT : format,
+    }
+  })
+  const roundFormats = resolvedFormats(formatRounds)
+  const ruledShape = eventShape({ formats: roundFormats, tags: 0 })
+  const answeredTrip = answeredShape(ruledShape, shapeAnswer)
+  const tripAsking = answeredTrip.main === 'ask'
+  const tripShape = tripAsking ? { ...answeredTrip, main: 'league' as const } : answeredTrip
+  const tripFormatIssue = !formatOn || matchPlay ? null
+    : tripAsking ? 'Answer how the rounds should count.'
+    : roundFormats.map(formatIssue).find(Boolean) ?? null
+  const formatBoards = (ids: (string | null)[]) => boardsForCreation({
+    rounds: formatRounds.map((r, i) => ({ roundId: ids[i] ?? null, format: roundFormats[i], name: r.name, matches: r.matches })),
+    shape: tripShape, ranks: tripShape.ranks, entrants: Math.max(1, players.filter(p => p.name.trim()).length),
+    fieldSize: players.filter(p => p.name.trim()).length,
+    discard: tripShape.main === 'overall' ? 0 : discard, secondaries: boards,
+  })
+  const formatPreview = formatOn && !matchPlay ? formatBoards(formatRounds.map((_, i) => `preview-${i}`)) : []
+  /** A round's venue on its Format card — the itinerary chose it. */
+  const courseNameOf = (id: string) => {
+    const c = courses.find(x => x.id === id)
+    return c ? courseLabel(c.name) : null
+  }
+
   // A tournament always sets one: the PIN is the organiser's key to the
   // Event Hub's admin side (and Trip Setup — one code, one lock). On a trip
   // the lock stays a choice.
@@ -262,7 +307,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
   const deadlineStep: Step | null = matchPlay && bracketRounds > 0 ? 5 : null
   const lastStep: Step = matchPlay ? (deadlineStep ? 6 : 5) : 3
   const fieldValid = !duplicateIssue && !(matchPlay && fieldTagsIssue(tags))
-  const settingsValid = !passcodeIssue && !publicIssue
+  const settingsValid = !passcodeIssue && !publicIssue && !tripFormatIssue
   // A trip's (and a league-less event's) step 3 holds the field and the
   // settings together; a match play event's are steps 3 and 5, its draw 4.
   const stepValid = (n: Step) =>
@@ -359,7 +404,11 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
     // Only when boards were actually built. Skipped, nothing is written and
     // the column keeps its empty default — the trip the wizard has always
     // made, with the competition still Trip Setup's question.
-    if (boards.length > 0) tripRow.leaderboards = boards
+    // With the format set, the boards it chose and every round's id, made
+    // here so the boards can name them before the round rows exist (D77).
+    const roundIds = formatOn && !matchPlay ? plannedGolf.map(() => crypto.randomUUID()) : null
+    const written = roundIds ? formatBoards(roundIds) : boards
+    if (written.length > 0) tripRow.leaderboards = written
 
     // Only for tournaments, so ordinary trips still create before migration
     // 046 has run. A tournament insert does need the column — until the
@@ -490,6 +539,8 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
         plannedGolf.map((g, i) => {
           const date = dateForDay(startDate || null, g.dayIndex)
           return {
+            // The id its boards were written with, where the format was set.
+            ...(roundIds ? { id: roundIds[i] } : {}),
             trip_id: tripId,
             course_id: g.courseId,
             round_number: i + 1,
@@ -1009,12 +1060,14 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                 event's last step, so no rule above it. */}
             <div className={matchPlay ? '' : 'mt-8 pt-6 border-t border-line'}>
               <p className="t-label text-ink/80 mb-2">
-                Leaderboards (optional)
+                {matchPlay ? 'Leaderboards (optional)' : 'The format (optional)'}
               </p>
               <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                {isTournament
+                {matchPlay
                   ? 'Skip for now and choose later in the organiser area.'
-                  : 'Skip for now and choose later in Trip Setup.'}
+                  : isTournament
+                    ? 'Each round’s golf, and the leaderboard follows from it. Skip for now and set it later in the organiser area.'
+                    : 'Each round’s golf, and the leaderboard follows from it. Skip for now and set it later in Trip Setup.'}
               </p>
               {/* The tags' wins and losses — a board the picker below
                   cannot make, so offered as its own switch while there are
@@ -1034,13 +1087,93 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                   />
                 </div>
               )}
-              <LeaderboardSetup
-                boards={boards}
-                playerCount={players.filter(p => p.name.trim()).length}
-                teamCount={0}
-                askTeeTeams={isTournament}
-                onChange={setBoards}
-              />
+              {matchPlay ? (
+                <LeaderboardSetup
+                  boards={boards}
+                  playerCount={players.filter(p => p.name.trim()).length}
+                  teamCount={0}
+                  askTeeTeams={isTournament}
+                  onChange={setBoards}
+                />
+              ) : !formatOn ? (
+                <button type="button" className={buttonClass('secondary')} onClick={() => setFormatOn(true)}>
+                  Set the format
+                </button>
+              ) : (
+                <div className="space-y-4">
+                  <RoundList
+                    rounds={formatRounds}
+                    onChange={setTripDrafts}
+                    unit={tripShape.unit}
+                    days={[]}
+                    dateOf={r => describeDay(dateForDay(startDate || null, r.dayIndex), r.dayIndex)}
+                    canAdd={false}
+                    sameVenue={false}
+                    onSameVenue={() => {}}
+                    renderVenue={() => null}
+                    allowTbc={false}
+                    fieldSize={players.filter(p => p.name.trim()).length}
+                    venueOf={r => courseNameOf(r.courseId)}
+                  />
+                  {ruledShape.main === 'ask' && (
+                    <div className="space-y-3">
+                      <p className="t-body text-ink/65">{shapeSentence(ruledShape, null)}</p>
+                      {([
+                        { key: 'one_total', label: 'One total across every round',
+                          hint: 'Each player’s own total over every round — the Primary — with each round’s own format as a leaderboard beside it.' },
+                        { key: 'per_round', label: 'Points per round',
+                          hint: 'Each round is a session in its own format, paying points to the Overall by finishing position.' },
+                      ] as const).map(o => (
+                        <button key={o.key} type="button" aria-pressed={shapeAnswer === o.key}
+                          className={optionClass(shapeAnswer === o.key)} onClick={() => setShapeAnswer(o.key)}>
+                          <p className="t-card text-ink">{o.label}</p>
+                          <p className="t-cap text-ink/65 mt-0.5">{o.hint}</p>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!tripAsking && (
+                    <ReadBack
+                      title={tripShape.main === 'overall' ? 'Overall' : boards.length > 0 ? 'Primary leaderboard' : 'Leaderboard'}
+                      sentence={formatRounds.length === 1 && tripShape.main !== 'overall'
+                        ? 'One round, on one leaderboard.'
+                        : shapeSentence(tripShape, null)}
+                      facts={formatPreview[0] ? boardFacts(formatPreview[0]) : []}
+                    >
+                      {tripShape.main !== 'overall' && formatRounds.length > 1 && (
+                        <div className="mt-4">
+                          <p className="t-label text-ink/80 mb-2">Drop each player’s worst round?</p>
+                          <div className="flex gap-2">
+                            {Array.from({ length: MAX_DISCARD + 1 }, (_, n) => n).map(n => (
+                              <button key={n} type="button" aria-pressed={discard === n}
+                                className={`${chipClass(discard === n)} flex-1`} onClick={() => setDiscard(n)}>
+                                {n === 0 ? 'No' : `Worst ${n}`}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div className="mt-4">
+                        <p className="t-label text-ink/80 mb-2">Secondary leaderboards</p>
+                        <LeaderboardSetup
+                          boards={boards}
+                          alongside={formatPreview.filter(b => !boards.some(x => x.id === b.id))}
+                          secondary
+                          playerCount={players.filter(p => p.name.trim()).length}
+                          teamCount={0}
+                          askTeeTeams={isTournament}
+                          onChange={setBoards}
+                        />
+                      </div>
+                    </ReadBack>
+                  )}
+                  {tripFormatIssue && <p className="t-cap text-ink/65">{tripFormatIssue}</p>}
+                  <button type="button" className={buttonClass('quiet')}
+                    onClick={() => { setFormatOn(false); setBoards([]) }}>
+                    Decide later
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* ── How collaborative? — events only ──

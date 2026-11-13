@@ -136,8 +136,9 @@ section('The itinerary replaces the rounds picker')
   // byte-for-byte the trip this wizard always made, and the phantom-board
   // rule above still holds for it.
   ok(src.includes('<LeaderboardSetup'), 'the leaderboard picker is offered at creation')
-  ok(src.includes('if (boards.length > 0) tripRow.leaderboards = boards'),
-    '  …written only when boards were actually built')
+  ok(src.includes('if (written.length > 0) tripRow.leaderboards = written')
+    && src.includes('const written = roundIds ? formatBoards(roundIds) : boards'),
+    '  …written only when boards were actually built — the Format\'s, once it is set (stage 8)')
   ok(src.includes('const fieldValid = !duplicateIssue') && src.includes('const settingsValid = !passcodeIssue && !publicIssue')
     && !/stepValid[\s\S]{0,400}boards/.test(src),
     '  …and never required — the way forward does not wait on a board')

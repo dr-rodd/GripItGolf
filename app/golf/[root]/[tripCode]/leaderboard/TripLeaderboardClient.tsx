@@ -1810,11 +1810,13 @@ export default function TripLeaderboardClient({
   // from this one page was a chip that said what the bar already said — and
   // it was the only thing forcing this strip to exist on a one-board trip.
   /**
-   * What a board is called on an event (D79): the Overall, "Leaderboard"
-   * alone, "Primary" beside a secondary — lib/eventShape.ts. A trip keeps
-   * its boards' titles until trips take the same model (D47).
+   * What a board is called (D79): the Overall, "Leaderboard" alone,
+   * "Primary" beside a secondary — lib/eventShape.ts. On an event; and on a
+   * trip made from its Format (its main board `lb-primary`, stage 8). Every
+   * other trip keeps its boards' titles, byte for byte (D47).
    */
-  const nameOf = (t: Leaderboard) => isEvent ? boardName(t, boards) : boardTitle(t)
+  const named = isEvent || boards.some(b => b.id === 'lb-primary')
+  const nameOf = (t: Leaderboard) => named ? boardName(t, boards) : boardTitle(t)
 
   /** A day board says which golf it counts; a whole-event board does not. */
   const scopeOf = (t: Leaderboard) => describeScope(t, rounds.map(r => ({

@@ -335,10 +335,25 @@ section('The screens ask the one helper')
   ok(read(base + 'organiser/page.tsx').includes('label: roundLabelOf('),
     'the organiser area names its rounds through roundLabelOf')
   const lb = read(base + 'leaderboard/TripLeaderboardClient.tsx')
-  ok(lb.includes("const nameOf = (t: Leaderboard) => isEvent ? boardName(t, boards) : boardTitle(t)"),
-    'the leaderboard names its boards through boardName, on an event only')
+  ok(lb.includes("const named = isEvent || boards.some(b => b.id === 'lb-primary')")
+    && lb.includes("const nameOf = (t: Leaderboard) => named ? boardName(t, boards) : boardTitle(t)"),
+    'the leaderboard names its boards through boardName — on an event, and on a trip made from its Format')
   ok(lb.includes('{nameOf(activeBoard)}') && lb.includes(": nameOf(t) }"),
     '  …on the tab and on the title card')
+}
+
+section('Trips take the model (stage 8, D47)')
+{
+  const form = fs.readFileSync('app/dashboard/create/CreateTripForm.tsx', 'utf-8')
+  ok(form.includes('Set the format') && form.includes('Decide later'), 'a trip’s Format is offered, and optional')
+  ok(form.includes('const written = roundIds ? formatBoards(roundIds) : boards')
+    && form.includes('if (written.length > 0) tripRow.leaderboards = written'),
+    '  …and a trip that never opens it writes exactly what it always did')
+  ok(form.includes('...(roundIds ? { id: roundIds[i] } : {}),'), '  …its rounds named by the boards only when the format was set')
+  ok(form.includes("const ruledShape = eventShape({ formats: roundFormats, tags: 0 })"), 'the same rule chooses a trip’s board')
+  const setup = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
+  ok(setup.includes('<p className="t-label text-ink">Formats</p>') && !setup.includes('Dynamic Overall Leaderboard is off'),
+    'Trip Setup’s door is Formats')
 }
 
 section('The rule never reads the field (D85)')

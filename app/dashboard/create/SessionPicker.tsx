@@ -176,8 +176,13 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
  */
 export function RoundList({
   rounds, onChange, unit, days, dateOf, canAdd, sameVenue, onSameVenue, renderVenue, allowTbc,
-  allowMatches = true, fieldSize = 0,
+  allowMatches = true, fieldSize = 0, venueOf,
 }: {
+  /**
+   * The rounds' venues are already set — a trip's, by its itinerary — and
+   * shown as a line rather than asked. Absent, each round asks its venue.
+   */
+  venueOf?: (r: SessionDraft) => string | null
   rounds: SessionDraft[]
   onChange: (next: SessionDraft[]) => void
   unit: RoundUnit
@@ -216,7 +221,7 @@ export function RoundList({
 
   return (
     <div className="space-y-4">
-      {rounds.length > 1 && (
+      {rounds.length > 1 && !venueOf && (
         <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
           <div className="min-w-0">
             <p className="text-ink text-sm font-medium">Same venue every {unit.toLowerCase()}</p>
@@ -277,7 +282,8 @@ export function RoundList({
                 </div>
               )}
 
-              {(isFirst || !sameVenue) && (
+              {venueOf && venueOf(r) && <p className="t-cap text-ink/65 -mt-2">{venueOf(r)}</p>}
+              {!venueOf && (isFirst || !sameVenue) && (
                 <div>
                   <label className={FIELD_LABEL}>{isFirst && sameVenue && rounds.length > 1 ? `Venue, every ${unit.toLowerCase()}` : 'Venue'}</label>
                   {renderVenue(r.courseId, id => set(i, { courseId: id }), allowTbc)}

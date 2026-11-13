@@ -753,14 +753,15 @@ export default function TripSetupClient({
               ...next,
             ])}
           />
-          {/* The Dynamic Overall Leaderboard's own door (Ross, 9 Nov 2026):
-              each round a session in its own format, feeding one Overall. */}
+          {/* Formats (D89, stage 8): each round's golf, the leaderboard
+              following from it — the switch between the Primary and the
+              Overall is a round's format, asked first. */}
           <Link href={`${tripHome}/setup/sessions`} className={`mt-3 block px-4 py-3 ${cardClass('raised', true)}`}>
-            <p className="t-label text-ink">Session formats</p>
+            <p className="t-label text-ink">Formats</p>
             <p className="t-cap text-ink/65 mt-0.5">
               {boards.some(isOverallBoard)
                 ? 'Each session’s format, and how it feeds the Overall.'
-                : 'Dynamic Overall Leaderboard is off — for golf that changes format round to round.'}
+                : 'Each round’s format — golf that changes format round to round makes it an Overall.'}
             </p>
           </Link>
           {boards.length > 0 && needsTeams(boards) && teams.length === 0 && (

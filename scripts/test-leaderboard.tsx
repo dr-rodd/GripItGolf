@@ -1658,7 +1658,10 @@ section('The platform names the leaderboard (D79)')
     'one board on an event: no tab strip and no title, exactly as before')
   const trip = render([SF(), ST()])
   ok(trip.includes('>Stableford Points<') && !trip.includes('>Primary<'),
-    'a trip keeps its boards\' titles until trips take the model (D47)')
+    'a trip made before keeps its boards\' titles, byte for byte (D47)')
+  const fromFormat = render([{ ...SF(), id: 'lb-primary' }, ST()])
+  ok(fromFormat.includes('>Primary<') && fromFormat.includes('>Strokes<'),
+    'a trip made from its Format names its main board the Primary (stage 8)')
 }
 
 console.log(`\n${'─'.repeat(56)}`)
