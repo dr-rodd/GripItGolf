@@ -1,94 +1,46 @@
 'use client'
 
 /**
- * The Dynamic Overall Leaderboard's creation steps (Ross, 9 Nov 2026;
- * docs/sessions-plan.md, D35–D43): the question, the running order of
- * sessions with a format each, and finalising the Overall. Components only —
- * every rule is lib/sessions.ts's.
+ * The creation wizard's Format step (Ross, 13 Nov 2026, D77–D90): the
+ * rounds with a format each — Round 1's own, the rest "Same as Round 1"
+ * until changed — and the read-back card naming the leaderboard the
+ * platform chose and why (lib/eventShape.ts). Also the Overall's ranking and
+ * feeds, which the organiser area's Session formats page shares. Components
+ * only — every rule is lib/sessions.ts's and lib/eventShape.ts's.
  */
 
 import { useState } from 'react'
 import {
   type SessionDraft, type SessionFormat, type MatchFormat, type OverallRanks, type SessionFeed,
-  MATCH_FORMATS, MATCHES_READY, OVERALL_RANKS, MAX_SESSION_NAME, MAX_SESSIONS,
+  MATCH_FORMATS, MATCHES_READY, OVERALL_RANKS, MAX_SESSION_NAME, MAX_SESSIONS, STROKE_FORMAT,
   describeFormat, describeFeed, resolvedFormats, usedFormats, sameFormat, sessionLabel,
-  defaultMatchAllowance, defaultPositionPoints, DEFAULT_MATCH_FEED, allOneFormat, formatPoints,
+  defaultMatchAllowance, defaultPositionPoints, DEFAULT_MATCH_FEED, formatPoints,
   defaultMatchSlots, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
+import { type RoundUnit, unitLabel } from '@/lib/eventShape'
+import { inkOn, setApart } from '@/lib/matchSides'
+import Toggle from '@/app/components/Toggle'
 import { Stepper } from '@/app/components/ItineraryForms'
 import { SCORINGS, TEAM_FORMATS, type Audience, type Scoring, type TeamFormat } from '@/lib/leaderboards'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optionClass, Pill } from '@/app/components/ui'
 
-// ─── The question ──────────────────────────────────────────────
-
-/** "Enable Dynamic Overall Leaderboard?" — No (the default) or Yes, as option cards. */
-export function DynamicQuestion({ value, onChange, sessionCount, onConfirmOff }: {
-  value: boolean | null
-  onChange: (on: boolean) => void
-  /** Sessions already set — turning it off then asks first. */
-  sessionCount: number
-  onConfirmOff: () => void
-}) {
-  const [asking, setAsking] = useState(false)
-  const choose = (on: boolean) => {
-    if (!on && value === true && sessionCount > 0) { setAsking(true); return }
-    setAsking(false)
-    onChange(on)
-  }
-  return (
-    <div className="space-y-3">
-      {[
-        { on: false, label: 'No', hint: 'Every round counts by the same rules. Pick the leaderboards as usual.' },
-        { on: true, label: 'Yes', hint: 'Each round is a session with its own format, feeding one overall leaderboard. Like the Ryder Cup.' },
-      ].map(o => (
-        <button
-          key={o.label}
-          type="button"
-          onClick={() => choose(o.on)}
-          aria-pressed={value === o.on}
-          className={optionClass(value === o.on)}
-        >
-          <p className="t-card text-ink">{o.label}</p>
-          <p className="t-cap text-ink/65 mt-0.5">{o.hint}</p>
-        </button>
-      ))}
-      {asking && (
-        <div className={`p-4 ${cardClass('flat')}`}>
-          <p className="text-ink text-sm font-medium">Turn the Dynamic Overall Leaderboard off?</p>
-          <p className="text-ink/65 text-[13px] mt-1 leading-snug">
-            Each day keeps its first session&apos;s venue as a plain round. The {sessionCount} session
-            {sessionCount === 1 ? '' : 's'} and their formats are kept here, so turning it back on brings them back.
-          </p>
-          <div className="flex gap-2 mt-3">
-            <button type="button" className={buttonClass('secondary', false, true)} onClick={() => setAsking(false)}>
-              Keep it on
-            </button>
-            <button type="button" className={buttonClass('primary', false, true)}
-              onClick={() => { setAsking(false); onConfirmOff(); onChange(false) }}>
-              Turn it off
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
 // ─── A session's format ────────────────────────────────────────
 
-const STROKE_DEFAULT: SessionFormat = { kind: 'stroke', audience: 'individual', scoring: 'stableford' }
+const STROKE_DEFAULT: SessionFormat = STROKE_FORMAT
 
 /** The leaderboard form's format questions only — no total-or-position, no discard, no overall tie. */
-export function FormatPicker({ value, onChange, idle = false }: {
+export function FormatPicker({ value, onChange, idle = false, allowMatches = true }: {
   value: SessionFormat
   onChange: (f: SessionFormat) => void
   /** Nothing shown as chosen — a tile above is the answer until one here is given. */
   idle?: boolean
+  /** A league of periods hands in cards, never matches. */
+  allowMatches?: boolean
 }) {
   const kind = idle ? null : value.kind
   return (
     <div className="space-y-4">
-      <div>
+      {allowMatches && <div>
         <p className={FIELD_LABEL}>How is it played?</p>
         <div className="flex gap-2">
           <button type="button" className={`${chipClass(kind === 'stroke')} flex-1`}
@@ -104,7 +56,7 @@ export function FormatPicker({ value, onChange, idle = false }: {
         {!MATCHES_READY && (
           <p className="t-cap text-ink/65 mt-2"><Pill>Coming soon</Pill> Matches — singles and fourball, worth points each.</p>
         )}
-      </div>
+      </div>}
 
       {value.kind === 'stroke' && (
         <>
@@ -143,6 +95,20 @@ export function FormatPicker({ value, onChange, idle = false }: {
                     onClick={() => onChange({ ...value, teamFormat: t.key as TeamFormat })}>
                     <p className="text-ink text-[15px] font-medium">{t.label}</p>
                     <p className="t-cap text-ink/65 mt-0.5">{t.hint}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {value.audience === 'team' && (value.teamFormat ?? 'better_ball') === 'better_ball' && (
+            <div>
+              <p className={FIELD_LABEL}>Scores that count on each hole</p>
+              <div className="flex gap-2">
+                {[1, 2, 3].map(n => (
+                  <button key={n} type="button"
+                    className={`${chipClass(!idle && (value.countingScores ?? 2) === n)} flex-1`}
+                    onClick={() => onChange({ ...value, countingScores: n })}>
+                    {n === 1 ? 'Best ball' : `Best ${n}`}
                   </button>
                 ))}
               </div>
@@ -193,69 +159,111 @@ export function FormatPicker({ value, onChange, idle = false }: {
   )
 }
 
-// ─── The running order ─────────────────────────────────────────
+// ─── The rounds ────────────────────────────────────────────────
 
-export function SessionList({ sessions, onChange, days, renderVenue, fieldSize = 0 }: {
-  sessions: SessionDraft[]
+/**
+ * The Format step's rounds (D77): Round 1 asks its format; every round after
+ * starts as "Same as Round 1" and shows a Change format button, which opens
+ * the formats already used, a new one, or Format TBC. A one-round event is
+ * one card. The words are the rule's — rounds on a league, sessions on an
+ * Overall (lib/eventShape.ts).
+ */
+export function RoundList({
+  rounds, onChange, unit, days, dateOf, canAdd, sameVenue, onSameVenue, renderVenue, allowTbc,
+  allowMatches = true, fieldSize = 0,
+}: {
+  rounds: SessionDraft[]
   onChange: (next: SessionDraft[]) => void
-  /** Players in the field so far — what a Matches session's count starts from. */
-  fieldSize?: number
-  /** The event's playing days, as index and label — one means no day picker. */
+  unit: RoundUnit
+  /** The event's playing days, as index and label — a round's day is asked only where rounds may be added. */
   days: { index: number; label: string }[]
-  renderVenue: (value: string, onChange: (id: string) => void) => React.ReactNode
+  /** A round's date line — "Sat 5 Jun" — or null. */
+  dateOf: (r: SessionDraft) => string | null
+  /** More than one round on a day (a standalone event's two sessions). */
+  canAdd: boolean
+  sameVenue: boolean
+  onSameVenue: (on: boolean) => void
+  renderVenue: (value: string, onChange: (id: string) => void, allowTbc: boolean) => React.ReactNode
+  /** A venue may be left to be confirmed (a league's series). */
+  allowTbc: boolean
+  allowMatches?: boolean
+  fieldSize?: number
 }) {
-  const formats = resolvedFormats(sessions)
-  const used = usedFormats(sessions)
+  const [open, setOpen] = useState<Set<string>>(() => new Set())
+  const formats = resolvedFormats(rounds)
+  const used = usedFormats(rounds)
+  const first = formats[0]
+  const firstLabel = unitLabel(unit, 1)
   const set = (i: number, patch: Partial<SessionDraft>) =>
-    onChange(sessions.map((s, idx) => (idx === i ? { ...s, ...patch } : s)))
+    onChange(rounds.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
+  const labelOf = (r: SessionDraft, i: number) => unitLabel(unit, i + 1, unit === 'Session' ? r.name : null)
+  const perDay = (day: number) => rounds.filter(r => r.dayIndex === day).length
   const add = () => {
-    const last = sessions.at(-1)
-    onChange([...sessions, {
-      key: `s-${Date.now().toString(36)}-${sessions.length}`,
+    const last = rounds.at(-1)
+    onChange([...rounds, {
+      key: `r-${Date.now().toString(36)}-${rounds.length}`,
       dayIndex: last?.dayIndex ?? days[0]?.index ?? 0,
       courseId: last?.courseId ?? '',
-      format: sessions.length === 0 ? STROKE_DEFAULT : 'same',
+      format: 'same',
     }])
   }
-  const allSame = allOneFormat(sessions)
 
   return (
     <div className="space-y-4">
-      {sessions.map((s, i) => {
+      {rounds.length > 1 && (
+        <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
+          <div className="min-w-0">
+            <p className="text-ink text-sm font-medium">Same venue every {unit.toLowerCase()}</p>
+            <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+              {sameVenue ? `Pick it once, on ${firstLabel}.` : `Each ${unit.toLowerCase()} picks its own.`}
+            </p>
+          </div>
+          <Toggle checked={sameVenue} onChange={onSameVenue} label="Same venue throughout" />
+        </div>
+      )}
+
+      {rounds.map((r, i) => {
         const format = formats[i]
         const isFirst = i === 0
+        const label = labelOf(r, i)
+        const date = dateOf(r)
+        const changing = r.format !== 'same' || open.has(r.key)
         return (
-          <div key={s.key} className={`p-4 ${cardClass()}`}>
+          <div key={r.key} className={`p-4 ${cardClass()}`}>
             <div className="flex items-center justify-between gap-3">
-              <p className="t-card text-ink min-w-0 truncate">{sessionLabel(s, i)}</p>
-              {!isFirst && (
+              <p className="t-card text-ink min-w-0 truncate">
+                {label}{date ? <span className="t-cap text-ink/65"> · {date}</span> : null}
+              </p>
+              {canAdd && !isFirst && perDay(r.dayIndex) > 1 && (
                 <button type="button" className={buttonClass('quiet', false, true)}
-                  onClick={() => onChange(sessions.filter((_, idx) => idx !== i))}
-                  aria-label={`Remove ${sessionLabel(s, i)}`}>
+                  onClick={() => onChange(rounds.filter((_, idx) => idx !== i))}
+                  aria-label={`Remove ${label}`}>
                   Remove
                 </button>
               )}
             </div>
 
             <div className="mt-3 space-y-4">
-              <div>
-                <label className={FIELD_LABEL}>Name (optional)</label>
-                <input
-                  type="text"
-                  className={FIELD}
-                  value={s.name ?? ''}
-                  maxLength={MAX_SESSION_NAME}
-                  placeholder={`Session ${i + 1}, or e.g. Friday foursomes`}
-                  onChange={e => set(i, { name: e.target.value })}
-                />
-              </div>
+              {unit === 'Session' && (
+                <div>
+                  <label className={FIELD_LABEL}>Name (optional)</label>
+                  <input
+                    type="text"
+                    className={FIELD}
+                    value={r.name ?? ''}
+                    maxLength={MAX_SESSION_NAME}
+                    placeholder={`Session ${i + 1}, or e.g. Friday foursomes`}
+                    onChange={e => set(i, { name: e.target.value })}
+                  />
+                </div>
+              )}
 
-              {days.length > 1 && (
+              {canAdd && days.length > 1 && (
                 <div>
                   <label className={FIELD_LABEL}>Day</label>
                   <select
                     className={FIELD}
-                    value={s.dayIndex}
+                    value={r.dayIndex}
                     onChange={e => set(i, { dayIndex: Number(e.target.value) })}
                   >
                     {days.map(d => <option key={d.index} value={d.index}>{d.label}</option>)}
@@ -263,43 +271,71 @@ export function SessionList({ sessions, onChange, days, renderVenue, fieldSize =
                 </div>
               )}
 
-              <div>
-                <label className={FIELD_LABEL}>Venue</label>
-                {renderVenue(s.courseId, id => set(i, { courseId: id }))}
-              </div>
+              {(isFirst || !sameVenue) && (
+                <div>
+                  <label className={FIELD_LABEL}>{isFirst && sameVenue && rounds.length > 1 ? `Venue, every ${unit.toLowerCase()}` : 'Venue'}</label>
+                  {renderVenue(r.courseId, id => set(i, { courseId: id }), allowTbc)}
+                </div>
+              )}
 
               <div>
                 <label className={FIELD_LABEL}>Format</label>
                 {isFirst ? (
                   <FormatPicker
-                    value={s.format === 'same' || s.format === 'tbc' ? STROKE_DEFAULT : s.format}
+                    value={r.format === 'same' || r.format === 'tbc' ? STROKE_FORMAT : r.format}
                     onChange={f => set(i, { format: f })}
+                    allowMatches={allowMatches}
                   />
+                ) : !changing ? (
+                  <div className={`p-3 ${cardClass('flat')}`}>
+                    <p className="text-ink text-[15px] font-medium">Same as {firstLabel}</p>
+                    <p className="t-cap text-ink/65 mt-0.5">{describeFormat(format)}</p>
+                    <button type="button" className={`${buttonClass('secondary', false, true)} mt-3`}
+                      onClick={() => setOpen(prev => new Set(prev).add(r.key))}>
+                      Change format
+                    </button>
+                  </div>
                 ) : (
                   <>
-                    {/* The formats already used, as tiles to tap — Session
-                        1's first — and TBC; a new format is the questions
-                        underneath, which this session takes the moment one
-                        is answered (Ross, 9 Nov 2026). */}
+                    {/* The formats already used, as tiles to tap — Round 1's
+                        first — and TBC; a new format is the questions
+                        underneath, which this round takes the moment one is
+                        answered (Ross, 9 Nov 2026). */}
                     <div className="space-y-2">
-                      <button type="button" className={optionClass(s.format === 'same')}
-                        aria-pressed={s.format === 'same'}
-                        onClick={() => set(i, { format: 'same' })}>
-                        <p className="text-ink text-[15px] font-medium">Same as Session 1</p>
-                        <p className="t-cap text-ink/65 mt-0.5">{describeFormat(formats[0])}</p>
+                      <button type="button" className={optionClass(r.format === 'same')}
+                        aria-pressed={r.format === 'same'}
+                        onClick={() => set(i, { format: 'same', allowance: undefined })}>
+                        <p className="text-ink text-[15px] font-medium">Same as {firstLabel}</p>
+                        <p className="t-cap text-ink/65 mt-0.5">{describeFormat(first)}</p>
                       </button>
-                      {used.filter(f => !sameFormat(f, formats[0])).map(f => {
-                        const on = s.format !== 'same' && s.format !== 'tbc' && sameFormat(f, format)
+                      {r.format === 'same' && first && (
+                        // D86: the same format off another allowance is still the same format.
+                        <div className="flex items-center gap-2 pl-1">
+                          <input
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            max={100}
+                            className={`${FIELD} w-24`}
+                            value={r.allowance ?? first.handicapAllowance ?? (first.kind === 'matches' ? defaultMatchAllowance(first.match) : 100)}
+                            onChange={e => set(i, { allowance: Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))) })}
+                            aria-label={`Handicap allowance for ${label}, percent`}
+                          />
+                          <span className="text-ink/65 text-sm">% handicap for this {unit.toLowerCase()}</span>
+                        </div>
+                      )}
+                      {used.filter(f => !sameFormat(f, first)).map(f => {
+                        const on = r.format !== 'same' && r.format !== 'tbc' && sameFormat(f, format)
                         return (
                           <button key={describeFormat(f)} type="button" className={optionClass(on)}
-                            aria-pressed={on} onClick={() => set(i, { format: f })}>
+                            aria-pressed={on} onClick={() => set(i, { format: f, allowance: undefined })}>
                             <p className="text-ink text-[15px] font-medium">{describeFormat(f)}</p>
                           </button>
                         )
                       })}
-                      <button type="button" className={optionClass(s.format === 'tbc')}
-                        aria-pressed={s.format === 'tbc'}
-                        onClick={() => set(i, { format: 'tbc' })}>
+                      <button type="button" className={optionClass(r.format === 'tbc')}
+                        aria-pressed={r.format === 'tbc'}
+                        onClick={() => set(i, { format: 'tbc', allowance: undefined })}>
                         <p className="text-ink text-[15px] font-medium">Format TBC</p>
                         <p className="t-cap text-ink/65 mt-0.5">Counts nothing until it is set in the organiser area.</p>
                       </button>
@@ -308,12 +344,13 @@ export function SessionList({ sessions, onChange, days, renderVenue, fieldSize =
                       <p className="t-label text-ink mb-3">Or a new format</p>
                       <FormatPicker
                         // Unanswered while a tile is chosen: any answer here
-                        // is this session's new format, started from the one
+                        // is this round's new format, started from the one
                         // it was playing.
-                        idle={s.format === 'same' || s.format === 'tbc' || formats.slice(0, i).some(f => sameFormat(f, format))}
-                        value={s.format !== 'same' && s.format !== 'tbc' ? s.format : (format ?? formats[0] ?? STROKE_DEFAULT)}
-                        // An answer that lands on Session 1's format is that tile.
-                        onChange={f => set(i, { format: sameFormat(f, formats[0]) ? 'same' : f })}
+                        idle={r.format === 'same' || r.format === 'tbc' || formats.slice(0, i).some(f => sameFormat(f, format))}
+                        value={r.format !== 'same' && r.format !== 'tbc' ? r.format : (format ?? first ?? STROKE_FORMAT)}
+                        // An answer that lands on Round 1's format is that tile.
+                        onChange={f => set(i, { format: sameFormat(f, first) ? 'same' : f, allowance: undefined })}
+                        allowMatches={allowMatches}
                       />
                     </div>
                   </>
@@ -325,7 +362,7 @@ export function SessionList({ sessions, onChange, days, renderVenue, fieldSize =
               {format?.kind === 'matches' && (
                 <Stepper
                   label="How many matches?"
-                  value={s.matches ?? defaultMatchSlots(fieldSize, format.match)}
+                  value={r.matches ?? defaultMatchSlots(fieldSize, format.match)}
                   min={1}
                   max={MAX_MATCH_SLOTS}
                   unit={n => (n === 1 ? 'match' : 'matches')}
@@ -337,17 +374,48 @@ export function SessionList({ sessions, onChange, days, renderVenue, fieldSize =
         )
       })}
 
-      {sessions.length < MAX_SESSIONS && (
+      {canAdd && rounds.length < MAX_SESSIONS && (
         <button type="button" className={buttonClass('secondary')} onClick={add}>
-          + Add a session
+          + Add a {unit.toLowerCase()}
         </button>
       )}
+    </div>
+  )
+}
 
-      {allSame && (
-        <p className="t-cap text-ink/65 leading-snug">
-          Every session plays {describeFormat(allSame)}, so a normal leaderboard would do this. Go back and answer No if you&apos;d rather.
-        </p>
-      )}
+// ─── The read-back ─────────────────────────────────────────────
+
+/**
+ * The card at the foot of the Format step (D77): the leaderboard the
+ * platform chose, why, and its facts — then whatever the shape asks next
+ * (the Overall's ranking, a secondary leaderboard).
+ */
+export function ReadBack({ title, sentence, facts, children }: {
+  title: string
+  sentence: string
+  facts: string[]
+  children?: React.ReactNode
+}) {
+  return (
+    <div className={`p-4 ${cardClass('raised')}`}>
+      <p className="t-card text-ink">{title}</p>
+      <p className="t-body text-ink/65 mt-1">{sentence}</p>
+      {facts.length > 0 && <p className="t-label text-ink/65 mt-2">{facts.join(' · ')}</p>}
+      {children}
+    </div>
+  )
+}
+
+/** Two tags facing off, in their own colours — the ticker's two ends (D50). */
+export function FaceOffTags({ tags }: { tags: { name: string; colour: string }[] }) {
+  const [a, b] = tags
+  if (!a || !b) return null
+  const [ca, cb] = setApart(a.colour, b.colour)
+  return (
+    <div className="flex items-center gap-2 mt-3">
+      <span className="t-label px-3 py-1.5 rounded-tile min-w-0 truncate" style={{ background: ca, color: inkOn(ca) }}>{a.name}</span>
+      <span className="t-cap text-ink/65">vs</span>
+      <span className="t-label px-3 py-1.5 rounded-tile min-w-0 truncate" style={{ background: cb, color: inkOn(cb) }}>{b.name}</span>
     </div>
   )
 }
@@ -366,7 +434,6 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
   entrants: number
 }) {
   const formats = resolvedFormats(sessions)
-  const allSame = allOneFormat(sessions)
   const feedOf = (key: string, i: number): SessionFeed => {
     const f = formats[i]
     if (!f) return { kind: 'none' }
@@ -419,11 +486,6 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
         </div>
       </div>
 
-      {allSame && (
-        <p className="t-cap text-ink/65 leading-snug">
-          Every session plays {describeFormat(allSame)}, so a normal leaderboard would do this. It&apos;s only a hint.
-        </p>
-      )}
     </div>
   )
 }

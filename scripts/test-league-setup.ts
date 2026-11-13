@@ -514,9 +514,10 @@ section('The league wizard reuses the proven pieces rather than restating them')
   ok(src.includes('<HandicapField'), 'handicaps from the shared field')
   ok(src.includes('firstDuplicateIndex'), 'and the no-two-same-names rule is the roster\'s')
   ok(!src.includes('starterBoards()') && src.includes('useState<Leaderboard[]>([])'),
-    'no leaderboard chosen for the organiser — they set them by hand (Ross, 8 Nov 2026)')
-  ok(/key === 'ready' \? \(isDynamic \|\| boards\.length > 0\)/.test(src), '  …and Finish waits for at least one — the Overall being one (D37)')
-  ok(!src.includes('setBoards(b => withLeagueTagBoard(b, next.on))') && src.includes('setBoards(b => withLeagueTagBoard(b, false))'),
+    'no secondary leaderboard chosen for the organiser — they add them by hand (Ross, 8 Nov 2026)')
+  ok(src.includes("key === 'format' ? formatProblem === null"),
+    '  …and the main board is the Format\'s (D77): the Format step waits for Round 1\'s format')
+  ok(!src.includes('withLeagueTagBoard(b, next.on)') && src.includes('setSecondaries(b => withLeagueTagBoard(b, false))'),
     '  …switching tags on adds no tags board; switching them off takes one away')
 
   // Leaderboard selection is built into creation — as Trip Setup's own
@@ -525,10 +526,10 @@ section('The league wizard reuses the proven pieces rather than restating them')
   // event.
   ok(src.includes('<LeaderboardSetup'),
     'the leaderboard picker is the platform\'s own, embedded whole')
-  ok(src.includes('leaderboards: storedBoards') && src.includes('})() : boards'),
-    'creation writes the boards the organiser built (and with an Overall, it and its sessions first)')
-  ok(src.includes('(isDynamic || boards.length > 0) && (!asksDayBoards'),
-    'and an event cannot be created without at least one board')
+  ok(src.includes('leaderboards: storedBoards') && src.includes('const storedBoards: Leaderboard[] = boardsFor(roundIds)'),
+    'creation writes the boards the Format chose, then the secondaries (lib/eventShape.ts)')
+  ok(!src.includes('asksDayBoards') && !src.includes('DAY_BOARDS'),
+    'the days question is gone from creation — a round\'s own format is a secondary (Ross, 13 Nov 2026)')
   ok(src.includes("kind: 'tournament'"), 'a league is an event')
   ok(src.includes('team_id: null'), 'everyone starts unassigned, as everywhere')
   ok(!src.includes("from('teams')"), 'and no teams are written')
@@ -551,10 +552,10 @@ section('The league wizard reuses the proven pieces rather than restating them')
   // Same-venue is a form convenience, never a stored fact: with the toggle
   // on, the first pick is every slot's at write time. A continuous league
   // keys venues by date, so a date added or removed cannot shuffle courses.
-  ok(src.includes('sameVenue || slots.length === 1\n      ? venues[0]'),
-    'the same-venue toggle — and a lone slot — resolve to one venue at write time')
-  ok(src.includes('dateVenues[slot.date]'),
-    'a continuous league keys its venues by date, not by index')
+  ok(src.includes('const venueFor = (i: number) => ((sameVenue && i > 0 ? rounds[0]?.courseId : rounds[i]?.courseId) ?? \'\')'),
+    'the same-venue toggle resolves to Round 1\'s venue at write time')
+  ok(src.includes("setRounds(prev => syncDrafts(prev, slots.map(s => s.dayIndex), schedule === 'standalone'))"),
+    'the rounds follow the playing days, each keeping its answers (syncDrafts)')
 }
 
 section('A league event\'s organiser area describes its format, never re-forms it')

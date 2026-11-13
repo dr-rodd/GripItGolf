@@ -687,3 +687,14 @@ Twenty-four players in two tags, USA and Europe. Five sessions over three days �
 
 - Changing a stroke session's tee sheet into a Matches one after players are booked keeps their bookings but not as matches — the organiser re-sets the matches.
 - No "holder retains"; ties on the Overall are shared, by decision.
+
+
+---
+
+## A club's one-round Stableford (Ross, 13 Nov 2026 — D77–D82)
+
+**The story.** A club runs its Saturday competition on Green Dot: one round, individual Stableford at 95%, the members entered by the secretary or joining with the code. Nobody wants to think about "leaderboards".
+
+**What is built.** Golf Tournament → Standalone → League. Name and date; the field; **the Format** — one card, Round 1: the venue, Stableford, 95%; the read-back says *"One round of Stableford, on one leaderboard."* — then Settings (tee times, PIN) and done. The event's board is made from the format (`boardsForCreation`); the tab bar's Leaderboard is the whole of it, no tab strip and no title. Adding a two's competition later as a secondary turns the main board's tab into **Primary**.
+
+**What is new.** Nothing stored: the board is the same league board a picked one always was.

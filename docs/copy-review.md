@@ -2031,6 +2031,10 @@ An event's main board is named for what it is, not for what it plays — the fac
 | Round summary heading, a round of an event with an Overall | Round 2 | **Session 2**, or the session's name |
 | Tee times tab — the round chips, "Round n's tee sheet isn't open yet / opens …", on an Overall | Round 2 | **Session 2**, or its name |
 | Organiser area, Starts card, on an Overall | Round 2 — Portsalon | **Session 2** — Portsalon |
+| League wizard steps (D77–D78) | Name your event · Who’s playing · Enable Dynamic Overall Leaderboard? · Set the running order · Finalise the Overall / Where you’re playing · Ready to go | Name your event · Who’s playing · **Set the format** — "The golf, round by round. The leaderboard follows from it." · **Settings** — "Everything that isn’t the golf." |
+| Format step, a later round | Same as Session 1 (tiles always open) | **Same as Round 1** (or Session 1) with **Change format** |
+| Format step, the read-back card | — | **Leaderboard** / **Primary leaderboard** / **Overall**, then why: "One round of Stableford, on one leaderboard." · "Every round plays Stableford, so the rounds add up to a total." · "Your sessions include matches, so each one pays points to the Overall." · "Your rounds are scored different ways, which don’t add up to one total, so each one pays points to the Overall." Under it **Add a secondary leaderboard**, **Drop each player’s worst round?**, **Change what it ranks and how each session pays** |
+| Settings step | — | **Record stats** — "Putts and where the tee shot went, on every card. Changeable in the organiser area." |
 
 ---
 

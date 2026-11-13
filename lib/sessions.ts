@@ -80,6 +80,8 @@ export type SessionFormat =
       scoring: Scoring
       teamFormat?: TeamFormat
       handicapAllowance?: number
+      /** Better ball only — how many scores count on a hole. Absent is the board's default, 2. */
+      countingScores?: number
     }
   | { kind: 'matches'; match: MatchFormat; handicapAllowance?: number }
 
@@ -103,6 +105,8 @@ export function formatOfBoard(lb: Leaderboard): SessionFormat | null {
       scoring: lb.scoring,
       ...(lb.audience === 'team' && lb.teamFormat ? { teamFormat: lb.teamFormat } : {}),
       ...(lb.handicapAllowance != null ? { handicapAllowance: lb.handicapAllowance } : {}),
+      ...(lb.audience === 'team' && lb.teamFormat === 'better_ball' && lb.countingScores != null
+        ? { countingScores: lb.countingScores } : {}),
     }
   }
   return null
@@ -116,7 +120,10 @@ export function sameFormat(a: SessionFormat | null, b: SessionFormat | null): bo
 export function formatKey(f: SessionFormat | null): string {
   if (!f) return 'tbc'
   if (f.kind === 'matches') return `m:${f.match}:${f.handicapAllowance ?? 100}`
-  return `s:${f.audience}:${f.scoring}:${f.teamFormat ?? '-'}:${f.handicapAllowance ?? 100}`
+  // The count only where it is set, so every key made before it reads the same.
+  const count = f.audience === 'team' && f.teamFormat === 'better_ball' && f.countingScores != null
+    ? `:c${f.countingScores}` : ''
+  return `s:${f.audience}:${f.scoring}:${f.teamFormat ?? '-'}:${f.handicapAllowance ?? 100}${count}`
 }
 
 /** A format's issue, or null when it can be played. */
@@ -166,6 +173,8 @@ export function sessionBoard(format: SessionFormat, roundId: string, daySheet: s
     ...(format.audience === 'team'
       ? { teamFormat: format.teamFormat ?? 'better_ball', teamSet: daySheet }
       : {}),
+    ...(format.audience === 'team' && (format.teamFormat ?? 'better_ball') === 'better_ball' && format.countingScores != null
+      ? { countingScores: format.countingScores } : {}),
     ...allowance,
     roundIds: [roundId],
     session: true,
@@ -184,6 +193,9 @@ export function describeFormat(f: SessionFormat | null): string {
         : f.teamFormat === 'hero' ? 'Team hero'
         : f.teamFormat === 'cut_dead_weight' ? 'Team cut the dead weight'
         : 'Team')
+      if (f.teamFormat === 'better_ball' && f.countingScores != null) {
+        parts.push(f.countingScores === 1 ? 'Best ball' : `Best ${f.countingScores} balls`)
+      }
     } else {
       parts.push('Individual')
     }
@@ -211,6 +223,12 @@ export type SessionDraft = {
   format: SessionFormat | 'same' | 'tbc'
   /** A Matches session: how many matches it holds — the order of play's slots. */
   matches?: number
+  /**
+   * `format: 'same'` only — the round plays Round 1's format off a different
+   * allowance (D86: allowance alone is never a different format). Absent is
+   * Round 1's own.
+   */
+  allowance?: number
 }
 
 /** Each session's format as it will be stored — "same" resolved, TBC null. */
@@ -219,7 +237,10 @@ export function resolvedFormats(sessions: readonly SessionDraft[]): (SessionForm
   const firstFormat = first && first !== 'same' && first !== 'tbc' ? first : null
   return sessions.map((s, i) => {
     if (s.format === 'tbc') return null
-    if (s.format === 'same') return i === 0 ? null : firstFormat
+    if (s.format === 'same') {
+      if (i === 0 || !firstFormat) return null
+      return s.allowance != null ? { ...firstFormat, handicapAllowance: s.allowance } : firstFormat
+    }
     return s.format
   })
 }
@@ -761,3 +782,45 @@ export function withOverallOff(boards: readonly Leaderboard[]): Leaderboard[] {
 export function defaultTeeIndex(count: number): number {
   return count <= 0 ? -1 : Math.floor((count - 1) / 2)
 }
+
+// ─── The creation wizard's rounds (D77–D78) ────────────────────
+
+/**
+ * The wizard's rounds kept in step with the event's playing days: a day
+ * with no round gains one ("Same as Round 1", or Round 1's own format when
+ * it is the first), a round whose day has gone is dropped, and every round
+ * already set keeps its answers. Running order out. `extra` keeps a second
+ * round on a day (a standalone event's two sessions a day); without it each
+ * day holds exactly one, which is a series' shape.
+ */
+export function syncDrafts(
+  drafts: readonly SessionDraft[], days: readonly number[], extra: boolean,
+): SessionDraft[] {
+  const wanted = new Set(days)
+  const kept = drafts.filter(d => wanted.has(d.dayIndex))
+  const out: SessionDraft[] = []
+  for (const day of days) {
+    const own = kept.filter(d => d.dayIndex === day)
+    if (own.length === 0) {
+      out.push({
+        key: `r-${day}`,
+        dayIndex: day,
+        courseId: '',
+        format: 'same',
+      })
+    } else {
+      out.push(...(extra ? own : own.slice(0, 1)))
+    }
+  }
+  const ordered = inRunningOrder(out)
+  // Round 1 always plays a format of its own: a "same" in first place —
+  // the old first round gone — takes the one it was copying, else the default.
+  if (ordered[0] && (ordered[0].format === 'same' || ordered[0].format === 'tbc')) {
+    const was = drafts.find(d => d.format !== 'same' && d.format !== 'tbc')
+    ordered[0] = { ...ordered[0], format: was && was.format !== 'same' && was.format !== 'tbc' ? was.format : STROKE_FORMAT }
+  }
+  return ordered
+}
+
+/** The format a new event starts from: individual Stableford. */
+export const STROKE_FORMAT: SessionFormat = { kind: 'stroke', audience: 'individual', scoring: 'stableford' }

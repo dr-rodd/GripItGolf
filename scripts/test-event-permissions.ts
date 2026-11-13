@@ -210,7 +210,7 @@ section('A series-only permission is asked of a series alone')
     'off until the organiser opens it, like every other')
 
   const league = read('app/dashboard/create/CreateLeagueForm.tsx')
-  ok(league.includes("registry={permissionsFor(schedule === 'series', false, continuous, isDynamic && "),
+  ok(league.includes("registry={permissionsFor(schedule === 'series', false, continuous, hasMatches)}"),
     'the league wizard asks by its shape')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('registry={permRegistry}') && organiser.includes('describePermissions(perms, permRegistry)'),

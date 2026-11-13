@@ -1319,9 +1319,20 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
-  askTeeTeams = false, askTags = false, scope, title, hint,
+  askTeeTeams = false, askTags = false, scope, title, hint, alongside = [], secondary = false,
 }: {
   boards: Leaderboard[]
+  /**
+   * Boards that sit beside these but are not edited here — the leaderboard
+   * the creation wizard's Format chose (D77). A board made here may not
+   * clash with them, and takes a team sheet none of them holds.
+   */
+  alongside?: Leaderboard[]
+  /**
+   * Every board here is a secondary: none is marked Primary, and the card
+   * offering another is worded for one more (D77, D83).
+   */
+  secondary?: boolean
   /** The field an individual prize table pays out to. */
   playerCount: number
   /** The field a team prize table pays out to. */
@@ -1369,8 +1380,9 @@ export default function LeaderboardSetup({
 
   const done = boards.length > 0
   const editing = boards.find(b => b.id === editingId) ?? null
-  // The board being changed is not competition for itself.
-  const others = boards.filter(b => b.id !== editingId)
+  // The board being changed is not competition for itself; the boards
+  // beside these always are.
+  const others = [...alongside, ...boards.filter(b => b.id !== editingId)]
 
   /**
    * Where a saved board lands.
@@ -1398,7 +1410,7 @@ export default function LeaderboardSetup({
     // teams (lib/teamSets.ts `nextSheetId`).
     return {
       ...lb,
-      teamSet: nextSheetId(boards.filter(b => b.id !== lb.id), { reserveMain: askTeeTeams || askTags }),
+      teamSet: nextSheetId([...alongside, ...boards].filter(b => b.id !== lb.id), { reserveMain: askTeeTeams || askTags }),
     }
   }
 
@@ -1477,7 +1489,7 @@ export default function LeaderboardSetup({
               <div className="flex-1 min-w-0 pt-0.5">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="t-card text-ink">{boardTitle(lb)}</span>
-                  {i === 0 && <Pill tone="win">Primary</Pill>}
+                  {i === 0 && !secondary && <Pill tone="win">Primary</Pill>}
                 </div>
                 <p className="t-cap text-ink/65 mt-1">{boardFacts(lb).join(' · ')}</p>
               </div>
@@ -1509,7 +1521,7 @@ export default function LeaderboardSetup({
 
       {!readOnly && !editing && (!done || adding) && (
         <Builder
-          existing={boards}
+          existing={[...alongside, ...boards]}
           initial={null}
           playerCount={playerCount}
           teamCount={teamCount}
@@ -1532,7 +1544,7 @@ export default function LeaderboardSetup({
               <IconTrophy size={18} />
             </span>
             <div className="min-w-0">
-              <p className="t-card text-ink">Create a secondary leaderboard</p>
+              <p className="t-card text-ink">{secondary ? 'Add another secondary leaderboard' : 'Create a secondary leaderboard'}</p>
               <p className="t-cap text-ink/65 mt-1 leading-snug">
                 {!done
                   ? 'Once your primary leaderboard is set, you can add more.'

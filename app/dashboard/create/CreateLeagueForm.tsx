@@ -31,13 +31,13 @@ import {
 import RoundDeadlines from '@/app/components/RoundDeadlines'
 import { setRoundDeadlines } from '@/lib/leagueRoundStore'
 import {
-  type DayBoards, type LeagueSetup, type LeagueSchedule, type RepeatUnit, DAY_BOARDS,
+  type LeagueSetup, type LeagueSchedule, type RepeatUnit,
   MAX_LEAGUE_DAYS, MAX_REPEAT_EVERY, REPEAT_UNITS,
   asksRoundDeadlines, describeRepeat, leagueDaysIssue, seriesDates,
   type LeaguePeriod, type PeriodRule, PERIOD_RULES, MAX_PERIODS, MAX_PERIOD_EVERY,
   equalPeriods, periodsIssue, describePeriod,
 } from '@/lib/leagueSetup'
-import type { Leaderboard } from '@/lib/leaderboards'
+import { type Leaderboard, boardFacts, MAX_DISCARD, ALL_TEAM_FORMATS } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -57,12 +57,14 @@ import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, optio
 import WizardShell from '@/app/components/WizardShell'
 import { Stepper } from '@/app/components/ItineraryForms'
 import { tripBase } from '@/lib/tripPaths'
-import { DynamicQuestion, SessionList, OverallSetup } from './SessionPicker'
+import { RoundList, OverallSetup, ReadBack, FaceOffTags, FormatPicker } from './SessionPicker'
 import {
-  type SessionDraft, type OverallRanks, type SessionFeed, type OverallRules,
-  sessionsIssue, resolvedFormats, inRunningOrder, sessionBoard, overallBoard, feedFor, defaultMatchSlots,
+  type SessionDraft, type SessionFormat, type OverallRanks, type SessionFeed,
+  resolvedFormats, syncDrafts, formatIssue, STROKE_FORMAT,
 } from '@/lib/sessions'
-import { daySheetId } from '@/lib/teamSets'
+import {
+  type EventShape, eventShape, boardsForCreation, shapeSentence, formatStepIssue, unitLabel,
+} from '@/lib/eventShape'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
 
 /**
@@ -100,25 +102,35 @@ import { createTripRow, enterEvent } from '@/lib/entryClient'
 // ── Styles shared with the trip wizard, by convention not import ─────────
 
 /** Each step opens on its question — WizardShell draws it as the step's title. */
-type StepKey = 'details' | 'venues' | 'deadlines' | 'field' | 'dynamic' | 'sessions' | 'overall' | 'ready'
+// Format first (Ross, 13 Nov 2026, D77–D78): details, the field, the
+// Format — the golf, from which the platform names the leaderboard
+// (lib/eventShape.ts) — then Settings, everything that isn't golf. No step
+// is called "leaderboard".
+type StepKey = 'details' | 'field' | 'venues' | 'format' | 'deadlines' | 'settings'
 const STEP_TITLES: Record<StepKey, string> = {
   details: 'Name your event',
-  // A standalone league's first leaderboard decision (Ross, 9 Nov 2026, D35).
-  dynamic: 'Enable Dynamic Overall Leaderboard?',
-  sessions: 'Set the running order',
-  overall: 'Finalise the Overall',
-  venues: 'Where you’re playing',
+  field: 'Who’s playing',
+  // A league of periods: where its cards may be played.
+  venues: 'Where cards are played',
+  format: 'Set the format',
   // Continuous and series leagues, once their rounds are made (Ross, 5 Nov 2026).
   deadlines: 'Set a deadline for each round?',
-  field: 'Who’s playing',
-  ready: 'Ready to go',
+  settings: 'Settings',
 }
 /** At most one line under the question. */
 const STEP_INTROS: Partial<Record<StepKey, string>> = {
+  format: 'The golf, round by round. The leaderboard follows from it.',
   deadlines: 'Do you want to set a deadline for each round to be completed?',
-  dynamic: 'If the format of the golf changes over the course of the event, add each round as individual sessions with its own format and set the rules on how they feed the overall leaderboard.',
-  sessions: 'Each session is one round of golf, in its own format.',
-  overall: 'Who it ranks, and how each session feeds it.',
+  settings: 'Everything that isn’t the golf.',
+}
+
+/** "Stableford", "better ball Stableford" — what a round plays, in the read-back's sentence. */
+function playsPhrase(f: SessionFormat | null): string | null {
+  if (!f || f.kind !== 'stroke') return null
+  const scoring = f.scoring === 'stableford' ? 'Stableford' : f.scoring === 'strokes' ? 'stroke play' : 'quota'
+  if (f.audience !== 'team') return scoring
+  const team = ALL_TEAM_FORMATS.find(t => t.key === (f.teamFormat ?? 'better_ball'))?.label.toLowerCase() ?? 'team'
+  return `${team} ${scoring}`
 }
 
 type PlayerInput = { name: string; handicap: string; gender: 'M' | 'F'; tag?: string }
@@ -272,16 +284,15 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   const [repeatUnit, setRepeatUnit] = useState<RepeatUnit>('week')
   const [eventCount, setEventCount] = useState(8)
 
-  // Step 2 — venues. `venues[i]` is slot i's course id (day i of a
-  // standalone run); with the toggle on, the first pick is every slot's and
-  // the rest are ignored. A continuous league and a series key by date
-  // instead, so a date added or removed in step one cannot silently shuffle
-  // the courses.
-  const [venues, setVenues] = useState<string[]>([])
-  const [dateVenues, setDateVenues] = useState<Record<string, string>>({})
-  // A league presumes its home course — on until the organiser says
-  // otherwise. Everything else starts off, as it always did.
+  // The Format step's rounds — a venue and a format each, Round 1's own and
+  // the rest "Same as Round 1" until changed. Kept in step with the playing
+  // days on the way in (`syncDrafts`). With the toggle on, Round 1's venue
+  // is every round's. A league presumes its home course — on until the
+  // organiser says otherwise; a standalone run starts off, as it always did.
+  const [rounds, setRounds] = useState<SessionDraft[]>([])
   const [sameVenue, setSameVenue] = useState(schedule === 'series')
+  // A league of periods plays one format on every card.
+  const [cardFormat, setCardFormat] = useState<SessionFormat>(STROKE_FORMAT)
 
   // Step 3 — the field
   const [entry, setEntry] = useState<PlayerEntry | null>(null)
@@ -295,21 +306,19 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   const [tags, setTags] = useState<FieldTags>(NO_FIELD_TAGS)
   const [tagsWarning, setTagsWarning] = useState<string | null>(null)
 
-  // Step 4 — the leaderboards, how the days relate, and the organiser PIN.
-  // Seeded with the starter board so a league that never touches the picker
-  // still plays from the moment it exists; the picker itself is the same
-  // LeaderboardSetup Trip Setup runs, so creation can offer exactly the
-  // competitions the platform can score and not one more.
-  // Nothing chosen for the organiser (Ross, 8 Nov 2026): the leaderboards
-  // are set by hand, and Finish waits for at least one.
-  const [boards, setBoards] = useState<Leaderboard[]>([])
-  // The Dynamic Overall Leaderboard (lib/sessions.ts): a standalone
-  // league's first leaderboard question, its sessions and the Overall's rules.
-  const [dynamic, setDynamic] = useState<boolean | null>(null)
-  const [sessions, setSessions] = useState<SessionDraft[]>([])
+  // The secondary leaderboards, beside the one the platform chose — the
+  // same LeaderboardSetup Trip Setup runs, so creation offers exactly the
+  // competitions the platform can score.
+  const [secondaries, setSecondaries] = useState<Leaderboard[]>([])
+  const [addingSecondary, setAddingSecondary] = useState(false)
+  // An Overall's ranking and feeds, behind a button on the read-back card.
   const [overallRanks, setOverallRanks] = useState<OverallRanks | null>(null)
   const [feeds, setFeeds] = useState<Record<string, SessionFeed>>({})
-  const [dayBoards, setDayBoards] = useState<DayBoards | null>(null)
+  const [overallOpen, setOverallOpen] = useState(false)
+  // A league board's worst rounds dropped.
+  const [discard, setDiscard] = useState(0)
+  // Stats: putts and tee shots on the scorecard (`trips.track_stats`).
+  const [trackStats, setTrackStats] = useState(false)
   // How collaborative the event is — all off until the organiser opts in
   // (lib/eventPermissions.ts, the one registry).
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
@@ -387,17 +396,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
 
   const daysIssue = continuous ? null : leagueDaysIssue(slots.length, schedule)
 
-  // One slot is asked with the single picker, which writes `venues[0]` —
-  // so one slot reads it back from there, whatever the shape keys by.
-  const venueFor = (slot: { date: string | null }, i: number) =>
-    (sameVenue || slots.length === 1
-      ? venues[0]
-      : schedule !== 'standalone' && slot.date
-        ? dateVenues[slot.date]
-        : venues[i]) ?? ''
-  const venuesComplete = continuous
-    ? anyCourse === true || (anyCourse === false && cardCourses.some(Boolean))
-    : slots.length > 0 && slots.every((s, i) => venueFor(s, i) !== '')
+  // A round's venue: Round 1's when the toggle is on.
+  const venueFor = (i: number) => ((sameVenue && i > 0 ? rounds[0]?.courseId : rounds[i]?.courseId) ?? '')
+  const venuesComplete = anyCourse === true || (anyCourse === false && cardCourses.some(Boolean))
 
   const duplicateIndex = firstDuplicateIndex(players.map(p => p.name))
   const duplicateIssue = duplicateIndex === -1
@@ -428,51 +429,70 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         ? periodsProblem === null
         : !!seriesPlan && !!startDate && slots.length > 0 && !daysIssue)
 
-  /** The course a slot is played at, or null while it is to be confirmed. */
-  const courseOf = (slot: { date: string | null }, i: number) => {
-    const v = venueFor(slot, i)
-    return v === TBC_VENUE ? null : v
+  /** The course a round is played at, or null while it is to be confirmed. */
+  const courseOf = (i: number) => {
+    const v = venueFor(i)
+    return v === TBC_VENUE || !v ? null : v
   }
 
-  // How the days relate is asked of anything with more than one day — and
-  // of every series, whose events are added after creation if they were
-  // not all made now: one event today is the start of several.
-  // Only a standalone league is asked about the Dynamic Overall Leaderboard.
-  const asksDynamic = schedule === 'standalone'
-  const isDynamic = asksDynamic && dynamic === true
-  // The run's playing days, for a session's day.
+  // The run's playing days, for a round's day.
   const playingDays = slots.map(s => ({ index: s.dayIndex, label: describeDay(s.date, s.dayIndex) }))
-  // The sessions as the rounds they become: running order, a position each
-  // within its day so two sessions on one day are two golf items.
-  const orderedSessions = inRunningOrder(sessions)
-  const sessionSlots = orderedSessions.map((sess, i) => ({
-    dayIndex: sess.dayIndex,
-    date: dateForDay(startDate || null, sess.dayIndex),
-    position: orderedSessions.slice(0, i).filter(o => o.dayIndex === sess.dayIndex).length,
-    courseId: sess.courseId,
+  // The rounds as the golf items they become: a position each within its
+  // day, so two sessions on one day are two golf items.
+  const playSlots = rounds.map((r, i) => ({
+    dayIndex: r.dayIndex,
+    date: dateForDay(startDate || null, r.dayIndex),
+    position: rounds.slice(0, i).filter(o => o.dayIndex === r.dayIndex).length,
+    courseId: courseOf(i),
   }))
-  const sessionsProblem = isDynamic ? sessionsIssue(orderedSessions) : null
   // Named players so far — what a Matches session's count starts from.
   const fieldCount = players.filter(p => p.name.trim()).length
-  const ranks: OverallRanks = overallRanks ?? (tags.on ? 'tags' : 'individuals')
-  const overallEntrants = ranks === 'tags' ? Math.max(2, tags.tags?.length ?? 2)
-    : ranks === 'individuals' ? Math.max(1, players.filter(p => p.name.trim()).length) : 4
 
-  const asksDayBoards = !continuous && !isDynamic && (slots.length > 1 || schedule === 'series')
+  // ── The rule (lib/eventShape.ts): the Format names the leaderboard ──
+  const formats: (SessionFormat | null)[] = continuous ? [cardFormat] : resolvedFormats(rounds)
+  const tagCount = tags.on ? tags.tags.length : 0
+  const ruled = eventShape({ formats, tags: tagCount })
+  // Stroke formats that could go either way are D90's question (stage 4);
+  // until it is asked, the Overall — which reads every round fairly.
+  const shape: EventShape = ruled.main === 'ask' ? { ...ruled, main: 'overall', unit: 'Session' } : ruled
+  const unit = shape.unit
+  const isOverall = shape.main === 'overall'
+  const hasMatches = formats.some(f => f?.kind === 'matches')
+  const ranks: OverallRanks = overallRanks ?? shape.ranks
+  const overallEntrants = ranks === 'tags' ? Math.max(2, tags.tags?.length ?? 2)
+    : ranks === 'individuals' ? Math.max(1, fieldCount) : 4
+  const formatProblem = continuous
+    ? formatIssue(cardFormat)
+    : formatStepIssue(rounds.map((r, i) => ({
+        courseId: venueFor(i), tbcVenue: venueFor(i) === TBC_VENUE,
+        format: formats[i], label: unitLabel(unit, i + 1, unit === 'Session' ? r.name : null),
+      })), shape.main)
+  /** The boards the event is made with — written on submit, previewed on the read-back. */
+  const boardsFor = (roundIds: (string | null)[]) => boardsForCreation({
+    rounds: continuous
+      ? [{ roundId: null, format: cardFormat }]
+      : rounds.map((r, i) => ({
+          roundId: roundIds[i] ?? null, format: formats[i], name: r.name, matches: r.matches, feed: feeds[r.key],
+        })),
+    shape, ranks, entrants: overallEntrants, fieldSize: fieldCount,
+    discard: isOverall ? 0 : discard, secondaries,
+  })
+  const preview = boardsFor(rounds.map((_, i) => (courseOf(i) ? `preview-${i}` : null)))
+  const roundCount = continuous ? 1 : rounds.length
 
   // The deadline question, once the rounds are made — on a league whose
   // rounds are played over a stretch, each round's name and own date.
   const askDeadlines = asksRoundDeadlines(schedule, continuous) && slots.length > 0
-  const deadlineNames = slots.map((slot, i) => `Round ${i + 1}${slot.date ? ` · ${describeShortDate(slot.date)}` : ''}`)
+  const deadlineNames = slots.map((slot, i) => `${unit} ${i + 1}${slot.date ? ` · ${describeShortDate(slot.date)}` : ''}`)
   const deadlineFloors = slots.map(slot => slot.date)
   const deadlineOpts = { names: deadlineNames, floors: deadlineFloors }
-  // A standalone league asks the field first, then the question, then the
-  // running order: venues a day, or (Yes) sessions and the Overall — so the
-  // back arrow from the Overall returns to the sessions and from there to
-  // the question (Ross, 9 Nov 2026).
-  const keys: StepKey[] = asksDynamic
-    ? ['details', 'field', 'dynamic', ...(isDynamic ? ['sessions' as const, 'overall' as const] : ['venues' as const]), 'ready']
-    : ['details', 'venues', ...(askDeadlines ? ['deadlines' as const] : []), 'field', 'ready']
+  // Details, the field, the Format, Settings (D78) — a league of periods
+  // asks where its cards are played before their format, and a league whose
+  // rounds are played over a stretch its deadlines after.
+  const keys: StepKey[] = [
+    'details', 'field', ...(continuous ? ['venues' as const] : []), 'format',
+    ...(askDeadlines ? ['deadlines' as const] : []), 'settings',
+  ]
   const key = keys[Math.min(Number(step) || 1, keys.length) - 1]
   const lastStep = keys.length
 
@@ -481,35 +501,19 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     key === 'venues' ? venuesComplete :
     key === 'deadlines' ? !deadlinesAnswerIssue(deadlines, slots.length, deadlineOpts) :
     key === 'field' ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
-    key === 'dynamic' ? dynamic !== null :
-    key === 'sessions' ? sessionsProblem === null :
-    key === 'overall' ? (ranks !== 'tags' || tags.on) :
-    key === 'ready' ? (isDynamic || boards.length > 0) && (!asksDayBoards || !!dayBoards) && !passcodeIssue && !publicIssue && !giIssue :
+    key === 'format' ? formatProblem === null && (!isOverall || ranks !== 'tags' || tags.on) :
+    key === 'settings' ? !passcodeIssue && !publicIssue && !giIssue :
     false
   )
 
-  /** Yes chosen: the running order starts with one session. */
-  function chooseDynamic(on: boolean) {
-    setDynamic(on)
-    if (on && sessions.length === 0) {
-      setSessions([{
-        key: 's-first',
-        dayIndex: slots[0]?.dayIndex ?? 0,
-        courseId: venues[0] ?? '',
-        format: { kind: 'stroke', audience: 'individual', scoring: 'stableford' },
-      }])
-    }
-  }
-
-  /** Yes → No: each day keeps its first session's venue as a plain round. */
-  function sessionsToVenues() {
-    const next = slots.map(slot => orderedSessions.find(sess => sess.dayIndex === slot.dayIndex)?.courseId ?? '')
-    setVenues(next)
-    setSameVenue(next.length > 1 && next.every(v => v === next[0]))
-  }
-
   function goNext() {
     if (step === 'done') return
+    const next = keys[step]
+    // Into the Format step: a round for every playing day, the answers
+    // already given kept (lib/sessions.ts `syncDrafts`).
+    if (next === 'format' && !continuous) {
+      setRounds(prev => syncDrafts(prev, slots.map(s => s.dayIndex), schedule === 'standalone'))
+    }
     if (step < lastStep) setStep(step + 1)
     else handleSubmit()
   }
@@ -518,19 +522,6 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     setError(null)
     if (step === 1 && onExit) { onExit(); return }
     if (step !== 'done' && step > 1) setStep(step - 1)
-  }
-
-  function setVenue(i: number, id: string) {
-    setVenues(prev => {
-      const next = [...prev]
-      while (next.length <= i) next.push('')
-      next[i] = id
-      return next
-    })
-  }
-
-  function setDateVenue(date: string, id: string) {
-    setDateVenues(prev => ({ ...prev, [date]: id }))
   }
 
   /** One period's start or finish moved by hand — the run keeps its keys. */
@@ -578,33 +569,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     const pins = { adminPin: passcode, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
 
 
-    // The Dynamic Overall Leaderboard's boards, written with the trip: each
-    // session's round is given its id here so its board can name it before
-    // the round row exists (lib/sessions.ts). TBC sessions get no board.
-    const roundIds = isDynamic ? sessionSlots.map(() => crypto.randomUUID()) : []
-    const storedBoards: Leaderboard[] = isDynamic ? (() => {
-      const formats = resolvedFormats(orderedSessions)
-      const sessionBoards = formats.flatMap((f, i) => f ? [sessionBoard(f, roundIds[i], daySheetId(roundIds[i]))] : [])
-      const rules: OverallRules = { ranks }
-      const storedFeeds: Record<string, SessionFeed> = {}
-      const names: Record<string, string> = {}
-      const slots: Record<string, number> = {}
-      orderedSessions.forEach((sess, i) => {
-        const rid = roundIds[i]
-        const board = sessionBoards.find(b => b.roundIds?.[0] === rid) ?? null
-        if (board) {
-          const own = feeds[sess.key]
-          storedFeeds[rid] = feedFor({ ranks, ...(own ? { feeds: { [rid]: own } } : {}) }, rid, board, overallEntrants)
-        }
-        if (sess.name?.trim()) names[rid] = sess.name.trim()
-        const f = formats[i]
-        if (f?.kind === 'matches') slots[rid] = sess.matches ?? defaultMatchSlots(fieldCount, f.match)
-      })
-      if (Object.keys(storedFeeds).length > 0) rules.feeds = storedFeeds
-      if (Object.keys(names).length > 0) rules.names = names
-      if (Object.keys(slots).length > 0) rules.slots = slots
-      return [overallBoard(rules), ...sessionBoards, ...boards]
-    })() : boards
+    // Every round's id is made here so the boards can name it before the
+    // round row exists; a round whose venue is to be confirmed has none yet.
+    const roundIds = rounds.map((_, i) => (courseOf(i) ? crypto.randomUUID() : null))
+    // The boards the Format chose (lib/eventShape.ts), then the secondaries.
+    const storedBoards: Leaderboard[] = boardsFor(roundIds)
 
     const setup: LeagueSetup = {
       format: 'league',
@@ -622,7 +591,6 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         ? { repeat: { every: repeatEvery, unit: repeatUnit } } : {}),
       entry: entry!,
       ...(entry === 'self_join' && requireApproval ? { requireApproval: true } : {}),
-      ...(asksDayBoards && dayBoards ? { dayBoards } : {}),
       // Live is the absent default; the rules ride only with a source that reads them.
       ...(giStored && scoreSource !== 'live' ? { scoreSource, golfIreland: giStored } : {}),
     }
@@ -665,6 +633,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       // Only when a toggle was actually flipped — nothing opened writes
       // nothing, so creation still lands before migration 049 has run.
       ...(storedPermissions(finalPerms) ? { event_permissions: finalPerms } : {}),
+      // Stats, only when switched on — off is the column's own default.
+      ...(trackStats ? { track_stats: true } : {}),
     }
 
     const leadEmail = normaliseEmail(email)
@@ -721,10 +691,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     // A continuous league's day_index is its calendar offset inside the
     // period, and a series' its offset from the first event, so the
     // schedule and the countdown keep reading true dates.
-    // A dynamic league's slots are its sessions, several to a day.
-    const playSlots = isDynamic
-      ? sessionSlots
-      : slots.map((slot, i) => ({ ...slot, position: 0, courseId: courseOf(slot, i) }))
+    // A standalone event may play two rounds on one day: each its own item.
     const items: ItineraryItem[] = playSlots.map((slot, i) => ({
       id: `tmp-day-${i}`,
       dayIndex: slot.dayIndex,
@@ -764,8 +731,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
       // The slot's own date — every shape has one now.
       const date = playSlots[i].date
       return [{
-        // A session's round carries the id its board was written with.
-        ...(isDynamic ? { id: roundIds[i] } : {}),
+        // Every round carries the id its boards were written with.
+        id: roundIds[i]!,
         trip_id: tripId,
         course_id: item.courseId,
         round_number: i + 1,
@@ -1294,117 +1261,140 @@ export default function CreateLeagueForm({ schedule, onExit }: {
           </div>
         )}
 
-        {/* ── The first leaderboard decision (D35) ── */}
-        {key === 'dynamic' && (
-          <DynamicQuestion
-            value={dynamic}
-            onChange={chooseDynamic}
-            sessionCount={sessions.length}
-            onConfirmOff={sessionsToVenues}
-          />
-        )}
-
-        {/* ── The running order: sessions, a format each ── */}
-        {key === 'sessions' && (
-          <div className="space-y-4">
-            <SessionList
-              sessions={sessions}
-              onChange={setSessions}
-              fieldSize={fieldCount}
-              days={playingDays}
-              renderVenue={(value, onChange) => (
-                <VenuePicker courses={courses} value={value} onChange={onChange}
-                  onCourseAdded={onCourseAdded} allowTbc={false} />
-              )}
-            />
-            {sessionsProblem && sessions.length > 0 && (
-              <p className="text-ink/65 text-[13px] leading-snug">{sessionsProblem}</p>
-            )}
-          </div>
-        )}
-
-        {/* ── Finalise the Overall ── */}
-        {key === 'overall' && (
-          <OverallSetup
-            sessions={orderedSessions}
-            ranks={ranks}
-            onRanks={setOverallRanks}
-            feeds={feeds}
-            onFeeds={setFeeds}
-            tagsOn={tags.on}
-            entrants={overallEntrants}
-          />
-        )}
-
-        {key === 'venues' && !continuous && (
+        {/* ── The Format (D77): the golf, round by round, and the read-back ── */}
+        {key === 'format' && (
           <div className="space-y-5">
-            {coursesLoaded && courses.length === 0 && (
+            {coursesLoaded && courses.length === 0 && !continuous && (
               <div className={`p-4 text-ink/65 text-sm text-center ${cardClass()}`}>
                 The course list could not be loaded — a course can still be
                 added by name from the picker.
               </div>
             )}
 
-            {slots.length > 1 && (
-              <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
-                <div className="min-w-0">
-                  <p className="text-ink text-sm font-medium">
-                    Same venue every {schedule === 'series' ? 'round' : 'day'}
-                  </p>
-                  <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-                    {schedule === 'series'
-                      ? 'One course for the whole league. Turn off to pick each round’s, or leave some to be confirmed.'
-                      : 'One course for the whole event — pick it once below.'}
-                  </p>
+            {continuous ? (
+              <div className={`p-4 ${cardClass()}`}>
+                <p className="t-card text-ink">Every card</p>
+                <div className="mt-3">
+                  <FormatPicker value={cardFormat} onChange={setCardFormat} allowMatches={false} />
                 </div>
-                <Toggle
-                  checked={sameVenue}
-                  onChange={setSameVenue}
-                  label="Same venue throughout"
-                />
-              </div>
-            )}
-
-            {slots.length === 1 || sameVenue ? (
-              <div>
-                <label className={FIELD_LABEL}>Venue</label>
-                <VenuePicker
-                  courses={courses}
-                  value={venues[0] ?? ''}
-                  onChange={id => setVenue(0, id)}
-                  onCourseAdded={onCourseAdded}
-                  allowTbc={schedule === 'series'}
-                />
-                {schedule === 'series' && seriesPlan === 'ad_hoc' && (
-                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                    For the first round. Each round after is presumed to be here too, and can be changed when it&apos;s added.
-                  </p>
-                )}
+                <div className="mt-5">
+                  <label className={FIELD_LABEL}>Which card counts in a period?</label>
+                  <div className="space-y-2">
+                    {PERIOD_RULES.map(r => (
+                      <button
+                        key={r.key}
+                        onClick={() => setPeriodRule(r.key)}
+                        aria-pressed={periodRule === r.key}
+                        className={optionClass(periodRule === r.key)}
+                      >
+                        <p className="text-[17px] font-medium leading-snug text-ink">{r.label}</p>
+                        <p className="t-cap text-ink/65 mt-0.5">{r.hint}</p>
+                      </button>
+                    ))}
+                  </div>
+                  {periodRule === 'composite' && (
+                    <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                      On a strokes leaderboard a composite needs one course, so a player whose cards are on different courses keeps their best card.
+                    </p>
+                  )}
+                </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {slots.map((slot, i) => (
-                  <div key={slot.date ?? i}>
-                    <label className={FIELD_LABEL}>
-                      {schedule === 'series'
-                        ? `Round ${i + 1} · ${describeDay(slot.date, slot.dayIndex)}`
-                        : describeDay(slot.date, slot.dayIndex)}
-                    </label>
-                    <VenuePicker
-                      courses={courses}
-                      value={venueFor(slot, i)}
-                      onChange={id =>
-                        schedule !== 'standalone' && slot.date
-                          ? setDateVenue(slot.date, id)
-                          : setVenue(i, id)}
-                      onCourseAdded={onCourseAdded}
-                      allowTbc={schedule === 'series'}
-                    />
-                  </div>
-                ))}
-              </div>
+              <RoundList
+                rounds={rounds}
+                onChange={setRounds}
+                unit={unit}
+                days={playingDays}
+                dateOf={r => {
+                  const d = dateForDay(startDate || null, r.dayIndex)
+                  return d && slots.length > 1 ? describeShortDate(d) : null
+                }}
+                canAdd={schedule === 'standalone'}
+                sameVenue={sameVenue}
+                onSameVenue={setSameVenue}
+                allowTbc={schedule === 'series' && !isOverall}
+                fieldSize={fieldCount}
+                renderVenue={(value, onChange, allowTbc) => (
+                  <VenuePicker courses={courses} value={value} onChange={onChange}
+                    onCourseAdded={onCourseAdded} allowTbc={allowTbc} />
+                )}
+              />
+            )}
+            {formatProblem && roundCount > 0 && (
+              <p className="text-ink/65 text-[13px] leading-snug">{formatProblem}</p>
+            )}
+            {schedule === 'series' && seriesPlan === 'ad_hoc' && !isOverall && (
+              <p className="text-ink/65 text-[13px] leading-snug">
+                Each round after the first is added on the Scoring tab, presumed at this venue and in this format.
+              </p>
             )}
 
+            {/* The leaderboard the platform chose, and why (D77, lib/eventShape.ts). */}
+            <ReadBack
+              title={isOverall ? 'Overall' : secondaries.length > 0 ? 'Primary leaderboard' : 'Leaderboard'}
+              sentence={continuous
+                ? `Every card plays ${playsPhrase(cardFormat) ?? 'the same format'}, and each period’s card adds to the total.`
+                : roundCount === 1 && !isOverall
+                  ? `One round of ${playsPhrase(formats[0]) ?? 'golf'}, on one leaderboard.`
+                  : shapeSentence(shape, playsPhrase(formats[0]))}
+              facts={preview[0] ? boardFacts(preview[0]) : []}
+            >
+              {isOverall && shape.faceOff && ranks === 'tags' && <FaceOffTags tags={tags.tags} />}
+
+              {!isOverall && roundCount > 1 && (
+                <div className="mt-4">
+                  <p className={FIELD_LABEL}>Drop each player’s worst round?</p>
+                  <div className="flex gap-2">
+                    {Array.from({ length: MAX_DISCARD + 1 }, (_, n) => n).map(n => (
+                      <button key={n} type="button" aria-pressed={discard === n}
+                        className={`${chipClass(discard === n)} flex-1`} onClick={() => setDiscard(n)}>
+                        {n === 0 ? 'No' : n === 1 ? 'Worst 1' : `Worst ${n}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {isOverall && (
+                overallOpen ? (
+                  <div className="mt-4">
+                    <OverallSetup
+                      sessions={rounds}
+                      ranks={ranks}
+                      onRanks={setOverallRanks}
+                      feeds={feeds}
+                      onFeeds={setFeeds}
+                      tagsOn={tags.on}
+                      entrants={overallEntrants}
+                    />
+                  </div>
+                ) : (
+                  <button type="button" className={`${buttonClass('secondary')} mt-4`} onClick={() => setOverallOpen(true)}>
+                    Change what it ranks and how each session pays
+                  </button>
+                )
+              )}
+
+              {secondaries.length > 0 || addingSecondary ? (
+                <div className="mt-4">
+                  <p className={FIELD_LABEL}>Secondary leaderboards</p>
+                  <LeaderboardSetup
+                    boards={secondaries}
+                    alongside={preview.filter(b => !secondaries.some(x => x.id === b.id))}
+                    secondary
+                    playerCount={fieldCount}
+                    teamCount={0}
+                    askTeeTeams
+                    askTags
+                    onChange={next => { setSecondaries(next); if (next.length === 0) setAddingSecondary(false) }}
+                  />
+                </div>
+              ) : (
+                <button type="button" className={`${buttonClass('secondary')} mt-4`} onClick={() => setAddingSecondary(true)}>
+                  Add a secondary leaderboard
+                </button>
+              )}
+            </ReadBack>
           </div>
         )}
 
@@ -1464,8 +1454,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               tags={tags}
               // Tags switched off take any tags board with them — there would be
               // nothing for it to rank. Switched on, nothing is added: the
-              // organiser picks a tags board on the Finish step if they want one.
-              setTags={next => { if (tags.on && !next.on) setBoards(b => withLeagueTagBoard(b, false)); setTags(next) }}
+              // organiser adds a tags board as a secondary if they want one.
+              setTags={next => { if (tags.on && !next.on) setSecondaries(b => withLeagueTagBoard(b, false)); setTags(next) }}
               counts={tagCounts(tags, players)}
               onRemove={key => setPlayers(prev => prev.map(p => (p.tag === key ? { ...p, tag: undefined } : p)))}
             />
@@ -1551,7 +1541,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         )}
 
         {/* ── 4 · Finish ── */}
-        {key === 'ready' && (
+        {key === 'settings' && (
           <div className="space-y-6">
             {/* ── Where the scores come from ──
                 Live on Green Dot, read from Golf Ireland, or both. Golf
@@ -1586,84 +1576,6 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               </div>
             )}
 
-            {/* ── The leaderboards ──
-                The same LeaderboardSetup Trip Setup runs, starting empty
-                (Ross, 8 Nov 2026: set by hand, never pre-filled) — so
-                creation offers exactly the competitions the platform can
-                score, and Finish waits for at least one. Teams are
-                apportioned after creation on the teams screen, the same
-                as a trip, so a team board here starts unassigned. */}
-            {continuous && (
-              <div>
-                <label className={FIELD_LABEL}>Which card counts in a period?</label>
-                <div className="space-y-2">
-                  {PERIOD_RULES.map(r => (
-                    <button
-                      key={r.key}
-                      onClick={() => setPeriodRule(r.key)}
-                      aria-pressed={periodRule === r.key}
-                      className={optionClass(periodRule === r.key)}
-                    >
-                      <p className="text-[17px] font-medium leading-snug text-ink">{r.label}</p>
-                      <p className="t-cap text-ink/65 mt-0.5">{r.hint}</p>
-                    </button>
-                  ))}
-                </div>
-                {periodRule === 'composite' && (
-                  <p className="text-ink/65 text-[13px] mt-2 leading-snug">
-                    On a strokes leaderboard a composite needs one course, so a player whose cards are on different courses keeps their best card.
-                  </p>
-                )}
-              </div>
-            )}
-
-            <div>
-              <label className={FIELD_LABEL}>{isDynamic ? 'Secondary leaderboards' : 'Leaderboards'}</label>
-              <p className="text-ink/65 text-[13px] mb-3 leading-snug">
-                {isDynamic
-                  ? 'The Overall is set. Add any other leaderboard you want beside it, or none.'
-                  : 'How the field is ranked. Add at least one.'}
-              </p>
-              <LeaderboardSetup
-                boards={boards}
-                playerCount={players.filter(p => p.name.trim()).length}
-                teamCount={0}
-                askTeeTeams
-                askTags
-                onChange={setBoards}
-              />
-              {boards.length === 0 && !isDynamic && (
-                <p className="t-cap text-ink/65 mt-3 leading-snug">
-                  Add a leaderboard to finish — it is what the event is played for.
-                </p>
-              )}
-            </div>
-
-            {asksDayBoards && (
-              <div>
-                <label className={FIELD_LABEL}>
-                  The leaderboard across the {schedule === 'series' ? 'rounds' : 'days'}
-                </label>
-                <div className="space-y-2">
-                  {DAY_BOARDS.map(d => (
-                    <button
-                      key={d.key}
-                      onClick={() => setDayBoards(d.key)}
-                      aria-pressed={dayBoards === d.key}
-                      className={optionClass(dayBoards === d.key)}
-                    >
-                      <p className="text-[17px] font-medium leading-snug text-ink">
-                        {d.label}
-                      </p>
-                      <p className="t-cap text-ink/65 mt-0.5">
-                        {d.hint}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* ── Tee times ──
                 Its own question (Ross, 26 Oct 2026): on, every round gets a
                 tee sheet, and the two answers — who makes the sheets, who
@@ -1678,7 +1590,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
             )}
             {/* A Matches session: the tee times — or the order of play —
                 are where its matches are made (Ross, 9 Nov 2026, D42). */}
-            {isDynamic && resolvedFormats(orderedSessions).some(f => f?.kind === 'matches') && (
+            {hasMatches && (
               <div className={`p-4 ${cardClass('flat')}`}>
                 <p className="text-ink text-sm font-medium">Tee times decide the matches.</p>
                 <p className="text-ink/65 text-[13px] mt-1 leading-snug">
@@ -1699,8 +1611,19 @@ export default function CreateLeagueForm({ schedule, onExit }: {
               <CollaborationQuestion
                 value={perms}
                 onChange={setPerms}
-                registry={permissionsFor(schedule === 'series', false, continuous, isDynamic && orderedSessions.some((_, i) => resolvedFormats(orderedSessions)[i]?.kind === 'matches'))}
+                registry={permissionsFor(schedule === 'series', false, continuous, hasMatches)}
               />
+            </div>
+
+            {/* ── Stats ── putts and tee shots on the scorecard (trips.track_stats). */}
+            <div className={`flex items-start justify-between gap-4 p-4 ${cardClass()}`}>
+              <div className="min-w-0">
+                <p className="text-ink text-sm font-medium">Record stats</p>
+                <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
+                  Putts and where the tee shot went, on every card. Changeable in the organiser area.
+                </p>
+              </div>
+              <Toggle checked={trackStats} onChange={setTrackStats} label="Record stats" />
             </div>
 
             <div className="pt-2 border-t border-line">

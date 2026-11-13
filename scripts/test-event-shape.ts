@@ -10,9 +10,11 @@
 import fs from 'fs'
 import {
   eventShape, answeredShape, storedShape, roundFormatsOf, boardName, mainLeagueBoard,
-  shapeKey, unitLabel, roundLabelOf, type ShapeInput,
+  shapeKey, unitLabel, roundLabelOf, boardsForCreation, formatStepIssue, type ShapeInput,
 } from '../lib/eventShape'
-import type { SessionFormat } from '../lib/sessions'
+import { type SessionFormat, type SessionDraft, syncDrafts, resolvedFormats, STROKE_FORMAT } from '../lib/sessions'
+import { parseLeaderboards } from '../lib/leaderboards'
+import { governingBoard } from '../lib/partnerships'
 import { SHAPE_CASES } from './fixtures/event-shapes'
 
 let passed = 0, failed = 0
@@ -162,6 +164,106 @@ section('A round on screen is a round or a session, from what is stored')
   const [same] = SHAPE_CASES.filter(c => c.name.includes('identical'))
   eq(roundLabelOf(same.boards, 'r1', 1), 'Session 1',
     'an Overall made before the rule stays sessions, though the rule would now say rounds')
+}
+
+section('The boards an event is made with (stage 3)')
+{
+  const make = (formats: (SessionFormat | null)[], tags = 0, extra: Partial<Parameters<typeof boardsForCreation>[0]> = {}) => {
+    const shape = eventShape({ formats, tags })
+    return boardsForCreation({
+      rounds: formats.map((format, i) => ({ roundId: `r${i + 1}`, format })),
+      shape: shape.main === 'ask' ? { ...shape, main: 'overall', unit: 'Session' } : shape,
+      ranks: shape.ranks, entrants: 8, fieldSize: 16, secondaries: [], ...extra,
+    })
+  }
+  // Ross's check 1: a one-round club Stableford at 95%.
+  const club = make([sf(95)])
+  eq(club.length, 1, 'one round of Stableford: one board')
+  eq([club[0].competition, club[0].scoring, club[0].combine, club[0].handicapAllowance, club[0].roundIds],
+    ['league', 'stableford', 'total', 95, undefined], '  …a league board on every round, at 95%')
+  eq(storedShape(club).main, 'league', '  …which reads back as a league')
+  eq(boardName(club[0], club), 'Leaderboard', '  …called Leaderboard')
+
+  const three = make([sf(), sf(), sf(85)])
+  eq(three.length, 1, 'three Stableford rounds: one board')
+  eq(three[0].roundAllowances, { r3: 85 }, '  …round 3’s own allowance on it (D86)')
+  eq(make([sf(), sf()], 0, { discard: 1 })[0].discardWorst, 1, 'the worst round dropped where asked')
+  eq(make([sf(), sf()], 0, { discard: 0 })[0].discardWorst, undefined, '  …and absent where not')
+  const team = make([bb, bb])
+  ok(team[0].audience === 'team' && team[0].teamSet !== 'main' && !!team[0].teamSet,
+    'a team league is kept off the main sheet, which holds the event’s tags')
+  eq(make([{ ...bb, countingScores: 1 }])[0].countingScores, 1, 'better ball’s count carried')
+
+  // Check 3: two tags, fourball then singles.
+  const ryder = make([fourball, singles], 2)
+  eq(ryder.map(b => b.competition), ['overall', 'matches', 'matches'], 'two tags, fourball then singles: the Overall and two sessions')
+  eq(ryder[0].overall?.ranks, 'tags', '  …ranking tags')
+  eq(ryder[0].overall?.slots, { r1: 4, r2: 8 }, '  …each session holding the field’s usual matches')
+  eq(boardName(ryder[0], ryder), 'Overall', '  …called Overall')
+  eq(governingBoard(ryder, 'r1')?.id, 'lb-session-r1', 'the Overall never governs a round')
+  eq(mainLeagueBoard(ryder), null, '  …and there is no Primary')
+
+  // Check 4: a Matches day, then a Stableford day.
+  const mixed = make([singles, sf()])
+  eq(mixed.map(b => b.competition), ['overall', 'matches', 'league'], 'Matches then Stableford: the Overall, never a Primary')
+  ok(mixed[2].session === true && mixed[2].roundIds?.[0] === 'r2', '  …the Stableford day a session of its own')
+  const tbc = make([fourball, null])
+  eq(tbc.length, 2, 'a session left TBC has no board')
+  const named = boardsForCreation({
+    rounds: [{ roundId: 'r1', format: fourball, name: 'Friday fourballs', matches: 3 }],
+    shape: eventShape({ formats: [fourball], tags: 0 }), ranks: 'individuals', entrants: 8, fieldSize: 16, secondaries: [],
+  })
+  eq([named[0].overall?.names, named[0].overall?.slots], [{ r1: 'Friday fourballs' }, { r1: 3 }], 'a session’s name and count kept on the Overall')
+  const sec = { id: 'sec', audience: 'individual' as const, competition: 'league' as const, scoring: 'strokes' as const, combine: 'total' as const }
+  const withSec = make([sf()], 0, { secondaries: [sec] })
+  eq(withSec.map(b => b.id), ['lb-primary', 'sec'], 'a secondary sits after the main board')
+  eq(boardName(withSec[0], withSec), 'Primary', '  …which is then the Primary (check 2)')
+  // Every board made here survives the parser unchanged — nothing it would drop.
+  // Keys sorted and the parser's own zero discard left out: the same board either way.
+  const canon = (v: unknown): unknown => Array.isArray(v) ? v.map(canon)
+    : v && typeof v === 'object'
+      ? Object.fromEntries(Object.entries(v as Record<string, unknown>)
+          .filter(([k, x]) => !(k === 'discardWorst' && x === 0))
+          .sort(([a], [b]) => a.localeCompare(b)).map(([k, x]) => [k, canon(x)]))
+      : v
+  for (const [label, boards] of Object.entries({ club, three, team, ryder, mixed, withSec })) {
+    eq(canon(parseLeaderboards(JSON.parse(JSON.stringify(boards)))), canon(boards), `${label}: stored and read back unchanged`)
+  }
+  const continuous = boardsForCreation({
+    rounds: [{ roundId: null, format: sf() }], shape: eventShape({ formats: [sf()], tags: 0 }),
+    ranks: 'individuals', entrants: 1, fieldSize: 0, secondaries: [],
+  })
+  eq(continuous.map(b => b.id), ['lb-primary'], 'a league of periods: one board, no round needed')
+}
+
+section('The Format step’s rounds follow the playing days')
+{
+  const fresh = syncDrafts([], [0, 1, 2], true)
+  eq(fresh.map(d => d.dayIndex), [0, 1, 2], 'a round for every playing day')
+  eq(fresh[0].format, STROKE_FORMAT, '  …Round 1 with a format of its own')
+  eq(fresh.slice(1).map(d => d.format), ['same', 'same'], '  …the rest "Same as Round 1"')
+  const answered: SessionDraft[] = [
+    { key: 'a', dayIndex: 0, courseId: 'c1', format: fourball },
+    { key: 'b', dayIndex: 0, courseId: 'c1', format: 'same' },
+    { key: 'c', dayIndex: 1, courseId: 'c2', format: singles },
+  ]
+  const kept = syncDrafts(answered, [0, 1], true)
+  eq(kept.map(d => d.key), ['a', 'b', 'c'], 'answers kept, two on a day kept')
+  eq(syncDrafts(answered, [0, 1], false).map(d => d.key), ['a', 'c'], '  …a series holds one a day')
+  const dropped = syncDrafts(answered, [1, 2], true)
+  eq(dropped.map(d => d.dayIndex), [1, 2], 'a day gone takes its rounds; a new day gains one')
+  eq(dropped[0].format, singles, '  …and the new Round 1 keeps its own format')
+  const fromSame = syncDrafts([{ key: 'x', dayIndex: 1, courseId: '', format: 'same' }], [1], true)
+  ok(fromSame[0].format !== 'same', 'Round 1 is never "Same as Round 1"')
+  eq(resolvedFormats([{ key: 'a', dayIndex: 0, courseId: '', format: sf() }, { key: 'b', dayIndex: 1, courseId: '', format: 'same', allowance: 85 }])[1],
+    sf(85), 'the same format off its own allowance')
+
+  eq(formatStepIssue([{ courseId: 'c', format: sf(), label: 'Round 1' }], 'league'), null, 'one round, a venue and a format: ready')
+  ok(!!formatStepIssue([{ courseId: '', format: sf(), label: 'Round 1' }], 'league'), 'no venue: not ready')
+  eq(formatStepIssue([{ courseId: 'c', format: sf(), label: 'Round 1' }, { courseId: 'tbc', tbcVenue: true, format: sf(), label: 'Round 2' }], 'league'),
+    null, 'a league round may wait for its venue')
+  ok(!!formatStepIssue([{ courseId: 'c', format: fourball, label: 'Session 1' }, { courseId: 'tbc', tbcVenue: true, format: fourball, label: 'Session 2' }], 'overall'),
+    '  …a session may not')
 }
 
 section('The screens ask the one helper')

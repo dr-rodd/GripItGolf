@@ -33,9 +33,12 @@ import {
   type Leaderboard, type Scoring, dayBoardFor, hasMatchplay, isMatchTally, isTagBoard, boardTitle,
 } from './leaderboards'
 import {
-  type SessionFormat, type OverallRanks, formatOfBoard, isSessionBoard, overallOf, sessionBoardFor,
+  type SessionFormat, type OverallRanks, type OverallRules, type SessionFeed,
+  formatOfBoard, isSessionBoard, overallOf, sessionBoardFor, sessionBoard, overallBoard, feedFor,
+  defaultMatchSlots, formatIssue,
 } from './sessions'
 import { allowanceOf } from './handicapAllowance'
+import { nextSheetId, daySheetId } from './teamSets'
 
 // ─── The rule ──────────────────────────────────────────────────
 
@@ -246,4 +249,161 @@ export function roundLabelOf(boards: readonly Leaderboard[], roundId: string, ro
   return overall
     ? unitLabel('Session', roundNumber, overall.overall?.names?.[roundId])
     : unitLabel('Round', roundNumber)
+}
+
+// ─── Creation: the read-back and the boards ────────────────────
+
+/**
+ * Why the platform chose the board it chose, as the Format step's read-back
+ * card says it (D77) — one sentence, the event's own word for its rounds.
+ */
+export function shapeSentence(shape: EventShape, scoringLabel: string | null): string {
+  switch (shape.reason) {
+    case 'empty': return 'Pick Round 1’s format and the leaderboard follows from it.'
+    case 'same': return scoringLabel
+      ? `Every round plays ${scoringLabel}, so the rounds add up to a total.`
+      : 'Every round plays the same format, so the rounds add up to a total.'
+    case 'matches': return 'Your sessions are matches, so each one pays points to the Overall.'
+    case 'matches_mixed': return 'Your sessions include matches, so each one pays points to the Overall.'
+    case 'different': return shape.main === 'league'
+      ? 'Your rounds play different formats. One total counts every round; each round’s own format gets a leaderboard beside it.'
+      : shape.main === 'overall'
+        ? 'Your rounds play different formats, so each one pays points to the Overall by finishing position.'
+        : 'Your rounds play different formats. How should they count?'
+    case 'mixed_scoring': return 'Your rounds are scored different ways, which don’t add up to one total, so each one pays points to the Overall.'
+    case 'shared_cards': return 'Some rounds have no card of each player’s own, so each round pays points to the Overall.'
+  }
+}
+
+/** One round as creation hands it over: its id (null while its venue is to be confirmed) and its format. */
+export type CreationRound = {
+  roundId: string | null
+  format: SessionFormat | null
+  name?: string
+  /** A Matches session's count, where the organiser set one. */
+  matches?: number
+  /** Its feed into the Overall, where the organiser changed it. */
+  feed?: SessionFeed
+}
+
+export type CreationBoards = {
+  rounds: readonly CreationRound[]
+  /** Answered: `ask` here reads as the Overall, the safe one of the two. */
+  shape: EventShape
+  ranks: OverallRanks
+  /** How many the Overall ranks — the default points table's length. */
+  entrants: number
+  /** Named players so far — a Matches session's usual count. */
+  fieldSize: number
+  /** The league board's worst rounds dropped. */
+  discard?: number
+  secondaries: readonly Leaderboard[]
+}
+
+/** A league board in a stroke format — the Primary, or a round's own beside it. */
+function strokeBoard(id: string, f: SessionFormat & { kind: 'stroke' }, extra: Partial<Leaderboard>): Leaderboard {
+  const pct = f.handicapAllowance ?? 100
+  return {
+    id,
+    audience: f.audience,
+    competition: 'league',
+    scoring: f.scoring,
+    combine: 'total',
+    ...(f.audience === 'team' ? { teamFormat: f.teamFormat ?? 'better_ball' } : {}),
+    ...(f.audience === 'team' && (f.teamFormat ?? 'better_ball') === 'better_ball' && f.countingScores != null
+      ? { countingScores: f.countingScores } : {}),
+    ...(pct !== 100 ? { handicapAllowance: pct } : {}),
+    ...extra,
+  }
+}
+
+/**
+ * The boards an event is made with, from its Format (D77): the rule's main
+ * board first, then the secondaries. Pure — the wizard's save writes what
+ * this returns and nothing else.
+ *
+ * · **league** — one board from Round 1's format, covering every round; a
+ *   round played off another allowance keeps it as the board's per-round
+ *   allowance (D86). Under D90's "one total" the board is each player's own
+ *   total on Round 1's scoring, and a round in another format gets a board
+ *   of its own beside it.
+ * · **overall** — the Overall, a session board a round (none for TBC), as
+ *   the sessions model has always stored them (lib/sessions.ts).
+ */
+export function boardsForCreation(o: CreationBoards): Leaderboard[] {
+  const first = o.rounds.find(r => r.format)?.format ?? null
+  if (o.shape.main === 'league') {
+    if (!first || first.kind !== 'stroke') return [...o.secondaries]
+    const differs = o.shape.reason === 'different'
+    // "One total": each player's own card, on Round 1's scoring.
+    const mainFormat: SessionFormat & { kind: 'stroke' } = differs
+      ? { kind: 'stroke', audience: 'individual', scoring: first.scoring,
+          ...(first.handicapAllowance != null ? { handicapAllowance: first.handicapAllowance } : {}) }
+      : first
+    const mainPct = mainFormat.handicapAllowance ?? 100
+    const roundAllowances: Record<string, number> = {}
+    const ownBoards: Leaderboard[] = []
+    for (const r of o.rounds) {
+      if (!r.roundId || !r.format || r.format.kind !== 'stroke') continue
+      const pct = r.format.handicapAllowance ?? 100
+      if (pct !== mainPct) roundAllowances[r.roundId] = pct
+      if (differs && shapeKey(r.format) !== shapeKey(mainFormat)) {
+        ownBoards.push(strokeBoard(`lb-round-${r.roundId}`, r.format, { roundIds: [r.roundId] }))
+      }
+    }
+    const team = mainFormat.audience === 'team'
+    const main = strokeBoard('lb-primary', mainFormat, {
+      ...(team ? { teamSet: nextSheetId([...o.secondaries], { reserveMain: true }) } : {}),
+      ...(Object.keys(roundAllowances).length > 0 ? { roundAllowances } : {}),
+      ...(o.discard ? { discardWorst: o.discard } : {}),
+    })
+    return [main, ...ownBoards, ...o.secondaries]
+  }
+
+  // The Overall: a session a round.
+  const rules: OverallRules = { ranks: o.ranks }
+  const feeds: Record<string, SessionFeed> = {}
+  const names: Record<string, string> = {}
+  const slots: Record<string, number> = {}
+  const sessions: Leaderboard[] = []
+  for (const r of o.rounds) {
+    if (!r.roundId) continue
+    if (r.name?.trim()) names[r.roundId] = r.name.trim()
+    if (!r.format) continue
+    const board = sessionBoard(r.format, r.roundId, daySheetId(r.roundId))
+    sessions.push(board)
+    feeds[r.roundId] = feedFor({ ranks: o.ranks, ...(r.feed ? { feeds: { [r.roundId]: r.feed } } : {}) },
+      r.roundId, board, o.entrants)
+    if (r.format.kind === 'matches') slots[r.roundId] = r.matches ?? defaultMatchSlots(o.fieldSize, r.format.match)
+  }
+  if (Object.keys(feeds).length > 0) rules.feeds = feeds
+  if (Object.keys(names).length > 0) rules.names = names
+  if (Object.keys(slots).length > 0) rules.slots = slots
+  return [overallBoard(rules), ...sessions, ...o.secondaries]
+}
+
+/**
+ * Why the Format step cannot go on yet, or null. Round 1 always has a
+ * format; every round a venue, unless it may be confirmed later — a
+ * league's round may, a session may not, because its own board needs the
+ * round it plays.
+ */
+export function formatStepIssue(
+  rounds: readonly { courseId: string | null | undefined; format: SessionFormat | null; label: string; tbcVenue?: boolean }[],
+  main: MainBoard,
+): string | null {
+  if (rounds.length === 0) return 'Add the first round.'
+  if (!rounds[0].format) return `Pick ${rounds[0].label}’s format.`
+  for (const r of rounds) {
+    if (r.tbcVenue) {
+      if (main !== 'league') return `${r.label} needs its venue — a session can’t be to be confirmed.`
+      continue
+    }
+    if (!r.courseId) return `Pick a venue for ${r.label}.`
+  }
+  for (const r of rounds) {
+    const issue = formatIssue(r.format)
+    if (issue) return `${r.label}: ${issue}`
+  }
+  return null
 }

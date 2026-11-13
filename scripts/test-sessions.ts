@@ -415,28 +415,29 @@ section('Small things Ross found (9 Nov 2026)')
 
 // ─── The wizard ────────────────────────────────────────────────
 
-section('The creation wizard asks, and No is today’s flow')
+section('The creation wizard asks for a Format, and the platform names the board (D77–D78)')
 {
   const form = read('app/dashboard/create/CreateLeagueForm.tsx')
-  ok(form.includes("dynamic: 'Enable Dynamic Overall Leaderboard?'"), 'the question is Ross’s wording')
-  ok(form.includes('If the format of the golf changes over the course of the event, add each round as individual sessions'),
-    '  …with its explanation as the step’s one line')
-  ok(/asksDynamic = schedule === 'standalone'/.test(form), 'only a standalone league is asked')
-  ok(form.includes("['details', 'field', 'dynamic', ...(isDynamic ? ['sessions' as const, 'overall' as const] : ['venues' as const]), 'ready']"),
-    'Yes runs the sessions then the Overall; No runs the venues as before')
-  ok(form.includes("['details', 'venues', ...(askDeadlines ? ['deadlines' as const] : []), 'field', 'ready']"),
-    'a series or continuous league’s steps are untouched')
-  ok(form.includes('const storedBoards: Leaderboard[] = isDynamic ?') && form.includes(': boards'),
-    'No stores exactly the boards picked, as before')
-  ok(form.includes('...(isDynamic ? { id: roundIds[i] } : {})'), 'a session’s round carries the id its board names; No’s rounds as before')
+  ok(!form.includes('Enable Dynamic Overall Leaderboard?') && !form.includes('DynamicQuestion'),
+    'the Dynamic Overall question is gone (D77 replaces D35)')
+  ok(form.includes("'details', 'field', ...(continuous ? ['venues' as const] : []), 'format',")
+    && form.includes("...(askDeadlines ? ['deadlines' as const] : []), 'settings',"),
+    'details, the field, the Format, Settings — every shape (D78)')
+  const titles = form.slice(form.indexOf('const STEP_TITLES'), form.indexOf('/** At most one line under the question. */'))
+  ok(!/leaderboard/i.test(titles.replace(/\/\/.*$/gm, '')), 'no step is called "leaderboard"')
+  ok(form.includes('const ruled = eventShape({ formats, tags: tagCount })'), 'the board kind comes from the rule, reading formats and tags')
+  ok(form.includes('const storedBoards: Leaderboard[] = boardsFor(roundIds)'), 'the save writes what boardsForCreation returns')
+  ok(form.includes('id: roundIds[i]!,'), 'every round carries the id its boards name')
   const picker = read('app/dashboard/create/SessionPicker.tsx')
-  ok(picker.includes('Turn the Dynamic Overall Leaderboard off?'), 'Yes → No with sessions set asks first')
-  ok(picker.includes('Same as Session 1') && picker.includes('Format TBC') && picker.includes('Or a new format'),
-    'later sessions start "Same as Session 1", the formats used and TBC as tiles, a new format under them')
-  ok(!picker.includes('Change format') && !read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('Change format'),
-    '  …never behind a Change format button, at creation or after (Ross, 9 Nov 2026)')
-  ok(picker.includes("onChange={f => set(i, { format: sameFormat(f, formats[0]) ? 'same' : f })}"),
-    '  …an answer that lands on Session 1’s format choosing that tile')
+  ok(!picker.includes('Turn the Dynamic Overall Leaderboard off?'), 'the Yes → No guard is gone with the question')
+  ok(picker.includes('Same as {firstLabel}') && picker.includes('Format TBC') && picker.includes('Or a new format'),
+    'later rounds start "Same as Round 1", the formats used and TBC as tiles, a new format under them')
+  ok(picker.includes('Change format'), '  …behind a Change format button (D77)')
+  ok(picker.includes("onChange={f => set(i, { format: sameFormat(f, first) ? 'same' : f, allowance: undefined })}"),
+    '  …an answer that lands on Round 1’s format choosing that tile')
+  ok(picker.includes('% handicap for this {unit.toLowerCase()}'), '  …and the same format off another allowance stays the same (D86)')
+  ok(picker.includes('export function ReadBack') && form.includes('<ReadBack'), 'the Format step ends with the read-back card')
+  ok(form.includes('Add a secondary leaderboard'), '  …offering a secondary leaderboard under it')
   ok(!/^export (const|function) [a-z]/m.test(picker), 'the picker exports components only (test:client-boundary)')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
   ok(organiser.includes('label="Session formats"'), 'the organiser area has a Session formats row')
@@ -541,7 +542,7 @@ section('Two tags facing off: the ticker (Ross, 9 Nov 2026)')
   ok(!/^export (const|function) [a-z]/m.test(ticker) && !/^export (const|function) [a-z]/m.test(list), 'the ticker and list export components only')
   const picker = read('app/dashboard/create/SessionPicker.tsx')
   ok(picker.includes('label="How many matches?"'), 'creation asks how many matches a Matches session holds')
-  ok(read('app/dashboard/create/CreateLeagueForm.tsx').includes('rules.slots = slots'), '  …and stores it on the Overall')
+  ok(read('lib/eventShape.ts').includes('rules.slots = slots'), '  …and stores it on the Overall')
   ok(read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx').includes('withSessionSlots(boards, r.id, n)'),
     '  …changed in the organiser area')
   ok(read('app/golf/[root]/[tripCode]/session/matchSheetPlan.ts').includes('slots: slotsOf(round.id)'),
