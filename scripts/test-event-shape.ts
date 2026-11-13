@@ -236,6 +236,34 @@ section('The boards an event is made with (stage 3)')
   eq(continuous.map(b => b.id), ['lb-primary'], 'a league of periods: one board, no round needed')
 }
 
+section('Stroke rounds in different formats: asked once (stage 4, D90)')
+{
+  // Ross's check 5: Stableford on day one, better ball on day two.
+  const formats = [sf(), bb]
+  const asked = eventShape({ formats, tags: 0 })
+  eq(asked.main, 'ask', 'Stableford then better ball: the question')
+  const made = (answer: 'one_total' | 'per_round') => boardsForCreation({
+    rounds: formats.map((format, i) => ({ roundId: `r${i + 1}`, format })),
+    shape: answeredShape(asked, answer), ranks: 'individuals', entrants: 8, fieldSize: 8, secondaries: [],
+  })
+  const one = made('one_total')
+  eq(one.map(b => b.id), ['lb-primary', 'lb-round-r2'], 'one total: the Primary, then day two’s own board')
+  eq([one[0].audience, one[0].scoring, one[0].roundIds], ['individual', 'stableford', undefined],
+    '  …the Primary every player’s own Stableford over both rounds')
+  eq([one[1].audience, one[1].teamFormat, one[1].roundIds], ['team', 'better_ball', ['r2']], '  …better ball on day two beside it')
+  eq(storedShape(one).main, 'league', '  …a league')
+  eq(boardName(one[0], one), 'Primary', '  …its main board the Primary')
+  eq(roundLabelOf(one, 'r2', 2), 'Round 2', '  …its rounds rounds')
+  const per = made('per_round')
+  eq(per.map(b => b.competition), ['overall', 'league', 'league'], 'points per round: the Overall and two sessions')
+  eq(per[0].overall?.feeds?.r1?.kind, 'position', '  …paying by finishing position')
+  eq(roundLabelOf(per, 'r2', 2), 'Session 2', '  …its rounds sessions')
+  eq(eventShape({ formats: [sf(), strokes], tags: 0 }).main, 'overall', 'Stableford beside strokes is never asked: the Overall')
+  const form = fs.readFileSync('app/dashboard/create/CreateLeagueForm.tsx', 'utf-8')
+  ok(form.includes("'One total across every round'") && form.includes("'Points per round'"), 'the wizard asks it in Ross’s words')
+  ok(form.includes("key === 'format' ? formatProblem === null && !asking"), '  …and waits for an answer')
+}
+
 section('The Format step’s rounds follow the playing days')
 {
   const fresh = syncDrafts([], [0, 1, 2], true)

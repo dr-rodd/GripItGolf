@@ -63,7 +63,7 @@ import {
   resolvedFormats, syncDrafts, formatIssue, STROKE_FORMAT,
 } from '@/lib/sessions'
 import {
-  type EventShape, eventShape, boardsForCreation, shapeSentence, formatStepIssue, unitLabel,
+  type ShapeAnswer, eventShape, answeredShape, boardsForCreation, shapeSentence, formatStepIssue, unitLabel,
 } from '@/lib/eventShape'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
 
@@ -315,6 +315,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   const [overallRanks, setOverallRanks] = useState<OverallRanks | null>(null)
   const [feeds, setFeeds] = useState<Record<string, SessionFeed>>({})
   const [overallOpen, setOverallOpen] = useState(false)
+  // D90's answer, where the rounds play stroke formats that fit one board.
+  const [shapeAnswer, setShapeAnswer] = useState<ShapeAnswer | null>(null)
   // A league board's worst rounds dropped.
   const [discard, setDiscard] = useState(0)
   // Stats: putts and tee shots on the scorecard (`trips.track_stats`).
@@ -452,9 +454,11 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   const formats: (SessionFormat | null)[] = continuous ? [cardFormat] : resolvedFormats(rounds)
   const tagCount = tags.on ? tags.tags.length : 0
   const ruled = eventShape({ formats, tags: tagCount })
-  // Stroke formats that could go either way are D90's question (stage 4);
-  // until it is asked, the Overall — which reads every round fairly.
-  const shape: EventShape = ruled.main === 'ask' ? { ...ruled, main: 'overall', unit: 'Session' } : ruled
+  // Stroke formats that fit one board are asked once (D90): one total, or
+  // points per round. Unanswered, the words stay rounds and Settings waits.
+  const answered = answeredShape(ruled, shapeAnswer)
+  const asking = answered.main === 'ask'
+  const shape = asking ? { ...answered, main: 'league' as const } : answered
   const unit = shape.unit
   const isOverall = shape.main === 'overall'
   const hasMatches = formats.some(f => f?.kind === 'matches')
@@ -501,7 +505,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     key === 'venues' ? venuesComplete :
     key === 'deadlines' ? !deadlinesAnswerIssue(deadlines, slots.length, deadlineOpts) :
     key === 'field' ? !!entry && !duplicateIssue && !fieldTagsIssue(tags) :
-    key === 'format' ? formatProblem === null && (!isOverall || ranks !== 'tags' || tags.on) :
+    key === 'format' ? formatProblem === null && !asking && (!isOverall || ranks !== 'tags' || tags.on) :
     key === 'settings' ? !passcodeIssue && !publicIssue && !giIssue :
     false
   )
@@ -1330,7 +1334,27 @@ export default function CreateLeagueForm({ schedule, onExit }: {
             )}
 
             {/* The leaderboard the platform chose, and why (D77, lib/eventShape.ts). */}
-            <ReadBack
+            {ruled.main === 'ask' && (
+              <div className="space-y-3">
+                <p className="t-body text-ink/65">{shapeSentence(ruled, playsPhrase(formats[0]))}</p>
+                {([
+                  { key: 'one_total', label: 'One total across every round',
+                    hint: `Each player’s ${playsPhrase({ kind: 'stroke', audience: 'individual', scoring: formats[0]?.kind === 'stroke' ? formats[0].scoring : 'stableford' })} added up over every round — the Primary — with each round’s own format as a leaderboard beside it.` },
+                  { key: 'per_round', label: 'Points per round',
+                    hint: 'Each round is a session in its own format, paying points to the Overall by finishing position.' },
+                ] as const).map(o => (
+                  <button key={o.key} type="button" aria-pressed={shapeAnswer === o.key}
+                    // optionClass's chosen look is cardClass('chosen')'s wash and edge.
+                    className={optionClass(shapeAnswer === o.key)}
+                    onClick={() => setShapeAnswer(o.key)}>
+                    <p className="t-card text-ink">{o.label}</p>
+                    <p className="t-cap text-ink/65 mt-0.5">{o.hint}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {!asking && <ReadBack
               title={isOverall ? 'Overall' : secondaries.length > 0 ? 'Primary leaderboard' : 'Leaderboard'}
               sentence={continuous
                 ? `Every card plays ${playsPhrase(cardFormat) ?? 'the same format'}, and each period’s card adds to the total.`
@@ -1394,7 +1418,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                   Add a secondary leaderboard
                 </button>
               )}
-            </ReadBack>
+            </ReadBack>}
           </div>
         )}
 
