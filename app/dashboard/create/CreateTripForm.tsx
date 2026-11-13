@@ -1114,6 +1114,11 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                     allowTbc={false}
                     fieldSize={players.filter(p => p.name.trim()).length}
                     venueOf={r => courseNameOf(r.courseId)}
+                    // One round is the trip itself, titled with its name; a
+                    // trip keeps a round's name only where it is a session.
+                    single={formatRounds.length === 1}
+                    singleTitle={tripName}
+                    nameable={tripShape.unit === 'Session'}
                   />
                   {ruledShape.main === 'ask' && (
                     <div className="space-y-3">

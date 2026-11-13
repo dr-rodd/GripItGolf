@@ -2039,6 +2039,11 @@ An event's main board is named for what it is, not for what it plays — the fac
 | Formats page, a crossing | Turn the Dynamic Overall Leaderboard off / Turn the Overall off? | "This makes the event an Overall" — "A leaderboard can’t add this up with the other rounds, so each round becomes a session paying points to the Overall — Round 2 becomes Session 2. Every leaderboard and score stays, beside the Overall." **Change to the Overall** · Cancel. "Every session now plays one format" — "…Session 2 becomes Round 2. The Overall goes; every session’s own leaderboard and every score stays. Or keep the Overall and its points per session." **Make it one total** · **Keep the Overall** · Cancel. The standings under **Now** and **After** |
 | Trip wizard, last step (stage 8) | Leaderboards (optional) — "Skip for now and choose later in Trip Setup." | **The format (optional)** — "Each round’s golf, and the leaderboard follows from it. Skip for now and set it later in Trip Setup." **Set the format** · **Decide later** |
 | Trip Setup's door | Session formats — "Dynamic Overall Leaderboard is off — for golf that changes format round to round." | **Formats** — "Each round’s format — golf that changes format round to round makes it an Overall." |
+| Format step, top (standalone) | — | **Single event** · **Multiple rounds** |
+| Format step, a single event's card | Round 1 | the event's own name |
+| Format step, several rounds | Round 2 (no name) · + Add a round | **Name (optional)** — "Round 2, or e.g. Saturday medal" · **+ Add another round** |
+| Format picker, under the answers | — | one sentence for what was tapped — "Every player scores Stableford points off their handicap, hole by hole. Most points wins." · "The team’s best 2 scores on each hole count, in Stableford points. Most points wins." · "One against one, hole by hole. A win is worth a point, a halved match half a point." |
+| League field step | Handicap | **Handicap (or leave blank)**, and "Shows as pending until they set it when claiming their name." under a blank one; the plus-handicap question when the step is left |
 | Settings step | — | **Record stats** — "Putts and where the tee shot went, on every card. Changeable in the organiser area." |
 
 ---

@@ -9,6 +9,7 @@ import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
 import { roundLabelOf } from '@/lib/eventShape'
+import { parseLeagueSetup } from '@/lib/leagueSetup'
 import { roundPartnership, partnershipName, teeMode, partnershipsFixed, MAX_PARTNERSHIP, type TeeMode } from '@/lib/partnerships'
 import { roundPickerSheet } from '@/lib/teamPicker'
 import { boardNames } from '@/lib/displayNames'
@@ -92,7 +93,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
 
   const [
     roundsResult, itemsResult, playersResult, settingsResult,
-    assignmentsResult, permsResult, teamsResult, membersResult, bookersResult, addedResult,
+    assignmentsResult, permsResult, setupNamesResult, teamsResult, membersResult, bookersResult, addedResult,
   ] = await Promise.all([
     db
       .from('rounds')
@@ -131,6 +132,12 @@ export default async function TeeSheetPage({ params, searchParams }: {
       .select('event_permissions')
       .eq('id', trip.id)
       .single(),
+    // A league's round names, in a read of their own — fail soft.
+    db
+      .from('trips')
+      .select('bracket_setup')
+      .eq('id', trip.id)
+      .maybeSingle(),
     // Every sheet's teams and memberships — the week's, each day's, and
     // the tags. Fetched whenever any of the three could be in play, so a
     // round can be grouped, a team formed and the tag gate answered
@@ -196,7 +203,8 @@ export default async function TeeSheetPage({ params, searchParams }: {
       return {
         id: r.id,
         roundNumber: r.round_number,
-        label: roundLabelOf(boards, r.id, r.round_number),
+        label: roundLabelOf(boards, r.id, r.round_number, parseLeagueSetup(
+          (setupNamesResult.data as { bracket_setup?: unknown } | null)?.bracket_setup)?.roundNames),
         courseName: course?.name ?? null,
         sheet,
         // A sheet made before the wizard has no opening: it is open.

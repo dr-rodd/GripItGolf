@@ -13,7 +13,8 @@ import {
   shapeKey, unitLabel, roundLabelOf, boardsForCreation, formatStepIssue, unreadRounds, unreadFact, unreadSentence,
   type ShapeInput,
 } from '../lib/eventShape'
-import { type SessionFormat, type SessionDraft, syncDrafts, resolvedFormats, STROKE_FORMAT } from '../lib/sessions'
+import { type SessionFormat, type SessionDraft, syncDrafts, resolvedFormats, STROKE_FORMAT, formatSentence } from '../lib/sessions'
+import { parseLeagueSetup } from '../lib/leagueSetup'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { governingBoard } from '../lib/partnerships'
 import { SHAPE_CASES } from './fixtures/event-shapes'
@@ -326,9 +327,9 @@ section('The screens ask the one helper')
 {
   const read = (f: string) => fs.readFileSync(f, 'utf-8')
   const base = 'app/golf/[root]/[tripCode]/'
-  ok(read(base + 'round/[roundNumber]/page.tsx').includes('{sessionInfo ? sessionInfo.name : `Round ${round.round_number}`}'),
-    'a round summary on an Overall names its session, never "Round n"')
-  ok(read(base + 'teesheet/page.tsx').includes('label: roundLabelOf(boards, r.id, r.round_number)'),
+  ok(read(base + 'round/[roundNumber]/page.tsx').includes("{sessionInfo ? sessionInfo.name : unitLabel('Round', round.round_number,"),
+    'a round summary on an Overall names its session, never "Round n" — and a league round by its own name')
+  ok(read(base + 'teesheet/page.tsx').includes('label: roundLabelOf(boards, r.id, r.round_number, parseLeagueSetup('),
     'the tee sheet names its rounds through roundLabelOf')
   ok((read(base + 'teesheet/TeeSheetClient.tsx').match(/label \?\? `Round \$\{/g) ?? []).length === 3,
     '  …in all three places it says which round')
@@ -354,6 +355,32 @@ section('Trips take the model (stage 8, D47)')
   const setup = fs.readFileSync('app/golf/[root]/[tripCode]/setup/TripSetupClient.tsx', 'utf-8')
   ok(setup.includes('<p className="t-label text-ink">Formats</p>') && !setup.includes('Dynamic Overall Leaderboard is off'),
     'Trip Setup’s door is Formats')
+}
+
+section('A single event, named rounds, and what a format means (Ross, 13 Nov 2026)')
+{
+  eq(roundLabelOf([], 'r2', 2, { r2: 'Saturday medal' }), 'Saturday medal', 'a league round by the name it was given')
+  eq(roundLabelOf([], 'r3', 3, { r2: 'Saturday medal' }), 'Round 3', '  …else its number')
+  const ryder = SHAPE_CASES.find(c => c.name.startsWith('a Ryder Cup'))!
+  eq(roundLabelOf(ryder.boards, 'r1', 1, { r1: 'Ignored' }), 'Session 1', '  …an Overall’s sessions keep their own names')
+  const setup = parseLeagueSetup({ format: 'league', entry: 'organiser', roundNames: { r1: '  Saturday medal ', r2: '', bad: 5 } })
+  eq(setup?.roundNames, { r1: 'Saturday medal' }, 'round names stored tidy, a bad one dropped — never the league')
+  eq(parseLeagueSetup({ format: 'league', entry: 'organiser' })?.roundNames, undefined, '  …and absent where none was given')
+  ok(formatSentence(sf()).startsWith('Every player scores Stableford points'), 'Stableford in a sentence')
+  ok(formatSentence(strokes).includes('Lowest nett total wins'), 'strokes in a sentence')
+  ok(formatSentence({ ...bb, countingScores: 1 }).includes('best score on each hole'), 'best ball in a sentence')
+  ok(formatSentence(singles).startsWith('One against one'), 'singles in a sentence')
+  ok(formatSentence(sf(95)).includes('Played off 95% of handicaps.'), '  …with the allowance where it is not full')
+  ok(formatSentence({ kind: 'stroke', audience: 'team', scoring: 'stableford', teamFormat: 'foursomes', handicapAllowance: 50 }).includes('alternate shots'),
+    'foursomes in a sentence')
+  const picker = fs.readFileSync('app/dashboard/create/SessionPicker.tsx', 'utf-8')
+  ok(picker.includes('{formatSentence(value)}'), 'the picker says it the moment a format is tapped')
+  ok(picker.includes("single ? singleTitle?.trim() || 'Your event'"), 'a single event’s card carries the event’s name, never "Round 1"')
+  ok(picker.includes('+ Add another {unit.toLowerCase()}'), '"Add another round"')
+  const form = fs.readFileSync('app/dashboard/create/CreateLeagueForm.tsx', 'utf-8')
+  ok(form.includes("label: 'Single event' }, { key: 'multiple', label: 'Multiple rounds' }"), 'the switch at the top: single event or multiple rounds')
+  ok(form.includes("if (key === 'field' && !plusHandicapsConfirmed()) return"), 'a plus handicap is asked about when the field is left (step 2)')
+  ok(form.includes('Shows as {HANDICAP_PENDING_LABEL} until they set it when claiming their name.'), '  …and a blank one says what it means, as on a trip')
 }
 
 section('The rule never reads the field (D85)')

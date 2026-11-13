@@ -192,7 +192,8 @@ export default async function OrganiserPage({ params }: {
     return {
       id: r.id,
       roundNumber: r.round_number,
-      label: roundLabelOf(parseLeaderboards(trip.leaderboards), r.id, r.round_number),
+      label: roundLabelOf(parseLeaderboards(trip.leaderboards), r.id, r.round_number,
+        parseLeagueSetup((setupResult.data as { bracket_setup?: unknown } | null)?.bracket_setup)?.roundNames),
       courseName: course?.name ?? null,
       itineraryItemId: r.itinerary_item_id,
       startFormat: r.start_format,

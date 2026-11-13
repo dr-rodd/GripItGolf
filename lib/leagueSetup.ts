@@ -161,6 +161,14 @@ export type LeagueSetup = {
    * course. Course ids; the picker offers these and nothing else.
    */
   courseIds?: string[]
+  /**
+   * A name a round was given at creation — "Saturday medal" — keyed by round
+   * id (Ross, 13 Nov 2026: a league's rounds named the way a session is).
+   * Absent is "Round n". Read wherever a round's label is printed
+   * (lib/eventShape.ts `roundLabelOf`); an Overall's sessions keep theirs on
+   * the Overall's own rules.
+   */
+  roundNames?: Record<string, string>
 }
 
 /**
@@ -900,7 +908,22 @@ export function parseLeagueSetup(raw: unknown): LeagueSetup | null {
     // the knockout form, and a save there would overwrite it. The rule and
     // the courses only ever ride with periods.
     ...periodFields(schedule, r),
+    ...(Object.keys(tidyRoundNames(r.roundNames)).length > 0 ? { roundNames: tidyRoundNames(r.roundNames) } : {}),
   }
+}
+
+/** The longest name a round may carry — a session's own ceiling. */
+export const MAX_ROUND_NAME = 40
+
+/** Round names as stored, fail-soft: a blank, overlong key or a non-string is dropped, never the league. */
+function tidyRoundNames(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [id, n] of Object.entries(raw as Record<string, unknown>)) {
+    if (!id || id.length > 64 || typeof n !== 'string' || !n.trim()) continue
+    out[id] = n.trim().slice(0, MAX_ROUND_NAME)
+  }
+  return out
 }
 
 function periodFields(schedule: LeagueSchedule | null, r: Record<string, unknown>): Partial<LeagueSetup> {

@@ -13,7 +13,7 @@ import { useState } from 'react'
 import {
   type SessionDraft, type SessionFormat, type MatchFormat, type OverallRanks, type SessionFeed,
   MATCH_FORMATS, MATCHES_READY, OVERALL_RANKS, MAX_SESSION_NAME, MAX_SESSIONS, STROKE_FORMAT,
-  describeFormat, describeFeed, resolvedFormats, usedFormats, sameFormat, sessionLabel,
+  describeFormat, describeFeed, resolvedFormats, usedFormats, sameFormat, sessionLabel, formatSentence,
   defaultMatchAllowance, defaultPositionPoints, DEFAULT_MATCH_FEED, formatPoints,
   defaultMatchSlots, MAX_MATCH_SLOTS,
 } from '@/lib/sessions'
@@ -141,6 +141,9 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
         </div>
       )}
 
+      {/* What the answer means, in a sentence, the moment it is tapped (Ross, 13 Nov 2026). */}
+      {!idle && <p className={`t-cap text-ink/80 leading-snug px-3 py-2.5 ${cardClass('flat')}`}>{formatSentence(value)}</p>}
+
       <div>
         <label className={FIELD_LABEL}>Handicap allowance</label>
         <div className="flex items-center gap-2">
@@ -176,8 +179,18 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
  */
 export function RoundList({
   rounds, onChange, unit, days, dateOf, canAdd, sameVenue, onSameVenue, renderVenue, allowTbc,
-  allowMatches = true, fieldSize = 0, venueOf,
+  allowMatches = true, fieldSize = 0, venueOf, single = false, singleTitle, nameable = true,
 }: {
+  /** Whether a round's name can be kept — a trip keeps only a session's. */
+  nameable?: boolean
+  /**
+   * A single event: one card, titled with the event's own name rather than
+   * "Round 1" (Ross, 13 Nov 2026 — a one-round event has no rounds to
+   * number), no name to give it and nothing to add.
+   */
+  single?: boolean
+  /** The single event's title — the name the organiser gave the event. */
+  singleTitle?: string
   /**
    * The rounds' venues are already set — a trip's, by its itinerary — and
    * shown as a line rather than asked. Absent, each round asks its venue.
@@ -204,10 +217,11 @@ export function RoundList({
   const formats = resolvedFormats(rounds)
   const used = usedFormats(rounds)
   const first = formats[0]
-  const firstLabel = unitLabel(unit, 1)
+  const firstLabel = unitLabel(unit, 1, rounds[0]?.name)
   const set = (i: number, patch: Partial<SessionDraft>) =>
     onChange(rounds.map((r, idx) => (idx === i ? { ...r, ...patch } : r)))
-  const labelOf = (r: SessionDraft, i: number) => unitLabel(unit, i + 1, unit === 'Session' ? r.name : null)
+  // Several rounds are named the way a session is: the name given, else the number.
+  const labelOf = (r: SessionDraft, i: number) => (single ? singleTitle?.trim() || 'Your event' : unitLabel(unit, i + 1, r.name))
   const perDay = (day: number) => rounds.filter(r => r.dayIndex === day).length
   const add = () => {
     const last = rounds.at(-1)
@@ -255,7 +269,7 @@ export function RoundList({
             </div>
 
             <div className="mt-3 space-y-4">
-              {unit === 'Session' && (
+              {!single && nameable && (
                 <div>
                   <label className={FIELD_LABEL}>Name (optional)</label>
                   <input
@@ -263,7 +277,7 @@ export function RoundList({
                     className={FIELD}
                     value={r.name ?? ''}
                     maxLength={MAX_SESSION_NAME}
-                    placeholder={`Session ${i + 1}, or e.g. Friday foursomes`}
+                    placeholder={unit === 'Session' ? `Session ${i + 1}, or e.g. Friday foursomes` : `Round ${i + 1}, or e.g. Saturday medal`}
                     onChange={e => set(i, { name: e.target.value })}
                   />
                 </div>
@@ -386,9 +400,9 @@ export function RoundList({
         )
       })}
 
-      {canAdd && rounds.length < MAX_SESSIONS && (
+      {canAdd && !single && rounds.length < MAX_SESSIONS && (
         <button type="button" className={buttonClass('secondary')} onClick={add}>
-          + Add a {unit.toLowerCase()}
+          + Add another {unit.toLowerCase()}
         </button>
       )}
     </div>

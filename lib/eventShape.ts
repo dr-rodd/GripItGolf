@@ -247,11 +247,15 @@ export function unitLabel(unit: RoundUnit, number: number, name?: string | null)
  * Overall it is a session, by its name or "Session n"; anywhere else
  * "Round n". The one place a screen asks.
  */
-export function roundLabelOf(boards: readonly Leaderboard[], roundId: string, roundNumber: number): string {
+export function roundLabelOf(
+  boards: readonly Leaderboard[], roundId: string, roundNumber: number,
+  /** A league's round names (`LeagueSetup.roundNames`), where it has any. */
+  roundNames?: Readonly<Record<string, string>> | null,
+): string {
   const overall = overallOf(boards)
   return overall
     ? unitLabel('Session', roundNumber, overall.overall?.names?.[roundId])
-    : unitLabel('Round', roundNumber)
+    : unitLabel('Round', roundNumber, roundNames?.[roundId])
 }
 
 // ─── Creation: the read-back and the boards ────────────────────

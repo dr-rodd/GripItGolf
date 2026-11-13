@@ -1,3 +1,5 @@
+import { unitLabel } from '@/lib/eventShape'
+import { parseLeagueSetup } from '@/lib/leagueSetup'
 import { Fragment, Suspense } from 'react'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import { overallOf, sessionBoardFor, sessionName, describeFormat, formatOfBoard, sessionSlotCount, slotFloor } from '@/lib/sessions'
@@ -152,7 +154,7 @@ export default async function RoundSummaryPage({
   // Everything the page reads about the course, the day and the field. The
   // itinerary item is where the tee time lives — the date is on the round,
   // and `itinerary_item_id` is the only thing tying the two together.
-  const [courseRes, holesRes, teesRes, itemRes, playersRes] = await Promise.all([
+  const [courseRes, holesRes, teesRes, itemRes, playersRes, setupNamesRes] = await Promise.all([
     db.from('courses').select('name, location, latitude, longitude').eq('id', round.course_id).single(),
     db
       .from('holes')
@@ -183,6 +185,8 @@ export default async function RoundSummaryPage({
       .eq('trip_id', trip.id)
       .eq('is_composite', false)
       .order('name'),
+    // A league round's own name (LeagueSetup.roundNames), in a read of its own — fail soft.
+    db.from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle(),
   ])
 
   const problems: string[] = []
@@ -252,7 +256,8 @@ export default async function RoundSummaryPage({
           <p className="t-label text-ink/65">
             {/* An event's round off the overall "doesn't count" — set from the
                 round's gear on the Scoring tab; a trip's is a casual round. */}
-            {sessionInfo ? sessionInfo.name : `Round ${round.round_number}`}{round.casual === true ? (event ? ' · doesn’t count' : ' · casual') : ''}
+            {sessionInfo ? sessionInfo.name : unitLabel('Round', round.round_number,
+              parseLeagueSetup((setupNamesRes.data as { bracket_setup?: unknown } | null)?.bracket_setup)?.roundNames?.[round.id])}{round.casual === true ? (event ? ' · doesn’t count' : ' · casual') : ''}
           </p>
           <h1 className="t-h1 text-ink text-balance mt-1.5" style={{ fontSize: 'clamp(24px, 7vw, 30px)' }}>
             {named.club}

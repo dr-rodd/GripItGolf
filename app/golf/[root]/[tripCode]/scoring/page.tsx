@@ -1,3 +1,4 @@
+import { unitLabel } from '@/lib/eventShape'
 import Link from 'next/link'
 import CardStateLine from '@/app/components/CardStateLine'
 import { CARD_COUNTS, COURSE_CARD_COUNTS, blockersByCourse, type CardBlocker } from '@/lib/courseCard'
@@ -524,8 +525,8 @@ export default async function TripCoursePortalPage({
                     {overall
                       ? sessionName(overall.overall, round.id, round.round_number)
                       : series && round.scheduled_date
-                      ? `Round ${round.round_number} · ${describeShortDate(round.scheduled_date)}`
-                      : `Round ${round.round_number}`}
+                      ? `${unitLabel('Round', round.round_number, leagueSetup?.roundNames?.[round.id])} · ${describeShortDate(round.scheduled_date)}`
+                      : unitLabel('Round', round.round_number, leagueSetup?.roundNames?.[round.id])}
                     {/* A league round's play-by date (Ross, 5 Nov 2026). */}
                     {playByLine(leagueSetup?.deadlines?.[round.itinerary_item_id ?? round.id], today, tone === 'played')}
                   </p>

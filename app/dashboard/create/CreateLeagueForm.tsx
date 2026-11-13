@@ -23,7 +23,7 @@ import {
 } from '@/lib/passcode'
 import { NO_PUBLIC_PIN, publicPinIssue } from '@/lib/publicPin'
 import PublicPinField from '@/app/components/PublicPinField'
-import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING } from '@/lib/handicap'
+import { parseHandicap, isPlusHandicap, isHandicapPending, PLUS_HANDICAP_WARNING, HANDICAP_PENDING_LABEL } from '@/lib/handicap'
 import { firstDuplicateIndex, duplicateNameError } from '@/lib/roster'
 import {
   type PlayerEntry, PLAYER_ENTRIES, NO_DEADLINES_ANSWER, deadlinesAnswerIssue, storedDeadlines, type DeadlinesAnswer,
@@ -451,6 +451,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // Named players so far — what a Matches session's count starts from.
   const fieldCount = players.filter(p => p.name.trim()).length
 
+  // A standalone event of one round is a single event (Ross, 13 Nov 2026):
+  // its card carries the event's own name, never "Round 1", and nothing to
+  // add. Multiple rounds are each named the way a session is.
+  const singleEvent = schedule === 'standalone' && rounds.length <= 1
+  const roundLabel = (r: SessionDraft, i: number) =>
+    singleEvent ? name.trim() || 'Your event' : unitLabel(unit, i + 1, r.name)
+
   // ── The rule (lib/eventShape.ts): the Format names the leaderboard ──
   const formats: (SessionFormat | null)[] = continuous ? [cardFormat] : resolvedFormats(rounds)
   const tagCount = tags.on ? tags.tags.length : 0
@@ -470,14 +477,14 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     ? formatIssue(cardFormat)
     : formatStepIssue(rounds.map((r, i) => ({
         courseId: venueFor(i), tbcVenue: venueFor(i) === TBC_VENUE,
-        format: formats[i], label: unitLabel(unit, i + 1, unit === 'Session' ? r.name : null),
+        format: formats[i], label: roundLabel(r, i),
       })), shape.main)
   /** The boards the event is made with — written on submit, previewed on the read-back. */
   const boardsFor = (roundIds: (string | null)[]) => boardsForCreation({
     rounds: continuous
       ? [{ roundId: null, format: cardFormat }]
       : rounds.map((r, i) => ({
-          roundId: roundIds[i] ?? null, format: formats[i], name: r.name, matches: r.matches, feed: feeds[r.key],
+          roundId: roundIds[i] ?? null, format: formats[i], name: singleEvent ? undefined : r.name, matches: r.matches, feed: feeds[r.key],
         })),
     shape, ranks, entrants: overallEntrants, fieldSize: fieldCount,
     discard: isOverall ? 0 : discard, secondaries,
@@ -511,8 +518,23 @@ export default function CreateLeagueForm({ schedule, onExit }: {
     false
   )
 
+  /**
+   * "Hold on there Cowboy!" — a plus handicap asked about by name before the
+   * field is left (the trip wizard asks on its field step too), so the
+   * answer is given while the box is still there to fix.
+   */
+  function plusHandicapsConfirmed(): boolean {
+    for (const p of players) {
+      if (!p.name.trim()) continue
+      if (!isPlusHandicap(parseHandicap(p.handicap))) continue
+      if (!window.confirm(`${p.name.trim()} — ${PLUS_HANDICAP_WARNING}`)) return false
+    }
+    return true
+  }
+
   function goNext() {
     if (step === 'done') return
+    if (key === 'field' && !plusHandicapsConfirmed()) return
     const next = keys[step]
     // Into the Format step: a round for every playing day, the answers
     // already given kept (lib/sessions.ts `syncDrafts`).
@@ -558,12 +580,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // ── Submit — the platform's insertion order, same as the trip wizard ────
 
   async function handleSubmit() {
-    for (const p of players) {
-      if (!p.name.trim()) continue
-      if (!isPlusHandicap(parseHandicap(p.handicap))) continue
-      if (!window.confirm(`${p.name.trim()} — ${PLUS_HANDICAP_WARNING}`)) return
-    }
-
+    // A plus handicap was asked about when the field was left (goNext).
     setSubmitting(true)
     setError(null)
 
@@ -596,6 +613,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         ? { repeat: { every: repeatEvery, unit: repeatUnit } } : {}),
       entry: entry!,
       ...(entry === 'self_join' && requireApproval ? { requireApproval: true } : {}),
+      // A league's rounds' own names (an Overall keeps its sessions' on its rules).
+      ...(() => {
+        if (singleEvent || isOverall || continuous) return {}
+        const roundNames: Record<string, string> = {}
+        rounds.forEach((r, i) => { const id = roundIds[i]; if (id && r.name?.trim()) roundNames[id] = r.name.trim() })
+        return Object.keys(roundNames).length > 0 ? { roundNames } : {}
+      })(),
       // Live is the absent default; the rules ride only with a source that reads them.
       ...(giStored && scoreSource !== 'live' ? { scoreSource, golfIreland: giStored } : {}),
     }
@@ -1305,7 +1329,25 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 </div>
               </div>
             ) : (
+              <>
+              {/* One round or several (Ross, 13 Nov 2026). */}
+              {schedule === 'standalone' && (
+                <Chips
+                  options={[{ key: 'single', label: 'Single event' }, { key: 'multiple', label: 'Multiple rounds' }] as const}
+                  chosen={singleEvent ? 'single' : 'multiple'}
+                  onChoose={k => {
+                    if (k === 'single') { setRounds(prev => prev.slice(0, 1)); return }
+                    if (rounds.length > 1) return
+                    // A second round on the next playing day, else the same one.
+                    const first = rounds[0]
+                    const day = playingDays.find(d => d.index > (first?.dayIndex ?? -1))?.index ?? first?.dayIndex ?? 0
+                    setRounds(prev => [...prev, { key: `r-${Date.now().toString(36)}`, dayIndex: day, courseId: '', format: 'same' }])
+                  }}
+                />
+              )}
               <RoundList
+                single={singleEvent}
+                singleTitle={name}
                 rounds={rounds}
                 onChange={setRounds}
                 unit={unit}
@@ -1324,6 +1366,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                     onCourseAdded={onCourseAdded} allowTbc={allowTbc} />
                 )}
               />
+              </>
             )}
             {formatProblem && roundCount > 0 && (
               <p className="text-ink/65 text-[13px] leading-snug">{formatProblem}</p>
@@ -1540,7 +1583,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                       id={`league-hcp-${i}`}
                       value={player.handicap}
                       onChange={v => updatePlayer(i, { handicap: v })}
-                      placeholder="Handicap"
+                      placeholder="Handicap (or leave blank)"
                       rowClassName="flex-1 min-w-0"
                       className={`${FIELD} flex-1 min-w-0`}
                     />
@@ -1556,6 +1599,14 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                       ))}
                     </div>
                   </div>
+
+                  {/* The trip wizard's own line (Ross, 13 Nov 2026): what a blank
+                      box means, said on the card where it is being left blank. */}
+                  {isHandicapPending(parseHandicap(player.handicap)) && (
+                    <p className="text-ink/65 text-[13px] mt-2 leading-snug">
+                      Shows as {HANDICAP_PENDING_LABEL} until they set it when claiming their name.
+                    </p>
+                  )}
 
                   <PlayerTagChips tags={tags} value={player.tag} label={`${player.name.trim() || `Player ${i + 1}`}'s tag`}
                     onChange={tag => updatePlayer(i, { tag })} />

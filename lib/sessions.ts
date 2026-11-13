@@ -207,6 +207,47 @@ export function describeFormat(f: SessionFormat | null): string {
   return parts.join(' · ')
 }
 
+/**
+ * What a format is, in one short sentence — said under the format picker
+ * the moment an answer is tapped (Ross, 13 Nov 2026), so an organiser who
+ * has never run "cut the dead weight" knows what they have just chosen.
+ */
+export function formatSentence(f: SessionFormat | null): string {
+  if (!f) return 'Not set yet. The round counts nothing until its format is chosen.'
+  const pct = f.handicapAllowance ?? (f.kind === 'matches' ? defaultMatchAllowance(f.match) : 100)
+  const off = pct === 100 ? '' : ` Played off ${pct}% of handicaps.`
+  if (f.kind === 'matches') {
+    const what = f.match === 'singles'
+      ? 'One against one, hole by hole.'
+      : f.match === 'fourball'
+        ? 'Two against two, hole by hole: the better ball of each pair counts.'
+        : 'Two against two, one ball a side, hitting alternate shots.'
+    return `${what} A win is worth a point, a halved match half a point.${f.match === 'foursomes' && pct === 50 ? ' Off half the partners’ combined handicaps.' : off}`
+  }
+  const wins = f.scoring === 'strokes' ? 'Lowest nett total wins.'
+    : f.scoring === 'quota' ? 'Furthest over quota wins.'
+    : 'Most points wins.'
+  const scored = f.scoring === 'strokes' ? 'nett strokes'
+    : f.scoring === 'quota' ? 'quota points'
+    : 'Stableford points'
+  if (f.audience === 'team') {
+    const format = f.teamFormat ?? 'better_ball'
+    if (format === 'foursomes') {
+      return `Two to a team, one ball, hitting alternate shots — ${scored} off ${pct === 50 ? 'half' : `${pct}% of`} their combined handicaps. ${wins}`
+    }
+    const team = format === 'hero' ? `The team’s best single card counts, in ${scored}.`
+      : format === 'cut_dead_weight' ? `Every card in the team counts except the worst one, in ${scored}.`
+      : format === 'aggregate' ? `Every score in the team counts, in ${scored}.`
+      : (f.countingScores ?? 2) === 1
+        ? `The team’s best score on each hole counts, in ${scored}.`
+        : `The team’s best ${f.countingScores ?? 2} scores on each hole count, in ${scored}.`
+    return `${team} ${wins}${off}`
+  }
+  if (f.scoring === 'quota') return `Each player aims to beat a quota of 36 less their handicap, earning points on every hole. ${wins}${off}`
+  if (f.scoring === 'strokes') return `Every player’s gross score less their handicap. ${wins}${off}`
+  return `Every player scores Stableford points off their handicap, hole by hole. ${wins}${off}`
+}
+
 // ─── The wizard's sessions ─────────────────────────────────────
 
 /** One session as the creation wizard holds it. */
