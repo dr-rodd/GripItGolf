@@ -287,7 +287,7 @@ section('A secondary beside the Overall names what it cannot read (stage 5, D83,
   ok((unreadFact(['A very long session name indeed']) ?? '').length <= 28, '  …held to the facts line’s length')
   eq(unreadFact([]), null, '  …and says nothing when nothing is left out')
   eq(unreadSentence('Stableford Points', ['Session 1', 'Session 3']),
-    'Stableford Points leaves out Session 1 and Session 3: their matches have no stroke card.', 'the creation grid’s sentence')
+    'Stableford Points leaves out Session 1 and Session 3: they have no card of each player’s own.', 'the creation grid’s sentence')
   const lb = fs.readFileSync('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx', 'utf-8')
   ok(lb.includes('const unread = unreadRounds(activeBoard, boards, rounds.map(r => r.id))'), 'the leaderboard’s facts line says it')
 }

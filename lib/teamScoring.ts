@@ -1,7 +1,7 @@
 // How a team's points for a round are worked out. One setting per trip,
 // stored on trips.team_scoring.
 
-export type TeamScoringMode = 'hero' | 'better_ball' | 'aggregate' | 'cut_dead_weight'
+export type TeamScoringMode = 'hero' | 'better_ball' | 'aggregate' | 'cut_dead_weight' | 'foursomes'
 
 export type TeamScoring = {
   mode: TeamScoringMode
@@ -242,6 +242,19 @@ export function teamHolePoints(
     const totals = playedTotals(memberIds, mine, value)
     const cut = totals.length > 1 ? worstOf(totals, basis).id : null
     for (const s of mine) if (s.playerId !== cut) add(s.holeNumber, value(s))
+    return out
+  }
+
+  if (scoring.mode === 'foursomes') {
+    // One ball a pair (D88): the pair's score is kept under one of them, so
+    // a hole's figure is the first member's — in the team's own order — who
+    // has one. Never a best of two: two balls would not be foursomes.
+    for (let hole = 1; hole <= 18; hole++) {
+      for (const id of memberIds) {
+        const s = mine.find(x => x.playerId === id && x.holeNumber === hole)
+        if (s) { add(hole, value(s)); break }
+      }
+    }
     return out
   }
 

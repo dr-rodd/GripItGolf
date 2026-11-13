@@ -98,12 +98,12 @@ export function shapeKey(f: SessionFormat): string {
 
 /**
  * Whether every player has a card of their own in this format — what an
- * individual total needs from every round. Every stroke format built today
- * keeps one (a better-ball team is its players' own cards, best taken per
- * hole); a match does not, its card living on the match.
+ * individual total needs from every round. A better-ball team is its
+ * players' own cards, best taken per hole; **stroke foursomes is one ball a
+ * pair (D88)**, and a match's card lives on the match.
  */
 export function givesOwnCards(f: SessionFormat): boolean {
-  return f.kind === 'stroke'
+  return f.kind === 'stroke' && !(f.audience === 'team' && f.teamFormat === 'foursomes')
 }
 
 /** The scoring a stroke format is played on; null for Matches. */
@@ -426,7 +426,15 @@ export function unreadRounds(
 ): string[] {
   if (lb.competition !== 'league' || isSessionBoard(lb)) return []
   const scope = lb.roundIds?.length ? roundIds.filter(id => lb.roundIds!.includes(id)) : roundIds
-  return scope.filter(id => sessionBoardFor(boards, id)?.competition === 'matches')
+  // A board that is not foursomes itself cannot read a foursomes round
+  // either: the pair's one ball is not either partner's own card (D88).
+  const ownFoursomes = lb.audience === 'team' && lb.teamFormat === 'foursomes'
+  const formats = roundFormatsOf(boards, scope)
+  return scope.filter((id, i) => {
+    if (sessionBoardFor(boards, id)?.competition === 'matches') return true
+    const f = formats[i]
+    return !ownFoursomes && !!f && f.kind === 'stroke' && f.audience === 'team' && f.teamFormat === 'foursomes'
+  })
 }
 
 /**
@@ -444,5 +452,5 @@ export function unreadFact(names: readonly string[]): string | null {
 export function unreadSentence(title: string, names: readonly string[]): string | null {
   if (names.length === 0) return null
   const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
-  return `${title} leaves out ${list}: ${names.length === 1 ? 'its' : 'their'} matches have no stroke card.`
+  return `${title} leaves out ${list}: ${names.length === 1 ? 'it has' : 'they have'} no card of each player’s own.`
 }

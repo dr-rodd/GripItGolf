@@ -192,6 +192,7 @@ export function describeFormat(f: SessionFormat | null): string {
       parts.push(f.teamFormat === 'better_ball' ? 'Team better ball'
         : f.teamFormat === 'hero' ? 'Team hero'
         : f.teamFormat === 'cut_dead_weight' ? 'Team cut the dead weight'
+        : f.teamFormat === 'foursomes' ? 'Team foursomes'
         : 'Team')
       if (f.teamFormat === 'better_ball' && f.countingScores != null) {
         parts.push(f.countingScores === 1 ? 'Best ball' : `Best ${f.countingScores} balls`)

@@ -92,7 +92,12 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
               <div className="space-y-2">
                 {TEAM_FORMATS.map(t => (
                   <button key={t.key} type="button" className={optionClass(!idle && value.teamFormat === t.key)}
-                    onClick={() => onChange({ ...value, teamFormat: t.key as TeamFormat })}>
+                    // Foursomes plays off half the pair's combined handicaps (D88).
+                    onClick={() => onChange({
+                      ...value, teamFormat: t.key as TeamFormat,
+                      handicapAllowance: t.key === 'foursomes' ? 50
+                        : value.teamFormat === 'foursomes' ? undefined : value.handicapAllowance,
+                    })}>
                     <p className="text-ink text-[15px] font-medium">{t.label}</p>
                     <p className="t-cap text-ink/65 mt-0.5">{t.hint}</p>
                   </button>
@@ -152,7 +157,8 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
             }}
             aria-label="Handicap allowance, percent"
           />
-          <span className="text-ink/65 text-sm">% of each player&apos;s course handicap</span>
+          <span className="text-ink/65 text-sm">{value.kind === 'stroke' && value.audience === 'team' && value.teamFormat === 'foursomes'
+            ? '% of the pair’s combined course handicaps' : '% of each player’s course handicap'}</span>
         </div>
       </div>
     </div>

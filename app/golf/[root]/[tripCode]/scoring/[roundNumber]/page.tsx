@@ -1,3 +1,5 @@
+import { foursomesPairs } from '@/lib/partnerships'
+import { fetchMemberships } from '@/lib/teamMembers'
 import { notFound, redirect } from 'next/navigation'
 import { overallOf, sessionBoardFor } from '@/lib/sessions'
 import { eventReader } from '@/lib/eventReader'
@@ -66,6 +68,13 @@ export default async function TripCoursePage({
   const allowances = allowanceCycle(boards, thisRound.id)
 
   const courseId = (thisRound.courses as any).id as string
+
+  // Stroke foursomes on this round (D88): its pairs, so the card shows each
+  // as one entry. Asked only of a round a foursomes board governs.
+  const pairs = boards.some(b => b.teamFormat === 'foursomes')
+    ? foursomesPairs(boards, thisRound.id, await fetchMemberships(trip.id, db)
+        .catch(() => [] as Awaited<ReturnType<typeof fetchMemberships>>))
+    : []
 
   // An event's players may carry their own colour (lib/playerColours.ts);
   // a trip's dots are its teams', and asks for nothing more.
@@ -181,6 +190,7 @@ export default async function TripCoursePage({
         // route passes nothing and so gets the default, which is the
         // scorecard exactly as it has always been.
         trackStats={trip.track_stats === true}
+        pairs={pairs}
         // TripHeader above is sticky too. Without this the scoring shell's own
         // header sticks to the same place and, being the lower z-index, ends
         // up behind it.

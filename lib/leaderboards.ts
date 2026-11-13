@@ -57,7 +57,7 @@ export type Scoring = 'stableford' | 'strokes' | 'quota'
  * says the same thing — but trips already running it have to keep scoring the
  * way they always have, so it stays a format this model knows about.
  */
-export type TeamFormat = 'better_ball' | 'hero' | 'cut_dead_weight' | 'aggregate'
+export type TeamFormat = 'better_ball' | 'hero' | 'cut_dead_weight' | 'aggregate' | 'foursomes'
 
 /** How the rounds are put together into a position on the board. */
 export type Combine = 'total' | 'position'
@@ -299,6 +299,10 @@ export const TEAM_FORMATS: { key: TeamFormat; label: string; hint: string }[] = 
     hint: 'The best single card in the team that day carries it.' },
   { key: 'cut_dead_weight', label: 'Cut the dead weight',
     hint: 'Everyone counts except the worst card of the day.' },
+  // D88 (Ross, 13 Nov 2026): a pair plays one ball, alternate shot, off
+  // half the partners' combined handicaps — one card a pair.
+  { key: 'foursomes', label: 'Foursomes',
+    hint: 'Two a side, one ball, alternate shots — off half the partners\' combined handicaps.' },
 ]
 
 /**

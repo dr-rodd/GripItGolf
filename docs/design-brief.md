@@ -262,6 +262,6 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D85 | Recognition reads formats and tags, never player count; two tags + Matches gets the face-off | Rule built |
 | D86 | Allowance alone never makes a round a different format | Rule built (`shapeKey`) |
 | D87 | A secondary over rounds it can't read names them rather than being refused — every Matches session, for a stroke secondary (Ross, 13 Nov 2026) | Built (stage 5) |
-| D88 | Stroke foursomes is a new team format | Planned (stage 7) |
+| D88 | Stroke foursomes is a new team format | Built (stage 7) |
 | D89 | Crossing Primary ↔ Overall after creation asks first, shows the standings before and after, deletes nothing | Built (stage 6) |
 | D90 | Stroke rounds in different formats that fit one board: asked once, one total (Primary) or points per round (Overall). Rounds that don't fit one board — Stableford beside strokes — get the Overall (Ross, 13 Nov 2026) | Built (stage 4) |

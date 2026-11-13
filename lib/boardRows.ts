@@ -504,7 +504,7 @@ export function teamCardHolePoints(
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
   return teamHolePoints(
     memberIds, roundId,
-    teamScoreInputs(ctx, allowanceFor(lb)),
+    teamInputsFor(lb, ctx, () => sheetForBoard(lb)),
     teamScoringFor(lb, ctx.legacyTeamScoring),
     basis,
   )
@@ -1301,7 +1301,7 @@ function relatives(lb: Leaderboard, rounds: RoundScore[]): Record<string, number
 function teamRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   const scoring = teamScoringFor(lb, ctx.legacyTeamScoring)
   const basis: ScoringBasis = lb.scoring === 'strokes' ? 'strokes' : 'stableford'
-  const inputs = teamScoreInputs(ctx, allowanceFor(lb))
+  const inputs = teamInputsFor(lb, ctx, () => sheetForBoard(lb))
 
   // This board's own teams. A trip running a league and a knockout between
   // different sides has two sheets of them, and ranking one board against
@@ -1425,7 +1425,7 @@ function tagRows(lb: Leaderboard, ctx: RowContext): BoardRow[] {
   // always carries one in that mode: the parser refuses it without.
   const byDayTeams = mode === 'day_teams'
   const teamFormat = byDayTeams ? teamScoringFor(lb, ctx.legacyTeamScoring) : null
-  const teamInputs = byDayTeams ? teamScoreInputs(ctx, allowanceFor(lb)) : []
+  const teamInputs = byDayTeams ? teamInputsFor(lb, ctx, daySheetId) : []
   /** The day teams playing a round, with the tag each one counts for. */
   const dayTeamsOn = (roundId: string) =>
     teamsOnSheet(ctx.teams, daySheetId(roundId)).map(t => {
@@ -1598,5 +1598,56 @@ function teamScoreInputs(ctx: RowContext, allowanceAt: (roundId: string) => numb
       points: boardPoints(s, hole, gender, ph, allowance),
       nett,
     }
+  })
+}
+
+/**
+ * A team board's inputs: the members' own scores at their own handicaps —
+ * or, on foursomes (D88), at the pair's.
+ *
+ * A foursomes pair plays one ball, kept under one of them, off **half their
+ * combined course handicaps**: the partners' unrounded course handicaps
+ * added and the board's allowance (50% unless set otherwise) taken off the
+ * sum, rounded once — `foursomesStrokes` in lib/matchArrangements.ts is the
+ * match card's same figure. The stored points are the lead player's own
+ * handicap's, so foursomes works them out from the gross, as a reduced board
+ * does. `sheetOf` says which sheet holds a round's pairs.
+ */
+function teamInputsFor(lb: Leaderboard, ctx: RowContext, sheetOf: (roundId: string) => string): TeamScoreInput[] {
+  if (lb.teamFormat !== 'foursomes') return teamScoreInputs(ctx, allowanceFor(lb))
+  const holeById = new Map(ctx.holes.map(h => [h.id, h]))
+  const genderOf = new Map(ctx.players.map(p => [p.id, p.gender]))
+  const handicapOf = new Map(ctx.players.map(p => [p.id, p.handicap]))
+  const allowanceAt = allowanceFor(lb)
+  /** A round's pair for a player: the team they are in on that round's sheet. */
+  const pairCache = new Map<string, Map<string, string[]>>()
+  const pairOf = (roundId: string, playerId: string): string[] => {
+    const sheet = sheetOf(roundId)
+    let bySheet = pairCache.get(sheet)
+    if (!bySheet) {
+      bySheet = new Map()
+      for (const t of teamsOnSheet(ctx.teams, sheet)) {
+        const members = membersOf(ctx.memberships, t.id)
+        for (const m of members) bySheet.set(m, members)
+      }
+      pairCache.set(sheet, bySheet)
+    }
+    return bySheet.get(playerId) ?? [playerId]
+  }
+  const exact = (roundId: string, playerId: string) => {
+    const key = `${roundId}:${playerId}`
+    return ctx.exactHcpFor?.get(key) ?? ctx.hcpFor.get(key) ?? handicapOf.get(playerId) ?? 0
+  }
+  return ctx.resolved.map(s => {
+    const hole = holeById.get(s.holeId)
+    const gender = genderOf.get(s.playerId) ?? 'M'
+    const combined = pairOf(s.roundId, s.playerId).reduce((sum, id) => sum + exact(s.roundId, id), 0)
+    const ph = allowedHandicap(combined, allowanceAt(s.roundId))
+    const shots = hole ? shotsReceived(ph, effectiveSI(hole, gender)) : 0
+    const nett = hole && s.gross != null && !s.noReturn ? s.gross - shots : undefined
+    const points = hole && s.gross != null && !s.noReturn
+      ? Math.max(0, effectivePar(hole, gender) + 2 - (s.gross - shots))
+      : 0
+    return { playerId: s.playerId, roundId: s.roundId, holeNumber: s.holeNumber, points, nett }
   })
 }

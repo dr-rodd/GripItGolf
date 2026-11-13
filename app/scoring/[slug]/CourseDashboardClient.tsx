@@ -133,6 +133,8 @@ interface Props {
    * untouched either way.
    */
   allowScoreEdits?: boolean
+  /** Stroke foursomes pairs on this round (D88) — passed to the card. */
+  pairs?: string[][]
   /**
    * The trip this screen belongs to, for the card check on the pick-player
    * screen — it scopes the re-score of committed cards after a correction.
@@ -151,7 +153,7 @@ export default function CourseDashboardClient({
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
-  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true, event = false,
+  bottomInset = "0", trackStats = false, tripCode, allowScoreEdits = true, event = false, pairs = [],
 }: Props) {
   // The course card, held as state rather than read straight off the props:
   // the card check on the pick-player screen can correct it against a photo
@@ -1037,6 +1039,7 @@ export default function CourseDashboardClient({
           quotaScale={quotaScale}
           trackStats={trackStats}
           allowScoreEdits={allowScoreEdits}
+          pairs={pairs}
           event={event}
           bottomInset={bottomInset}
           onBack={goBack}

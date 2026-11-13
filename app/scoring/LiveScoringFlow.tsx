@@ -199,6 +199,13 @@ interface Props {
   /** An event: the scorecard gate's unrated line asks the organiser. */
   event?: boolean
   /**
+   * Stroke foursomes pairs on this round (D88, lib/partnerships.ts
+   * `foursomesPairs`): one ball a pair, so each pair is one entry on the
+   * card, kept under its first member and named "Ross & Dave"; the partner
+   * is locked with them and never scored apart. Empty for every other round.
+   */
+  pairs?: string[][]
+  /**
    * The room the tab bar takes at the foot, where there is one — the start
    * sheet's sticky Start round rests just above it.
    */
@@ -485,8 +492,17 @@ export default function LiveScoringFlow({
   trackStats = false,
   tripCode,
   onCourseDataUpdated,
-  allowScoreEdits = true, event = false, bottomInset = "0",
+  allowScoreEdits = true, event = false, bottomInset = "0", pairs = [],
 }: Props) {
+  // Stroke foursomes (D88): the pair's lead carries the card, the partner rides with them.
+  const pairOf = new Map(pairs.filter(p => p.length >= 2).map(p => [p[0], p]))
+  const partners = new Set(pairs.flatMap(p => p.slice(1)))
+  const firstName = (id: string) => (players.find(p => p.id === id)?.name ?? '').split(' ')[0]
+  /** A player's name on the card — a foursomes pair's lead as the pair. */
+  const nameOf = (player: { id: string; name: string }) => {
+    const pair = pairOf.get(player.id)
+    return pair ? pair.map(firstName).join(' & ') : player.name
+  }
   const [liveRound, setLiveRound] = useState<ActiveLiveRound | null>(activeLiveRound)
   const [step, setStep] = useState<LiveStep>(
     activeLiveRound ? (autoResume ? "resuming" : "setup") : "activate"
@@ -744,7 +760,10 @@ export default function LiveScoringFlow({
     await supabase
       .from("live_player_locks")
       .upsert(
-        playerSetups.map(({ player }) => ({ live_round_id: liveRound.id, player_id: player.id })),
+        // A foursomes pair's partner is locked with its lead (D88): on this
+        // card, never on another.
+        playerSetups.flatMap(({ player }) => pairOf.get(player.id) ?? [player.id])
+          .map(id => ({ live_round_id: liveRound.id, player_id: id })),
         { onConflict: "live_round_id,player_id" }
       )
 
@@ -1282,7 +1301,8 @@ export default function LiveScoringFlow({
       ? "Pick who's playing."
       : teeMissing ? "Pick a tee for each player."
       : pendingReason
-    const available = players.filter(p => !lockedPlayerIds.includes(p.id))
+    // A foursomes partner is not picked on their own: their pair's lead is (D88).
+    const available = players.filter(p => !lockedPlayerIds.includes(p.id) && !partners.has(p.id))
     const full = selectedPlayerIds.length >= 4
 
     return (
@@ -1368,7 +1388,7 @@ export default function LiveScoringFlow({
                   {dotColour(player) && (
                     <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} aria-hidden="true" />
                   )}
-                  <span className="flex-1 min-w-0 truncate text-[17px] font-medium text-ink">{player.name}</span>
+                  <span className="flex-1 min-w-0 truncate text-[17px] font-medium text-ink">{nameOf(player)}</span>
                   <span className="t-cap text-ink/65 flex-shrink-0 tabular-nums">
                     {pending ? HANDICAP_PENDING_LABEL : `HCP ${formatHandicap(player.handicap as number)}`}
                   </span>
@@ -1581,6 +1601,7 @@ export default function LiveScoringFlow({
               key={hole.id}
               hole={hole}
               playerSetups={playerSetups}
+              nameOf={nameOf}
               courseId={courseId}
               existingScores={existingHoleScores}
               runningTotals={runningTotals}
@@ -1647,7 +1668,7 @@ export default function LiveScoringFlow({
                   style={{ backgroundColor: dotColour(player)! }}
                 />
               )}
-              <span className="text-ink/80 text-base font-semibold truncate">{player.name}</span>
+              <span className="text-ink/80 text-base font-semibold truncate">{nameOf(player)}</span>
               <span className="flex-shrink-0 flex items-baseline gap-1.5">
                 <span className={SC_LABEL}>PH</span>
                 <span className="text-ink text-[15px] font-semibold tabular-nums" style={{ fontFamily: 'var(--font-serif)' }}>
@@ -1830,7 +1851,7 @@ export default function LiveScoringFlow({
                       <span className="w-2 h-2 rounded-full ring-1 ring-line-strong flex-shrink-0" style={{ backgroundColor: dotColour(player)! }} />
                     )}
                     <span className={`text-base font-medium leading-tight ${isSel ? "text-ink" : "text-ink/65"}`}>
-                      {player.name.split(" ")[0]}
+                      {pairOf.has(player.id) ? nameOf(player) : player.name.split(" ")[0]}
                     </span>
                   </div>
                   <span className={`text-sm ${isSel ? "text-accent-deep" : "text-ink/50"}`}>HC {formatHandicap(displayHcp)}</span>
@@ -1929,7 +1950,7 @@ export default function LiveScoringFlow({
                     card repeating the thing that was just tapped. */}
                 <div className={`flex items-center gap-5 px-4 py-2.5 ${SC_RULE} ${SC_HEAD}`}>
                   {playerSetups.length < 2 && (
-                    <span className="flex-1 min-w-0 t-card text-ink truncate">{player.name}</span>
+                    <span className="flex-1 min-w-0 t-card text-ink truncate">{nameOf(player)}</span>
                   )}
                   <span className="flex items-center gap-1.5">
                     <span className={SC_LABEL}>Tee</span>
@@ -2073,8 +2094,10 @@ export default function LiveScoringFlow({
 
 function HoleCard({
   hole, playerSetups, courseId,
-  existingScores, runningTotals, onSubmit, onBack, showLeaderboard, trackStats,
+  existingScores, runningTotals, onSubmit, onBack, showLeaderboard, trackStats, nameOf,
 }: {
+  /** A player's name on the card — a foursomes pair's lead as the pair (D88). */
+  nameOf: (player: { id: string; name: string }) => string
   hole: Hole
   playerSetups: PlayerSetup[]; courseId: string
   existingScores: Record<string, HoleScore>
@@ -2135,7 +2158,7 @@ function HoleCard({
               hole={hole}
               effectivePar={ePar}
               effectiveSI={eSI}
-              playerName={player.name}
+              playerName={nameOf(player)}
               teamColor={dotColour(player) ?? undefined}
               score={hs.gross}
               isNR={hs.isNR}

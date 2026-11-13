@@ -132,6 +132,9 @@ export function allowedHandicap(courseHandicap: number, allowance: number): numb
  */
 export function suggestedAllowance(lb: Partial<Leaderboard>): number {
   if (lb.competition !== 'league') return FULL_ALLOWANCE
+  // Foursomes: half the partners' combined handicaps (D88) — of the pair's
+  // sum, never of each player's own (`foursomesHandicap` in lib/boardRows.ts).
+  if (lb.audience === 'team' && lb.teamFormat === 'foursomes') return 50
   return lb.audience === 'team' ? 85 : 95
 }
 

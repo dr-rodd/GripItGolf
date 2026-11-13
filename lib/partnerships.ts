@@ -265,3 +265,25 @@ export function teeMode(p: RoundPartnership | null): TeeMode {
 export function partnershipsFixed(p: RoundPartnership | null): boolean {
   return !!p && p.board.competition === 'matchplay'
 }
+
+// ─── Stroke foursomes on the card (D88) ───────────────────────
+
+/**
+ * A round's foursomes pairs — the partnerships of the board governing it,
+ * when that board is stroke foursomes: one ball a pair, so the live card
+ * shows each pair as one entry, kept under its first member. Empty for any
+ * other round, a foursomes *match* included (that is the match card's).
+ */
+export function foursomesPairs(
+  boards: readonly Leaderboard[], roundId: string, memberships: readonly Membership[],
+): string[][] {
+  const gov = governingBoard(boards, roundId)
+  if (!gov || gov.competition !== 'league' || gov.audience !== 'team' || gov.teamFormat !== 'foursomes') return []
+  const sheet = sheetForBoard(gov)
+  const byTeam = new Map<string, string[]>()
+  for (const m of memberships) {
+    if ((m.team_set || 'main') !== sheet) continue
+    byTeam.set(m.team_id, [...(byTeam.get(m.team_id) ?? []), m.player_id])
+  }
+  return [...byTeam.values()].filter(p => p.length >= 2)
+}

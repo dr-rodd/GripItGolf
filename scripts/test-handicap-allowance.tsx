@@ -588,7 +588,7 @@ section('The card being edited says what it is being edited against')
   const sub = flow.slice(flow.indexOf('{/* Sub-header */}'),
                          flow.indexOf('{/* Scrollable holes */}'))
   ok(sub.length > 0, 'the edit sub-header is there to check')
-  ok(sub.includes('{player.name}'), 'it names whose card it is')
+  ok(sub.includes('{nameOf(player)}'), 'it names whose card it is — a foursomes pair as the pair (D88)')
   ok(sub.includes('formatHandicap(playingHcp)'),
     'and prints the handicap beside the name, written the way golf writes one — ' +
     'a plus handicap is "+1", never "-1"')
