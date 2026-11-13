@@ -1,5 +1,7 @@
 # Plan: sessions, Matches and the Dynamic Overall Leaderboard
 
+> **13 Nov 2026: D35's question is being replaced.** "Enable Dynamic Overall Leaderboard?" goes; the platform now reads the event's formats and decides whether it has an Overall (D77–D90, `lib/eventShape.ts`). The storage below is unchanged. `docs/format-first-plan.md` has the stages.
+
 Claude Code's plan for the 9 November 2026 brief ("sessions, matches and the Dynamic Overall Leaderboard (Ryder Cup capable)", version 2). This file covers the architecture that the brief left to Claude Code. The brief's own sections still hold the rules. **Stage 1 (the date freeze) shipped on 9 Nov, `8da50c7`.** Each stage below waits for Ross's yes and is checked on greendot.live before the next one starts.
 
 ---

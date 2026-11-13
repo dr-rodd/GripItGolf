@@ -218,7 +218,7 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D29 | An event's schedule is golf and activities; travel and stays are a trip's. Stored ones are kept | Built |
 | D30 | Continuous is a league of periods: cards handed in any time inside a period, ranked by best card or best composite card, each period its own result adding to the overall; anyone in the field starts a card by default; periods an equal run adjusted by hand | Built |
 | D34 | **Knockout** (a bracket) and **Matches** (match play results on a leaderboard) are separate in data, readers and words | Built |
-| D35 | The first leaderboard question is **"Enable Dynamic Overall Leaderboard?"**, off by default; Yes runs the sessions, then back to finalise the Overall | Built |
+| D35 | The first leaderboard question is **"Enable Dynamic Overall Leaderboard?"**, off by default; Yes runs the sessions, then back to finalise the Overall | Built; replaced by D77 (the question goes at stage 3 of `docs/format-first-plan.md`) |
 | D36 | A round in a dynamic event is a **session** with its own format; later sessions start "Same as Session 1"; Format TBC counts nothing until set | Built |
 | D37 | Main leaderboard = Primary (today's) or the Dynamic Overall Leaderboard ("Overall" on screen); secondary boards as before | Built |
 | D38 | Sessions feed the Overall by finishing position (stroke) or per match result (Matches, default 1 / ½ / 0); the Ryder Cup scores per match to the tag | Built |
@@ -251,3 +251,17 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D74 | A user's course is live for everyone at once; the database knows which courses the system added and which a user did (`courses.added_by`, migration 074), never who. A review to confirm them is a future project | Built (074 to paste) |
 | D75 | New default team colours: brick, cobalt, plum, orange, slate, rose, olive, navy. Existing teams keep theirs (decided as D73 on 11 Nov; renumbered, D73 was already taken) | Built |
 | D76 | The card check offers a tee's colour, approximated from the card or the tee's name, only where the name does not already say one; kept on the tee and drawn on its dot. Team-colour dots wear a hairline ring | Built (075 to paste) |
+| D77 | Creation asks for a Format and Settings, never a "leaderboard"; "Enable Dynamic Overall Leaderboard?" is removed (replaces D35) | Planned (stage 3) |
+| D78 | Creation's order: details, field, Format, Settings | Planned (stage 3) |
+| D79 | A single board is "Leaderboard"; with secondaries the main one is "Primary"; the Overall is "Overall" | Rule built (`boardName`); on screen at stage 2 |
+| D80 | Matches always require the Overall; its rounds are sessions | Rule built (`eventShape`) |
+| D81 | Matches mixed with stroke days always require the Overall | Rule built |
+| D82 | Stroke play with one total is Leaderboard / Primary; its rounds are rounds | Rule built |
+| D83 | Secondaries are allowed beside the Overall as well as the Primary | Planned (stage 5) |
+| D84 | The platform reads the event and offers only the board types it can feed | Rule built; screens from stage 3 |
+| D85 | Recognition reads formats and tags, never player count; two tags + Matches gets the face-off | Rule built |
+| D86 | Allowance alone never makes a round a different format | Rule built (`shapeKey`) |
+| D87 | A secondary over rounds it can't read names them rather than being refused — every Matches session, for a stroke secondary (Ross, 13 Nov 2026) | Planned (stage 5) |
+| D88 | Stroke foursomes is a new team format | Planned (stage 7) |
+| D89 | Crossing Primary ↔ Overall after creation asks first, shows the standings before and after, deletes nothing | Planned (stage 6) |
+| D90 | Stroke rounds in different formats that fit one board: asked once, one total (Primary) or points per round (Overall). Rounds that don't fit one board — Stableford beside strokes — get the Overall (Ross, 13 Nov 2026) | Rule built; question at stage 4 |

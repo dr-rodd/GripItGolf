@@ -410,3 +410,21 @@ The per-day board editor makes a board for one round at a time; a format spannin
 - **The Overall never governs a round** — `governingBoard` skips it, so a TBC session takes no partnership rules from it.
 - On the leaderboard the Overall is the first tab and carries **Overall · Session 1 · …**; a session opens in its own format (a table, or its list of matches), never as points. A session's own board is never a tab. A round summary on such an event is its session's result; the hub's standing reads the Overall on the full path.
 - Halves on any board are written as golf writes them: 7½, never 7.5.
+
+## The platform names the leaderboard (13 November 2026, D77–D90)
+
+`lib/eventShape.ts` is the only copy of the rule; `docs/format-first-plan.md` has the plan and the stages. An organiser gives the event a **Format** (its rounds, each with a format) and **Settings** (everything that is not golf), and never sets up "a leaderboard": the platform reads the Format.
+
+| The golf | Main board | Rounds are called |
+|---|---|---|
+| Stroke play, one format every round (allowance aside, D86) | a league board, round columns and a total | Round n |
+| Any Matches, alone or beside stroke days | the Overall (D80, D81) | Session n |
+| Stroke formats that fit one board — the same scoring, every player keeping their own card (Stableford beside better ball) | asked once: one total (league) or points per round (Overall) (D90) | either |
+| Stroke rounds that do not fit one board — Stableford beside strokes, say | the Overall (Ross, 13 Nov 2026: "any rounds that don't fit neatly on a leaderboard get an overall") | Session n |
+| Two tags and Matches | the Overall ranking tags, with the face-off ticker (D50, D85) | Session n |
+
+- **`eventShape({ formats, tags })`** reads formats and the tag count, **never the field** (D85). Format TBC rounds are ignored. `shapeKey` is a format without its allowance, which is what two rounds are compared on.
+- **The rule proposes; the stored boards are the truth.** It runs when an event is made and when a round's format changes. Every screen reads `storedShape(boards)` — an Overall board means the Overall — so an event made before the rule (an Overall over identical Stableford sessions) reads as it always has.
+- **`roundFormatsOf(boards, roundIds)`** reads a stored event back into formats: a round's session board, else a board scoped to that round, else the first board covering every round; on an Overall only the session board counts. Tags boards and the tag tally are never a round's format.
+- **`boardName(lb, boards)`** is what a board is called (D79): the Overall "Overall"; the first board, when it is a league board covering every round, **"Leaderboard"** alone and **"Primary"** once a secondary sits beside it; every other board its `boardTitle`. A session's own board is never counted, nor the tag tally.
+- `test:event-shape` holds every row above, and every stored shape of event in `scripts/fixtures/event-shapes.ts` read back through it.
