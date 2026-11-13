@@ -203,12 +203,15 @@ export function roundFormatsOf(
 // ─── Naming ────────────────────────────────────────────────────
 
 /**
- * The boards the leaderboard counts when it decides whether a board stands
- * alone: never a session's own board (reached through the Overall's switch)
- * and never the tag tally, which is drawn under the bracket.
+ * The boards the leaderboard draws as tabs, for deciding whether a board
+ * stands alone: never the tag tally, which is drawn under the bracket, and
+ * on an Overall never a session's own board (reached through its switch).
+ * With no Overall a session's board is a day's own board like any other —
+ * the leaderboard draws it beside the main one, so it is a secondary.
  */
 function shownBoards(boards: readonly Leaderboard[]): Leaderboard[] {
-  return boards.filter(b => !isSessionBoard(b) && !isMatchTally(b))
+  const overall = overallOf(boards) != null
+  return boards.filter(b => !isMatchTally(b) && !(overall && isSessionBoard(b)))
 }
 
 /**
@@ -218,7 +221,7 @@ function shownBoards(boards: readonly Leaderboard[]): Leaderboard[] {
  */
 export function mainLeagueBoard(boards: readonly Leaderboard[]): Leaderboard | null {
   const first = shownBoards(boards)[0]
-  if (!first || first.competition !== 'league' || (first.roundIds?.length ?? 0) > 0) return null
+  if (!first || first.competition !== 'league' || (first.roundIds?.length ?? 0) > 0 || isSessionBoard(first)) return null
   return overallOf(boards) ? null : first
 }
 

@@ -440,10 +440,10 @@ section('The creation wizard asks for a Format, and the platform names the board
   ok(form.includes('Add a secondary leaderboard'), '  …offering a secondary leaderboard under it')
   ok(!/^export (const|function) [a-z]/m.test(picker), 'the picker exports components only (test:client-boundary)')
   const organiser = read('app/golf/[root]/[tripCode]/organiser/OrganiserClient.tsx')
-  ok(organiser.includes('label="Session formats"'), 'the organiser area has a Session formats row')
+  ok(organiser.includes('label="Formats"'), 'the organiser area has a Formats row (D89)')
   const sessionsPage = read('app/golf/[root]/[tripCode]/organiser/sessions/SessionsClient.tsx')
-  ok(sessionsPage.includes('Turn the Overall off?') && sessionsPage.includes('withOverallOff(boards)'),
-    '  …where turning it off asks first, and takes only the Overall')
+  ok(!sessionsPage.includes('withOverallOff(boards)') && sessionsPage.includes('changeRoundFormat('),
+    '  …where the formats are the switch — no Overall on/off (test:shape-change holds the crossing)')
   ok(sessionsPage.includes('This session counts nothing until its format is set.'), '  …and a TBC session says so')
   const hub = read('lib/hubStanding.ts')
   ok(hub.includes("if (lead.competition === 'overall')") && hub.includes('overallRows(lead, overall.boards'),

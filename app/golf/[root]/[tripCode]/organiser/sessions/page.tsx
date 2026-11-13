@@ -10,12 +10,13 @@ import { tripHomeAt } from '@/lib/tripPaths'
 export const dynamic = 'force-dynamic'
 
 /**
- * Session formats — the Dynamic Overall Leaderboard after creation (Ross,
- * 9 Nov 2026; lib/sessions.ts): each session's format (or TBC), its name,
- * how it feeds the Overall and what the Overall ranks, and turning the
- * Overall on or off. Behind the organiser PIN on an event, the Trip Setup
- * passcode on a trip (stage 8 — trips follow events, D47); reached on a trip
- * at /setup/sessions, which is this page.
+ * Formats — an event's golf after creation (Ross, 13 Nov 2026, D89;
+ * lib/shapeChange.ts): each round's format, the crossing between the
+ * Primary and the Overall asked first with the standings either side, and
+ * on an Overall each session's name, count and feed and what it ranks.
+ * Behind the organiser PIN on an event, the Trip Setup passcode on a trip
+ * (trips follow events, D47); reached on a trip at /setup/sessions, which is
+ * this page.
  */
 export default async function SessionsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
@@ -72,7 +73,7 @@ export default async function SessionsPage({ params }: {
       <PasscodeGate
         tripCode={tripCode}
         tripName={trip.name}
-        title="Session formats"
+        title="Formats"
         hint={event ? `Enter the organiser PIN for ${trip.name}.` : `Enter the passcode for ${trip.name}.`}
       >
         {content}

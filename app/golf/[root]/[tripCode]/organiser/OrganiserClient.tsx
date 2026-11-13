@@ -542,7 +542,7 @@ export default function OrganiserClient({
             {hasTeamBoards && (
               <ListRow href={`${tripHome}/teams`} label="Teams" hint="Pick the teams, or see the ones players have made." />
             )}
-            {/* With an Overall, a day's format is its session's, set on Session formats. */}
+            {/* With an Overall, a day's format is its session's, set on Formats. */}
             {rounds.length > 1 && sessions !== 'on' && (
               <ListRow href={`${tripHome}/organiser/days`} label="Each day’s own format" hint={dayFormatSummary} />
             )}
@@ -552,10 +552,9 @@ export default function OrganiserClient({
             {sessions && (
               <ListRow
                 href={`${tripHome}/organiser/sessions`}
-                label="Session formats"
-                hint={sessions === 'on'
-                  ? 'Each session’s format, and how it feeds the Overall.'
-                  : 'Dynamic Overall Leaderboard is off. Turn it on here.'}
+                label="Formats"
+                // The shape the formats make (D89) — changing them is the switch.
+                hint={`${sessions === 'on' ? 'Overall' : 'Leaderboard'} · ${rounds.length} ${sessions === 'on' ? 'session' : 'round'}${rounds.length === 1 ? '' : 's'}`}
               />
             )}
             {(knockout || isLeague) && (

@@ -257,7 +257,8 @@ export default async function OrganiserPage({ params }: {
       isLeague={!!leagueSetup}
       // A standalone league may run a Dynamic Overall Leaderboard; an event
       // that has one keeps the door whatever its shape (lib/sessions.ts).
-      sessions={overallOf(boards) ? 'on' : leagueSetup && !leagueSetup.schedule ? 'off' : null}
+      // Formats, for every league with rounds — a league of periods has none to set (D89).
+      sessions={overallOf(boards) ? 'on' : leagueSetup && !leagueSetup.periods?.length ? 'off' : null}
       initialTrackStats={trip.track_stats === true}
       series={leagueSetup?.schedule === 'series'}
       periods={isPeriodLeague(leagueSetup)}
