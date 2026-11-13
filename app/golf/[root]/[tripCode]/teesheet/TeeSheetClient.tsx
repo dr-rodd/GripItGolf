@@ -82,6 +82,8 @@ import { useTripBase } from '@/app/golf/[root]/[tripCode]/TripBase'
 type Round = {
   id: string
   roundNumber: number
+  /** "Round 2", or on an Overall its session's name (lib/eventShape.ts `roundLabelOf`). */
+  label?: string
   courseName: string | null
   /** Vacant, live from the wizard's rules, or made before the wizard. */
   sheet: RoundSheet
@@ -943,7 +945,7 @@ export default function TeeSheetClient({
                   onClick={() => { setRoundId(r.id); closeBooking() }}
                   className={optionClass(r.id === roundId, 'tile')}
                 >
-                  <span className="block t-label">Round {r.roundNumber}</span>
+                  <span className="block t-label">{r.label ?? `Round ${r.roundNumber}`}</span>
                   {r.courseName && (
                     <span className="block t-cap text-ink/65 mt-0.5">{courseLabel(r.courseName)}</span>
                   )}
@@ -970,7 +972,7 @@ export default function TeeSheetClient({
              has made its sheet yet. The way to the wizard, the PIN asked
              there unless anyone may make the sheets. */
           <div className={`p-4 ${cardClass()}`}>
-            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee sheet isn&apos;t open yet</p>
+            <p className="t-card text-ink">{round.label ?? `Round ${round.roundNumber}`}&apos;s tee sheet isn&apos;t open yet</p>
             <p className="t-cap text-ink/65 mt-1 leading-snug">
               Once it is, everybody can see who goes off when.
             </p>
@@ -986,7 +988,7 @@ export default function TeeSheetClient({
         ) : fieldBarred ? (
           /* Opened for later: the field is told when, and nothing more. */
           <div className={`p-4 ${cardClass()}`}>
-            <p className="t-card text-ink">Round {round.roundNumber}&apos;s tee sheet opens {round.opensLabel}</p>
+            <p className="t-card text-ink">{round.label ?? `Round ${round.roundNumber}`}&apos;s tee sheet opens {round.opensLabel}</p>
             <p className="t-cap text-ink/65 mt-1 leading-snug">
               {fieldMayEdit ? 'Pick your time here once it opens.' : 'Who goes off when shows here once it opens.'}
             </p>

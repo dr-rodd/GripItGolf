@@ -1638,6 +1638,29 @@ section('The Dynamic Overall Leaderboard (D37, D39)')
   ok(!plain.includes('Which session'), 'without an Overall the board is exactly as it was')
 }
 
+section('The platform names the leaderboard (D79)')
+{
+  const asEvent = (boards: Leaderboard[]) => renderToStaticMarkup(
+    React.createElement(TripLeaderboardClient, {
+      tripCode: 'ABC123', boards,
+      activeRoundIds: [], livePlayerIds: [], legacyTeamScoring: null,
+      rounds, teams: [], memberships: [], players,
+      holes, scores, liveScores: [], roundHandicaps, isEvent: true,
+    } as never)
+  )
+  const two = asEvent([SF(), ST()])
+  ok(two.includes('>Primary<'), 'an event with a secondary: the main board is the Primary')
+  ok(two.includes('>Strokes<'), '  …and the secondary keeps its own title')
+  ok(!two.includes('>Stableford Points<'), '  …and the Primary is not also called by its scoring')
+  ok(two.includes('Stableford · Running total'), '  …while its facts line still says what it plays')
+  const one = asEvent([SF()])
+  ok(!one.includes('>Primary<') && !one.includes('Which leaderboard'),
+    'one board on an event: no tab strip and no title, exactly as before')
+  const trip = render([SF(), ST()])
+  ok(trip.includes('>Stableford Points<') && !trip.includes('>Primary<'),
+    'a trip keeps its boards\' titles until trips take the model (D47)')
+}
+
 console.log(`\n${'─'.repeat(56)}`)
 if (failed === 0) console.log(`✓ all ${passed} checks passed`)
 else {

@@ -2018,6 +2018,22 @@ The golf formats keep their names — "Stableford match play" and "Strokes match
 
 ---
 
+## The platform names the leaderboard (Ross, 13 Nov 2026 — D79, D80)
+
+An event's main board is named for what it is, not for what it plays — the facts line under it still says "Stableford · Running total · 95% handicap". `boardName` in `lib/eventShape.ts` is the one copy; a round's name is `roundLabelOf`. Trips keep their boards' titles until trips take the same model (D47).
+
+| Where | Was | Now |
+|---|---|---|
+| Leaderboard tab and title card, an event's main board with a secondary beside it | its scoring — "Stableford Points" | **Primary** |
+| The same, the only board | (no tab or title is drawn — the bottom bar says Leaderboard) | unchanged; "Leaderboard" is its name where one is needed |
+| The Overall | Overall | Overall |
+| A secondary board | its title — "Strokes", "Team better ball" | unchanged |
+| Round summary heading, a round of an event with an Overall | Round 2 | **Session 2**, or the session's name |
+| Tee times tab — the round chips, "Round n's tee sheet isn't open yet / opens …", on an Overall | Round 2 | **Session 2**, or its name |
+| Organiser area, Starts card, on an Overall | Round 2 — Portsalon | **Session 2** — Portsalon |
+
+---
+
 ## Appendix — screens not on the platform
 
 These files still carry copy but nothing on a trip links to them. They're the

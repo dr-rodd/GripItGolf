@@ -44,6 +44,8 @@ type Notice = { id: string; body: string; created_at: string }
 type RoundInfo = {
   id: string
   roundNumber: number
+  /** "Round 2", or on an Overall its session's name. */
+  label?: string
   courseName: string | null
   itineraryItemId: string | null
   startFormat: string | null
@@ -432,12 +434,12 @@ export default function OrganiserClient({
                 return (
                   <li key={round.id} className={`${cardClass()} p-4`}>
                     <p className="text-ink text-sm font-medium mb-3">
-                      Round {round.roundNumber}
+                      {round.label ?? `Round ${round.roundNumber}`}
                       {round.courseName ? ` — ${courseLabel(round.courseName)}` : ''}
                     </p>
 
                     <ChoiceChips
-                      label={`How round ${round.roundNumber} starts`}
+                      label={`How ${round.label && !/^Round \d+$/.test(round.label) ? round.label : `round ${round.roundNumber}`} starts`}
                       value={chosen}
                       onChange={f => saveFormat(round, f)}
                       options={(['shotgun', 'tee_sheet'] as const).map(f => ({ value: f, label: START_FORMAT_LABEL[f] }))}

@@ -177,3 +177,4 @@ Also worth knowing: under D82, an Overall can no longer be *made* over identical
 ## Shipped
 
 - **Stage 1** — `lib/eventShape.ts`, `scripts/test-event-shape.ts`, `scripts/fixtures/event-shapes.ts`. No screen changes.
+- **Stage 2** — on an event, the leaderboard's tab and title card call the main board **Primary** beside a secondary (`boardName`); a round on an Overall event is its session (`roundLabelOf`) on the round summary (it said "Round n"), the Tee times tab and the organiser area's Starts card. Trips untouched, so `test:golden` did not move; one board on an event draws no tab or title, as before. The leaderboard's league round switch, the Scoring tab and the hub already said the right word.

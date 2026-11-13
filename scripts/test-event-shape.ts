@@ -10,7 +10,7 @@
 import fs from 'fs'
 import {
   eventShape, answeredShape, storedShape, roundFormatsOf, boardName, mainLeagueBoard,
-  shapeKey, unitLabel, type ShapeInput,
+  shapeKey, unitLabel, roundLabelOf, type ShapeInput,
 } from '../lib/eventShape'
 import type { SessionFormat } from '../lib/sessions'
 import { SHAPE_CASES } from './fixtures/event-shapes'
@@ -149,6 +149,38 @@ section('Naming (D79)')
   eq(unitLabel('Session', 2), 'Session 2', 'Session n')
   eq(unitLabel('Session', 2, 'Friday foursomes'), 'Friday foursomes', 'a session’s own name')
   eq(unitLabel('Session', 2, '  '), 'Session 2', 'a blank name is the number')
+}
+
+section('A round on screen is a round or a session, from what is stored')
+{
+  const [ryder] = SHAPE_CASES.filter(c => c.name.startsWith('a Ryder Cup'))
+  eq(roundLabelOf(ryder.boards, 'r2', 2), 'Session 2', 'an Overall’s round is a session')
+  const named = ryder.boards.map(b => b.competition === 'overall'
+    ? { ...b, overall: { ...b.overall!, names: { r1: 'Friday fourballs' } } } : b)
+  eq(roundLabelOf(named, 'r1', 1), 'Friday fourballs', '  …by its name where it has one')
+  eq(roundLabelOf(SHAPE_CASES[0].boards, 'r2', 2), 'Round 2', 'a league’s round is a round')
+  const [same] = SHAPE_CASES.filter(c => c.name.includes('identical'))
+  eq(roundLabelOf(same.boards, 'r1', 1), 'Session 1',
+    'an Overall made before the rule stays sessions, though the rule would now say rounds')
+}
+
+section('The screens ask the one helper')
+{
+  const read = (f: string) => fs.readFileSync(f, 'utf-8')
+  const base = 'app/golf/[root]/[tripCode]/'
+  ok(read(base + 'round/[roundNumber]/page.tsx').includes('{sessionInfo ? sessionInfo.name : `Round ${round.round_number}`}'),
+    'a round summary on an Overall names its session, never "Round n"')
+  ok(read(base + 'teesheet/page.tsx').includes('label: roundLabelOf(boards, r.id, r.round_number)'),
+    'the tee sheet names its rounds through roundLabelOf')
+  ok((read(base + 'teesheet/TeeSheetClient.tsx').match(/label \?\? `Round \$\{/g) ?? []).length === 3,
+    '  …in all three places it says which round')
+  ok(read(base + 'organiser/page.tsx').includes('label: roundLabelOf('),
+    'the organiser area names its rounds through roundLabelOf')
+  const lb = read(base + 'leaderboard/TripLeaderboardClient.tsx')
+  ok(lb.includes("const nameOf = (t: Leaderboard) => isEvent ? boardName(t, boards) : boardTitle(t)"),
+    'the leaderboard names its boards through boardName, on an event only')
+  ok(lb.includes('{nameOf(activeBoard)}') && lb.includes(": nameOf(t) }"),
+    '  …on the tab and on the title card')
 }
 
 section('The rule never reads the field (D85)')

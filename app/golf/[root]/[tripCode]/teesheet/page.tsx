@@ -8,6 +8,7 @@ import { readSessionCards, readSessionMatchRows } from '../session/sessionMatche
 import { isEvent } from '@/lib/eventHub'
 import { fetchTripKind } from '../kind'
 import { parseLeaderboards, tagsInPlay } from '@/lib/leaderboards'
+import { roundLabelOf } from '@/lib/eventShape'
 import { roundPartnership, partnershipName, teeMode, partnershipsFixed, MAX_PARTNERSHIP, type TeeMode } from '@/lib/partnerships'
 import { roundPickerSheet } from '@/lib/teamPicker'
 import { boardNames } from '@/lib/displayNames'
@@ -195,6 +196,7 @@ export default async function TeeSheetPage({ params, searchParams }: {
       return {
         id: r.id,
         roundNumber: r.round_number,
+        label: roundLabelOf(boards, r.id, r.round_number),
         courseName: course?.name ?? null,
         sheet,
         // A sheet made before the wizard has no opening: it is open.

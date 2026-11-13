@@ -12,6 +12,7 @@ import { roundSheet, teeSheetSummary } from '@/lib/teeSheet'
 import { readAllRows } from '@/lib/allRows'
 import { readSheetSettings } from '../teesheet/sheets'
 import { parseLeaderboards } from '@/lib/leaderboards'
+import { roundLabelOf } from '@/lib/eventShape'
 import { describeRange } from '@/lib/confirmationEmail'
 import BackButton from '@/app/components/BackButton'
 import PasscodeGate from '../setup/PasscodeGate'
@@ -191,6 +192,7 @@ export default async function OrganiserPage({ params }: {
     return {
       id: r.id,
       roundNumber: r.round_number,
+      label: roundLabelOf(parseLeaderboards(trip.leaderboards), r.id, r.round_number),
       courseName: course?.name ?? null,
       itineraryItemId: r.itinerary_item_id,
       startFormat: r.start_format,

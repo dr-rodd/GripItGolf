@@ -6,6 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
+import { boardName } from '@/lib/eventShape'
 import {
   type Leaderboard, boardTitle, boardFacts, hasMatchplay,
 } from '@/lib/leaderboards'
@@ -1808,6 +1809,13 @@ export default function TripLeaderboardClient({
   // own on the bar at the bottom of every trip screen, so a second way in
   // from this one page was a chip that said what the bar already said — and
   // it was the only thing forcing this strip to exist on a one-board trip.
+  /**
+   * What a board is called on an event (D79): the Overall, "Leaderboard"
+   * alone, "Primary" beside a secondary — lib/eventShape.ts. A trip keeps
+   * its boards' titles until trips take the same model (D47).
+   */
+  const nameOf = (t: Leaderboard) => isEvent ? boardName(t, boards) : boardTitle(t)
+
   /** A day board says which golf it counts; a whole-event board does not. */
   const scopeOf = (t: Leaderboard) => describeScope(t, rounds.map(r => ({
     id: r.id, roundNumber: r.round_number, courseName: r.courses?.name ?? null,
@@ -1830,7 +1838,7 @@ export default function TripLeaderboardClient({
           onChange={setActiveId}
           options={tabs.map(t => {
             const scope = scopeOf(t)
-            return { value: t.id, label: scope ? `${scope} · ${boardTitle(t)}` : boardTitle(t) }
+            return { value: t.id, label: scope ? `${scope} · ${boardTitle(t)}` : nameOf(t) }
           })}
         />
       )}
@@ -2097,7 +2105,7 @@ export default function TripLeaderboardClient({
         <div className={`px-4 py-3 mb-3 ${cardClass()}`}>
           <div className="flex items-center justify-between gap-3">
             <p className="t-card text-ink">
-              {boardTitle(activeBoard)}
+              {nameOf(activeBoard)}
             </p>
             {inPlay && <InPlayBadge />}
           </div>

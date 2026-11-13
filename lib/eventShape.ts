@@ -235,3 +235,15 @@ export function boardName(lb: Leaderboard, boards: readonly Leaderboard[]): stri
 export function unitLabel(unit: RoundUnit, number: number, name?: string | null): string {
   return name?.trim() || `${unit} ${number}`
 }
+
+/**
+ * What one of an event's rounds is called, from what is stored: on an
+ * Overall it is a session, by its name or "Session n"; anywhere else
+ * "Round n". The one place a screen asks.
+ */
+export function roundLabelOf(boards: readonly Leaderboard[], roundId: string, roundNumber: number): string {
+  const overall = overallOf(boards)
+  return overall
+    ? unitLabel('Session', roundNumber, overall.overall?.names?.[roundId])
+    : unitLabel('Round', roundNumber)
+}
