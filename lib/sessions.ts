@@ -24,7 +24,7 @@
  * which is the one place that reads cards.
  */
 
-import type { MatchCardDetail } from './matchCard'
+import type { MatchCardDetail, MatchTie } from './matchCard'
 import type { Leaderboard, Scoring, TeamFormat, Audience } from './leaderboards'
 
 // ─── Match formats ─────────────────────────────────────────────
@@ -51,6 +51,13 @@ export const MATCH_FORMATS: {
  * "Coming soon", so a Ryder Cup can be laid out before it can be played.
  */
 export const MATCHES_READY = true
+
+/** How a tied match is finished — the question a Matches format asks (Ross, 13 Nov 2026). */
+export const MATCH_TIES: { key: MatchTie; label: string; hint: string }[] = [
+  { key: 'half', label: 'Half a point each', hint: 'Level after 18 is a halved match.' },
+  { key: 'extra', label: 'Extra holes', hint: 'Play on from the 1st until one side wins a hole.' },
+  { key: 'manual', label: 'Pick the winner', hint: 'Whoever finalises the card chooses who wins.' },
+]
 
 export const isMatchFormat = (v: unknown): v is MatchFormat =>
   MATCH_FORMATS.some(f => f.key === v)
@@ -83,7 +90,11 @@ export type SessionFormat =
       /** Better ball only — how many scores count on a hole. Absent is the board's default, 2. */
       countingScores?: number
     }
-  | { kind: 'matches'; match: MatchFormat; handicapAllowance?: number }
+  | {
+      kind: 'matches'; match: MatchFormat; handicapAllowance?: number
+      /** How a match level after 18 is finished. Absent is a half. */
+      tie?: MatchTie
+    }
 
 export const isMatchesBoard = (lb: Pick<Leaderboard, 'competition'>) => lb.competition === 'matches'
 export const isOverallBoard = (lb: Pick<Leaderboard, 'competition'>) => lb.competition === 'overall'
@@ -96,6 +107,7 @@ export function formatOfBoard(lb: Leaderboard): SessionFormat | null {
       kind: 'matches',
       match: lb.matchFormat,
       ...(lb.handicapAllowance != null ? { handicapAllowance: lb.handicapAllowance } : {}),
+      ...(lb.matchTie ? { tie: lb.matchTie } : {}),
     }
   }
   if (lb.competition === 'league' && lb.scoring) {
@@ -119,7 +131,7 @@ export function sameFormat(a: SessionFormat | null, b: SessionFormat | null): bo
 
 export function formatKey(f: SessionFormat | null): string {
   if (!f) return 'tbc'
-  if (f.kind === 'matches') return `m:${f.match}:${f.handicapAllowance ?? 100}`
+  if (f.kind === 'matches') return `m:${f.match}:${f.handicapAllowance ?? 100}${f.tie && f.tie !== 'half' ? `:${f.tie}` : ''}`
   // The count only where it is set, so every key made before it reads the same.
   const count = f.audience === 'team' && f.teamFormat === 'better_ball' && f.countingScores != null
     ? `:c${f.countingScores}` : ''
@@ -160,6 +172,7 @@ export function sessionBoard(format: SessionFormat, roundId: string, daySheet: s
       matchFormat: format.match,
       ...(team ? { teamSet: daySheet } : {}),
       ...(pct !== 100 ? { handicapAllowance: pct } : {}),
+      ...(format.tie && format.tie !== 'half' ? { matchTie: format.tie } : {}),
       roundIds: [roundId],
       session: true,
     }
@@ -187,6 +200,8 @@ export function describeFormat(f: SessionFormat | null): string {
   const parts: string[] = []
   if (f.kind === 'matches') {
     parts.push(MATCH_FORMATS.find(m => m.key === f.match)?.label ?? 'Matches', 'Matches')
+    if (f.tie === 'extra') parts.push('Ties go extra holes')
+    else if (f.tie === 'manual') parts.push('Ties decided by hand')
   } else {
     if (f.audience === 'team') {
       parts.push(f.teamFormat === 'better_ball' ? 'Team better ball'
@@ -222,7 +237,10 @@ export function formatSentence(f: SessionFormat | null): string {
       : f.match === 'fourball'
         ? 'Two against two, hole by hole: the better ball of each pair counts.'
         : 'Two against two, one ball a side, hitting alternate shots.'
-    return `${what} A win is worth a point, a halved match half a point.${f.match === 'foursomes' && pct === 50 ? ' Off half the partners’ combined handicaps.' : off}`
+    const tie = f.tie === 'extra' ? 'Level after 18, it goes down extra holes until one is won.'
+      : f.tie === 'manual' ? 'Level after 18, the winner is picked when the card is finalised.'
+      : 'Level after 18, it is halved — half a point each.'
+    return `${what} ${tie}${f.match === 'foursomes' && pct === 50 ? ' Off half the partners’ combined handicaps.' : off}`
   }
   const wins = f.scoring === 'strokes' ? 'Lowest nett total wins.'
     : f.scoring === 'quota' ? 'Furthest over quota wins.'

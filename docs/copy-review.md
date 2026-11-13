@@ -2044,6 +2044,10 @@ An event's main board is named for what it is, not for what it plays — the fac
 | Format step, several rounds | Round 2 (no name) · + Add a round | **Name (optional)** — "Round 2, or e.g. Saturday medal" · **+ Add another round** |
 | Format picker, under the answers | — | one sentence for what was tapped — "Every player scores Stableford points off their handicap, hole by hole. Most points wins." · "The team’s best 2 scores on each hole count, in Stableford points. Most points wins." · "One against one, hole by hole. A win is worth a point, a halved match half a point." |
 | League field step | Handicap | **Handicap (or leave blank)**, and "Shows as pending until they set it when claiming their name." under a blank one; the plus-handicap question when the step is left |
+| Format picker, a Matches format | (points per match in the Overall's feeds) | **How is a tied match finished?** — **Half a point each** "Level after 18 is a halved match." · **Extra holes** "Play on from the 1st until one side wins a hole." · **Pick the winner** "Whoever finalises the card chooses who wins." |
+| Match card finish sheet, a tie picked by hand | — | "All square after 18 — who wins?", the two sides to tap, then "Europe wins"; the result line "Europe won by decision" |
+| Settings step's line | "Everything that isn’t the golf." | (none) |
+| Tee times switch, creation | Tee times | **Add a tee sheet?** |
 | Settings step | — | **Record stats** — "Putts and where the tee shot went, on every card. Changeable in the organiser area." |
 
 ---

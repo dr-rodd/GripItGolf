@@ -122,7 +122,6 @@ const STEP_TITLES: Record<StepKey, string> = {
 const STEP_INTROS: Partial<Record<StepKey, string>> = {
   format: 'The golf, round by round. The leaderboard follows from it.',
   deadlines: 'Do you want to set a deadline for each round to be completed?',
-  settings: 'Everything that isn’t the golf.',
 }
 
 /** "Stableford", "better ball Stableford" — what a round plays, in the read-back's sentence. */
@@ -414,9 +413,14 @@ export default function CreateLeagueForm({ schedule, onExit }: {
   // The public PIN, beside it on an event (lib/publicPin.ts).
   const publicIssue = publicPinIssue(publicPin, passcode)
 
+  // Whether any round plays Matches — Golf Ireland is then never offered.
+  const eventHasMatches = !continuous && resolvedFormats(rounds).some(f => f?.kind === 'matches')
+
   // The rules as they would be stored, or null while something is missing.
-  const giStored = readsGolfIreland(scoreSource) ? parseGolfIrelandRules(giRules) : null
-  const giIssue = !readsGolfIreland(scoreSource) ? null
+  // Matches are never read from Golf Ireland — the question is not asked.
+  const readsGI = readsGolfIreland(scoreSource) && !eventHasMatches
+  const giStored = readsGI ? parseGolfIrelandRules(giRules) : null
+  const giIssue = !readsGI ? null
     : giRules.clubs.length === 0 ? 'Golf Ireland needs at least one club — pick one above.'
     : giRules.weekdays?.length === 0 ? 'Tick the days a round may be played on, or choose any day.'
     : !giStored ? 'Answer each Golf Ireland question above.'
@@ -1455,6 +1459,7 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                     askTeeTeams
                     askTags
                     onChange={next => { setSecondaries(next); if (next.length === 0) setAddingSecondary(false) }}
+                    onDismiss={() => setAddingSecondary(false)}
                   />
                   {/* A stroke board over a Matches session names it (D87). */}
                   {secondaries.map(b => {
@@ -1626,6 +1631,9 @@ export default function CreateLeagueForm({ schedule, onExit }: {
         {/* ── 4 · Finish ── */}
         {key === 'settings' && (
           <div className="space-y-6">
+            {/* Golf Ireland reads stroke cards; a match is played on the match card,
+                so an event with Matches is never offered it (Ross, 13 Nov 2026). */}
+            {!hasMatches && (<>
             {/* ── Where the scores come from ──
                 Live on Green Dot, read from Golf Ireland, or both. Golf
                 Ireland asks its own questions, in its own card. */}
@@ -1658,6 +1666,8 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                 )}
               </div>
             )}
+
+            </>)}
 
             {/* ── Tee times ──
                 Its own question (Ross, 26 Oct 2026): on, every round gets a

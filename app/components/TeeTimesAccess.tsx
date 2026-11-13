@@ -82,12 +82,13 @@ export function TeeTimesQuestion({ on, onToggle, value, onChange, trip = false }
     <div>
       <div className={`flex items-center justify-between gap-4 px-4 py-3 ${cardClass()}`}>
         <div className="min-w-0">
-          <p className="text-ink text-sm font-medium">Tee times</p>
+          {/* Ross, 13 Nov 2026: asked as a question. */}
+          <p className="text-ink text-sm font-medium">Add a tee sheet?</p>
           <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
             A tee sheet for every round, opened once the field is in.
           </p>
         </div>
-        <Toggle checked={on} onChange={onToggle} label="Tee times" />
+        <Toggle checked={on} onChange={onToggle} label="Add a tee sheet" />
       </div>
       {on && (
         <div className="mt-4">

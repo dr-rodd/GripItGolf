@@ -204,7 +204,8 @@ export async function readSessionCards(
     setups.set(row.id, { ...base, card })
     const scores = scoresOf.get(row.id)
     if (scores && scores.size > 0) {
-      const played = playSessionCard(holes, card.a, card.b, scores)
+      // A tie decided on extra holes plays on past 18 (the session's own answer).
+      const played = playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half')
       if (!row.result) {
         const { state } = played
         result.live = true

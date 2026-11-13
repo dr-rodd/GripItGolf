@@ -255,6 +255,13 @@ export type Leaderboard = {
   /** `competition: 'matches'` only — singles, fourball or foursomes. */
   matchFormat?: MatchFormat
 
+  /**
+   * `competition: 'matches'` only — how a match level after 18 is finished
+   * (Ross, 13 Nov 2026): extra holes, or a winner picked by hand. Absent is
+   * a half, which is what every session did before the question.
+   */
+  matchTie?: 'extra' | 'manual'
+
   /** `competition: 'overall'` only — what it ranks and how each session feeds it. */
   overall?: OverallRules
 }
@@ -1076,6 +1083,7 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
       lb.roundIds = scope
       lb.session = true
+      if (r.matchTie === 'extra' || r.matchTie === 'manual') lb.matchTie = r.matchTie
       if (!isSlotFree(out, lb)) continue
       out.push(lb)
       continue

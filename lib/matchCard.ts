@@ -326,27 +326,59 @@ export function reopenBlocked(nextRound: string, nextDecided: boolean, nextScore
 export type SessionCardState = CardState & {
   /** All square after eighteen — a result in its own right. */
   halved: boolean
+  /**
+   * All square after eighteen on a session that has the tie decided by
+   * hand (`MatchTie` 'manual'): settled, and whoever finalises picks the winner.
+   */
+  decide?: boolean
 }
 
-/** A session match's card: the eighteen, its outcomes, and where it stands. */
+/**
+ * How a session match level after 18 is finished (Ross, 13 Nov 2026): a
+ * half — the default, and every session made before the question — extra
+ * holes from the 1st until one is won, as a knockout does, or a winner
+ * picked by hand when the card is finalised.
+ */
+export type MatchTie = 'half' | 'extra' | 'manual'
+
+/** A session match's card: the eighteen (more on extra holes), its outcomes, and where it stands. */
 export function playSessionCard(
-  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores,
+  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores, tie: MatchTie = 'half',
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
+  if (tie === 'extra') {
+    // The knockout's own card: down the 19th off the 1st, until one is won.
+    const played = playCard(holes, a, b, scores, new Map())
+    return { ...played, state: { ...played.state, halved: false } }
+  }
   const list = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
   const outcomes = holeOutcomes(list, a, b, scores, new Map())
   const state = cardState(outcomes)
   if (state.extra) {
-    return {
-      holes: list, outcomes,
-      state: { ...state, extra: false, settled: true, halved: true, leader: null, result: 'A/S', progress: 'All square after 18' },
-    }
+    return tie === 'manual'
+      ? {
+          holes: list, outcomes,
+          state: { ...state, extra: false, settled: true, halved: false, decide: true, leader: null, result: 'A/S', progress: 'All square after 18' },
+        }
+      : {
+          holes: list, outcomes,
+          state: { ...state, extra: false, settled: true, halved: true, leader: null, result: 'A/S', progress: 'All square after 18' },
+        }
   }
   return { holes: list, outcomes, state: { ...state, halved: false } }
 }
 
-/** What a finalised session card writes: the result and its margin. */
-export function sessionResult(state: SessionCardState): { result: 'a' | 'b' | 'halved'; margin: string } | null {
+/** The margin a tie decided by hand is written with — "Europe won by decision". */
+export const DECIDED_MARGIN = 'by decision'
+
+/**
+ * What a finalised session card writes: the result and its margin. A tie
+ * decided by hand needs the side picked (`pick`); without one, nothing.
+ */
+export function sessionResult(
+  state: SessionCardState, pick?: CardSideKey | null,
+): { result: 'a' | 'b' | 'halved'; margin: string } | null {
   if (!state.settled) return null
+  if (state.decide) return pick ? { result: pick === 'A' ? 'a' : 'b', margin: DECIDED_MARGIN } : null
   if (state.halved) return { result: 'halved', margin: 'A/S' }
   if (!state.leader || !state.result) return null
   return { result: state.leader === 'A' ? 'a' : 'b', margin: state.result }

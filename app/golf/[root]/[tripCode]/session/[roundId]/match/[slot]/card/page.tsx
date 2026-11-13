@@ -1,3 +1,4 @@
+import { sessionBoardFor } from '@/lib/sessions'
 import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import OrganiserLock from '@/app/components/OrganiserLock'
@@ -130,6 +131,7 @@ export default async function SessionMatchCardPage({ params, searchParams }: {
             <MatchCardClient
               startOn={view === 'scorecard' ? 'scorecard' : 'card'}
               session
+              tie={sessionBoardFor(boards, row.round_id)?.matchTie ?? 'half'}
               backHref={back}
               roundName={`${label} · ${format}`}
               club={named?.club ?? null}

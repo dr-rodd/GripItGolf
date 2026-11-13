@@ -383,6 +383,22 @@ section('A single event, named rounds, and what a format means (Ross, 13 Nov 202
   ok(form.includes('Shows as {HANDICAP_PENDING_LABEL} until they set it when claiming their name.'), '  …and a blank one says what it means, as on a trip')
 }
 
+section('Check 3 (Ross, 13 Nov 2026)')
+{
+  const picker = fs.readFileSync('app/dashboard/create/SessionPicker.tsx', 'utf-8')
+  ok(picker.includes("replace(/^0+(?=\\d)/, '')") && picker.includes("onFocus={() => { setText(String(value)); setFocused(true) }}"),
+    'the allowance box can be emptied — clearing 100 and typing 90 reads 90, never 090')
+  ok(picker.includes('How is a tied match finished?') && picker.includes('askMatchPoints={false}'),
+    'Matches ask how a tie is finished, never the points')
+  const setup = fs.readFileSync('app/components/LeaderboardSetup.tsx', 'utf-8')
+  ok(setup.includes('label="Close" onClick={onDismiss}'), 'a new secondary leaderboard has a ✕ to put it away')
+  const form = fs.readFileSync('app/dashboard/create/CreateLeagueForm.tsx', 'utf-8')
+  ok(!form.includes('Everything that isn’t the golf.'), 'Settings has no line under its title')
+  ok(form.includes('{!hasMatches && (<>') && form.includes('const readsGI = readsGolfIreland(scoreSource) && !eventHasMatches'),
+    'an event with Matches is never offered Golf Ireland')
+  ok(fs.readFileSync('app/components/TeeTimesAccess.tsx', 'utf-8').includes('Add a tee sheet?'), 'tee times asked as "Add a tee sheet?"')
+}
+
 section('The rule never reads the field (D85)')
 {
   const src = fs.readFileSync('lib/eventShape.ts', 'utf-8')

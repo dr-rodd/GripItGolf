@@ -190,6 +190,13 @@ Also worth knowing: under D82, an Overall can no longer be *made* over identical
 - **Step 2 (the field)** asks about a plus handicap ("Hold on there Cowboy!") when the field is left, as the trip wizard's field step does, and a blank handicap says "Shows as pending until they set it when claiming their name."
 - **Step 3 (the Format)**: a standalone event opens with **Single event / Multiple rounds** at the top. A single event's card carries the event's own name, never "Round 1". Multiple rounds are each named the way a session is ("Round 2, or e.g. Saturday medal"), stored on the league's setup (`LeagueSetup.roundNames`, no migration) and printed by `roundLabelOf` on the round summary, the Scoring tab, the tee sheet and the organiser area. "+ Add another round". **Every format answer says what it is in a sentence** the moment it is tapped (`formatSentence` in `lib/sessions.ts`).
 
+## After Ross's check 3 (13 Nov 2026)
+
+- **The allowance box** can be emptied while typing — clearing 100 and typing 90 reads 90, never "090" (`PercentField` in `SessionPicker.tsx`); only 1–100 is handed on, and an empty box goes back to the last figure.
+- **Matches ask how a tied match is finished, never the points** (a match is a point, a half half): **Half a point each** (the default, every session before), **Extra holes** (the knockout's own card — down the 19th off the 1st until a hole is won; **migration 083** widens `session_match_scores.hole_number` to 36, paste by hand), or **Pick the winner** (all square after 18 is settled and the finish sheet asks which side; written as "won by decision"). Stored on the session's board as `Leaderboard.matchTie` (absent = a half), read by the card (`playSessionCard(…, tie)`) and the server's read of every card (`sessionMatches.ts`). The Overall's feed at creation no longer asks a match's points.
+- **A new secondary leaderboard has a ✕** top right (`LeaderboardSetup onDismiss`).
+- **Settings**: no line under the title; **Golf Ireland is not offered to an event with Matches**; the tee times switch reads **"Add a tee sheet?"**.
+
 ## Left open after stage 8
 
 - **The live card's points on a foursomes pair** are the lead's own figure; the leaderboard's are the pair's (off half the combined handicaps). A partner can still be put on another card before the pair's card locks them.

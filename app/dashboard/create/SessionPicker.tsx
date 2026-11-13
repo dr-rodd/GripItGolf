@@ -15,7 +15,7 @@ import {
   MATCH_FORMATS, MATCHES_READY, OVERALL_RANKS, MAX_SESSION_NAME, MAX_SESSIONS, STROKE_FORMAT,
   describeFormat, describeFeed, resolvedFormats, usedFormats, sameFormat, sessionLabel, formatSentence,
   defaultMatchAllowance, defaultPositionPoints, DEFAULT_MATCH_FEED, formatPoints,
-  defaultMatchSlots, MAX_MATCH_SLOTS,
+  defaultMatchSlots, MAX_MATCH_SLOTS, MATCH_TIES,
 } from '@/lib/sessions'
 import { type RoundUnit, unitLabel } from '@/lib/eventShape'
 import { inkOn, setApart } from '@/lib/matchSides'
@@ -144,27 +144,71 @@ export function FormatPicker({ value, onChange, idle = false, allowMatches = tru
       {/* What the answer means, in a sentence, the moment it is tapped (Ross, 13 Nov 2026). */}
       {!idle && <p className={`t-cap text-ink/80 leading-snug px-3 py-2.5 ${cardClass('flat')}`}>{formatSentence(value)}</p>}
 
+      {/* How a tied match is finished — the one thing a Matches format asks
+          beyond its kind; what a match is worth stays a point (Ross, 13 Nov 2026). */}
+      {value.kind === 'matches' && (
+        <div>
+          <p className={FIELD_LABEL}>How is a tied match finished?</p>
+          <div className="space-y-2">
+            {MATCH_TIES.map(t => (
+              <button key={t.key} type="button" aria-pressed={!idle && (value.tie ?? 'half') === t.key}
+                className={optionClass(!idle && (value.tie ?? 'half') === t.key)}
+                onClick={() => onChange({ ...value, tie: t.key })}>
+                <p className="text-ink text-[15px] font-medium">{t.label}</p>
+                <p className="t-cap text-ink/65 mt-0.5">{t.hint}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div>
         <label className={FIELD_LABEL}>Handicap allowance</label>
         <div className="flex items-center gap-2">
-          <input
-            type="number"
-            inputMode="numeric"
-            min={0}
-            max={100}
-            className={`${FIELD} w-24`}
+          <PercentField
             value={value.handicapAllowance ?? (value.kind === 'matches' ? defaultMatchAllowance(value.match) : 100)}
-            onChange={e => {
-              const n = Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0)))
-              onChange({ ...value, handicapAllowance: n })
-            }}
-            aria-label="Handicap allowance, percent"
+            onChange={n => onChange({ ...value, handicapAllowance: n })}
+            label="Handicap allowance, percent"
           />
           <span className="text-ink/65 text-sm">{value.kind === 'stroke' && value.audience === 'team' && value.teamFormat === 'foursomes'
             ? '% of the pair’s combined course handicaps' : '% of each player’s course handicap'}</span>
         </div>
       </div>
     </div>
+  )
+}
+
+// ─── A percentage box ──────────────────────────────────────────
+
+/**
+ * A handicap allowance typed in (Ross, 13 Nov 2026): the box may be
+ * emptied while typing — clearing 100 and typing 90 reads 90, never "090" —
+ * and only a whole number from 1 to 100 is handed on. Left empty, it goes
+ * back to the last figure given.
+ */
+function PercentField({ value, onChange, label }: { value: number; onChange: (n: number) => void; label: string }) {
+  const [text, setText] = useState(String(value))
+  const [focused, setFocused] = useState(false)
+  // Shown as typed while the box has the finger; the figure itself otherwise.
+  const shown = focused ? text : String(value)
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      pattern="[0-9]*"
+      maxLength={3}
+      className={`${FIELD} w-24`}
+      value={shown}
+      onFocus={() => { setText(String(value)); setFocused(true) }}
+      onChange={e => {
+        const digits = e.target.value.replace(/\D/g, '').replace(/^0+(?=\d)/, '').slice(0, 3)
+        setText(digits)
+        const n = Number(digits)
+        if (digits && n >= 1 && n <= 100) onChange(n)
+      }}
+      onBlur={() => setFocused(false)}
+      aria-label={label}
+    />
   )
 }
 
@@ -337,15 +381,10 @@ export function RoundList({
                       {r.format === 'same' && first && (
                         // D86: the same format off another allowance is still the same format.
                         <div className="flex items-center gap-2 pl-1">
-                          <input
-                            type="number"
-                            inputMode="numeric"
-                            min={0}
-                            max={100}
-                            className={`${FIELD} w-24`}
+                          <PercentField
                             value={r.allowance ?? first.handicapAllowance ?? (first.kind === 'matches' ? defaultMatchAllowance(first.match) : 100)}
-                            onChange={e => set(i, { allowance: Math.max(0, Math.min(100, Math.round(Number(e.target.value) || 0))) })}
-                            aria-label={`Handicap allowance for ${label}, percent`}
+                            onChange={n => set(i, { allowance: n })}
+                            label={`Handicap allowance for ${label}, percent`}
                           />
                           <span className="text-ink/65 text-sm">% handicap for this {unit.toLowerCase()}</span>
                         </div>
@@ -505,6 +544,7 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
                   entrants={entrants}
                   label={sessionLabel(s, i)}
                   onChange={next => setFeed(s.key, next)}
+                  askMatchPoints={false}
                 />
               </div>
             )
@@ -517,7 +557,13 @@ export function OverallSetup({ sessions, ranks, onRanks, feeds, onFeeds, tagsOn,
 }
 
 /** How one session feeds the Overall — counts or not, and what it pays. */
-export function FeedEditor({ format, feed, entrants, label, onChange }: {
+export function FeedEditor({ format, feed, entrants, label, onChange, askMatchPoints = true }: {
+  /**
+   * Whether a Matches session's points are asked. Creation does not (Ross,
+   * 13 Nov 2026: a match is a point, a half half — how a tie is finished is
+   * the question); the organiser's Formats page still can.
+   */
+  askMatchPoints?: boolean
   format: SessionFormat | null
   feed: SessionFeed
   entrants: number
@@ -540,7 +586,7 @@ export function FeedEditor({ format, feed, entrants, label, onChange }: {
           Doesn&apos;t count
         </button>
       </div>
-      {feed.kind === 'match' && (
+      {feed.kind === 'match' && askMatchPoints && (
         <div className="grid grid-cols-3 gap-2 mt-3">
           {(['win', 'half', 'loss'] as const).map(k => (
             <label key={k} className="block">

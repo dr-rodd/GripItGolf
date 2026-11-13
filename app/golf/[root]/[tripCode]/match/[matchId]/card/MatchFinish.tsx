@@ -2,7 +2,7 @@
 
 import { createPortal } from 'react-dom'
 import DotBloom from '@/app/components/DotBloom'
-import { buttonClass } from '@/app/components/ui'
+import { buttonClass, chipClass } from '@/app/components/ui'
 import { type CardHole, type CardSideKey, type CardSideView, type HoleOutcome } from '@/lib/matchCard'
 import { MatchScoresTable } from './MatchScorecard'
 import type { SideColour } from '@/lib/matchSides'
@@ -21,8 +21,13 @@ import type { SideColour } from '@/lib/matchSides'
  */
 export default function MatchFinish({
   phase, bloom, a, b, colours, holes, outcomes, scores, headline, winner, saving, error,
-  onFinalise, onFix, onClose, canContinue, onContinue,
+  onFinalise, onFix, onClose, canContinue, onContinue, decide = null,
 }: {
+  /**
+   * A session match level after 18 whose tie is picked by hand (Ross, 13
+   * Nov 2026): the two sides to choose from, and Finalise waits for one.
+   */
+  decide?: { a: string; b: string; pick: CardSideKey | null; onPick: (side: CardSideKey) => void } | null
   phase: 'confirm' | 'done'
   /** Straight after finalising: the one celebration. */
   bloom: boolean
@@ -70,8 +75,20 @@ export default function MatchFinish({
 
           {phase === 'confirm' ? (
             <>
+              {decide && (
+                <div className="flex gap-2 mt-5">
+                  {(['A', 'B'] as const).map(side => (
+                    <button key={side} type="button" aria-pressed={decide.pick === side}
+                      onClick={() => decide.onPick(side)}
+                      className={`${chipClass(decide.pick === side)} flex-1 min-w-0`}>
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: colours[side].fill }} aria-hidden="true" />
+                      <span className="truncate">{side === 'A' ? decide.a : decide.b}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
               {error && <p className="text-rust-deep text-sm text-center leading-snug mt-3">{error}</p>}
-              <button type="button" onClick={onFinalise} disabled={saving} className={`${buttonClass('primary')} mt-5`}>
+              <button type="button" onClick={onFinalise} disabled={saving || (!!decide && !decide.pick)} className={`${buttonClass('primary')} mt-5`}>
                 {saving ? 'Finalising…' : 'Yes — finalise the match'}
               </button>
               <button type="button" onClick={onFix} disabled={saving} className={`${buttonClass('secondary')} mt-2`}>

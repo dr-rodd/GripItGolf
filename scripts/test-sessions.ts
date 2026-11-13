@@ -293,6 +293,30 @@ section('A session match: eighteen holes, and a half is a result (D44)')
   eq(sessionResult(level.state), { result: 'halved', margin: 'A/S' }, '  …and writes a half')
   const won = playSessionCard(holes18, A, B, card([3, 3, 3, ...Array(13).fill(4)], Array(16).fill(4)))
   eq(sessionResult(won.state), { result: 'a', margin: '3&2' }, 'a match won early writes its side and margin')
+  // How a tied match is finished (Ross, 13 Nov 2026).
+  const decide = playSessionCard(holes18, A, B, card(Array(18).fill(4), Array(18).fill(4)), 'manual')
+  ok(decide.state.settled && !decide.state.halved && decide.state.decide === true, 'a tie picked by hand: settled, not halved, waiting for a pick')
+  eq(sessionResult(decide.state), null, '  …nothing written until a side is picked')
+  eq(sessionResult(decide.state, 'B'), { result: 'b', margin: 'by decision' }, '  …then the side picked, "by decision"')
+  const extra = playSessionCard(holes18, A, B, card(Array(18).fill(4), Array(18).fill(4)), 'extra')
+  ok(!extra.state.settled && extra.holes.length === 19, 'a tie on extra holes goes down the 19th')
+  const extraWon = playSessionCard(holes18, A, B, card([...Array(18).fill(4), 3], [...Array(18).fill(4), 4]), 'extra')
+  eq(sessionResult(extraWon.state), { result: 'a', margin: extraWon.state.result }, '  …and is won there')
+  ok(/19/.test(extraWon.state.result ?? ''), '  …"at 19th"')
+  eq(sessionResult(playSessionCard(holes18, A, B, card(Array(18).fill(4), Array(18).fill(4)), 'half').state),
+    { result: 'halved', margin: 'A/S' }, 'half, the default, as ever')
+  const tieBoard = sessionBoard({ kind: 'matches', match: 'singles', tie: 'extra' }, 'r1', 'day:r1')
+  eq(tieBoard.matchTie, 'extra', 'the answer rides on the session’s board')
+  eq(parseLeaderboards([tieBoard])[0]?.matchTie, 'extra', '  …is read back')
+  eq(formatOfBoard(parseLeaderboards([tieBoard])[0])?.kind === 'matches' && (formatOfBoard(parseLeaderboards([tieBoard])[0]) as { tie?: string }).tie, 'extra',
+    '  …and back into the format')
+  eq(sessionBoard({ kind: 'matches', match: 'singles', tie: 'half' }, 'r1', 'day:r1').matchTie, undefined, 'a half writes nothing — every older board reads the same')
+  const finish = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
+  ok(finish.includes('disabled={saving || (!!decide && !decide.pick)}'), 'the finish sheet waits for a pick when the tie is decided by hand')
+  ok(read('app/golf/[root]/[tripCode]/session/sessionMatches.ts').includes("playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half')"),
+    'the server reads a card by the same answer')
+  ok(read('supabase/migrations/20260101000083_session_extra_holes.sql').includes('CHECK (hole_number BETWEEN 1 AND 36)'),
+    'migration 083 lets a session card take the 19th')
   const going = playSessionCard(holes18, A, B, card([3, 4], [4, 4]))
   ok(!going.state.settled && sessionResult(going.state) === null, 'a match still in play writes nothing')
 }

@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import {
-  REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
+  type MatchTie, REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
   sessionResult, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
@@ -73,8 +73,10 @@ const MAX_GROSS = 20
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, pinSet,
   stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null, courseId = null,
-  session = false, startOn = 'card',
+  session = false, startOn = 'card', tie = 'half',
 }: {
+  /** A session match: how a match level after 18 is finished (Ross, 13 Nov 2026). */
+  tie?: MatchTie
   /**
    * Which face it opens on: the card for scoring, or the scorecard — the
    * match hole by hole — for somebody arriving from the leaderboard to see
@@ -210,10 +212,14 @@ export default function MatchCardClient({
   const { holes, outcomes, state } = useMemo(() => {
     const byPlayer = new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))]))
     return session
-      ? playSessionCard(baseHoles, sides.A, sides.B, byPlayer)
+      ? playSessionCard(baseHoles, sides.A, sides.B, byPlayer, tie)
       : playCard(baseHoles, sides.A, sides.B, byPlayer,
         new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])), plan)
-  }, [baseHoles, sides, scores, conceded, plan, session])
+  }, [baseHoles, sides, scores, conceded, plan, session, tie])
+  // All square after 18 on a session whose tie is picked by hand: the side
+  // chosen in the finish sheet, written as "won by decision".
+  const decide = session && 'decide' in state && (state as { decide?: boolean }).decide === true
+  const [pick, setPick] = useState<CardSideKey | null>(null)
   // A session match may finish halved — a result with no winner (D44).
   const halved = session && 'halved' in state && (state as { halved: boolean }).halved
   const current = hole ?? (loaded ? openingHole(outcomes) : 1)
@@ -224,7 +230,8 @@ export default function MatchCardClient({
   const firstOpen = holes.find(x => !outcomes.find(o => o.holeNumber === x.holeNumber)?.winner)?.holeNumber
   const holeOpen = !loaded || firstOpen === undefined || current <= firstOpen
   const editHere = canEdit && holeOpen
-  const winnerId = state.leader === 'A' ? a.id : state.leader === 'B' ? b.id : null
+  const winnerSide: CardSideKey | null = decide ? pick : state.leader
+  const winnerId = winnerSide === 'A' ? a.id : winnerSide === 'B' ? b.id : null
 
   // ── Writing ──
   // One write at a time per box, in the order tapped.
@@ -311,7 +318,7 @@ export default function MatchCardClient({
       }
       if (session) {
         // Onto the session's own row, never a bracket.
-        const res = sessionResult(state as Parameters<typeof sessionResult>[0])
+        const res = sessionResult(state as Parameters<typeof sessionResult>[0], pick)
         if (!res) return false
         const { data: hit, error: err } = await supabase.from('session_matches')
           .update({ result: res.result, margin: res.margin, updated_at: new Date().toISOString() })
@@ -337,7 +344,7 @@ export default function MatchCardClient({
       writing.current = false
       setSaving(false)
     }
-  }, [state, winnerId, tripId, matchId, router, session, outbox, mine])
+  }, [state, winnerId, tripId, matchId, router, session, outbox, mine, pick])
 
   // ── The end of the match: confirm, finalise, then the card ──
   // Nothing interrupts while scores are going in (Ross, 26 Oct 2026: the
@@ -424,6 +431,7 @@ export default function MatchCardClient({
 
   const nameOf = (key: CardSideKey) => (key === 'A' ? a.name : b.name)
   const status = halved ? 'Halved'
+    : decide ? (pick ? `${nameOf(pick)} wins` : 'All square after 18 — who wins?')
     : state.settled && state.leader
     ? `${nameOf(state.leader)} wins ${state.result}`
     : state.extra ? `${state.progress} — down the ${ordinal(state.played + 1)}`
@@ -624,8 +632,10 @@ export default function MatchCardClient({
       </div>
 
       {/* An extra hole: which course hole it is played off — the 1st and
-          on unless the players pick another. Same shots, until one is won. */}
-      {current > REGULATION_HOLES && (
+          on unless the players pick another. Same shots, until one is won.
+          A session's extra holes run on from the 1st: its row has nowhere to
+          keep another choice. */}
+      {current > REGULATION_HOLES && !session && (
         <label className="flex items-center justify-end gap-2 t-cap text-ink/80 -mt-1">
           Played off the
           <select
@@ -721,7 +731,8 @@ export default function MatchCardClient({
           outcomes={outcomes}
           scores={scores}
           headline={status}
-          winner={state.leader}
+          winner={winnerSide}
+          decide={decide ? { a: a.name, b: b.name, pick, onPick: setPick } : null}
           saving={saving}
           error={error}
           onFinalise={finalise}

@@ -728,7 +728,7 @@ function RoundLinks({
 
 function Builder({
   existing, initial, playerCount, teamCount, rounds, askTeeTeams = false,
-  askTags = false, scope, onSave, onCancel,
+  askTags = false, scope, onSave, onCancel, onDismiss = null,
 }: {
   /** What the trip already runs, NOT counting the board being edited. */
   existing: Leaderboard[]
@@ -756,6 +756,8 @@ function Builder({
   scope?: string[]
   onSave: (lb: Leaderboard) => void
   onCancel: (() => void) | null
+  /** A new board's ✕, top right: put the form away without saving (Ross, 13 Nov 2026). */
+  onDismiss?: (() => void) | null
 }) {
   const fresh = scope?.length ? { ...FRESH, roundIds: scope } : FRESH
   const [draft, setDraft] = useState<Partial<Leaderboard>>(initial ?? fresh)
@@ -792,7 +794,12 @@ function Builder({
 
   return (
     <Card className="p-5 flex flex-col gap-5">
-      <div>
+      <div className={`relative ${onDismiss && !editing ? 'pr-10' : ''}`}>
+        {onDismiss && !editing && (
+          <IconButton dense label="Close" onClick={onDismiss} className="absolute -top-2 -right-2">
+            <IconX size={20} />
+          </IconButton>
+        )}
         {/* "Another", not "A second". The heading counted for you, and it
             counted wrong every time after the first: adding a fifth board
             was still announced as adding a second. Counting is the one thing
@@ -1319,8 +1326,14 @@ function Builder({
 
 export default function LeaderboardSetup({
   boards, playerCount, teamCount, rounds = [], readOnly = false, onChange,
-  askTeeTeams = false, askTags = false, scope, title, hint, alongside = [], secondary = false,
+  askTeeTeams = false, askTags = false, scope, title, hint, alongside = [], secondary = false, onDismiss,
 }: {
+  /**
+   * Where a form with nothing saved yet goes when its ✕ is tapped — the
+   * creation wizard folds "Add a secondary leaderboard" away again. Once a
+   * board exists the ✕ puts the new form away by itself.
+   */
+  onDismiss?: () => void
   boards: Leaderboard[]
   /**
    * Boards that sit beside these but are not edited here — the leaderboard
@@ -1531,6 +1544,7 @@ export default function LeaderboardSetup({
           scope={scope}
           onSave={save}
           onCancel={done ? () => setAdding(false) : null}
+          onDismiss={done ? () => setAdding(false) : onDismiss ?? null}
         />
       )}
 
