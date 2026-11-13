@@ -407,3 +407,39 @@ export function formatStepIssue(
   }
   return null
 }
+
+// ─── A secondary over rounds it cannot read (D83, D87) ─────────
+
+/**
+ * The rounds a stroke board counts but cannot read: every Matches session in
+ * its scope. A match card lives on the match — its own table, stopping when
+ * the match is settled, a conceded hole without a score — so no stroke board
+ * reads one. The board is never refused and the round never dropped from it;
+ * it says so instead (Ross, 13 Nov 2026). Empty for anything that is not an
+ * ordinary stroke board, a session's own included.
+ */
+export function unreadRounds(
+  lb: Leaderboard, boards: readonly Leaderboard[], roundIds: readonly string[],
+): string[] {
+  if (lb.competition !== 'league' || isSessionBoard(lb)) return []
+  const scope = lb.roundIds?.length ? roundIds.filter(id => lb.roundIds!.includes(id)) : roundIds
+  return scope.filter(id => sessionBoardFor(boards, id)?.competition === 'matches')
+}
+
+/**
+ * The fact a board's line says about them — "Leaves out Session 2",
+ * "Leaves out 3 sessions" — held to the facts line's length (28).
+ */
+export function unreadFact(names: readonly string[]): string | null {
+  if (names.length === 0) return null
+  const one = `Leaves out ${names[0]}`
+  if (names.length === 1 && one.length <= 28) return one
+  return `Leaves out ${names.length} session${names.length === 1 ? '' : 's'}`
+}
+
+/** The sentence the creation grid says under such a board. */
+export function unreadSentence(title: string, names: readonly string[]): string | null {
+  if (names.length === 0) return null
+  const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
+  return `${title} leaves out ${list}: ${names.length === 1 ? 'its' : 'their'} matches have no stroke card.`
+}

@@ -37,7 +37,7 @@ import {
   type LeaguePeriod, type PeriodRule, PERIOD_RULES, MAX_PERIODS, MAX_PERIOD_EVERY,
   equalPeriods, periodsIssue, describePeriod,
 } from '@/lib/leagueSetup'
-import { type Leaderboard, boardFacts, MAX_DISCARD, ALL_TEAM_FORMATS } from '@/lib/leaderboards'
+import { type Leaderboard, boardFacts, boardTitle, MAX_DISCARD, ALL_TEAM_FORMATS } from '@/lib/leaderboards'
 import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import {
   type EventPermissions, defaultPermissions, permissionsFor, storedPermissions,
@@ -64,6 +64,7 @@ import {
 } from '@/lib/sessions'
 import {
   type ShapeAnswer, eventShape, answeredShape, boardsForCreation, shapeSentence, formatStepIssue, unitLabel,
+  unreadRounds, unreadSentence,
 } from '@/lib/eventShape'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
 
@@ -1412,6 +1413,13 @@ export default function CreateLeagueForm({ schedule, onExit }: {
                     askTags
                     onChange={next => { setSecondaries(next); if (next.length === 0) setAddingSecondary(false) }}
                   />
+                  {/* A stroke board over a Matches session names it (D87). */}
+                  {secondaries.map(b => {
+                    const ids = rounds.map((_, i) => `preview-${i}`)
+                    const line = unreadSentence(boardTitle(b), unreadRounds(b, preview, ids)
+                      .map(id => unitLabel(unit, ids.indexOf(id) + 1, rounds[ids.indexOf(id)]?.name)))
+                    return line ? <p key={b.id} className="t-cap text-ink/65 mt-2 leading-snug">{line}</p> : null
+                  })}
                 </div>
               ) : (
                 <button type="button" className={`${buttonClass('secondary')} mt-4`} onClick={() => setAddingSecondary(true)}>

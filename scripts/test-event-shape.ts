@@ -10,7 +10,8 @@
 import fs from 'fs'
 import {
   eventShape, answeredShape, storedShape, roundFormatsOf, boardName, mainLeagueBoard,
-  shapeKey, unitLabel, roundLabelOf, boardsForCreation, formatStepIssue, type ShapeInput,
+  shapeKey, unitLabel, roundLabelOf, boardsForCreation, formatStepIssue, unreadRounds, unreadFact, unreadSentence,
+  type ShapeInput,
 } from '../lib/eventShape'
 import { type SessionFormat, type SessionDraft, syncDrafts, resolvedFormats, STROKE_FORMAT } from '../lib/sessions'
 import { parseLeaderboards } from '../lib/leaderboards'
@@ -262,6 +263,33 @@ section('Stroke rounds in different formats: asked once (stage 4, D90)')
   const form = fs.readFileSync('app/dashboard/create/CreateLeagueForm.tsx', 'utf-8')
   ok(form.includes("'One total across every round'") && form.includes("'Points per round'"), 'the wizard asks it in Ross’s words')
   ok(form.includes("key === 'format' ? formatProblem === null && !asking"), '  …and waits for an answer')
+}
+
+section('A secondary beside the Overall names what it cannot read (stage 5, D83, D87)')
+{
+  const sec = { id: 'sec', audience: 'individual' as const, competition: 'league' as const, scoring: 'stableford' as const, combine: 'total' as const }
+  const boards = boardsForCreation({
+    rounds: [
+      { roundId: 'r1', format: foursomes }, { roundId: 'r2', format: sf() }, { roundId: 'r3', format: singles },
+    ],
+    shape: eventShape({ formats: [foursomes, sf(), singles], tags: 2 }), ranks: 'tags', entrants: 2, fieldSize: 24,
+    secondaries: [sec],
+  })
+  eq(boards.map(b => b.id).at(-1), 'sec', 'a secondary sits beside the Overall (D83)')
+  eq(unreadRounds(sec, boards, ['r1', 'r2', 'r3']), ['r1', 'r3'],
+    'a stroke secondary leaves out every Matches session — foursomes, singles alike')
+  eq(unreadRounds({ ...sec, roundIds: ['r2'] }, boards, ['r1', 'r2', 'r3']), [], '  …nothing where it counts only stroke rounds')
+  eq(unreadRounds(boards[0], boards, ['r1', 'r2', 'r3']), [], '  …and the Overall reads them all')
+  eq(unreadRounds(boards.find(b => b.id === 'lb-session-r2')!, boards, ['r1', 'r2', 'r3']), [], '  …as does a session’s own board')
+  eq(unreadRounds(sec, [sec], ['r1', 'r2']), [], 'no Overall, nothing left out')
+  eq(unreadFact(['Session 1']), 'Leaves out Session 1', 'the fact names one session')
+  eq(unreadFact(['Session 1', 'Session 3']), 'Leaves out 2 sessions', '  …and counts several')
+  ok((unreadFact(['A very long session name indeed']) ?? '').length <= 28, '  …held to the facts line’s length')
+  eq(unreadFact([]), null, '  …and says nothing when nothing is left out')
+  eq(unreadSentence('Stableford Points', ['Session 1', 'Session 3']),
+    'Stableford Points leaves out Session 1 and Session 3: their matches have no stroke card.', 'the creation grid’s sentence')
+  const lb = fs.readFileSync('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx', 'utf-8')
+  ok(lb.includes('const unread = unreadRounds(activeBoard, boards, rounds.map(r => r.id))'), 'the leaderboard’s facts line says it')
 }
 
 section('The Format step’s rounds follow the playing days')

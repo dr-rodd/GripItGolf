@@ -6,7 +6,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
-import { boardName } from '@/lib/eventShape'
+import { boardName, unreadRounds, unreadFact, roundLabelOf } from '@/lib/eventShape'
 import {
   type Leaderboard, boardTitle, boardFacts, hasMatchplay,
 } from '@/lib/leaderboards'
@@ -1940,6 +1940,16 @@ export default function TripLeaderboardClient({
     : activeBoard)
   // A league of periods says which card counts — a fact of every board on it.
   if (periodRounds) rules.push(periodRuleFact(periodRule))
+  // A stroke board beside an Overall names the Matches sessions it cannot
+  // read, rather than leaving their columns to look unplayed (D87).
+  {
+    const unread = unreadRounds(activeBoard, boards, rounds.map(r => r.id))
+    const fact = unreadFact(unread.map(id => {
+      const r = rounds.find(x => x.id === id)
+      return roundLabelOf(boards, id, r?.round_number ?? 0)
+    }))
+    if (fact) rules.push(fact)
+  }
   // "14½ to win" — only when every session is Matches with fixed points and
   // two sides are ranked (lib/sessions.ts `targetLine`).
   if (activeBoard.competition === 'overall' && activeBoard.overall) {
