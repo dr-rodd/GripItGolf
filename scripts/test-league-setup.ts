@@ -910,7 +910,7 @@ section('A Golf Ireland card played as a round counts as that round, and switche
 
   const rc = read('lib/rowContext.ts')
   ok(rc.includes('roundCards: input.roundCards'), 'the one assembly carries them')
-  for (const f of ['app/golf/[root]/[tripCode]/leaderboard/page.tsx', 'app/golf/[root]/[tripCode]/export/page.tsx',
+  for (const f of ['app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts', 'app/golf/[root]/[tripCode]/export/page.tsx',
                    'lib/hubStanding.ts', 'app/golf/[root]/[tripCode]/scoring/page.tsx']) {
     ok(read(f).includes('readRoundCards('), `${f} reads them through the one reader`)
   }

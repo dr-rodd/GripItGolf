@@ -821,7 +821,7 @@ section('A match play event ranks its tags by matches won')
   }), [], '  …and handed no results, it draws no rows rather than a table of noughts')
   const page = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
   ok(page.includes('<TagTally') && page.includes('boards.find(isMatchTally)'), 'it stands under the bracket — the event\'s leaderboard tab')
-  const lbPage = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
+  const lbPage = read('app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts')
   ok(lbPage.includes("lb.competition === 'matchplay' || isMatchTally(lb)") && lbPage.includes('.filter(lb => !isMatchTally(lb))'),
     '  …so the leaderboard still opens the bracket, and never draws an empty tally')
 }

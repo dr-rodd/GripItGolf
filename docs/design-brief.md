@@ -250,6 +250,12 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D73 | Whoever may start a round may add its course: "Add a course" is in every course picker, the photo deferrable, and the field's add-courses setting is gone | Built |
 | D74 | A user's course is live for everyone at once; the database knows which courses the system added and which a user did (`courses.added_by`, migration 074), never who. A review to confirm them is a future project | Built (074 to paste) |
 | D75 | New default team colours: brick, cobalt, plum, orange, slate, rose, olive, navy. Existing teams keep theirs (decided as D73 on 11 Nov; renumbered, D73 was already taken) | Built |
+
+| # | Decision | Status |
+|---|---|---|
+| D91 | The golf leaderboard reads from one shared server copy per event, at most 10 seconds old (`GOLF_BOARD_SECONDS`), to cut what Supabase sends out. Nothing a player sees changes; the poller stays at 15s live, 3 min idle (Ross, 14 Nov 2026) | Built |
+| D92 | A look at an older copy reads the database once and shows that read, which becomes the copy — never the old one shown while it refreshes behind, never two reads for one look. A failed read is never kept and never shown as an empty board | Built |
+| D93 | The copy is not dropped when a card is committed; a score reaches other boards within about 25 seconds. Revisit only if 10 seconds draws a complaint. The other golf screens stay uncached for now | Built |
 | D76 | The card check offers a tee's colour, approximated from the card or the tee's name, only where the name does not already say one; kept on the tee and drawn on its dot. Team-colour dots wear a hairline ring | Built (075 to paste) |
 | D77 | Creation asks for a Format and Settings, never a "leaderboard"; "Enable Dynamic Overall Leaderboard?" is removed (replaces D35) | Built (stage 3) |
 | D78 | Creation's order: details, field, Format, Settings | Built (stage 3) |

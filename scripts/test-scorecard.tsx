@@ -627,7 +627,7 @@ section('A scorecard survives being left and reopened')
     'app/scoring/LiveScoringFlow.tsx',
     'app/scoring/LiveLeaderboardPanel.tsx',
     'app/scoring/[slug]/CourseDashboardClient.tsx',
-    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts',
     'app/golf/[root]/[tripCode]/scoring/page.tsx',
   ]) {
     const src = read(f)

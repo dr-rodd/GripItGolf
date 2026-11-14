@@ -1146,7 +1146,7 @@ section('The lab reads the derivation and does none of its own')
   ok(!/putts|fairway_hit|true\)/.test(boardFetch),
     '  …and a board does not')
   for (const f of [
-    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts',
     'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]) {
     const q = code(f).match(/from\('trips'\)[\s\S]{0,80}?\.select\(([^)]*)\)/)?.[1] ?? ''

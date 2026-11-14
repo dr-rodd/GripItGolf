@@ -780,7 +780,7 @@ section('A linked player carries the mark wherever the league names them')
     'app/golf/[root]/[tripCode]/page.tsx',
     'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx',
   ]) ok(/<LinkedBadge\b/.test(read(f)), `${f} shows the mark`)
-  for (const f of ['app/golf/[root]/[tripCode]/page.tsx', 'app/golf/[root]/[tripCode]/leaderboard/page.tsx']) {
+  for (const f of ['app/golf/[root]/[tripCode]/page.tsx', 'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts']) {
     ok(read(f).includes('golfIrelandLinkedIds('), `${f} reads the links through the one helper`)
   }
   const helper = read('app/golf/[root]/[tripCode]/golfIreland.ts')

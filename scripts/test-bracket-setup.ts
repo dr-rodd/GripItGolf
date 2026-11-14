@@ -183,7 +183,7 @@ section('A match play event is a knockout from the moment it is made')
     '  …read in their own fail-soft query, never the trip\'s select')
   ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
     '  …lined up with the rounds actually drawn')
-  const board2 = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
+  const board2 = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx') + read('app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts')
   ok(board2.includes('isKnockoutEvent(') && board2.includes('redirect(`${tripHome}/matchplay`)'),
     'a match play event\'s leaderboard tab is the bracket')
   ok(board2.includes("own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))"),

@@ -301,7 +301,7 @@ section('A player picks their own colour while the event has no sides')
   const readers = [
     'app/golf/[root]/[tripCode]/knockout.ts',
     'app/golf/[root]/[tripCode]/matchplay/page.tsx',
-    'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
+    'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts',
     'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]
   for (const f of readers) {

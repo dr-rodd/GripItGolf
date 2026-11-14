@@ -1,45 +1,19 @@
 import { notFound, redirect } from 'next/navigation'
-import { overallOf } from '@/lib/sessions'
-import { readSessionResults } from '../session/sessionMatches'
-import { isKnockoutEvent } from '@/lib/bracketSetup'
-import { eventReader } from '@/lib/eventReader'
-import { parseFormats } from '@/lib/formats'
-import { isMatchTally, parseLeaderboards } from '@/lib/leaderboards'
-import { tripBoards, isLegacy } from '@/lib/leaderboardsCompat'
+import { isLegacy } from '@/lib/leaderboardsCompat'
+import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
-import { fetchMemberships } from '@/lib/teamMembers'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
 import { isEvent } from '@/lib/eventHub'
-import { parseLeagueSetup, isPeriodLeague } from '@/lib/leagueSetup'
+import { isPeriodLeague } from '@/lib/leagueSetup'
 import Poller from '@/app/components/Poller'
-import { readScores, readLiveScores, readRoundHandicaps } from '@/lib/scoreReads'
-import TripLeaderboardClient, { type Score, type LiveScore, type RoundHcp } from './TripLeaderboardClient'
+import TripLeaderboardClient from './TripLeaderboardClient'
 import SupportLink from '@/app/components/SupportLink'
 import TripHeader from '@/app/components/TripHeader'
-import { golfIrelandLinkedIds } from '../golfIreland'
-import { readRoundCards } from '@/lib/golfIrelandCards'
 import { picksFrom, playerColourOf } from '@/lib/playerColours'
 import { tripHomeAt } from '@/lib/tripPaths'
+import { boardCopy } from './boardCopy'
 
 export const dynamic = 'force-dynamic'
-
-/**
- * What this page reads off a round.
- *
- * The query asks for `rounds(*)` so the casual flag rides along without being
- * named — migration 031 is run by hand. This names the columns actually used,
- * which is also what lets the file drop the three `any` casts it carried back
- * when `rounds` came out of a separate untyped query.
- */
-type BoardRound = {
-  id: string
-  round_number: number
-  status?: string
-  casual?: boolean
-  scheduled_date?: string | null
-  course_id?: string | null
-  courses: { id: string; name: string } | null
-}
 
 export default async function TripLeaderboardPage({
   params,
@@ -47,131 +21,27 @@ export default async function TripLeaderboardPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
-  const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 
-  // The trip and its rounds in one request.
-  //
-  // Everything below is scoped by round or by course, so the rounds have to
-  // be known before the big batch can be asked for — which used to mean a
-  // second round trip, waited for on its own, between the trip lookup and the
-  // nine queries under it. Embedding them costs nothing: the two are joined
-  // by `rounds.trip_id`, so Postgres does the work this end and one request
-  // comes back with both. This is the slowest page in the app and that hop
-  // was pure latency on it.
-  //
-  // `rounds(*)` rather than a column list, so the casual flag rides along
-  // without being named — migration 031 is run by hand, and this page must
-  // keep working on a database without it. The ordering has to name the
-  // embedded table; left off, the rounds come back in whatever order the
-  // join produced and the board's columns are shuffled.
-  const { data: trip } = await db
-    .from('trips')
-    .select('*, rounds(*, courses(id, name))')
-    .eq('trip_code', tripCode)
-    .order('round_number', { referencedTable: 'rounds' })
-    .single()
-  if (!trip) notFound()
+  // Everything the board reads, from the event's shared server copy — at
+  // most GOLF_BOARD_SECONDS old, or read fresh for this look (boardCopy.ts).
+  // Nothing about who is looking is in it; anything per-viewer this page
+  // ever needs is read here, beside it.
+  const copy = await boardCopy(tripCode)
+  if (!copy) notFound()
 
-  const rounds = (trip.rounds ?? []) as BoardRound[]
+  // A match play event's leaderboard is its bracket, unless the organiser
+  // has added a board beside the draw (boardCopy.ts, opensBracket).
+  if (copy.bracket) redirect(`${tripHome}/matchplay`)
 
-  // Parsed up front: the Golf Ireland cards are read in the batch below,
-  // and only for a league that reads them.
-  const leagueSetup = isEvent((trip as { kind?: unknown }).kind)
-    ? parseLeagueSetup((trip as { bracket_setup?: unknown }).bracket_setup)
-    : null
-
-  // A match play event's leaderboard is its bracket (docs/event-use-cases.md,
-  // story 2) — unless the organiser has added a board beside the draw, in
-  // which case the table stays and its strip links to the bracket as on a
-  // trip. Asked before the batch, so the hop costs nothing it did not need.
-  {
-    const own = parseLeaderboards(trip.leaderboards)
-    if (isEvent((trip as { kind?: unknown }).kind)
-        && isKnockoutEvent((trip as { bracket_setup?: unknown }).bracket_setup)
-        && own.length > 0 && own.every(lb => lb.competition === 'matchplay' || isMatchTally(lb))) {
-      redirect(`${tripHome}/matchplay`)
-    }
-  }
-
-  const roundIds  = rounds.map(r => r.id)
-  const courseIds = rounds.map(r => r.courses?.id).filter(Boolean)
-  const nilId     = '00000000-0000-0000-0000-000000000000'
-
-  const [teamsRes, playersRes, holesRes, scoresRes, liveScoresRes, hcpsRes, teesRes, openRes,
-         memberships, nicknamesRes, giLinked, roundCards, picksRes] =
-    await Promise.all([
-      db.from('teams').select('id, name, color, team_set').eq('trip_id', trip.id).order('created_at'),
-      db.from('players')
-        .select('id, name, handicap, gender, is_composite')
-        .eq('trip_id', trip.id).eq('is_composite', false).order('name'),
-      db.from('holes')
-        .select('id, hole_number, par, stroke_index, course_id, par_ladies, stroke_index_ladies')
-        .in('course_id', courseIds.length > 0 ? courseIds : [nilId])
-        .order('hole_number'),
-      // Every score, however many — lib/scoreReads.ts reads past Supabase's
-      // 1,000-row cap, which a trip of fourteen playing four rounds reaches.
-      readScores<Score>(db,
-        'player_id, hole_id, gross_score, stableford_points, no_return, round_id',
-        roundIds.length > 0 ? roundIds : [nilId]),
-      // In-progress scores — merged client-side so the board moves during play
-      readLiveScores<LiveScore>(db,
-        'player_id, round_id, hole_number, gross_score, stableford_points',
-        roundIds.length > 0 ? roundIds : [nilId]),
-      // `tee_id` comes with them: a board playing off a percentage needs the
-      // course handicap before it was rounded, and that can only be worked out
-      // again from the tee it was played off.
-      readRoundHandicaps<RoundHcp>(db,
-        'round_id, player_id, playing_handicap, tee_id',
-        roundIds.length > 0 ? roundIds : [nilId]),
-      // The ratings behind those tees, so the unrounded course handicap can be
-      // rebuilt. Only a board playing off a percentage reads it.
-      db.from('tees')
-        .select('id, slope, course_rating, par')
-        .in('course_id', courseIds.length > 0 ? courseIds : [nilId]),
-      // A round is "in play" when a scorecard is open on it — not merely
-      // because a score was once entered against it. The locks come with it:
-      // who is on that card is what decides which rows wear the live dot, and
-      // it has to be per player — not everybody plays every round, and a
-      // signed card is not live however busy the rest of the trip is.
-      db.from('live_rounds')
-        .select('id, round_id, live_player_locks(player_id)')
-        .eq('status', 'active')
-        .in('round_id', roundIds.length > 0 ? roundIds : [nilId]),
-      // Who is in which team, on every sheet. A trip can run a league between
-      // fours and a knockout between pairings, so this cannot be a field on
-      // the player — see lib/teamSets.ts.
-      fetchMemberships(trip.id, db),
-      // Leaderboard nicknames, on their own and fail-soft: naming the column
-      // in the players select above would fail the whole roster on a
-      // database that has not run migration 047, and a board without
-      // nicknames still stands.
-      db.from('players').select('id, nickname').eq('trip_id', trip.id),
-      // A Golf Ireland league's linked players — the mark beside their
-      // names. No query unless the league reads Golf Ireland.
-      golfIrelandLinkedIds(trip.id, (trip as { bracket_setup?: unknown }).bracket_setup),
-      // Its Golf Ireland cards, each on the round it was played as — read
-      // on the server, which alone can (lib/golfIrelandCards.ts).
-      readRoundCards(trip.id, leagueSetup, rounds),
-      // An event's players' own colours, on their own and fail-soft
-      // (migration 063). A trip offers no picker, so it asks for nothing.
-      isEvent((trip as { kind?: unknown }).kind)
-        ? db.from('players').select('id, colour').eq('trip_id', trip.id)
-        : Promise.resolve({ data: null }),
-    ])
-
-  // What the trip plays for. A stored list wins; a trip created before the
-  // column existed has its old flags read as the boards they described, so
-  // the client only ever renders one shape.
+  const { trip, rounds, leagueSetup, boards, teams, players, memberships } = copy
   const stored = parseLeaderboards(trip.leaderboards)
   const teamScoring = parseTeamScoring(trip.team_scoring)
-  // A tags tally lives under the bracket, which alone reads the results.
-  const boards = tripBoards(stored, parseFormats(trip.formats), teamScoring).filter(lb => !isMatchTally(lb))
 
   // How an event's days relate on the board, and whether this is an event
-  // at all. Both ride in on the `*` above rather than being named, so a
-  // database that has not run migrations 046/047 simply has neither and
-  // reads as the trip it has always been.
+  // at all. Both ride in on the `*` of the trips read rather than being
+  // named, so a database that has not run migrations 046/047 simply has
+  // neither and reads as the trip it has always been.
   const event = isEvent((trip as { kind?: unknown }).kind)
   const dayBoards = leagueSetup?.dayBoards
 
@@ -181,11 +51,8 @@ export default async function TripLeaderboardPage({
   // as they were.
   const playerColours: Record<string, string> = {}
   if (event) {
-    const colourOf = playerColourOf(
-      teamsRes.data ?? [], memberships,
-      picksFrom(picksRes.data as { id: string; colour?: string | null }[] | null),
-    )
-    for (const p of playersRes.data ?? []) {
+    const colourOf = playerColourOf(teams, memberships, picksFrom(copy.picks))
+    for (const p of players) {
       const c = colourOf(p.id)
       if (c) playerColours[p.id] = c
     }
@@ -196,18 +63,9 @@ export default async function TripLeaderboardPage({
   // Derived through the one copy of the rule: a vacant card — open, nobody
   // locked on — puts nothing in play. See liveRoundPresence in rowContext.
   const { activeRoundIds, livePlayerIds } =
-    liveRoundPresence((openRes.data ?? []) as unknown as OpenCard[])
+    liveRoundPresence(copy.open as unknown as OpenCard[])
   const hasActiveRound =
     activeRoundIds.length > 0 || rounds.some(r => r.status === 'active')
-
-  // A Dynamic Overall Leaderboard's Matches sessions: each match and where
-  // it stands, read on the server — what the Overall counts them from.
-  const sessionMatches = overallOf(boards) && boards.some(b => b.competition === 'matches')
-    ? await readSessionResults(db, trip, boards,
-        (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[],
-        { teams: (teamsRes.data ?? []) as { id: string; name: string }[], memberships })
-        .catch(e => { console.error('Leaderboard session matches read failed:', e); return [] })
-    : []
 
   return (
     <div className="min-h-dvh paper has-tabbar page-enter text-ink">
@@ -225,15 +83,15 @@ export default async function TripLeaderboardPage({
         livePlayerIds={livePlayerIds}
         legacyTeamScoring={isLegacy(stored) ? teamScoring : null}
         rounds={rounds}
-        teams={teamsRes.data ?? []}
+        teams={teams}
         memberships={memberships}
-        players={playersRes.data ?? []}
-        nicknames={(nicknamesRes.data ?? []) as { id: string; nickname: string | null }[]}
-        holes={holesRes.data ?? []}
-        scores={scoresRes.data ?? []}
-        liveScores={liveScoresRes.data ?? []}
-        roundHandicaps={hcpsRes.data ?? []}
-        tees={teesRes.data ?? []}
+        players={players}
+        nicknames={copy.nicknames}
+        holes={copy.holes}
+        scores={copy.scores}
+        liveScores={copy.liveScores}
+        roundHandicaps={copy.hcps}
+        tees={copy.tees}
         isEvent={event}
         playerColours={playerColours}
         dayBoards={dayBoards}
@@ -241,9 +99,9 @@ export default async function TripLeaderboardPage({
         periods={isPeriodLeague(leagueSetup) ? leagueSetup.periods : undefined}
         periodRule={isPeriodLeague(leagueSetup) ? leagueSetup.periodRule : undefined}
         cardsOff={leagueSetup?.cardsOff}
-        roundCards={roundCards}
-        linkedIds={giLinked}
-        sessionMatches={sessionMatches}
+        roundCards={copy.roundCards}
+        linkedIds={copy.giLinked}
+        sessionMatches={copy.sessionMatches}
       />
 
       {/* Below the board, after everything worth reading */}

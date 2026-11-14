@@ -514,9 +514,27 @@ writing). Every run screen used to read every whole run in the challenge on
 every look — a 200-runner month reaches ~6,000 runs, ~2 MB a look, which is
 several times the allowance at a few hundred looks a day. So the run boards
 read four columns a run and keep a five-minute server copy (`docs/run.md`,
-"The boards' copy"): a busy board is a few reads an hour. Golf is deliberately
-left uncached — phones write scores straight to Supabase, so the server cannot
-know when a live board is stale, and a golf trip's reads are small. Revisit
-only for a 100-plus-player tournament. Check **Supabase → Usage → Egress**
+"The boards' copy"): a busy board is a few reads an hour.
+
+**The golf leaderboard keeps a ten-second copy** (D91–D93, 14 Nov 2026). It
+was left uncached at first — phones write scores straight to Supabase, so the
+server cannot know when a live board is stale — but every phone on a live
+board asks for the whole event every fifteen seconds, which is the egress a
+100-plus-player tournament runs into. So the page reads everything through
+`app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts`: one copy per event,
+read through `eventReader`, nothing per-viewer in it, at most
+`GOLF_BOARD_SECONDS` (10) old. **A look that finds it older reads the
+database at once and shows that** — never the old copy shown while a new one
+is fetched behind it, which is what Next's `unstable_cache` does and why
+the copy is `lib/sharedCopy.ts` (in the server's memory, so each Vercel
+instance keeps its own: a board is at most one read per ten seconds per
+instance, never one per phone; `unstable_cache` also refuses items over
+2 MB, which a big tournament's board can be). A failed read is never kept;
+the look that failed falls back on the copy it had, or the error screen —
+never an empty board. A score reaches other boards within a poll and the
+copy's age, about 25 seconds at worst. Not dropped when a card is committed —
+add that only if ten seconds draws a complaint. `test:board-copy`. The other
+golf screens (the in-play panel, the scorecard list, the match card, the
+knockout views, the hub) are still uncached. Check **Supabase → Usage → Egress**
 after a big event; whether Supabase meters compressed bytes is not documented,
 so measured beats estimated.

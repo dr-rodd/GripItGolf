@@ -411,7 +411,9 @@ section('A round is in play only while somebody is locked on a card')
     'app/golf/[root]/[tripCode]/scoring/page.tsx',
     'app/golf/[root]/[tripCode]/matchplay/page.tsx',
   ]) {
-    const src = fs.readFileSync(page, 'utf-8')
+    // The leaderboard's reads live in its shared copy (boardCopy.ts).
+    const src = [page, ...(page.endsWith('leaderboard/page.tsx') ? [page.replace('page.tsx', 'boardCopy.ts')] : [])]
+      .map(f => fs.readFileSync(f, 'utf-8')).join('\n')
     ok(src.includes('liveRoundPresence('),
       `${page.split('/').pop()} derives in-play through liveRoundPresence`)
     ok(src.includes('live_player_locks(player_id)'),

@@ -117,7 +117,7 @@ section('The nickname belongs to the player, not to team selection')
 
 section('The board prints the display name; the sheet keeps the full one')
 {
-  const page = read('app/golf/[root]/[tripCode]/leaderboard/page.tsx')
+  const page = read('app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts')
   ok(page.includes("select('id, nickname')"),
     'the page fetches nicknames on their own, fail-soft')
 
