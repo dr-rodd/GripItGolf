@@ -84,9 +84,11 @@ Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
 **Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.
 
-## Accounts and clubs (D94–D104)
+## Accounts and clubs (D94–D104, D117–D122)
 
-Ross, 14 Nov 2026: planned, not built. The plan below was checked against
+Ross, 14 Nov 2026: planned, not built. D117–D122 (the same day, from the
+Claude.ai project list) redraw stages (c) onward; D105–D116 are not
+recorded here. The plan below was checked against
 the code on that date (questions A–I); build one stage at a time, each
 tested on greendot.live before the next.
 
@@ -132,11 +134,13 @@ AND-ed.
   become organiser through Forgot PIN (D67). Any other event is claimed by
   typing its organiser PIN while signed in. A trip with no passcode is
   claimable only by its email — but on it every member is organiser anyway.
-- **A club is a workspace, not a login**: `clubs`, `club_admins` (owner |
-  admin), `club_invites` by email. Unverified until Ross approves it in
-  `/admin`; only a verified club gets the tick and a public page.
+- **A club is a workspace, not a login**: `clubs`, `club_members` (owner |
+  admin | member — D117 makes members a thing, so this replaces the
+  `club_admins` first proposed), `club_invites` by email. Unverified until
+  Ross approves it in `/admin`; only a verified club gets the tick and a
+  public page. Only owners and admins are organisers of the club's events.
 - **Delete account ships with sign-in**: the auth user deleted
-  (`trip_members` and `club_admins` cascade, `trip_private.owner_id` set
+  (`trip_members` and `club_members` cascade, `trip_private.owner_id` set
   null), refused while sole owner of a club. Names and scores stay on
   events — they are the event's, not the account's.
 
@@ -303,22 +307,192 @@ the PIN and is organiser; a helper given the PIN is organiser for twelve
 hours and changing the PIN ends theirs, not the owner's; a phone with no
 account sees every page as before.
 
-**(c) Clubs.** Migration 085: `clubs`, `club_admins`, `club_invites`
-(server only — RLS on, no policy, `service_role` granted by name),
-`trip_private.club_id`, and `account_trips()` widened to club admins.
-**Paste before the deploy.** Undo: the 084 `account_trips()` again, drop
-the column and the three tables. Approval in `/admin` (H). *Phone check:*
-make a club, invite a second email, approve it in `/admin`, put an event
-under it, and the second account is organiser there.
+### D117–D122 (Ross, 14 Nov 2026)
 
-**(d) A player's "My golf".** Migration 086: `account_players` (account ↔
-a claimed player, server only), written when a signed-in phone claims a
-name. Never read off `trip_members.player_id`, which one account on two
-phones can set two ways. Paste before. Undo: drop the table. *Phone check:*
-rounds from two events on one page; unlinking removes them.
+- **D117 — club members are the pro tier.** One function, `mayUseFeature`
+  in `lib/tiers.ts` (pure, the only copy), answers "may this account use
+  this feature" from one fact: is it a member of a verified club. **Today it
+  answers yes for everyone**: every feature in its registry is marked
+  `everyone`, and moving one to `club` is one line. It is never asked on
+  the way to joining, playing, scoring or watching — those are not features
+  in the registry, and `test:no-account` fails a trip, scoring or entry file
+  that imports it. The fact arrives from `/api/account/me` (the account's
+  verified clubs), so a phone with no account is simply "not a member" —
+  which today still means yes.
+- **D118, D119 — the club skin.** A club sets a crest, its name, one colour
+  and one header photo, shown **only inside its members area**
+  (`/club/[slug]/…`). No fonts. The meaning colours — accent (live, action),
+  gold (won), rust, side-a, side-b — are never re-pointed. The look itself
+  is being designed in Claude.ai; below is only how it is held together.
+- **D120 — one list of a member's events**, club and open together, each
+  marked which, loaded after the page like My events (the same
+  `/api/account/events`, widened).
+- **D121, D122 — stats across the platform.** A summary row written once
+  per signed card, so a golfer's stats never re-read hole scores across
+  events. Each row says whether it is a **club round** (the event is a
+  verified club's) or **open** (an open event, the name self-claimed). A
+  club reads only the rows from its own events.
 
-**(e) Club season.** The Golfer of the Year concept above, on a club's
-events. Its migration, if any, decided then.
+### How a club's colour is held (D118, D119)
+
+**A third set of `--gd-*` values, scoped to one wrapper.** Today there are
+two sets — `:root` (day) and `html.dark` (night), plus the print copy of the
+day values. The club set is four new tokens and nothing else:
+`--gd-club` (marks, rules, the header band), `--gd-club-deep` (club-coloured
+words), `--gd-on-club` (words on the band) and `--gd-club-tint`
+(`color-mix` over `var(--gd-club)`), each with a `--color-club*` twin in
+`@theme`. Their house values in `:root` are bark, so a club with no colour
+looks like Green Dot. The members area's layout (a server component) draws
+one `<div data-club style="…">` carrying the club's values **for both modes
+at once** (`--gd-club-l`, `--gd-club-d` and so on), and `globals.css` picks
+them: `[data-club] { --gd-club: var(--gd-club-l) }`,
+`html.dark [data-club] { --gd-club: var(--gd-club-d) }`, and the print block
+the day values — so the theme switch works live without a reload, exactly
+as today's tokens do. **A `[data-club]` rule may declare only `--gd-club*`**,
+and the inline style is written only from hex the server has checked
+(`/^#[0-9A-F]{6}$/`, at save and again at render), so a club's value can
+never reach another token or carry anything but a colour.
+
+**The colour is checked and adjusted, never refused** — `lib/clubColour.ts`,
+pure, the only copy, run on the server at render from the one hex the club
+chose (only that is stored, so a better rule later moves every club):
+- *Day*: `club` clears 3:1 against cream and white (a mark, WCAG 1.4.11);
+  `club-deep` clears 4.5:1 against both (words); `on-club` is ink or white,
+  whichever clears 4.5:1 on `club`.
+- *Night*: the same floors against the dark page and card.
+- *Adjusting*: keep the hue, step the lightness (darker by day, lighter at
+  night) until each floor clears, easing chroma only to stay in sRGB. The
+  hue is never moved: a club's colour is its identity.
+- *Beside the meaning colours*: distance measured as the match sides already
+  measure it (`colourDistance`, ΔE over Lab, in `lib/matchSides.ts`).
+  Too close to the emerald (Ireland is full of green clubs) and the club
+  colour is stepped further in lightness, never re-hued — and it is never
+  used anywhere a meaning colour speaks, so the two cannot collide on a
+  board or a button.
+- The club's admin sees the colour as it will show in both modes before
+  saving, with a line when it was adjusted.
+
+**What it touches in `test:branding`.**
+- *The palette is defined once*: the club tokens join the list, house value
+  `var(--gd-bark)`, no hex of their own in the stylesheet.
+- *The named mixes are tokens*: its pattern allows `color-mix` over bark,
+  ink or accent only; `--gd-club-tint` over `var(--gd-club)` is added.
+- *Dark mode is the same tokens with night values*: the club tokens' night
+  value is the `-d` variable, under `html.dark [data-club]`.
+- *The print block*: re-points the club tokens to the day values too.
+- *One primary action per screen* and *Emerald is an accent*: unchanged —
+  the primary button stays deep emerald inside a club area.
+- **New, *A club's colour is decoration***: the `club` utilities appear
+  only in an allowlist of members-area files; never in `lib/resultTone.ts`,
+  `lib/matchSides.ts`, `lib/teamColors.ts`, `buttonClass` or a pill; no
+  full-height club wash; `[data-club]` declares only `--gd-club*`; and
+  `lib/clubColour.ts` run over awkward choices (white, black, a yellow, a
+  near-emerald, a near-gold, a red beside side-a) clears every floor in both
+  modes.
+- The style lab is untouched: its attributes sit on `<html>`, the club's on
+  a wrapper, and neither names the other's tokens.
+
+**Crest and header photo.** A Supabase Storage bucket, `club-assets`, read
+publicly, written only by the server, which resizes on upload (crest
+512px, photo 1600px wide, WebP) so a page never carries a camera's original.
+Shown only for a verified club. The words over the photo sit on a scrim —
+for the design.
+
+### The stages, from (c)
+
+**(c) Clubs and members.** Migration 085:
+- `clubs` — id, slug (unique), name, `colour` (hex or null, CHECK
+  `^#[0-9A-Fa-f]{6}$`), `crest_path`, `header_path`, `verified_at`,
+  created_at. The skin's columns go in now; they cost nothing until (d)
+  draws them.
+- `club_members` — club, user (`auth.users ON DELETE CASCADE`), role owner |
+  admin | member, created_at; one row per account per club.
+- `club_invites` — club, email (lowercased), role, token hash, expiry, used.
+- `trip_private.club_id` (`ON DELETE SET NULL`).
+- `account_trips()` widened: owner, or owner/admin of the event's club, the
+  club verified. Members are not organisers.
+- The `club-assets` bucket (or made in the dashboard — say which when built).
+- All three tables server only: RLS on, no policy, `service_role` by name.
+
+**Paste before the deploy** (no club exists, so nothing changes). Undo:
+084's `account_trips()` again, drop `trip_private.club_id`, drop the three
+tables and the bucket. Builds: making a club, inviting, joining by invite,
+Ross's approval in `/admin` (H), putting an event under a club, the public
+club page, `mayUseFeature` (yes for all), and D120's one list on
+`/dashboard`. Ross first: nothing beyond (b) — invites spend Resend's
+emails. *Phone check:* make a club, invite a second email, approve it,
+put an event under it — the second account (an admin) is organiser there,
+a member is not, and both see it in their one list marked as the club's;
+a phone with no account sees the event exactly as before.
+
+**(d) The club skin.** No migration (085 holds the columns). Builds
+`lib/clubColour.ts`, the `[data-club]` wrapper and tokens, the uploads, and
+the members area — once the look comes back from Claude.ai. *Phone check:*
+a green club, a yellow club and a white club, each by day and at night —
+words readable, emerald still meaning live, nothing outside `/club/`
+changed.
+
+**(e) My golf and the card summaries.** Migration 086:
+- `account_players` — account ↔ a claimed player, written when a
+  signed-in phone claims a name (the entry route knows both). Never read off
+  `trip_members.player_id`.
+- `card_summaries` — one row per player per signed round: trip, round,
+  player, course, tee, played_on, holes, gross, par, Stableford points (off
+  the full handicap — an allowance is a board's), course handicap, putts,
+  fairways hit and tried, greens in regulation and holes counted, eagles or
+  better / birdies / pars / bogeys / doubles or worse, `origin` (`club` |
+  `open`), `club_id`, `rules_version`, written_at. UNIQUE (round, player);
+  indexed by player and by club. Nothing that depends on the rest of the
+  field (gained on the field moves as others sign) — a player's own card
+  only.
+- Both server only: RLS on, no policy, `service_role` by name.
+
+**Paste before the deploy.** Undo: drop both tables (they are derived —
+rebuilt by the backfill).
+
+*Writing a row.* The commit happens in the browser (`handleCommit`), so the
+browser never writes the summary: once its commit lands it asks
+`/api/stats/card` with the round, fire-and-forget, and the server reads the
+round's own rows through `eventReader`, checks the card is finalised, builds
+each row with `lib/cardSummary.ts` (pure, built on `lib/holeStats.ts` — no
+second copy of greens in regulation or anything else) and upserts. The
+nightly cleanup is the backstop: finalised rounds with no summary, written
+then. **Once per signed card, rewritten only when the card changes**: Edit
+Scorecard, a card check that re-scores a course, a void (rows deleted), a
+handicap correction, the event moving into or out of a club (`origin`
+rewritten for the event in one update), and a `rules_version` bump. A
+one-off backfill writes every round signed before 086, North West 26
+included — read only on its scores.
+
+*Reading.* My golf: the account's players, then their summaries. A club's
+stats: its rows by `club_id`, from a server route that checks the asker is
+a member — never the others. Origin decides what is shown where: a club's
+page shows only club rounds; My golf shows both, marked.
+
+*Phone check:* sign a card, see it on My golf within a page load; edit a
+hole and see the row follow; a club round and an open round marked apart;
+a club's page shows none of a member's open rounds.
+
+**(f) Club season.** The Golfer of the Year concept above, read off the
+club's summary rows. Migration, if any, decided then.
+
+### What D117–D122 cost in reads
+
+| What | When | Reads |
+|---|---|---|
+| `mayUseFeature` | per screen that asks | none of its own — the account's clubs ride in `/api/account/me`, one query, once a page load, signed-in phones only |
+| The one events list (D120) | opening `/dashboard` | one wave of three in parallel (the account's `trip_members`, `account_players`, `club_members`), then one of two (those events' `trips`, their clubs' `clubs`) — five small queries, never per trip page |
+| The club skin | each members-area page | one `clubs` row by slug, which the page reads anyway; the colour maths is arithmetic |
+| Writing a summary | once per signed card | four reads of that one round (round, holes, handicap snapshot, scores) and one upsert — a few dozen rows |
+| Rewriting | per edit, check, void, handicap fix | the same, for that round |
+| Backstop | nightly | one anti-join, finalised rounds without summaries |
+| My golf | opening it | two queries, one row per card — today's per-trip stats page reads 18 rows a card, every hole, and only within one trip |
+| A club's stats | opening its page | one query by `club_id`, past the 1,000-row cap through `readAllRows`; worth a shared copy (`lib/sharedCopy.ts`) once a club has a season of it |
+| Backfill | once | every signed round's scores, once |
+
+A phone with no account pays none of it: nothing above runs unless a page
+asked by a signed-in account, or a card was signed — and signing a card
+costs that phone one extra request it does not wait for.
 
 ### Open with Ross
 - What the padlock means to an owner: shutting it can end a PIN grant
@@ -326,7 +500,15 @@ events. Its migration, if any, decided then.
   tap shows "Organiser through your account" with Sign out.
 - Two phones on one account claiming different names in one event: the
   account's own claim wins at a merge, and each phone's later entry writes
-  its cookie's. Harmless today; (d) uses its own table.
+  its cookie's. Harmless today; (e) uses its own table.
 - Whether the sign-in screen should say "We sent a code" the same way for
   a new and an existing email (it can; the API still tells the two apart).
 - Resend's paid plan before (b).
+- Whether a match card (a knockout's or a session's) gets a summary row
+  too. It has a gross a hole, so it can; proposed after stroke cards.
+- What an open round shows a club: proposed nothing (D122), even for its
+  own members' open rounds.
+- A club changing its crest or photo after Ross verified it: shown at once,
+  or held for another look.
+- Whether an account may leave a club itself, and whether a member list is
+  visible to other members.
