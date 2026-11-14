@@ -454,8 +454,23 @@ server only and shown masked like Golf Ireland's (`maskMembershipNumber`).
   that opens clubs — never before, because until then no club list is held.
   The draft is below.
 
-*Still open*: whether a removed member's row is deleted or kept marked
-lapsed for a season's stats (proposed: kept, `removed_at`).
+**What leaving means** (Ross, 14 Nov 2026) — golf is never lost by a
+membership changing:
+- **A membership that lapses keeps all its golf.** The rounds played stay
+  on every board and in every summary, as they were.
+- **A club removing a member severs them from the club, nothing more.** The
+  row is kept, marked removed (`removed_at`), its link to the account cut,
+  and the access it gave ends at once. **A club can never delete anybody's
+  personal account.**
+- **The club chooses whether a removed member still appears on its
+  leaderboards** — a choice per member (`club_members.on_boards`, shown by
+  default), which hides them from the club's boards and leaves their scores
+  where they are, so the choice can be undone.
+- **A member deleting their own account leaves their golf on the
+  leaderboards**: names and scores belong to the events they were played
+  in. **The club may then delete that golf if it wants** — an owner or
+  admin's deliberate act, through the organiser's existing delete a player
+  (which takes the scores with it), never automatic.
 
 **Privacy notice — the Clubs section, to ship with stage (c).** "A golf club
 on Green Dot can keep its list of members here: each member's name, the
@@ -467,11 +482,15 @@ club, to let members link their own account and to show them the club's
 events, members' area and results. A member links their account themselves
 with a code sent to the email on the club's list. Only the club's owners
 and admins see the list, and membership numbers are shown partly hidden.
-One GUI number links to one account. When a club removes a member, their
-link ends at once and the access it gave with it; their names and scores
-stay with the events they played in. A club's list is deleted when the club
-is closed, and a member can ask the club, or write to the support address,
-to be taken off it." (Plus Clubs as a reason under "Why we may hold it" —
+One GUI number links to one account. When a membership lapses, the golf
+played stays. When a club removes a member, their link to the club ends at
+once and the access it gave with it; their own account is never touched by
+a club, their names and scores stay with the events they played in, and the
+club decides whether they still appear on its leaderboards. If you delete
+your account, your golf stays on the leaderboards it was played on, and
+the club may choose to delete it from its own events. A club's list is
+deleted when the club is closed, and a member can ask the club, or write to
+the support address, to be taken off it." (Plus Clubs as a reason under "Why we may hold it" —
 the club's legitimate interest in running its membership — and the club as
 a source of data under "What every event holds".)
 
