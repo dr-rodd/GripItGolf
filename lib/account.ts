@@ -19,7 +19,7 @@
 // (lib/accountClient.ts) imports it too. The server's half is
 // app/api/account/account.ts.
 
-import type { FieldRole, Membership } from './membership'
+import type { AttemptLimit, FieldRole, Membership } from './membership'
 
 /**
  * Whether the screens link to the account page. Off until Supabase sends
@@ -63,6 +63,86 @@ export function codeIssue(raw: string): string | null {
   return codeDigits(raw).length === CODE_LENGTH ? null : `The code is ${CODE_LENGTH} digits.`
 }
 
+// ─── The username (D130) ───────────────────────────────────────
+
+export const USERNAME_MIN = 3
+export const USERNAME_MAX = 20
+
+/**
+ * Names nobody may take: the site's own, its people's roles, and words a
+ * screen might print beside a name and be misread with. Compared after
+ * lower-casing; dots and underscores in a reserved word are refused too
+ * ("green.dot", "green_dot").
+ */
+export const RESERVED_USERNAMES: readonly string[] = [
+  'admin', 'administrator', 'greendot', 'greendotlive', 'greendotgolf', 'support', 'root', 'help',
+  'system', 'staff', 'official', 'moderator', 'mod', 'owner', 'organiser', 'organizer', 'api',
+  'account', 'accounts', 'login', 'signin', 'signup', 'join', 'member', 'members', 'club', 'clubs',
+  'golf', 'run', 'privacy', 'terms', 'security', 'info', 'contact', 'team', 'null', 'undefined',
+  'everyone', 'anonymous', 'guest', 'player', 'spectator', 'me',
+]
+
+/** A username as it is kept: trimmed and lower case. */
+export function normaliseUsername(raw: string): string {
+  return String(raw ?? '').trim().toLowerCase()
+}
+
+/** Why a username will not do, in a sentence — null when it will. */
+export function usernameIssue(raw: string): string | null {
+  const u = normaliseUsername(raw)
+  if (!u) return 'Choose a username.'
+  if (u.includes('@')) return 'A username can’t have an @ in it.'
+  if (u.length < USERNAME_MIN || u.length > USERNAME_MAX) return `A username is ${USERNAME_MIN} to ${USERNAME_MAX} characters.`
+  if (!/^[a-z0-9._]+$/.test(u)) return 'Use only letters, numbers, dots and underscores.'
+  if (u.startsWith('.') || u.endsWith('.')) return 'A username can’t start or end with a dot.'
+  if (RESERVED_USERNAMES.includes(u.replace(/[._]/g, ''))) return 'That username isn’t available.'
+  return null
+}
+
+// ─── The password (D131) ───────────────────────────────────────
+
+export const PASSWORD_MIN = 8
+/** Supabase keeps passwords with bcrypt, which reads 72 bytes and no more. */
+export const PASSWORD_MAX = 72
+
+/** Why a password will not do — its length, and nothing else. */
+export function passwordIssue(raw: string): string | null {
+  const p = String(raw ?? '')
+  if (p.length < PASSWORD_MIN) return `A password is at least ${PASSWORD_MIN} characters.`
+  if (new TextEncoder().encode(p).length > PASSWORD_MAX) return `A password is at most ${PASSWORD_MAX} characters.`
+  return null
+}
+
+// ─── Signing in (D132) ─────────────────────────────────────────
+
+/** One field, two kinds: anything with an @ in it is an email, anything else a username. */
+export function signInRoute(identifier: string): { kind: 'email'; email: string } | { kind: 'username'; username: string } {
+  const raw = String(identifier ?? '').trim()
+  return raw.includes('@') ? { kind: 'email', email: normaliseEmail(raw) } : { kind: 'username', username: normaliseUsername(raw) }
+}
+
+/**
+ * The one answer to every failed sign-in — a wrong password, a name nobody
+ * has, an email nobody has, a junior's profile. It never says which part was
+ * wrong, or whether there is anybody by that name.
+ */
+export const SIGN_IN_FAILED = 'Wrong username, email or password'
+
+/**
+ * Wrong sign-ins counted (on the server, `account_attempts`): per network
+ * address, which stops one phone guessing, and per name typed — counted
+ * whether or not anybody has that name, so the count says nothing — which
+ * stops a spread-out guess at one person's password. Username checks are
+ * counted per address, every one, so the list of names cannot be read off.
+ */
+export const SIGN_IN_LIMITS = {
+  address: { max: 10, windowMs: 15 * 60 * 1000 },
+  name: { max: 20, windowMs: 60 * 60 * 1000 },
+} as const satisfies Record<string, AttemptLimit>
+export const USERNAME_CHECK_LIMIT: AttemptLimit = { max: 60, windowMs: 10 * 60 * 1000 }
+/** The nightly cleanup deletes a count whose window started this long ago. */
+export const ACCOUNT_ATTEMPT_KEEP_HOURS = 24
+
 // ─── Who a user is ─────────────────────────────────────────────
 
 /** A Supabase user as these rules read one. */
@@ -72,6 +152,16 @@ export interface AuthUser {
   email: string | null
   /** The email has been confirmed by a code. */
   emailConfirmed: boolean
+  /**
+   * A junior's profile (D108) — set only by the server, in Supabase's
+   * `app_metadata`, which no phone can write. Never a username or password.
+   */
+  junior?: boolean
+}
+
+/** A junior's profile has neither a username nor a password (D108, D131). */
+export function credentialsRefused(u: Pick<AuthUser, 'junior'> | null | undefined): boolean {
+  return !!u?.junior
 }
 
 /**
@@ -110,9 +200,16 @@ export function mergeMemberships(account: Membership | null, phone: Membership):
 
 // ─── The words ─────────────────────────────────────────────────
 
+/**
+ * On screen (D133): anyone with an account is a "Green Dot member", a
+ * club's people "<club name> members" — never a bare "member". The code
+ * keeps the word account.
+ */
 export const ACCOUNT_WORDS = {
-  never: 'You never need an account to join, play, score or watch.',
-  why: 'An account keeps your events with you when you change phone.',
+  never: 'You never need to be a Green Dot member to join, play, score or watch.',
+  why: 'Green Dot members keep their events with them when they change phone.',
+  signInFailed: SIGN_IN_FAILED,
+  reauth: 'To set a password, sign in once more with a code — tap Forgot password.',
   sent: (email: string) => `We sent a ${CODE_LENGTH}-digit code to ${email}.`,
   wrongCode: 'That code isn’t right or has run out — check it, or send a new one.',
   tooMany: 'Too many codes asked for — wait a minute and try again.',

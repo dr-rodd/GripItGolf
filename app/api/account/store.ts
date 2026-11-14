@@ -1,9 +1,10 @@
 // The service-role store behind /api/account (./account.ts).
 
 import { createHmac } from 'crypto'
+import { createClient } from '@supabase/supabase-js'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import type { AuthUser } from '@/lib/account'
-import type { Membership } from '@/lib/membership'
+import type { AttemptWindow, Membership } from '@/lib/membership'
 import type { AccountStore } from './account'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -11,6 +12,7 @@ type Db = ReturnType<typeof createAdminClient>
 function asUser(u: {
   id: string; is_anonymous?: boolean | null; email?: string | null
   email_confirmed_at?: string | null; confirmed_at?: string | null
+  app_metadata?: Record<string, unknown> | null
 } | null | undefined): AuthUser | null {
   if (!u) return null
   return {
@@ -18,6 +20,7 @@ function asUser(u: {
     isAnonymous: u.is_anonymous === true,
     email: u.email ? u.email.toLowerCase() : null,
     emailConfirmed: !!(u.email_confirmed_at ?? u.confirmed_at),
+    junior: u.app_metadata?.junior === true,
   }
 }
 
@@ -68,6 +71,56 @@ export function accountStore(db: Db): AccountStore {
       const key = process.env.SUPABASE_SERVICE_ROLE_KEY ?? ''
       if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is not set')
       return createHmac('sha256', key).update('green-dot account merge ticket v1').digest('base64url')
+    },
+
+    // ─── Stage (a2): usernames, passwords, wrong tries (migration 084) ──
+
+    async usernameOf(userId) {
+      const { data, error } = await db.from('account_usernames').select('username').eq('user_id', userId).maybeSingle()
+      if (error) throw error
+      return (data as { username?: string } | null)?.username ?? null
+    },
+    async userIdByUsername(username) {
+      const { data, error } = await db.from('account_usernames').select('user_id').eq('username', username).maybeSingle()
+      if (error) throw error
+      return (data as { user_id?: string } | null)?.user_id ?? null
+    },
+    async setUsername(userId, username) {
+      const { error } = await db.from('account_usernames')
+        .upsert({ user_id: userId, username, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      if (!error) return 'ok'
+      if (error.code === '23505') return 'taken'
+      throw error
+    },
+    async hasPassword(userId) {
+      const { data, error } = await db.rpc('account_has_password', { uid: userId })
+      if (error) throw error
+      return data === true
+    },
+    async passwordSignIn(email, password) {
+      // A client of its own, holding nothing between calls: the session it
+      // makes is handed straight to the phone.
+      const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      if (!url || !anon) throw new Error('Missing Supabase environment variables')
+      const auth = createClient(url, anon, { auth: { persistSession: false, autoRefreshToken: false } }).auth
+      const { data, error } = await auth.signInWithPassword({ email, password })
+      if (error || !data.session || !data.user) return null
+      return { userId: data.user.id, accessToken: data.session.access_token, refreshToken: data.session.refresh_token }
+    },
+    async readAttempts(keys) {
+      const out = new Map<string, AttemptWindow>()
+      const { data, error } = await db.from('account_attempts').select('key, failures, window_started').in('key', keys)
+      if (error) throw error
+      for (const r of (data ?? []) as { key: string; failures: number; window_started: string }[]) {
+        out.set(r.key, { failures: r.failures, windowStarted: r.window_started })
+      }
+      return out
+    },
+    async writeAttempt(key, w) {
+      const { error } = await db.from('account_attempts')
+        .upsert({ key, failures: w.failures, window_started: w.windowStarted }, { onConflict: 'key' })
+      if (error) throw error
     },
   }
 }

@@ -17,10 +17,13 @@
 import fs from 'fs'
 import path from 'path'
 import {
-  ACCOUNTS_LINKED, ACCOUNT_PATH, CODE_LENGTH, MERGE_TICKET_MS, codeDigits, codeIssue, emailIssue, isAccount,
-  mergeMemberships, normaliseEmail, type AuthUser,
+  ACCOUNTS_LINKED, ACCOUNT_PATH, ACCOUNT_WORDS, CODE_LENGTH, MERGE_TICKET_MS, PASSWORD_MAX, PASSWORD_MIN,
+  RESERVED_USERNAMES, SIGN_IN_FAILED, SIGN_IN_LIMITS, USERNAME_CHECK_LIMIT, codeDigits, codeIssue, credentialsRefused,
+  emailIssue, isAccount, mergeMemberships, normaliseEmail, normaliseUsername, passwordIssue, signInRoute, usernameIssue,
+  type AuthUser,
 } from '../lib/account'
-import { readTicket, runAccount, type AccountStore } from '../app/api/account/account'
+import { attemptKey, readTicket, runAccount, type AccountStore } from '../app/api/account/account'
+import type { AttemptWindow } from '../lib/membership'
 import { sealJson } from '../lib/signedState'
 import type { Membership } from '../lib/membership'
 
@@ -68,6 +71,48 @@ function ruleTests() {
     '2026-11-14T12:00:00.000Z', '…and never cleared by a phone without one')
   eq(mergeMemberships(m('player', 'mine', null), m('player', 'phone', null)).playerId, 'mine', 'two claims: the account’s own stays')
   eq(mergeMemberships(m('guest', null, null), m('player', 'phone', null)).playerId, 'phone', 'one claim: kept')
+
+  section('Usernames (D130)')
+  eq(usernameIssue('Ross.OG'), null, 'letters, numbers and dots will do — capitals are folded')
+  eq(normaliseUsername('  Ross.OG '), 'ross.og', '…kept trimmed and lower case')
+  eq(usernameIssue('ross_og_1'), null, 'underscores and digits will do')
+  ok(usernameIssue('ro') !== null && usernameIssue('a'.repeat(21)) !== null, 'fewer than 3 or more than 20 will not')
+  eq(usernameIssue('abc'), null, '…3 is enough')
+  eq(usernameIssue('a'.repeat(20)), null, '…and 20 is not too many')
+  ok(usernameIssue('ross@og') === 'A username can’t have an @ in it.', 'an @ is refused, so a username can never pass for an email')
+  ok(usernameIssue('.ross') !== null && usernameIssue('ross.') !== null, 'no dot at either end')
+  ok(usernameIssue('ross og') !== null && usernameIssue('ross-og') !== null && usernameIssue('rossé') !== null, 'spaces, hyphens and accents refused')
+  for (const r of ['admin', 'greendot', 'support', 'root', 'help', 'Admin', 'green.dot', 'green_dot', 'greendotlive']) {
+    eq(usernameIssue(r), 'That username isn’t available.', `reserved: ${r}`)
+  }
+  ok(RESERVED_USERNAMES.every(r => r === r.toLowerCase()), 'the reserved list is lower case, compared after folding')
+  eq(usernameIssue(''), 'Choose a username.', 'empty asks for one')
+
+  section('Passwords (D131)')
+  eq(PASSWORD_MIN, 8, 'at least 8')
+  eq(PASSWORD_MAX, 72, 'at most 72 (bcrypt reads no further)')
+  ok(passwordIssue('1234567') !== null, '7 is too short')
+  eq(passwordIssue('12345678'), null, '8 of anything will do — no other rule')
+  eq(passwordIssue('aaaaaaaa'), null, '…not even a mix of kinds')
+  ok(passwordIssue('x'.repeat(73)) !== null, '73 is too long')
+  ok(passwordIssue('é'.repeat(40)) !== null, '…counted in bytes, as bcrypt counts')
+
+  section('Signing in: one field, an @ means email (D132)')
+  eq(signInRoute('Ross@Example.ie '), { kind: 'email', email: 'ross@example.ie' }, 'an @ is an email')
+  eq(signInRoute(' Ross.OG'), { kind: 'username', username: 'ross.og' }, 'anything else a username')
+  eq(SIGN_IN_FAILED, 'Wrong username, email or password', 'the one message for every failure')
+
+  section('Juniors (D108)')
+  ok(credentialsRefused({ junior: true }), 'a junior profile is refused a username and a password')
+  ok(!credentialsRefused({ junior: false }) && !credentialsRefused({}), '…anybody else is not')
+
+  section('The words (D133): a Green Dot member, never a bare member')
+  const screen = read('app/account/AccountScreen.tsx')
+  const wordsSrc = read('lib/account.ts').slice(read('lib/account.ts').indexOf('export const ACCOUNT_WORDS'))
+  const strings = [...(screen + wordsSrc).matchAll(/(['"`])((?:(?!\1).)*?)\1/g)].map(m => m[2])
+  const bare = strings.filter(t => /\bmembers?\b/i.test(t) && !/Green Dot members?\b/.test(t))
+  eq(bare, [], 'no screen word says member without Green Dot before it')
+  ok(Object.values(ACCOUNT_WORDS).some(w => typeof w === 'string' && w.includes('Green Dot member')), 'the words say Green Dot member')
 }
 
 // ─── The route ─────────────────────────────────────────────────
@@ -77,7 +122,26 @@ class Stand implements AccountStore {
   tokens = new Map<string, string>()
   rows = new Map<string, Membership>() // `${user}|${trip}`
   deleted: string[] = []
+  usernames = new Map<string, string>() // user → username
+  passwords = new Map<string, string>() // email → password
+  attempts = new Map<string, AttemptWindow>()
+  signIns: string[] = []
   add(user: AuthUser, token: string) { this.users.set(user.id, user); this.tokens.set(token, user.id) }
+  async usernameOf(id: string) { return this.usernames.get(id) ?? null }
+  async userIdByUsername(u: string) { return [...this.usernames].find(([, n]) => n === u)?.[0] ?? null }
+  async setUsername(id: string, u: string): Promise<'ok' | 'taken'> {
+    if ([...this.usernames].some(([k, n]) => n === u && k !== id)) return 'taken'
+    this.usernames.set(id, u); return 'ok'
+  }
+  async hasPassword(id: string) { const e = this.users.get(id)?.email; return !!e && this.passwords.has(e) }
+  async passwordSignIn(email: string, password: string) {
+    this.signIns.push(email)
+    if (this.passwords.get(email) !== password) return null
+    const u = [...this.users.values()].find(x => x.email === email)
+    return u ? { userId: u.id, accessToken: `at-${u.id}`, refreshToken: `rt-${u.id}` } : null
+  }
+  async readAttempts(keys: string[]) { return new Map(keys.filter(k => this.attempts.has(k)).map(k => [k, this.attempts.get(k)!])) }
+  async writeAttempt(key: string, w: AttemptWindow) { this.attempts.set(key, w) }
   async userFromToken(t: string) { const id = this.tokens.get(t); return id ? this.users.get(id) ?? null : null }
   async userById(id: string) { return this.users.get(id) ?? null }
   async membershipsOf(userId: string) {
@@ -88,6 +152,7 @@ class Stand implements AccountStore {
   async deleteUser(id: string) {
     this.deleted.push(id)
     this.users.delete(id)
+    this.usernames.delete(id)
     for (const k of [...this.rows.keys()]) if (k.startsWith(`${id}|`)) this.rows.delete(k) // ON DELETE CASCADE
   }
   ticketSecret() { return 'test-ticket-secret' }
@@ -159,6 +224,113 @@ async function routeTests() {
     ok(!s.users.has('acct') && !s.rows.has('acct|T2'), '  …its record of its events with it')
     eq((await runAccount({ token: 'to', action: 'what' }, s, now)).status, 400, 'anything else is refused')
   }
+
+  await signInTests(now, fresh, phone, account, other)
+}
+
+async function signInTests(
+  now: Date, fresh: () => Stand, phone: AuthUser, account: AuthUser, other: AuthUser,
+) {
+  const signIn = (s: Stand, identifier: string, password: string, token: string | null = 'tp', address = '1.2.3.4') =>
+    runAccount({ token, action: 'sign-in', identifier, password, address }, s, now)
+  const ready = () => {
+    const s = fresh()
+    s.usernames.set('acct', 'ross.og')
+    s.passwords.set('a@b.ie', 'right-password')
+    return s
+  }
+
+  section('Usernames on the server')
+  {
+    const s = ready()
+    const st = await runAccount({ token: 'ta', action: 'status' }, s, now)
+    eq(st.status === 200 && [st.body.username, st.body.hasPassword], ['ross.og', true], 'status: the username and that a password is set')
+    eq((await runAccount({ token: 'tp', action: 'status' }, s, now)).status, 403, '  …a phone with no account has none')
+    const taken = await runAccount({ token: 'to', action: 'username-check', username: 'Ross.OG', address: '9' }, s, now)
+    eq(taken.status === 200 && taken.body.result, 'taken', 'a username another account has is taken, ignoring case')
+    const mine = await runAccount({ token: 'ta', action: 'username-check', username: 'ross.og', address: '9' }, s, now)
+    eq(mine.status === 200 && mine.body.result, 'free', '  …your own is not')
+    const bad = await runAccount({ token: 'to', action: 'username-check', username: 'admin', address: '9' }, s, now)
+    eq(bad.status === 200 && bad.body.result, 'invalid', 'a reserved name is invalid')
+    eq((await runAccount({ token: 'to', action: 'set-username', username: 'ross.og' }, s, now)).status, 409, 'setting a taken name is refused')
+    eq((await runAccount({ token: 'to', action: 'set-username', username: 'Other_1' }, s, now)).status, 200, 'a free one is saved')
+    eq(s.usernames.get('other'), 'other_1', '  …lower case')
+    eq((await runAccount({ token: 'to', action: 'set-username', username: 'Other.2' }, s, now)).status, 200, 'and can be changed')
+    eq((await runAccount({ token: 'tp', action: 'set-username', username: 'phoneuser' }, s, now)).status, 403, 'a phone with no account gets none')
+    s.users.set('other', { ...other, junior: true })
+    eq((await runAccount({ token: 'to', action: 'set-username', username: 'kid.one' }, s, now)).status, 403, 'a junior profile is refused a username (D108)')
+  }
+  {
+    const s = ready()
+    let last = null as Awaited<ReturnType<typeof runAccount>> | null
+    for (let i = 0; i <= USERNAME_CHECK_LIMIT.max; i++) {
+      last = await runAccount({ token: 'to', action: 'username-check', username: `name${i}`, address: '5.5.5.5' }, s, now)
+    }
+    eq(last?.status, 429, `username checks are limited: ${USERNAME_CHECK_LIMIT.max} an address, then refused`)
+    const elsewhere = await runAccount({ token: 'to', action: 'username-check', username: 'nameX', address: '6.6.6.6' }, s, now)
+    eq(elsewhere.status, 200, '  …per address')
+    ok(![...s.attempts.keys()].some(k => k.includes('5.5.5.5')), '  …and the address is only ever kept hashed')
+  }
+
+  section('Signing in: one answer to every failure (D132)')
+  {
+    const s = ready()
+    const failures = [
+      await signIn(s, 'ross.og', 'wrong-password'),
+      await signIn(s, 'nobody.here', 'right-password'),
+      await signIn(s, 'a@b.ie', 'wrong-password'),
+      await signIn(s, 'nobody@b.ie', 'right-password'),
+      await signIn(s, 'ross.og', ''),
+      await signIn(s, '', 'right-password'),
+      await signIn(s, 'ad', 'right-password'),
+    ]
+    for (const f of failures) eq([f.status, f.body.ok === false && f.body.error], [401, SIGN_IN_FAILED], '  a failure reads the same')
+  }
+  {
+    const s = ready()
+    const r = await signIn(s, 'Ross.OG', 'right-password')
+    eq(r.status, 200, 'the username and the right password sign in')
+    eq(r.status === 200 && r.body.session, { access_token: 'at-acct', refresh_token: 'rt-acct' }, '  …and hand back the session for the phone')
+    ok(!JSON.stringify(r.body).includes('a@b.ie'), '  …and never the email behind the username')
+    eq(r.status === 200 && r.body.moved, 2, '  …with the phone’s own events moved across, as the code path moves them')
+    ok(!s.users.has('phone') && s.rows.has('acct|T1'), '  …the phone’s old identity forgotten once they are')
+    const byEmail = await signIn(ready(), 'A@B.ie', 'right-password')
+    eq(byEmail.status, 200, 'the email and the right password sign in too')
+    const noPhone = await signIn(ready(), 'ross.og', 'right-password', null)
+    eq(noPhone.status === 200 && noPhone.body.moved, 0, 'a phone with no identity of its own still signs in, moving nothing')
+  }
+  {
+    const s = ready()
+    s.users.set('acct', { ...account, junior: true })
+    eq((await signIn(s, 'ross.og', 'right-password')).status, 401, 'a junior profile never signs in with a password (D108)')
+  }
+  {
+    const s = ready()
+    // An account signed in on this phone already is never moved or deleted.
+    const r = await signIn(s, 'ross.og', 'right-password', 'to')
+    eq(r.status === 200 && r.body.moved, 0, 'signing in on a phone already holding another account moves nothing of theirs')
+    ok(s.users.has('other'), '  …and deletes nothing')
+  }
+
+  section('Signing in: wrong tries limited, as the PIN is')
+  {
+    const s = ready()
+    for (let i = 0; i < SIGN_IN_LIMITS.address.max; i++) await signIn(s, `guess${i}`, 'wrong-password', 'tp', '7.7.7.7')
+    const blocked = await signIn(s, 'ross.og', 'right-password', 'tp', '7.7.7.7')
+    eq(blocked.status, 429, `${SIGN_IN_LIMITS.address.max} wrong from one address, then even the right password waits`)
+    eq((await signIn(s, 'ross.og', 'right-password', 'tp', '8.8.8.8')).status, 200, '  …another address is not held up')
+  }
+  {
+    const s = ready()
+    for (let i = 0; i < SIGN_IN_LIMITS.name.max; i++) await signIn(s, 'ross.og', 'wrong-password', 'tp', `10.0.0.${i}`)
+    eq((await signIn(s, 'ross.og', 'right-password', 'tp', '10.0.1.1')).status, 429,
+      `${SIGN_IN_LIMITS.name.max} wrong at one name from anywhere, then that name waits`)
+    for (let i = 0; i < SIGN_IN_LIMITS.name.max; i++) await signIn(s, 'nobody.at.all', 'x-wrong-pass', 'tp', `10.1.0.${i}`)
+    eq((await signIn(s, 'nobody.at.all', 'x-wrong-pass', 'tp', '10.1.1.1')).status, 429,
+      '  …counted the same for a name nobody has, so the count says nothing')
+    ok(![...s.attempts.keys()].some(k => /ross|10\.0\./.test(k)), '  …the names and addresses only ever kept hashed')
+    eq(attemptKey('signin-name', 'ross.og'), attemptKey('signin-name', 'ross.og'), '  …the same name always the same key')
+  }
 }
 
 // ─── Nobody needs an account ───────────────────────────────────
@@ -176,8 +348,12 @@ function wiringTests() {
   const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
 
   section('Nobody needs an account to join, play, score or watch')
-  const askers = files.filter(f => /\.(updateUser|signInWithOtp|verifyOtp)\(/.test(strip(read(f))))
-  eq(askers, ['lib/accountClient.ts'], 'one file asks Supabase for an email code')
+  const askers = files.filter(f => /\.(updateUser|signInWithOtp|verifyOtp|setSession)\(/.test(strip(read(f))))
+  eq(askers, ['lib/accountClient.ts'], 'one browser file talks to Supabase’s sign-in for accounts')
+  const passwordCheckers = files.filter(f => /\.signInWithPassword\(/.test(strip(read(f))))
+  eq(passwordCheckers, ['app/api/account/store.ts'], 'a password is checked in one place, on the server')
+  ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
+    'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
   eq(importers, ['app/account/AccountScreen.tsx'], 'only the account page imports it')
   const reached = files.filter(f => f.startsWith('app/api/')

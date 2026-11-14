@@ -238,3 +238,14 @@ ROLLBACK;
 -- Six rows, every one true:
 SELECT relname, relrowsecurity FROM pg_class
 WHERE relname IN ('scores', 'live_scores', 'round_handicaps', 'composite_holes', 'live_rounds', 'live_player_locks');
+
+-- ─── Stage (a2) (migration 084): Green Dot members' usernames ───────
+-- Phones never reach the usernames, the wrong-try counts, or the password
+-- check. One row, every column true:
+SELECT
+  to_regclass('public.account_usernames') IS NOT NULL AS usernames_exist,
+  NOT has_table_privilege('authenticated', 'public.account_usernames', 'SELECT') AS usernames_closed,
+  NOT has_table_privilege('anon',          'public.account_usernames', 'SELECT') AS usernames_closed_anon,
+  NOT has_table_privilege('authenticated', 'public.account_attempts',  'SELECT') AS attempts_closed,
+  NOT has_function_privilege('authenticated', 'public.account_has_password(uuid)', 'EXECUTE') AS password_check_closed,
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'account_usernames') AS usernames_rls_on;

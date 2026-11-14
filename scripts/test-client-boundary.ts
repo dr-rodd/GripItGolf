@@ -176,6 +176,20 @@ section('The lead player\'s email never reaches a browser (stage 5, D62)')
   ok(reading.length === 0, 'no client file reads the address or imports lib/leadEmail.ts')
 }
 
+section('A username\'s email never reaches a browser (stage a2, D132)')
+{
+  const files = [...walk(path.join(root, 'app')), ...walk(path.join(root, 'lib'))]
+  const rel = (f: string) => path.relative(root, f)
+  const reaching = files
+    .filter(f => { const s = fs.readFileSync(f, 'utf8'); return isClientModule(s) && /account_usernames|account_has_password|app\/api\/account\/(account|store)|signInWithPassword/.test(s) })
+    .map(rel)
+  for (const f of reaching) console.log(`    ${f}`)
+  ok(reaching.length === 0, 'no client file reads the usernames, checks a password, or imports the account route\'s server code')
+  const signIn = fs.readFileSync(path.join(root, 'app/api/account/account.ts'), 'utf8')
+  const body = signIn.slice(signIn.indexOf('async function runSignIn'))
+  ok(!/email\s*[,}:]/.test(body.slice(body.lastIndexOf('return {'))), 'the sign-in answer carries the session, never the email')
+}
+
 console.log(`\n${passed} passed, ${failed} failed`)
 if (failed > 0) {
   console.log('\nFailures:')

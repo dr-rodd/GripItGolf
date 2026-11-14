@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-admin"
 import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT, FORGET_WEEKDAY } from "@/lib/membership"
 import { RESET_KEEP_HOURS } from "@/lib/pinReset"
+import { ACCOUNT_ATTEMPT_KEEP_HOURS } from "@/lib/account"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import {
@@ -198,6 +199,22 @@ export async function GET(req: NextRequest) {
     console.error("entry attempts cleanup failed:", e)
   }
 
+  // ── 4a. Wrong sign-ins and username checks a day old (stage (a2), 084) ──
+  // The retry limits need at most an hour of them; the hashed addresses and
+  // names go with them. Its own try: before 084 the table does not exist.
+  let staleAccountAttempts = 0
+  try {
+    const cutoff = new Date(Date.now() - ACCOUNT_ATTEMPT_KEEP_HOURS * 60 * 60 * 1000).toISOString()
+    const q = dryRun
+      ? supabaseAdmin.from("account_attempts").select("key", { count: "exact", head: true }).lt("window_started", cutoff)
+      : supabaseAdmin.from("account_attempts").delete({ count: "exact" }).lt("window_started", cutoff)
+    const { count, error } = await q
+    if (error) throw error
+    staleAccountAttempts = count ?? 0
+  } catch (e) {
+    console.error("account attempts cleanup failed:", e)
+  }
+
   // ── 4b. PIN reset links a day old (D67, migration 072) ──
   // A link works for 30 minutes and the limit counts an hour of them, so a
   // day is plenty. Its own try: before 072 the table does not exist.
@@ -249,6 +266,7 @@ export async function GET(req: NextRequest) {
     dryRun,
     draws,
     staleAttempts,
+    staleAccountAttempts,
     staleResets,
     anonymousPhones,
     closedEmpty,
