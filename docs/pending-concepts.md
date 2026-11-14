@@ -84,7 +84,7 @@ Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
 **Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.
 
-## Accounts and clubs (D94–D104, D117–D122)
+## Accounts and clubs (D94–D134)
 
 Ross, 14 Nov 2026: planned, not built. D117–D122 (the same day, from the
 Claude.ai project list) redraw stages (c) onward; D105–D116 are not
@@ -297,18 +297,13 @@ scoring phone and keep scoring; sign in on a second phone and see its events
 kept; install to the home screen and sign in there; sign out and score;
 delete the account and still see the event.
 
-**(b) My events at `/dashboard`, ownership, claiming.** Migration 084:
-`trip_private.owner_id` (`REFERENCES auth.users ON DELETE SET NULL`),
-`claimed_at`, `account_trips()`, and the `OR` in `writable_trips()` and
-`organiser_trips()`. **Paste before the deploy** — every owner is null until
-the code writes one, so nothing changes. Undo: 071's two functions pasted
-again, `DROP FUNCTION account_trips`, `DROP COLUMN owner_id, claimed_at`.
-`/dashboard` is a client page asking `/api/account/events` with the token:
-owned, then entered. The padlock reads the peek's `organiserBy`. *Phone
-check:* a signed-in organiser opens their event on a phone that never had
-the PIN and is organiser; a helper given the PIN is organiser for twelve
-hours and changing the PIN ends theirs, not the owner's; a phone with no
-account sees every page as before.
+**(a2) Green Dot members sign-in (D128–D133).** Built 14 Nov 2026,
+behind `ACCOUNTS_LINKED`, on `/account` only — the build is described in
+the D128–D133 entry below. Migration 084.
+
+Stages (b) onward were redrawn on 14 Nov 2026 at 21:05 — see **"The stages
+from (b), redrawn"** below. The first draw's detail for clubs, the skin and
+the summary row is kept under "Detail kept from the first draw".
 
 ### D117–D122 (Ross, 14 Nov 2026)
 
@@ -401,7 +396,11 @@ publicly, written only by the server, which resizes on upload (crest
 Shown only for a verified club. The words over the photo sit on a scrim —
 for the design.
 
-### The stages, from (c)
+### Detail kept from the first draw (c)–(f)
+
+Superseded as a plan by the redraw below, and kept for its detail — the
+members list, decredentialling, what leaving means, the privacy draft, the
+summary row. Stage letters and migration numbers here are the old ones.
 
 **(c) Clubs and members.** Migration 085:
 - `clubs` — id, slug (unique), name, `colour` (hex or null, CHECK
@@ -559,10 +558,183 @@ a club's page shows none of a member's open rounds.
 **(f) Club season.** The Golfer of the Year concept above, read off the
 club's summary rows. Migration, if any, decided then.
 
-### What D117–D122 cost in reads
+### D105–D134 (Ross, 14 Nov 2026, 21:05, from the Claude.ai project list)
+
+The rule above all is unchanged (D94): nobody ever needs an account to
+join, play, score or watch. An account only adds — OR-ed onto today's
+rules, never AND-ed. Recorded here as they were given; **the full text of
+D105, D106, D109, D110, D111, D114, D115, D119 and D120 lives in the
+Claude.ai project list and is not reproduced here** — what this file holds
+of them is what the entries below and above say.
+
+- **D107 (agreed)** — an event owned by an account and with no PIN asks
+  who may change its settings: **"Just me"** (the default) or **"Anyone in
+  the event"**. Only an owned event is asked; every other event without a
+  PIN stays as today (every member the organiser).
+- **D108** — juniors. **A junior profile never gets a username or a
+  password** (D131's rule holds it: `app_metadata.junior`, set only by the
+  server, refuses both).
+- **D112 (agreed)** — a **closed** event decides **who may be in the
+  field**, never who must sign in. A listed club member is drawn and scored
+  with no account.
+- **D113 (amended)** — **members-only leaderboards apply to club events
+  only**; a watch link shows one outside. Every event made outside a club
+  stays exactly as today, byte for byte.
+- **D116 (amended)** — clubs and their members are **one stage**, and a
+  club may exist with no members yet.
+- **D117 (amended)** — pro comes from membership of a verified club, **or
+  later an individual entitlement** (a stats package bought by one person).
+  The one function, `mayUseFeature`, takes club membership OR an individual
+  entitlement; **both answer yes for everyone today; nothing is sold.**
+- **D118 (agreed)** — the skin is **the Pints mockup**: club artwork, crest,
+  name, one club colour — detail in D123–D127.
+- **D121, D122 (agreed)** — stats across the platform; a club sees only its
+  own events' rounds; **open-event rounds are marked self-claimed and never
+  feed a handicap or a club honour**.
+- **D123–D127 — the Pints club skin.** D123 the art's strengths (how
+  strongly the club artwork shows behind each part of a screen); D124 a
+  light and a dark version of the art; D125 **the club colour is for
+  identity only** — never a meaning (live, action, won, a side); D126 the
+  art supply spec (what a club hands over: sizes, formats, the two
+  versions); D127 **the members' tab bar: Home · Comps · Board · Stats ·
+  Club**.
+- **D128–D133 — Green Dot members sign in** (stage a2, built — below).
+  D128 joining is the email and code, then a username and a password on the
+  same screen, not finished until both are saved; D129 an account from
+  stage (a) is asked for both the next time it signs in; D130 the username
+  (3–20 of a–z, 0–9, `.` and `_`, stored lower case, unique ignoring case,
+  no `@`, no leading or trailing dot, a reserved list refused, changeable,
+  shown to nobody else yet); D131 the password (8–72, no other rule, a
+  show/hide eye; juniors never); D132 signing in is one field, "Username or
+  email", and a password — `@` means email — with "Forgot password?" by
+  email and code, and one message for every failure, "Wrong username, email
+  or password"; D133 **the words** — anyone with an account is **a "Green
+  Dot member"**, a club's people are **"<club name> members"**, never a bare
+  "member" on screen; the code keeps the word account.
+- **D134 (proposed)** — a Green Dot member links their account to their
+  player in any open event or trip, past ones included. **Claiming a name
+  while signed in is the link.** One account per player per event. The
+  member can unlink; the organiser can undo a wrong link. Linked rounds
+  count to stats as self-claimed. A past event is reached through the
+  normal door — its code, then the name — **never by searching**.
+
+### Stage (a2) as built — Green Dot members sign in (D128–D133)
+
+- **The rules** are `lib/account.ts`, pure, held by `test:account`:
+  `usernameIssue` (D130, `RESERVED_USERNAMES`), `passwordIssue` (D131),
+  `signInRoute` (`@` → email, else a username), `SIGN_IN_FAILED` (the one
+  message), `credentialsRefused` (a junior), and the retry windows
+  (`SIGN_IN_LIMITS`: 10 wrong per address in 15 minutes, 20 per name in an
+  hour; username checks 60 per address in 10 minutes).
+- **The server** is `/api/account` (logic in `app/api/account/account.ts`
+  on an injected store): `status` (the username, whether a password is set),
+  `username-check` (taken or free, rate limited), `set-username`,
+  `sign-in` (a username is turned into its email on the service role and the
+  password checked there — `signInWithPassword` on a throwaway client —
+  and the session handed back for the phone to `setSession`; **a username's
+  email never reaches a browser**; the phone's own events are moved onto the
+  account as the code path does), and the earlier `ticket`, `merge`,
+  `delete`.
+- **The phone's half** is still `lib/accountClient.ts`, the only browser
+  file that talks to Supabase's sign-in: `updateUser({ password })` on the
+  signed-in session, `setSession`, the code calls. A phone signed in long
+  ago that Supabase asks to sign in again before a password change is sent
+  through "Forgot password?".
+- **The screen** (`/account`, unlinked): Sign in | Join on one screen; Join
+  is the email, the code, then a username and a password; "Forgot
+  password?" is the email, the code and a new password; any account short of
+  a username or a password is asked for what it lacks before it is done;
+  signed in reads "Signed in as <username>", with the username changeable,
+  Sign out and Delete my account.
+- **Migration 084** (paste before the deploy): `account_usernames`,
+  `account_attempts` (where wrong sign-ins and username checks are counted —
+  `entry_attempts` cannot be shared: every row there belongs to an event),
+  and `account_has_password(uuid)`, all closed to phones. The nightly cleanup
+  clears `account_attempts` a day old.
+
+### The stages from (b), redrawn (14 Nov 2026, 21:05)
+
+Every stage below changes nothing for a phone with no account, and nothing
+about an event made outside a club. Migration numbers follow 084.
+
+**(b) My events, ownership and D134 linking.** Migration **085**:
+- `trip_private.owner_id` (`auth.users ON DELETE SET NULL`),
+  `trip_private.settings_by` (`'owner'` | `'anyone'`, D107 — read only for
+  an owned event with no PIN);
+- `account_players` — account, event, player, `linked_at`, `linked_by`
+  (self or organiser); **UNIQUE (player)** — one account per player per
+  event — and UNIQUE (account, event); server only;
+- `account_trips()` (owned events) and the `OR` in `writable_trips()` and
+  `organiser_trips()`; `organiser_trips()` also reads D107: an owned no-PIN
+  event set to "Just me" makes only the owner its organiser.
+
+Paste before the deploy (no owner exists, so nothing changes). Undo: 071's
+two functions again, drop the function, `account_players` and the two
+columns. **The link is written by `/api/entry`** when a signed-in phone
+claims a name — the route already holds the user and the player, so it is
+one upsert more, and only for an account. Unlinking is the member's
+(their own link) or the organiser's (any link in their event). A past
+event is reached by its code and the name, never searched. Linked rounds
+are self-claimed. *Reads:* claiming, +1 write for an account, nothing for a
+phone; My events, one wave of three (`trip_members`, `account_players`,
+owned events) then the events' rows — loaded after the page. *Phone check:*
+claim a name signed in and see the event in My events; claim the same name
+from a second account and be refused; the organiser undoes a link; a phone
+with no account claims exactly as before.
+
+**(c) Clubs with their members — one stage, an empty club allowed
+(D116).** Migration **086**: `clubs` (with the skin's columns, empty until
+(e)), `club_members` (the club's list: name, member number, GUI number —
+one per account, optional — email, role, `user_id` null until linked,
+`removed_at`, `on_boards`), `club_invites`, `trip_private.club_id`, and
+`account_trips()` widened to a verified club's owners and admins. All
+server only. Paste before the deploy. Undo: 085's `account_trips()`, drop
+the column and the three tables. Builds: making a club (empty), Ross's
+approval in `/admin`, the list (paste or file), invites and linking by
+code, removing (severing, never deleting an account), `mayUseFeature`
+(club OR individual, yes for all), D120's one list of events, and the
+privacy notice's Clubs section in the same deploy. *Reads:* a members-area
+page, one `club_members` row for the asker; the list page, the club's rows
+(past 1,000 through `readAllRows`); nothing on any event page.
+
+**(d) Club events and booking (D112, D113, D127).** Migration **087** if
+anything needs storing beyond 086 (proposed: `club_entries`, an event's
+field drawn from the list — a list row as a player with **no account
+needed**, D112). A club event is any event with `trip_private.club_id`.
+Closed means who may be in the field; booking uses the tee sheet as it
+stands, with the field limited to the list. **Members-only leaderboards on
+club events only** (D113): a club event's boards are read by its club's
+members, or by anybody holding its watch link; every event outside a club
+is untouched. The members' tab bar (D127: Home · Comps · Board · Stats ·
+Club) is the club area's, never an event's. *Reads:* a club event page +1
+(its club, once, in the layout's cached reads); the board's shared copy
+(D91) unchanged.
+
+**(e) The club skin (D118, D123–D127).** No migration (086 holds the
+columns); art in the `club-assets` bucket, a light and a dark version
+(D124). The scoped token set and the colour check as in "How a club's
+colour is held" above — **the club colour for identity only** (D125). The
+art layer: a club's artwork drawn behind its members area at the strengths
+D123 sets per part, never behind a board's numbers or a scorecard.
+`test:branding` changes **inside club space only** — the club tokens, the
+art layer's strengths, and an allowlist of club-area files; every existing
+section holds unchanged outside it. The supply spec (D126) is what the club
+upload checks. *Reads:* none beyond the `clubs` row a members-area page
+reads anyway; the art is two cached images.
+
+**(f) The stats summary row per signed card (D121, D122).** Migration
+**088**: `card_summaries`, as drawn under "Detail kept" (E), with `origin`
+**`club` | `self_claimed`** — an open event's round is self-claimed and
+**never feeds a handicap or a club honour**. Written by the server once per
+signed card, rewritten when the card changes. *Reads:* as in the table
+below.
+
+### What the stages cost in reads
 
 | What | When | Reads |
 |---|---|---|
+| Signing in (a2) | per sign-in | two small reads (the tries, the username) and Supabase's own check; a phone with no account none |
+| D134 linking | per claim by an account | one upsert; a phone with no account none |
 | `mayUseFeature` | per screen that asks | none of its own — the account's clubs ride in `/api/account/me`, one query, once a page load, signed-in phones only |
 | The one events list (D120) | opening `/dashboard` | one wave of three in parallel (the account's `trip_members`, `account_players`, `club_members`), then one of two (those events' `trips`, their clubs' `clubs`) — five small queries, never per trip page |
 | The club skin | each members-area page | one `clubs` row by slug, which the page reads anyway; the colour maths is arithmetic |
