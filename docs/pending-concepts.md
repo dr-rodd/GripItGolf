@@ -438,16 +438,42 @@ The list is administered on the club's members page (add, edit, remove,
 paste a list, see who is linked), owners and admins only; the numbers are
 server only and shown masked like Golf Ireland's (`maskMembershipNumber`).
 
-*Questions with it*: whether linking needs the GUI number to match as well
-as the invite email (stronger, and the number is on every member's card);
-whether one GUI number may link to more than one account (proposed: no — a
-second claim is held for the club to settle); whether a removed row is
-deleted or kept marked lapsed for a season's stats (proposed: kept, `removed_at`,
-so their club rounds stay counted while they no longer hold access); and
-that a GUI number is personal data — the privacy notice gains a Clubs
-section before (c) opens.
-- The `club-assets` bucket (or made in the dashboard — say which when built).
-- All three tables server only: RLS on, no policy, `service_role` by name.
+*Answered* (Ross, 14 Nov 2026):
+- **A club brings its list** — names, member numbers, GUI numbers and
+  emails — and the members area takes it in whole (a pasted list or a file).
+  Each person links themselves to their row by making a personal account and
+  keying in a code; **which code is still to decide** (proposed: a code in
+  the invite email to the address on the list, so only the person who reads
+  that inbox can link that row — the same proof sign-in already rests on).
+- **One GUI number per account.** A second account claiming a number
+  already linked is held for the club to settle, never quietly moved.
+- **GUI numbers are optional.** Most club members have one, not every
+  account will; a member row without one links by its email and code
+  alone, and decredentialling then goes by the row.
+- **The privacy notice gains a Clubs section**, shipped in the same deploy
+  that opens clubs — never before, because until then no club list is held.
+  The draft is below.
+
+*Still open*: whether a removed member's row is deleted or kept marked
+lapsed for a season's stats (proposed: kept, `removed_at`).
+
+**Privacy notice — the Clubs section, to ship with stage (c).** "A golf club
+on Green Dot can keep its list of members here: each member's name, the
+club's own member number, their national (GUI) membership number if they
+have one, their email address, and whether they are an owner, admin or
+member. The club's owners and admins add, change and remove those details,
+and are responsible for them being accurate; Green Dot holds them for the
+club, to let members link their own account and to show them the club's
+events, members' area and results. A member links their account themselves
+with a code sent to the email on the club's list. Only the club's owners
+and admins see the list, and membership numbers are shown partly hidden.
+One GUI number links to one account. When a club removes a member, their
+link ends at once and the access it gave with it; their names and scores
+stay with the events they played in. A club's list is deleted when the club
+is closed, and a member can ask the club, or write to the support address,
+to be taken off it." (Plus Clubs as a reason under "Why we may hold it" —
+the club's legitimate interest in running its membership — and the club as
+a source of data under "What every event holds".)
 
 **Paste before the deploy** (no club exists, so nothing changes). Undo:
 084's `account_trips()` again, drop `trip_private.club_id`, drop the three
