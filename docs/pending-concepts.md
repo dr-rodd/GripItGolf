@@ -140,7 +140,7 @@ AND-ed.
   Ross approves it in `/admin`; only a verified club gets the tick and a
   public page. Only owners and admins are organisers of the club's events.
 - **Delete account ships with sign-in**: the auth user deleted
-  (`trip_members` and `club_members` cascade, `trip_private.owner_id` set
+  (`trip_members` cascade, a `club_members` row is unlinked and stays on the club's list, `trip_private.owner_id` set
   null), refused while sole owner of a club. Names and scores stay on
   events — they are the event's, not the account's.
 
@@ -282,7 +282,10 @@ only the server writes `trip_members`; 081 deletes only anonymous phones),
 
 ### The stages
 
-**(a) Sign-in, sign-out, delete, privacy — no new powers.** No migration.
+**(a) Sign-in, sign-out, delete, privacy — no new powers.** **Built 14 Nov 2026, unlinked**
+(`/account`; `ACCOUNTS_LINKED` in lib/account.ts off until Ross has set E's
+dashboard settings and tried it on a phone — then flip it and add the
+links). No migration.
 Starts with a spike on a Vercel preview: the anonymous upgrade by code, and
 the `email_exists` → sign-in → merge, on the pinned supabase-js. Builds
 `lib/accountClient.ts`, an account screen (Settings tab on events, Trip
@@ -405,24 +408,59 @@ for the design.
   `^#[0-9A-Fa-f]{6}$`), `crest_path`, `header_path`, `verified_at`,
   created_at. The skin's columns go in now; they cost nothing until (d)
   draws them.
-- `club_members` — club, user (`auth.users ON DELETE CASCADE`), role owner |
-  admin | member, created_at; one row per account per club.
-- `club_invites` — club, email (lowercased), role, token hash, expiry, used.
+- `club_members` — **the club's own list of its members, which its owners
+  and admins keep** (Ross, 14 Nov 2026): club, name, **member number** (the
+  club's own, optional, unique within the club), **GUI number** (the
+  national membership number — Golf Ireland's, still called GUI by clubs;
+  optional, unique within the club), email (optional, for the invite), role
+  owner | admin | member, `user_id` (`auth.users ON DELETE SET NULL` —
+  **null until an account is linked to the row**), added_at. A row exists
+  before anybody has an account: the list is the club's, the link is the
+  person's.
+- `club_invites` — a member row, email (lowercased), token hash, expiry,
+  used. Accepting links the signed-in account to that row.
 - `trip_private.club_id` (`ON DELETE SET NULL`).
 - `account_trips()` widened: owner, or owner/admin of the event's club, the
-  club verified. Members are not organisers.
+  club verified — read through the member row's `user_id`. Members are not
+  organisers.
+
+**Decredentialling** (Ross, 14 Nov 2026). An account's club standing is
+never stored on the account: it is "is there a row on a verified club's
+list linked to me", asked afresh on every request (`account_trips()`,
+`mayUseFeature`, the members area). So **taking a member off the list
+decredentials them at once** — organiser through the club, the pro tier
+(D117) and the members area all end on their next page load, with no session
+to revoke. The GUI number is what makes that dependable: a club keeping its
+list from its own records (a pasted export, a yearly renewal) matches rows
+by GUI number, so a lapsed member drops off by number even where their name
+or email changed, and the same person in two clubs is one GUI number in each.
+The list is administered on the club's members page (add, edit, remove,
+paste a list, see who is linked), owners and admins only; the numbers are
+server only and shown masked like Golf Ireland's (`maskMembershipNumber`).
+
+*Questions with it*: whether linking needs the GUI number to match as well
+as the invite email (stronger, and the number is on every member's card);
+whether one GUI number may link to more than one account (proposed: no — a
+second claim is held for the club to settle); whether a removed row is
+deleted or kept marked lapsed for a season's stats (proposed: kept, `removed_at`,
+so their club rounds stay counted while they no longer hold access); and
+that a GUI number is personal data — the privacy notice gains a Clubs
+section before (c) opens.
 - The `club-assets` bucket (or made in the dashboard — say which when built).
 - All three tables server only: RLS on, no policy, `service_role` by name.
 
 **Paste before the deploy** (no club exists, so nothing changes). Undo:
 084's `account_trips()` again, drop `trip_private.club_id`, drop the three
-tables and the bucket. Builds: making a club, inviting, joining by invite,
+tables and the bucket. Builds: making a club, the members list (with member
+and GUI numbers, pasting a list), inviting, joining by invite,
 Ross's approval in `/admin` (H), putting an event under a club, the public
 club page, `mayUseFeature` (yes for all), and D120's one list on
 `/dashboard`. Ross first: nothing beyond (b) — invites spend Resend's
 emails. *Phone check:* make a club, invite a second email, approve it,
 put an event under it — the second account (an admin) is organiser there,
 a member is not, and both see it in their one list marked as the club's;
+take the member off the list and their members area closes on the next
+page load;
 a phone with no account sees the event exactly as before.
 
 **(d) The club skin.** No migration (085 holds the columns). Builds

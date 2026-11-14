@@ -103,6 +103,15 @@ async function phoneSession(): Promise<{ userId: string; token: string } | null>
   return signingIn
 }
 
+/**
+ * This phone's identity, for the account page (lib/accountClient.ts) — the
+ * same one sign-in as everything else here, never a second.
+ */
+export async function phoneIdentity(): Promise<{ userId: string; token: string } | null> {
+  if (!inBrowser() || !(await databaseReady())) return null
+  return phoneSession()
+}
+
 // ─── Entering ──────────────────────────────────────────────────
 
 /** The player this phone's cookie claims in this event, if any. */

@@ -341,8 +341,8 @@ function wiringTests() {
     const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
     const writers = [...files('app'), ...files('lib')].filter(f => read(f).includes("from('trip_members')"))
-    eq(writers.sort(), ['app/api/entry/store.ts', 'app/api/event/resetStore.ts', 'app/api/trip/create/route.ts'],
-      'three files name the table: the entry route\'s store, creation (the maker\'s own membership), and a PIN reset ending every phone\'s organiser access')
+    eq(writers.sort(), ['app/api/account/store.ts', 'app/api/entry/store.ts', 'app/api/event/resetStore.ts', 'app/api/trip/create/route.ts'],
+      'four files name the table: the entry route\'s store, creation (the maker\'s own membership), a PIN reset ending every phone\'s organiser access, and an account taking a phone\'s events across (stage (a))')
     ok(read('app/api/trip/create/route.ts').includes('createAdminClient()'), '  …both on the service role')
     ok(read('app/api/entry/route.ts').includes('serviceStore(createAdminClient())') || /serviceStore\(db\)/.test(read('app/api/entry/route.ts')),
       '  …built on the service role by the route')

@@ -8,6 +8,7 @@ import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
 import {
   ATTEMPT_LIMITS, ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_RULE, ORGANISER_HOURS,
 } from '@/lib/membership'
+import { CODE_LENGTH } from '@/lib/account'
 import { LegalPage, LegalSection, LEGAL_LINK } from '@/app/components/LegalPage'
 
 export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
@@ -42,7 +43,7 @@ export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
  * Strava's review — docs/run.md.
  */
 
-const UPDATED = '11 November 2026'
+const UPDATED = '14 November 2026'
 
 const minutes = (ms: number) => ms / 60_000
 const hours = (ms: number) => ms / 3_600_000
@@ -66,7 +67,8 @@ export default function PrivacyPage() {
       <LegalSection title="The short version">
         <ul className="list-disc pl-5 space-y-1.5">
           <li>We hold what an event needs to run, and nothing for advertising — no ads, no analytics tracking, nothing sold.</li>
-          <li>There are no accounts. <B>An event&apos;s code is its key</B>: anyone with it can see the names, scores and leaderboards in that event.</li>
+          <li>You never need an account. <B>An event&apos;s code is its key</B>: anyone with it can see the names, scores and leaderboards in that event.</li>
+          <li>An account is optional — an email address and a code, so your events follow you to another phone — and you can delete it yourself in one tap.</li>
           <li>Strava is optional, only with your consent, and only for the challenge you connect it to.</li>
           <li>You can have your data deleted. Runners can do it themselves in one tap; anyone can write to {mail}.</li>
         </ul>
@@ -99,6 +101,23 @@ export default function PrivacyPage() {
           everywhere in {hours(ATTEMPT_LIMITS.event.windowMs) === 1 ? 'an hour' : `${hours(ATTEMPT_LIMITS.event.windowMs)} hours`}.
           The network address is scrambled before it is stored, never kept as the address itself,
           and each count is deleted within {(ATTEMPT_KEEP_HOURS * 2) / 24} days.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Accounts">
+        <p>
+          You never need an account to join, play, score or watch. If you choose to make one, we
+          hold <B>your email address</B> and when you signed in, and link it to the identity this
+          phone already has — so the events it has entered stay with you on another phone. We email
+          you a {CODE_LENGTH}-digit code each time you sign in; there is no password, and the code
+          is not kept once used. An account changes nothing about what you can see or do in any
+          event, and nobody else in an event sees your email address.
+        </p>
+        <p className="mt-3">
+          <B>Deleting it:</B> Your account → Delete my account. Your email address and the
+          account&apos;s record of which events it entered are deleted straight away, and the screen
+          says so. Your names and scores stay with the events they were played in, as anybody&apos;s
+          do; ask the organiser, or write to {mail}, to have those removed too.
         </p>
       </LegalSection>
 
@@ -191,7 +210,7 @@ export default function PrivacyPage() {
         <p>
           Anyone with an event&apos;s code can open it and see what the event shows: names, teams,
           scores, leaderboards, the itinerary and notices. That is how the group follows along
-          without accounts, and it is why a code should be shared only with the people it is for.
+          without needing an account, and it is why a code should be shared only with the people it is for.
           Settings are behind the organiser&apos;s PIN, which guards against slips rather than a
           determined person. A running challenge never shows anybody&apos;s runs to anybody but them.
         </p>
@@ -210,7 +229,8 @@ export default function PrivacyPage() {
         <p>
           To run an event you take part in — including when an organiser adds you to one — we rely
           on our legitimate interest, and theirs, in the event working: scores counted, teams kept,
-          the leaderboard right. The organiser&apos;s email is used to provide what they asked for.
+          the leaderboard right. The organiser&apos;s email, and an account&apos;s, are used to provide what
+          they asked for.
           Strava data is held on your consent, which you can withdraw at any time.
         </p>
       </LegalSection>
@@ -223,7 +243,7 @@ export default function PrivacyPage() {
             quick, it holds a copy of that challenge&apos;s runs for at most {BOARD_MAX_AGE_MS / 60_000} minutes.
           </li>
           <li><B>Supabase</B> — the database everything is stored in.</li>
-          <li><B>Resend</B> — sends the confirmation email, and replies from {SITE.supportEmail}.</li>
+          <li><B>Resend</B> — sends the confirmation email and sign-in codes, and replies from {SITE.supportEmail}.</li>
           <li><B>ImprovMX</B> — receives email sent to {SITE.supportEmail} and passes it on.</li>
           <li><B>Google</B> — Gmail is where email to {SITE.supportEmail} is read and answered.</li>
           <li><B>Anthropic</B> — reads golf scorecard photos for the card check. No Strava data ever goes here.</li>
@@ -262,6 +282,9 @@ export default function PrivacyPage() {
             nickname from the trip&apos;s home screen; the lead player or organiser can correct or
             remove a player in Trip Setup — removing a player deletes their scores with them.
           </li>
+          <li>
+            <B>An account</B> can be deleted by its owner in one tap: Your account → Delete my account.
+          </li>
           <li>For anything else, or if you would rather not ask the organiser, write to {mail}.</li>
         </ul>
         <p>
@@ -279,7 +302,7 @@ export default function PrivacyPage() {
           A few small cookies and stored settings, all needed for the site to work, none for
           tracking: which player you are on each event, so the screens are yours; whether you have
           seen the introduction; dark mode; that this phone unlocked an event&apos;s settings, for{' '}
-          {ORGANISER_HOURS} hours; that this phone made an event; and golf scores entered but not yet sent, so a
+          {ORGANISER_HOURS} hours; that this phone made an event; the sign-in to your account, if you made one; and golf scores entered but not yet sent, so a
           bad signal on the course loses nothing. Clearing your browser&apos;s data removes them all.
         </p>
         <p className="mt-3">
