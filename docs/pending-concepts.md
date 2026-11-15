@@ -84,7 +84,7 @@ Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
 **Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.
 
-## Accounts and clubs (D94–D140)
+## Accounts and clubs (D94–D152)
 
 Ross, 14 Nov 2026: planned, not built. D117–D122 (the same day, from the
 Claude.ai project list) redraw stages (c) onward; D105–D116 are not
@@ -657,6 +657,217 @@ to a Green Dot account and offers Forgot password and Sign in. *Cost:* the
 screen now tells anyone who types an address whether it has an account;
 Supabase's own rate limits are the only brake on guessing.
 
+### D141–D152 (Ross, 15 Nov 2026) — the three tiers, and the redraw from (d)
+
+**Decided**
+- **D141** — accounts are more visible on the front page.
+- **D142** — three tiers. **No account**: nothing changes, ever (D94).
+  **Dot member** (the code's and the docs' word; on screen still "Green Dot
+  member", D133): an account, with a personal page. **Club member**: on a
+  verified club's list and linked; sees the site through the club, and keeps
+  every Dot member feature.
+- **D143** — a Dot member's personal page: their events, their stats (the
+  headline feature), and making events. Its tab bar is the club's (D127)
+  less Club.
+- **D144** — a Club member's default view is the club area; their open
+  events and the events they made sit in its upcoming list.
+- **D145** — one club per account, for now.
+- **D146** — making a trip or event moves off the front page, onto the
+  personal page and the club area.
+
+**Proposed (checked against the code below)**
+- **D147** — the front page by tier. Signed out: the code box stays first;
+  under it a **Green Dot members** card (Sign in, Join, one line on what it
+  gives); **Create an event goes**, and a quiet "Organise an event" goes to
+  Join. Signed in: greendot.live opens the member's home, which carries the
+  code box.
+- **D148** — one home address, **`/home`**: the club area for a Club member,
+  the personal page for a Dot member; signed out it goes to sign in.
+  **`/club/[slug]`** is the club's public page.
+- **D149** — the personal tab bar is **Home · Events · Board · Stats · Me**;
+  Board opens the live event's board, else the latest, never empty. The club
+  tab bar stays D127 (Home · Comps · Board · Stats · Club).
+- **D150** — D145 is enforced on the server only: linking or setting up a
+  second club is refused, naming the club. The tables stay able to hold more.
+- **D151** — the personal page has no skin; only a club area does.
+- **D152** — stage (f), the card summary row and its backfill, comes before
+  or with the personal page.
+
+#### Q1. Sending a signed-in phone to /home with no flash
+
+The sign-in lives in the phone's storage (supabase-js keeps it in
+localStorage), so the server never knows who is signed in when it sends `/`.
+`/` is static today (built once, prefetched whole). The options:
+
+| Option | How | Flash | Cost |
+|---|---|---|---|
+| A. **Head-script hint** (recommended) | The account code keeps a hint on the phone — `gd.tier.v1` = `dot` or `club:<slug>` — written on sign-in and status, cleared on sign-out and when the session is gone. The root layout's head script (already there for the theme and the style lab) reads it before the first paint and, on `/` only, does `location.replace('/home')` | None: nothing is painted before it runs | `/` stays static. A member pays one hop to a static page from Vercel's edge (tens of ms). A few bytes more in the head script on every page. `/?front` skips it for anybody who wants the old page. **It is only a hint**: `/home` checks the real session and sends a stale one to sign in |
+| B. Cookie hint read by the server | The same hint as a plain cookie; `app/page.tsx` reads cookies and redirects | None | `/` turns dynamic: every visit becomes a server function call, no static prefetch, slower for the signed-out majority. The home-screen app has its own cookie jar (a second phone anyway) |
+| C. Middleware / proxy | Reads the cookie in front of every page | None | Ruled out: no proxy or rewrite without a Vercel preview (8 Nov 2026), and it adds a hop to every request on the site |
+| D. Redirect after the page loads | `useEffect` on the landing page | A visible blink of the front page, 100–300 ms | Cheapest, and the blink is exactly what Ross wants gone |
+| E. One page, two faces | The head script sets `html.member` and CSS swaps the landing's blocks | None | No redirect, but the member's home is not `/home` (D148) — two copies of "home" |
+
+The same hint lets `/home` choose the club layout or the personal one
+before it paints, so a Club member never sees the personal page flash
+first. The installed app's `start_url` stays `/`; the head script handles it
+the same way.
+
+#### Q2. Is D145 true already?
+
+No. 086's `uq_club_members_user` is one row per account **per club**, and
+nothing refuses a second club: `runLink` refuses only "already on *this*
+club's list", and `create` allows `MAX_CLUBS_MADE` (5) clubs per account,
+each with its maker as owner. **D150 is a small change**: `runLink` and
+`create` both ask `clubsOf(user)` first and refuse while the account is on
+any club's list and not removed — "Your account is on Lahinch's list. One
+club per account for now." `MAX_CLUBS_MADE` then never bites. Taken off a
+list (removed), the account is free to join another. No migration. Folded
+into (e1).
+
+#### Q3. A Club member making an event from the club area
+
+**Proposed rule:** an owner or admin of the verified club is asked once,
+"Whose event is this?", with **the club's** (the default) or **just mine**.
+A club's event is made under the club, Club admins only (086's unheld PIN),
+so the wizard's PIN step becomes "Lend a PIN to helpers? (optional)". Any
+other Club member makes **their own** event with no question, because only
+admins run club events (D139). The club area's upcoming list (D144) shows
+the club's events to everybody on its list, and a member's own events to
+that member alone. *Code:* the create route takes a `clubId` **beside** the
+row — never a column, so `CREATE_COLUMNS` is untouched — checks the maker is
+an admin of that verified club, and writes `trip_private.club_id` /
+`club_access` in the same step as the owner. The four wizards' PIN steps
+learn the optional wording (`MemberGate` already knows who is signed in).
+Built with the club area, (h).
+
+#### Q4. The order, with the club page first
+
+**What the club page needs first:**
+- **The look from Claude.ai.** D123–D127's full text lives in the Claude.ai
+  list, not here, and the page's layout is still to come back as a hand-off
+  spec: where the crest, name, header photo and art sit, the art's
+  strengths, the scrim.
+- **The colour rules** (`lib/clubColour.ts`, the `[data-club]` tokens,
+  `test:branding`'s club section — as drawn under "How a club's colour is
+  held").
+- **Somewhere to keep the art.** A storage bucket, two more columns for
+  D124's light and dark art, and resizing on upload. `sharp` is only in
+  node_modules as Next's optional extra and is not in `package.json`, so it
+  is added as a dependency, or the phone resizes the image before upload.
+- **A verified club with art to show.**
+
+It does **not** need (d) or (f): the public page shows the club and its
+upcoming events, which 086 already links (`trip_private.club_id`).
+
+The redrawn order:
+
+1. **(e1) The club page and its skin (D118, D123–D127, D150).** Migration
+   **087**:
+   - the `club-assets` bucket (public read, server write) and
+     `clubs.art_light_path` / `art_dark_path`;
+   - `lib/clubColour.ts`, the tokens and the uploads, set from the club's
+     page by its admins;
+   - **`/club/[slug]`**, a verified club only (else 404): crest, name,
+     header photo, art, colour, and its upcoming events.
+
+   Plus D150's refusal (Q2).
+2. **(f) The card summary row (D121, D122, D152).** Migration **088**,
+   `card_summaries`, as drawn under "Detail kept", with the one-off
+   backfill.
+3. **(g) The front page by tier and the personal page (D141, D143, D146–D149,
+   D151).**
+   - No migration.
+   - The head-script hint (Q1) and the landing's members card; Create an
+     event comes off the front page.
+   - `/home` with Home · Events · Board · Stats · Me. Stats reads (f); that
+     is why (f) comes first.
+4. **(h) The club area (D144, D127, Q3).**
+   - No migration.
+   - `/home` for a Club member: Home (the upcoming list) · Comps · Board ·
+     Stats · Club, in the club's skin.
+   - Making an event from it, by Q3's rule.
+   - The list page moves under Club for its admins.
+5. **(d) Club events and booking (D112, D113).** Migration **089** if
+   anything needs storing (`club_entries`). It gives Comps its booking and
+   members-only boards.
+
+Migration numbers are redrawn: 087 the club's art (was (d)'s), 088 the
+summary row (unchanged), 089 club events.
+
+#### Where /home fits what is there today (D148)
+
+| Address today | From (g) |
+|---|---|
+| `/` | The front page; a signed-in phone goes on to `/home` (Q1) |
+| `/account` | Stays the door: sign in, join, Forgot password, and where `?next=` lands. Signed in, it goes on to `/home/me` |
+| `/account/events` | Becomes the Events tab, `/home/events`; the old address redirects (Next's own `redirects()` in `next.config.ts`, as the trip addresses do — no proxy) |
+| `/account/clubs`, `/account/club` | Joining by code moves to Me; the list moves to the club area's Club tab in (h); the old addresses redirect then |
+| `/dashboard` | Has no page today (only `/dashboard/create`). Redirects to `/home` |
+| `/dashboard/create`, `/create`, `/golf` | Stay as they are, behind `MemberGate`; reached from `/home` and the club area instead of the front page |
+| `/club/[slug]` | New in (e1), public, a server page with a shared copy |
+
+#### Q5. What the personal page reads
+
+The shell is static and draws at once from the hint. Everything else is
+asked **after the page paints**, in one round trip from the phone
+(`/api/account` `home`).
+
+| Read | Queries | Shared copy |
+|---|---|---|
+| Who and which tier | username (1); the club rows and the club (2) | None: per person, `no-store` |
+| Events (Home's upcoming, the Events tab) | owned, entered and linked (3); the club's events (1–2); the events' rows (1). `claim_events_by_email` once a session, not every load | None. Small: tens of rows for a busy golfer |
+| Live now (Home, Board) | Only for events dated today: their rounds' active cards (1, a count) | None |
+| Stats | The account's players (1, already read for Events) and their summary rows (1, indexed by player). Never a hole score | None. A season is tens of rows |
+| Board | Nothing of its own: it opens the chosen event's leaderboard, which reads the **golf board's shared copy** (D91, at most 10 seconds old, one per event) | Yes: the event's board copy |
+
+The club page (e1) is the only new shared copy: **one per club**, public
+data (the club and its upcoming events), about 60 seconds old, built the
+`lib/sharedCopy.ts` way.
+
+#### Ross's jobs by hand
+- **(e1):**
+  - Bring the club page's look back from Claude.ai as a hand-off spec.
+  - Paste 087 before the deploy.
+  - Verify a test club, and give it a crest, a header photo and light and
+    dark art (D126's spec).
+- **(f):** paste 088, then tap the backfill once. It will be an admin-only
+  button: this container cannot reach the database.
+- **(g):** move Resend to its paid plan before more sign-ins are invited
+  (question E). Nothing to paste.
+- **(h):** nothing to paste. Choose what Comps shows before (d).
+- **(d):** paste 089 if it is needed.
+
+#### Phone checks
+- **(e1):**
+  - `greendot.live/club/<slug>` for a verified club: crest, name, photo and
+    art by day and at night. A green club, a yellow club and a white club
+    all readable, with emerald still meaning live.
+  - An unverified club's address is "not found".
+  - Linking a second club is refused, naming the first.
+  - Nothing outside `/club/` has changed.
+- **(f):**
+  - Sign a card; its row appears.
+  - Edit a hole; the row follows.
+  - North West 26's rounds are there after the backfill.
+- **(g):**
+  - Signed out, the front page is the code box, then the members card, and
+    no Create.
+  - Signed in, greendot.live lands on Home with no blink, and the code box
+    there joins an event.
+  - Board opens a live board, else the latest.
+  - Stats shows your rounds.
+  - Sign out: the front page comes back.
+  - `/account/events` and `/dashboard` land on `/home`.
+  - The installed app opens on Home.
+  - A phone with no account: everything as before.
+- **(h):**
+  - A Club member lands on the club area in the club's skin.
+  - An admin makes an event "the club's" and it is locked to admins.
+  - A plain member's own event is theirs alone.
+  - Taken off the list, the person lands on the personal page on their next
+    visit.
+- **(d):** as drawn under (d) above.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:
@@ -692,6 +903,10 @@ Supabase's own rate limits are the only brake on guessing.
   clears `account_attempts` a day old.
 
 ### The stages from (b), redrawn (14 Nov 2026, 21:05)
+
+*Order and migration numbers from (d) on are redrawn again under
+"D141–D152" above: (e1) the club page with 087, (f) 088, (g) the front page
+and personal page, (h) the club area, (d) with 089.*
 
 Every stage below changes nothing for a phone with no account, and nothing
 about an event made outside a club. Migration numbers follow 084.

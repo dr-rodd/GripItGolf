@@ -42,13 +42,25 @@ the current wordmark stays unchanged until it does.
 
 **Who uses it and where:** almost entirely on a phone. Golf is played outdoors,
 in daylight, one-handed, often on a weak signal, often by people whose reading
-glasses are in the car. Running is checked in short glances. Nobody signs in;
-a six-character event code is the way in.
+glasses are in the car. Running is checked in short glances. **Nobody needs
+to sign in to join, play, score or watch** — a six-character event code is
+the way in. Making an event needs a free Green Dot account (D135), and golf
+clubs keep their members' list on Green Dot (D116–D140). Three tiers are
+planned (D142): no account, Green Dot member with a personal page, and club
+member, who sees the site through their club.
 
 ## The screens
 
 - **Front door:** landing (type an event code, or Create), Create (pick a
-  sport), Golf doorway, Join, the create wizards, Privacy, Terms.
+  sport), Golf doorway, Join, the create wizards (behind sign-in since D135),
+  Privacy, Terms. **Planned (D146–D148):** Create leaves the front page for a
+  Green Dot members card; a signed-in phone opens its own `/home`.
+- **Green Dot members:** `/account` (sign in, join, Forgot password, Me),
+  My events, Clubs and a club's list (`/account/clubs`, `/account/club`).
+  **Planned:** `/home` — a personal page (Home · Events · Board · Stats · Me,
+  no skin) or, for a club member, the club area (Home · Comps · Board ·
+  Stats · Club, in the club's skin) — and `/club/[slug]`, a club's public
+  page.
 - **A golf trip** — tab bar: Home · Scoring · **Leaderboard** (centre) · Stats ·
   Trip Setup. Plus the round summary, teams, players, match play bracket,
   export. Scoring is a full-screen card with no tab bar (the bottom of the
@@ -271,3 +283,22 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D88 | Stroke foursomes is a new team format | Built (stage 7) |
 | D89 | Crossing Primary ↔ Overall after creation asks first, shows the standings before and after, deletes nothing | Built (stage 6) |
 | D90 | Stroke rounds in different formats that fit one board: asked once, one total (Primary) or points per round (Overall). Rounds that don't fit one board — Stableford beside strokes — get the Overall (Ross, 13 Nov 2026) | Built (stage 4) |
+
+**Accounts and clubs** (Ross, 14–15 Nov 2026; the whole plan, D94–D152, is in `docs/pending-concepts.md`, "Accounts and clubs"). The rule above all, D94: nobody ever needs an account to join, play, score or watch — an account only adds. Built so far: sign-in by username or email and a password (D128–D133; on screen "Green Dot member", never a bare "member"), owners and My events (D105–D107, D134), only members make events (D135), a PIN per event (D136–D137), clubs and their lists with a club's admins running its events (D116–D117, D138–D140).
+
+| # | Decision | Status |
+|---|---|---|
+| D141 | Accounts more visible on the front page | Agreed; plan (g) |
+| D142 | Three tiers: no account (nothing changes, ever); Green Dot member ("Dot member" in code and docs) with a personal page; Club member (on a verified club's list, linked) who sees the site through the club and keeps every Dot member feature. On screen the words stay as D133 | Agreed |
+| D143 | A Dot member's personal page: their events, their stats (the headline feature), making events. Tab bar as the club's less Club | Agreed; plan (g) |
+| D144 | A Club member's default view is the club area; their open events and the events they made sit in its upcoming list | Agreed; plan (h) |
+| D145 | One club per account, for now | Agreed; enforced by D150 |
+| D146 | Making a trip or event moves off the front page, onto the personal page and the club area | Agreed; plan (g) |
+| D147 | Front page by tier: signed out, the code box first, then a Green Dot members card (Sign in, Join, one line on what it gives), no Create; a quiet "Organise an event" goes to Join. Signed in, greendot.live opens the member's home, which carries the code box | Proposed; plan (g) |
+| D148 | One home address, `/home` (club area or personal page); `/club/[slug]` the club's public page; `/home` signed out goes to sign in; old account addresses redirect | Proposed; plan (g) |
+| D149 | Personal tab bar Home · Events · Board · Stats · Me; Board opens the live event's board, else the latest, never empty. Club tab bar stays D127 | Proposed; plan (g) |
+| D150 | D145 enforced on the server only: a second club refused, naming the first; the tables can hold more | Proposed; plan (e1) |
+| D151 | The personal page has no skin; only a club area does | Proposed |
+| D152 | The card summary row and its backfill (stage (f)) come before or with the personal page | Proposed; plan (f) before (g) |
+
+**For the next design session**: the club page's look (D118, D123–D127 — the Pints mockup), handed back as a hand-off spec, is what stage (e1) waits on; the personal page and the members card on the front page (D143, D147, D149) follow.
