@@ -586,6 +586,7 @@ async function tierTests() {
   eq(bootAt('/golf/trip/GX7K2P', 'club:lahinch'), null, '…nor any other page')
   eq(bootAt('/home', 'club:lahinch'), '/club/lahinch', 'a Club member at /home goes on to the club, so the personal page never flashes')
   eq(bootAt('/home', 'dot'), null, '…a Dot member stays')
+  eq(bootAt('/home?tab=events', 'club:lahinch'), null, '…but the personal page asked for by name stays, for a Club member too (stage (h))')
   eq(bootAt('/', 'club:"><script>'), null, 'a hint that is not an address goes nowhere')
   eq(bootAt('/', 'dot', true), null, 'storage refused: the front page shows')
 
@@ -613,7 +614,7 @@ async function tierTests() {
   section('Where the tiers land')
   const screen = read('app/home/HomeScreen.tsx')
   ok(/if \(r\.signedOut\) \{ forgetTier\(\); window\.location\.replace\('\/'\)/.test(screen), 'a stale hint is cleared and the front page shown')
-  ok(/if \(r\.home\.club\) \{ window\.location\.replace\(`\/club\/\$\{r\.home\.club\.slug\}`\)/.test(screen), 'a Club member goes on to the club area')
+  ok(/if \(r\.home\.club && !asked\) \{ window\.location\.replace\(`\/club\/\$\{r\.home\.club\.slug\}`\)/.test(screen), 'a Club member goes on to the club area, unless a tab was asked for by name')
   ok(/'home', 'events', 'board', 'stats', 'me'/.test(read('app/home/HomeTabBar.tsx')), 'Home · Events · Board · Stats · Me (D149)')
   ok(/text-accent-deep/.test(read('app/home/HomeTabBar.tsx')) && !/club/.test(read('app/home/HomeTabBar.tsx').replace(/\/\*[\s\S]*?\*\//g, '')),
     '  …lit in emerald: no skin outside a club (D151)')

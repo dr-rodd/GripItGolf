@@ -618,6 +618,27 @@ function wiringTests() {
   ok(/eventClub\(db, row\.id\)/.test(entryStore) && /select\('club_id, club_access'\)/.test(entryStore),
     'the event’s club is read in a query of its own, so nothing changes before 086')
 
+  section('Stage (h): the club area, and the club’s events made from it (D144, D153)')
+  const gate = read('app/dashboard/create/MemberGate.tsx')
+  ok(/Whose event is this\?/.test(gate) && /status === 'verified' && mayAdminister\(k\.role\)/.test(gate),
+    'the gate asks "Whose event is this?" of a verified club’s owners and admins only')
+  ok(/EventClubContext\.Provider value=\{whose\.club\}/.test(gate), '  …and hands the answer to the wizard behind it')
+  for (const f of ['CreateTripForm', 'CreateLeagueForm', 'CreateKnockoutForm', 'CreateRunForm'].map(n => `app/dashboard/create/${n}.tsx`)) {
+    const form = read(f)
+    ok(/const club = useEventClub\(\)/.test(form) && /clubId: club\?\.id \?\? null/.test(form) && /clubPinIssue\(club,/.test(form)
+      && /<ClubPinNote club=\{club\} \/>/.test(form), `${f}: a club’s event sends its club, and its PIN is lent and optional`)
+  }
+  ok(/clubId: pins\.clubId/.test(read('lib/entryClient.ts')), 'the club goes beside the row, never a column (Q3)')
+  const view = read('app/club/[slug]/ClubView.tsx')
+  ok(/<CodeBox \/>/.test(view) && /href="\/create"/.test(view), 'the club area’s Home has the code box and Make an event')
+  ok(/href=\{`\/club\/\$\{face\.slug\}\/list`\}/.test(view) && /href="\/home\?tab=events"/.test(view),
+    'its Club tab holds the list (owners and admins) and Your events')
+  ok(fs.existsSync('app/club/[slug]/list/page.tsx') && /notFound\(\)/.test(read('app/club/[slug]/list/page.tsx')),
+    'the list lives under the club, a verified club only')
+  ok(/window\.location\.replace\(state\.list \? `\/club\/\$\{state\.club\.slug\}\/list`/.test(read('app/account/club/ClubScreen.tsx')),
+    '  …and the old address goes on there for a verified club')
+  ok(/owner_id', userId/.test(read('app/api/club/store.ts')), 'a member’s own events include the ones they made (D144)')
+
   section('Words (D133)')
   const screens = ['app/account/clubs/ClubsScreen.tsx', 'app/account/club/ClubScreen.tsx', 'app/components/ClubEventCard.tsx'].map(read).join('\n')
   const strings = [...screens.matchAll(/(['"`])((?:(?!\1).)*?)\1|>([^<>{}]+)</g)].map(m => m[2] ?? m[3] ?? '')

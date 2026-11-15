@@ -27,6 +27,7 @@ import { describeError, generateCode } from './CreateTripForm'
 import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import WizardShell from '@/app/components/WizardShell'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
+import { ClubPinNote, clubPinIssue, useEventClub } from './EventClub'
 
 /**
  * Creating a Green Dot Run challenge — an ongoing team running competition.
@@ -88,6 +89,8 @@ export default function CreateRunForm() {
   const [perms, setPerms] = useState<RunPermissions>(defaultRunPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  // Q3, D153: "the club's" — the PIN becomes one lent to helpers, optional.
+  const club = useEventClub()
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -113,9 +116,9 @@ export default function CreateRunForm() {
   const rules = rulesFromDraft(draft)
   const pointsIssue = draftIssue(draft)
 
-  const passcodeIssue =
+  const passcodeIssue = clubPinIssue(club, passcode, passcodeConfirm,
     passcodeError(passcode) ??
-    (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+    (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null))
 
   const canProceed = !submitting && (
     step === 1 ? name.trim().length > 0 && !!startDate && !!endDate && !datesIssue :
@@ -153,7 +156,7 @@ export default function CreateRunForm() {
 
     // The PINs as typed: sent beside the row and stored salted and slow by
     // the server (row-level security stage 4, D64) — no hash is made here.
-    const pins = { adminPin: passcode, publicPin: null }
+    const pins = { adminPin: passcode || null, clubId: club?.id ?? null, publicPin: null }
 
     // 1. The trip row — the whole challenge's settings, in one write.
     const tripRow: Record<string, unknown> = {
@@ -290,9 +293,14 @@ export default function CreateRunForm() {
 
           <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
-              Your organiser PIN is set. Keep it safe — you can change it in the organiser
-              area, and Forgot PIN? emails a link to choose a new one to the address
-              this challenge was made with.
+              {passcode ? <>
+                Your organiser PIN is set. Keep it safe — you can change it in the organiser
+                area, and Forgot PIN? emails a link to choose a new one to the address
+                this challenge was made with.
+              </> : <>
+                {club?.name ?? 'The club'}’s owners and admins run this challenge on any phone they sign in on.
+                Lend helpers a PIN any time from the organiser area.
+              </>}
             </p>
           </div>
 
@@ -525,6 +533,7 @@ export default function CreateRunForm() {
               </p>
             </div>
 
+            {club && <ClubPinNote club={club} />}
             <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
               <p className="text-rust-deep text-sm font-semibold leading-snug">
                 Write it down.

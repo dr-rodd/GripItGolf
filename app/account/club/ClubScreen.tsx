@@ -30,7 +30,11 @@ const blankRow = { name: '', memberNumber: '', guiNumber: '', email: '' }
  * hidden; typing one replaces it. Anybody else on the list sees that they
  * are on it.
  */
-export default function ClubScreen() {
+export default function ClubScreen({ clubId: given, back }: {
+  /** Stage (h): drawn under the club's own address, `/club/[slug]/list`, which knows the club. */
+  clubId?: string
+  back?: { href: string; label: string }
+} = {}) {
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [id, setId] = useState('')
   const [search, setSearch] = useState('')
@@ -50,11 +54,19 @@ export default function ClubScreen() {
   }, [])
 
   useEffect(() => {
-    const clubId = new URLSearchParams(window.location.search).get('id') ?? ''
+    const clubId = given ?? new URLSearchParams(window.location.search).get('id') ?? ''
     setId(clubId)
     if (!clubId) { setState({ kind: 'failed', error: 'No club chosen.' }); return }
     void load(clubId)
-  }, [load])
+  }, [load, given])
+
+  // Stage (h): a verified club's list lives in its club area now. The old
+  // address, `/account/club?id=`, goes on there; a club still waiting to be
+  // verified has no club area and keeps it here.
+  useEffect(() => {
+    if (given || state.kind !== 'ready' || state.club.status !== 'verified') return
+    window.location.replace(state.list ? `/club/${state.club.slug}/list` : `/club/${state.club.slug}`)
+  }, [given, state])
 
   const preview = useMemo(() => (paste.trim() ? parseMemberList(paste) : null), [paste])
 
@@ -87,7 +99,7 @@ export default function ClubScreen() {
 
   if (state.kind !== 'ready') {
     return (
-      <Frame>
+      <Frame back={back}>
         <h1 className="t-h1 text-ink">Your club</h1>
         {state.kind === 'failed' && <p className="t-cap text-rust-deep mt-6" role="alert">{state.error}</p>}
       </Frame>
@@ -99,7 +111,7 @@ export default function ClubScreen() {
 
   if (!list) {
     return (
-      <Frame>
+      <Frame back={back}>
         <h1 className="t-h1 text-ink">{club.name}</h1>
         <p className="text-ink/80 text-[15px] leading-relaxed mt-4">
           You’re on {club.name}’s list.{' '}
@@ -114,12 +126,12 @@ export default function ClubScreen() {
   const current = list.filter(r => !r.removed).length
 
   return (
-    <Frame>
+    <Frame back={back}>
       <h1 className="t-h1 text-ink">{club.name}</h1>
       <p className="text-ink/65 text-sm mt-1">
         {CLUB_STATUS_WORDS[club.status]}{club.status === 'pending' ? '. You can build the list meanwhile.' : '.'}
       </p>
-      {club.status === 'verified' && (
+      {club.status === 'verified' && !given && (
         <a href={`/club/${club.slug}`} className="t-cap text-accent-deep underline underline-offset-2 mt-2 inline-block">
           See the club’s page
         </a>
@@ -229,11 +241,11 @@ export default function ClubScreen() {
   )
 }
 
-function Frame({ children }: { children: React.ReactNode }) {
+function Frame({ children, back }: { children: React.ReactNode; back?: { href: string; label: string } }) {
   return (
     <main className="min-h-dvh paper flex flex-col">
       <div className="w-full max-w-md mx-auto px-4 pt-2">
-        <BackButton href="/account/clubs" label="Clubs" />
+        <BackButton href={back?.href ?? '/account/clubs'} label={back?.label ?? 'Clubs'} />
       </div>
       <div className="flex-1 w-full max-w-md mx-auto px-4 pt-4 pb-10">{children}</div>
     </main>

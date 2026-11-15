@@ -595,8 +595,8 @@ async function main() {
     // trip settings" on a trip, "Lock event settings" on a tournament.
     ok(source.includes('Lock {noun} settings'), 'the option is on the form')
     ok(source.includes('label={`Lock ${noun} settings`}'), 'as a labelled switch')
-    ok(source.includes('adminPin: lockOn ? passcode : null'),
-      'the passcode is sent to the server, only when one was set')
+    ok(source.includes('adminPin: lockOn && passcode ? passcode : null'),
+      'the passcode is sent to the server, only when one was set (a club\'s event may leave it blank, Q3)')
     ok(!/passcode_hash|hashPasscode/.test(source),
       'and no hash is made or named on the phone (stage 4, D64)')
     ok(source.includes('describeError'),

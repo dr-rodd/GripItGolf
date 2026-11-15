@@ -291,7 +291,7 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D141 | Accounts more visible on the front page | Built (g): the Green Dot members card under the code box |
 | D142 | Three tiers: no account (nothing changes, ever); Green Dot member ("Dot member" in code and docs) with a personal page; Club member (on a verified club's list, linked) who sees the site through the club and keeps every Dot member feature. On screen the words stay as D133 | Agreed |
 | D143 | A Dot member's personal page: their events, their stats (the headline feature), making events. Tab bar as the club's less Club | Built (g): `/home` — Home, Events, Board, Stats, Me |
-| D144 | A Club member's default view is the club area; their open events and the events they made sit in its upcoming list | Agreed; plan (h) |
+| D144 | A Club member's default view is the club area; their open events and the events they made sit in its upcoming list | Built (h): the club area stays at `/club/<slug>` (the server draws the skin before paint); a member's own events are its Outside the club |
 | D145 | One club per account, for now | Agreed; enforced by D150 |
 | D146 | Making a trip or event moves off the front page, onto the personal page and the club area | Built (g): Create gone from the front page; Make an event on `/home` |
 | D147 | Front page by tier: signed out, the code box first, then a Green Dot members card (Sign in, Join, one line on what it gives), no Create; a quiet "Organise an event" goes to Join. Signed in, greendot.live opens the member's home, which carries the code box | Built (g): signed out the code box, the members card, Organise an event; signed in the head script goes on to `/home` |
@@ -315,7 +315,7 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 
 | # | Decision | Status |
 |---|---|---|
-| D153 | A club's owner or admin making an event from the club area is asked "the club's" (default, Club admins only) or "just mine"; any other club member makes their own. The club area lists the club's events to everyone on its list and a member's own to them alone | Agreed; plan (h) |
+| D153 | A club's owner or admin making an event from the club area is asked "the club's" (default, Club admins only) or "just mine"; any other club member makes their own. The club area lists the club's events to everyone on its list and a member's own to them alone | Built (h): asked at the create gate (`MemberGate`) |
 | D154 | The phone's sign-in hint holds a kind and a slug, never a name. The pre-paint script reads it on "/" alone (never a code path or a query). `/home` finding it stale clears it and shows the front page, not sign-in | Built (g): `lib/tierHint.ts`; on `/home` a club hint also goes on to the club |
 | D155 | One art image per club; dark mode derives it in CSS (brightness .62, saturate .75, sepia .15). An optional dark override is kept, never required | Built (e1): `clubs.art_path`, `art_dark_path` (087) |
 | D156 | sharp is a real dependency; images are resized on the server (art 1600 wide, crest 512, WebP), never on the phone | Built (e1) |

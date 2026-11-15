@@ -333,7 +333,9 @@ section('Creation writes in the platform\'s order, through the shared writers')
   ok(form.includes('kind: RUN_KIND'), 'the trip row is a run challenge')
   ok(form.includes('run_setup: { rules, boards: defaultBoards(draft.teamScore) }'),
     'carrying the rules and the two starting boards')
-  ok(form.includes('const pins = { adminPin: passcode, publicPin: null }'), 'and the organiser PIN, always — sent for the server to store (stage 4)')
+  ok(form.includes('const pins = { adminPin: passcode || null, clubId: club?.id ?? null, publicPin: null }'),
+    'and the organiser PIN — always, but for a club\'s challenge, where it is lent and optional (Q3) — sent for the server to store (stage 4)')
+  ok(/clubPinIssue\(club, passcode, passcodeConfirm,/.test(form), '  …left blank only on a club\'s event, never on the maker\'s own')
   ok(form.includes('storedRunPermissions(perms)'), 'permissions only when one was changed')
   // The row is made through /api/trip/create (row-level security, stage 3).
   const iTrip = form.indexOf('createTripRow(tripRow, pins)')

@@ -56,6 +56,7 @@ import { ChoiceChips, CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass, chi
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
+import { ClubPinNote, clubPinIssue, useEventClub } from './EventClub'
 
 // ── Types ─────────────────────────────────────────────────────────────────
 
@@ -217,6 +218,8 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
   const [lockSettings, setLockSettings] = useState(false)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  // Q3, D153: "the club's" — the PIN becomes one lent to helpers, optional.
+  const club = useEventClub()
   const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
   // A match play event's draw: now, later or on a date (lib/bracketDraw.ts)
   const [draw, setDraw] = useState<CreationDrawValue>(NO_CREATION_DRAW)
@@ -281,12 +284,12 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
   // A tournament always sets one: the PIN is the organiser's key to the
   // Event Hub's admin side (and Trip Setup — one code, one lock). On a trip
   // the lock stays a choice.
-  const lockOn = isTournament || lockSettings
+  const lockOn = isTournament || lockSettings || !!club
 
   const passcodeIssue = !lockOn
     ? null
-    : passcodeError(passcode) ??
-      (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+    : clubPinIssue(club, passcode, passcodeConfirm, passcodeError(passcode) ??
+      (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null))
   // The public PIN, beside it on an event (lib/publicPin.ts).
   const publicIssue = isTournament ? publicPinIssue(publicPin, passcode) : null
   // Two people on one trip cannot share a name. Caught on the form rather
@@ -368,7 +371,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
 
     // The PINs as typed: sent beside the row and stored salted and slow by
     // the server (row-level security stage 4, D64) — no hash is made here.
-    const pins = { adminPin: lockOn ? passcode : null, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
+    const pins = { adminPin: lockOn && passcode ? passcode : null, clubId: club?.id ?? null, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
 
 
     // 1. Trip
@@ -690,7 +693,9 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
           {lockOn && (
             <div className={`mb-4 px-4 py-3 ${cardClass('flat')}`}>
               <p className="text-ink/80 text-[13px] leading-snug">
-                {isTournament
+                {club && !passcode
+                  ? `${club.name}’s owners and admins run this ${isTournament ? 'event' : 'trip'} on any phone they sign in on. Lend helpers a PIN any time from its settings.`
+                  : isTournament
                   ? 'Your organiser PIN is set. Keep it safe — you can change it in the organiser area, and Forgot PIN? emails a link to choose a new one to the address this event was made with.'
                   : 'Settings are locked. Keep your passcode safe — you can change it in Trip Setup, and Forgot passcode? emails a link to choose a new one to the address this trip was made with.'}
               </p>
@@ -1219,7 +1224,9 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
                 phone (and it locks Trip Setup with the same code), so a
                 tournament without one would have no organiser side at all. */}
             <div className="mt-8 pt-6 border-t border-line">
-              {isTournament ? (
+              {club ? (
+                <ClubPinNote club={club} />
+              ) : isTournament ? (
                 <div className={`${cardClass()} px-4 py-4`}>
                   <p className="text-ink text-sm font-medium">Organiser PIN</p>
                   <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">

@@ -980,6 +980,42 @@ not redirect to `/home/me` — Me links to it, so it stays the settings page,
 and the tabs are one page (`/home?tab=…`) rather than `/home/me` and
 `/home/events`.
 
+### Stage (h) as built — the club area and the club's events (15 Nov 2026; D144, D153, Q3)
+
+No migration. **Where the club area lives:** it stays at `/club/<slug>`
+rather than moving under `/home` — the server draws the club's skin (art,
+crest, colour) there before the first paint, which a static `/home` cannot,
+so a Club member never sees the personal page or a plain shell first. The
+head script already sends a club hint from `/` and `/home` there (D154);
+`/home?tab=…` is now the personal page asked for by name and stays, for a
+Club member too. *Departure from the plan's "under /home".*
+
+**The club area (D144):** Home gains the code box (`app/components/CodeBox.tsx`,
+now shared with `/home`) and **Make an event**; Outside the club lists the
+member's events outside the club — in them, or made by them (owned, 085). The
+**Club** tab: the club's list and look (owners and admins), **Your events**
+(`/home?tab=events` — the whole list, claiming and unlinking), Your account,
+Privacy and Terms. The personal page's Me names the club.
+
+**The list moved under Club:** `/club/<slug>/list` (verified clubs; the
+server hands it the club's id and colour, the list is asked for after
+paint, answered to owners and admins alone). `/account/club?id=` goes on
+there for a verified club; a club still waiting to be verified keeps that
+address, having no club area. `/account/clubs` (join by code, set one up)
+stays, reached from Me.
+
+**"Whose event is this?" (Q3, D153):** asked by `MemberGate`, once, of a
+verified club's owner or admin, before any wizard — **the club's** or **just
+mine**; anybody else goes straight in. The answer is a context
+(`app/dashboard/create/EventClub.tsx`) the four wizards read: on the club's,
+the PIN step says what a PIN is for now and the PIN is optional
+(`clubPinIssue`). `/api/trip/create` takes `clubId` **beside** the row,
+checks the maker runs that verified club (`adminClubs`, the organiser area's
+own read), and writes `trip_private.club_id`/`club_access` in the same step
+as the membership — no PIN: **Club admins only**, a PIN nobody is given
+(`unheldPin`, now in `lib/pinHash.ts`); a PIN typed in: **lent to helpers**
+(`pin`). A failure there takes the event back, as a failed membership does.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:

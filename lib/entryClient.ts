@@ -385,7 +385,7 @@ export function answerPlayTogether(tripCode: string, boardId: string, together: 
  */
 export async function createTripRow(
   row: Record<string, unknown>,
-  pins: { adminPin?: string | null; publicPin?: string | null } = {},
+  pins: { adminPin?: string | null; publicPin?: string | null; clubId?: string | null } = {},
 ): Promise<{ data: { id: string } | null; error: { message: string; code?: string } | null }> {
   const failed = (message: string) => ({ data: null, error: { message } })
   if (!inBrowser()) return failed('Could not create the event — try again.')
@@ -397,7 +397,7 @@ export async function createTripRow(
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.token}` },
       // The PINs as typed, beside the row: hashed on the server (D64).
-      body: JSON.stringify({ row, adminPin: pins.adminPin ?? null, publicPin: pins.publicPin ?? null }),
+      body: JSON.stringify({ row, adminPin: pins.adminPin ?? null, publicPin: pins.publicPin ?? null, ...(pins.clubId ? { clubId: pins.clubId } : {}) }),
       credentials: 'same-origin',
     })
     const out = await res.json().catch(() => null) as {

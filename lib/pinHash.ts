@@ -19,7 +19,7 @@
 // before stage 4 (which held the plain hash itself) still opens the door.
 // It holds nothing that helps guess the PIN without the server's key.
 
-import { createHash, createHmac, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'crypto'
+import { createHash, createHmac, randomBytes, randomInt, scrypt as scryptCb, timingSafeEqual } from 'crypto'
 
 export const PIN_SCHEME = 's1'
 
@@ -114,4 +114,14 @@ export function entryAllowed(stored: string | null | undefined, cookie: string |
   if (!token) return false
   if (same(cookie, token)) return true
   return isLegacyHash(cookie) && same(fingerprint(code, cookie), token)
+}
+
+/**
+ * A PIN nobody is given: the lock on a club event kept to its admins
+ * (D138–D140). Every page locks, and the club's owners and admins, signed
+ * in, are its organisers. Made fresh each time and never kept anywhere but
+ * as its hash.
+ */
+export function unheldPin(): string {
+  return String(randomInt(10_000_000, 100_000_000))
 }

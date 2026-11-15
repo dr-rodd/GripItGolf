@@ -7,7 +7,8 @@ import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { IconChevronRight } from '@/app/components/icons'
-import { ButtonLink, FIELD, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
+import CodeBox from '@/app/components/CodeBox'
+import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import type { MyEvent } from '@/lib/account'
 import { clubEventDates, groupClubEvents, irishToday } from '@/lib/clubs'
@@ -43,13 +44,16 @@ export default function HomeScreen() {
   const [tab, setTab] = useState<HomeTab>('home')
 
   const load = useCallback(async () => {
+    // A tab asked for by name is the personal page on purpose — the club
+    // area's Your events (stage (h)) — so a Club member stays for it.
+    const asked = new URLSearchParams(window.location.search).has('tab')
     const r = await homeData()
     if (!r.ok) {
       if (r.signedOut) { forgetTier(); window.location.replace('/'); return }
       setState({ kind: 'failed', error: r.error })
       return
     }
-    if (r.home.club) { window.location.replace(`/club/${r.home.club.slug}`); return }
+    if (r.home.club && !asked) { window.location.replace(`/club/${r.home.club.slug}`); return }
     setState({ kind: 'ready', home: r.home })
   }, [])
 
@@ -154,47 +158,6 @@ function HomeTabPage({ home }: { home: HomeData | null }) {
   )
 }
 
-/** The front page's code box (D147): checked by the server, then off to the event by its short link. */
-function CodeBox() {
-  const router = useRouter()
-  const [code, setCode] = useState('')
-  const [checking, setChecking] = useState(false)
-  const [error, setError] = useState('')
-
-  async function join(e: React.FormEvent) {
-    e.preventDefault()
-    if (checking) return
-    setError('')
-    setChecking(true)
-    const entered = code.toUpperCase().trim()
-    try {
-      const res = await fetch(`/api/event/find?code=${encodeURIComponent(entered)}`, { cache: 'no-store' })
-      if (res.status !== 200 && res.status !== 404) throw new Error(`find ${res.status}`)
-      const data = await res.json() as { code: string | null }
-      if (!data.code) { setError('Event not found — check the code and try again'); setChecking(false); return }
-      router.push(`/${data.code}`)
-    } catch {
-      setError('Could not check the code — try again')
-      setChecking(false)
-    }
-  }
-
-  return (
-    <form onSubmit={join} className="w-full flex flex-col gap-3 mt-6">
-      <input
-        type="text" value={code}
-        onChange={e => { setCode(e.target.value.toUpperCase()); setError('') }}
-        maxLength={6} placeholder="EVENT CODE" aria-label="Event code"
-        className={`${FIELD} field-code`} autoComplete="off" autoCorrect="off" spellCheck={false}
-      />
-      {error && <p className="text-rust-deep text-sm text-center leading-snug" role="alert">{error}</p>}
-      <button type="submit" disabled={checking || code.trim().length < 6} className={buttonClass('primary')}>
-        {checking ? 'Checking…' : 'Join event'}
-      </button>
-    </form>
-  )
-}
-
 /** A date tile, 52×56, and the event beside it — the club calendar's row without the club's colour. */
 function DateRow({ e }: { e: MyEvent }) {
   const d = e.startDate ? new Date(`${e.startDate}T12:00:00Z`) : null
@@ -265,6 +228,7 @@ function MeTab({ home }: { home: HomeData | null }) {
       <h1 className="t-h1 text-ink">Me</h1>
       {home?.username && <p className="text-ink/80 text-[15px] mt-2">Signed in as {home.username}.</p>}
       <ListGroup className="mt-6">
+        {home?.club && <ListRow href={`/club/${home.club.slug}`} label={home.club.name} hint="Your club’s area" />}
         <ListRow href="/account" label="Your account" hint="Username, password, sign out, delete" />
         <ListRow href="/account/clubs" label="Clubs" hint="Join your club with its code, or set one up" />
         <ListRow href="/privacy" label="Privacy" hint="What Green Dot keeps, and for how long" />

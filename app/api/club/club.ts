@@ -106,7 +106,7 @@ export interface ClubStore {
   entries(userId: string, codes: string[]): Promise<string[]>
   /** Stage (f): this account's own card summaries for a year, and their courses' names. Empty before 088. */
   seasonRows(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
-  /** This account's events outside the club, on now or to come (D143's "Outside the club"). */
+  /** This account's events outside the club — in them or made them — on now or to come (D143's "Outside the club", D144). */
   outsideEvents(userId: string, excludeCodes: string[]): Promise<ClubEvent[]>
   /** The best club-round score in each of these finished events, by code — from the summaries. */
   topScores(codes: string[]): Promise<Record<string, { name: string; points: number }>>

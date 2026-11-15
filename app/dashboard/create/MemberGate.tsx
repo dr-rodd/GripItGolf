@@ -3,11 +3,24 @@
 import { useEffect, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
-import { ButtonLink } from '@/app/components/ui'
+import { ButtonLink, optionClass } from '@/app/components/ui'
 import { CREATE_NEEDS_ACCOUNT, accountLink } from '@/lib/account'
-import { readAccount, watchAccount } from '@/lib/accountClient'
+import { askClub, readAccount, watchAccount } from '@/lib/accountClient'
+import { mayAdminister } from '@/lib/clubs'
+import { EventClubContext, type EventClub } from './EventClub'
 
 type Gate = 'checking' | 'signedIn' | 'phone'
+
+/** Whose event: not asked yet, being asked (the club this account runs), or answered. */
+type Whose = { kind: 'unknown' } | { kind: 'ask'; club: EventClub } | { kind: 'answered'; club: EventClub | null }
+
+/** The verified club this account runs, if any — one club per account (D150). Fail-soft: none. */
+async function clubRun(): Promise<EventClub | null> {
+  const r = await askClub('mine')
+  if (!r.ok) return null
+  const c = (r.clubs ?? []).find(k => k.status === 'verified' && mayAdminister(k.role))
+  return c ? { id: c.id, name: c.name } : null
+}
 
 /**
  * Only a Green Dot member makes an event (Ross, 15 Nov 2026, D135). Every
@@ -24,18 +37,61 @@ type Gate = 'checking' | 'signedIn' | 'phone'
 export default function MemberGate({ children }: { children: React.ReactNode }) {
   const [gate, setGate] = useState<Gate>(CREATE_NEEDS_ACCOUNT ? 'checking' : 'signedIn')
   const [here, setHere] = useState<string | null>(null)
+  const [whose, setWhose] = useState<Whose>({ kind: 'unknown' })
 
   useEffect(() => {
     if (!CREATE_NEEDS_ACCOUNT) return
     let live = true
-    const check = () => { readAccount().then(a => { if (live) setGate(a ? 'signedIn' : 'phone') }) }
+    const check = () => {
+      readAccount().then(async a => {
+        if (!live) return
+        if (!a) { setGate('phone'); return }
+        // Q3, D153: a verified club's owner or admin is asked whose event
+        // this is, once, before the wizard; everybody else goes straight in.
+        const club = await clubRun()
+        if (!live) return
+        setWhose(w => (w.kind === 'unknown' ? (club ? { kind: 'ask', club } : { kind: 'answered', club: null }) : w))
+        setGate('signedIn')
+      })
+    }
     setHere(window.location.pathname + window.location.search)
     check()
     const stop = watchAccount(check)
     return () => { live = false; stop() }
   }, [])
 
-  if (gate === 'signedIn') return <>{children}</>
+  if (gate === 'signedIn' && whose.kind === 'answered') {
+    return <EventClubContext.Provider value={whose.club}>{children}</EventClubContext.Provider>
+  }
+  if (gate === 'signedIn' && !CREATE_NEEDS_ACCOUNT) return <>{children}</>
+
+  if (gate === 'signedIn' && whose.kind === 'ask') {
+    const { club } = whose
+    return (
+      <main className="min-h-dvh paper">
+        <TripHeader backTo="/create" />
+        <div className="flex flex-col items-center px-6 py-12 page-enter">
+          <div className="w-full max-w-sm">
+            <h1 className="t-h1 text-ink mb-2">Whose event is this?</h1>
+            <p className="text-ink/80 text-[15px] leading-relaxed">You run {club.name}. Make it the club’s, or your own.</p>
+            <div className="flex flex-col gap-3 mt-8">
+              <button type="button" onClick={() => setWhose({ kind: 'answered', club })} className={optionClass(false)}>
+                <span className="block text-[17px] font-semibold text-ink">{club.name}’s</span>
+                <span className="block t-cap text-ink/65 mt-0.5">
+                  On the club’s calendar. The club’s owners and admins run it; a PIN for helpers is optional.
+                </span>
+              </button>
+              <button type="button" onClick={() => setWhose({ kind: 'answered', club: null })} className={optionClass(false)}>
+                <span className="block text-[17px] font-semibold text-ink">Just mine</span>
+                <span className="block t-cap text-ink/65 mt-0.5">Yours alone, with a PIN of your own, as any event.</span>
+              </button>
+            </div>
+            <LegalLinks className="mt-12" />
+          </div>
+        </div>
+      </main>
+    )
+  }
 
   return (
     <main className="min-h-dvh paper">

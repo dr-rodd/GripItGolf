@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
+import CodeBox from '@/app/components/CodeBox'
 import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
@@ -225,6 +226,11 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         {' · '}{roleWord(m.role, face.name)}
       </p>
 
+      {/* Stage (h): the front page's way into an event, and making one —
+          the club's own for its admins, asked at the gate (Q3, D153). */}
+      <CodeBox />
+      <ButtonLink href="/create" variant="secondary" className="mt-3">Make an event</ButtonLink>
+
       {g.now.length > 0 && (
         <section className="mt-6">
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
@@ -395,12 +401,15 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
       <p className="text-ink/80 text-[15px] mt-2">You’re on {face.name}’s list as {roleWord(m.role, face.name).replace(/^(Owner|Admin)$/, r => `an ${r.toLowerCase()}`)}.</p>
       <ListGroup className="mt-6">
         {mayAdminister(m.role) && (
-          <ListRow href={`/account/club?id=${encodeURIComponent(m.clubId)}`} label="Keep the list and the club’s look"
+          <ListRow href={`/club/${face.slug}/list`} label="The club’s list and look"
             hint="Add people, send their codes, the crest, the art and the colour" />
         )}
+        <ListRow href="/home?tab=events" label="Your events"
+          hint="Every event you’re in or run, and the players linked to you" />
         <ListRow href="/account" label="Your account" hint="Username, password, sign out" />
       </ListGroup>
       <p className="t-cap text-ink/65 mt-4">Anybody else opening this address sees {face.name}’s public page.</p>
+      <LegalLinks className="mt-12" />
     </section>
   )
 }

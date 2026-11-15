@@ -124,6 +124,38 @@ async function createTests() {
     ok(!('lead_email' in (trips.get('trip-1') ?? {})), '  …the address never on the trips row every member reads (stage 5, D62)')
     eq(emails.get('trip-1'), 'lead@example.com', '  …kept apart instead')
   }
+  section('/api/trip/create: "the club\'s" — an event made under a verified club its maker runs (Q3, D153)')
+  {
+    const { store, trips, members } = standIn()
+    eq((await runCreate({ token: 'tok-u1', row: ROW, clubId: 'club-1' }, store, NOW)).status, 400,
+      'a store without clubs: a club asked for is refused, never quietly dropped')
+    const clubs = new Map<string, { clubId: string; access: string }>()
+    const withClubs: CreateStore = {
+      ...store,
+      async adminClubs(u) { return u === 'admin' ? [{ id: 'club-1', name: 'Green GC' }] : [] },
+      async setEventClub(t, clubId, access) { clubs.set(t, { clubId, access }) },
+    }
+    eq((await runCreate({ token: 'tok-member', row: ROW, clubId: 'club-1' }, withClubs, NOW)).status, 403,
+      'a plain member of the club cannot make the club\'s event — only its owners and admins (D139)')
+    eq((await runCreate({ token: 'tok-admin', row: ROW, clubId: 'club-9' }, withClubs, NOW)).status, 403,
+      '  …nor an admin under a club they do not run')
+    eq(trips.size, 0, '  …and neither made a row')
+
+    const locked = await runCreate({ token: 'tok-admin', row: ROW, clubId: 'club-1' }, withClubs, NOW)
+    eq(locked.status, 200, 'an admin makes the club\'s event with no PIN')
+    eq(clubs.get('trip-1'), { clubId: 'club-1', access: 'admins' }, '  …under the club, Club admins only')
+    ok(String((trips.get('trip-1') as Record<string, unknown>).settings_passcode_hash).startsWith('s1$'),
+      '  …locked with a PIN nobody is given (D138–D140), so every page locks')
+    eq(members.get('admin:trip-1')?.organiserUntil, null, '  …and the maker holds no PIN: they run it as the club\'s admin, signed in')
+
+    const lent = await runCreate({ token: 'tok-admin', row: { ...ROW, trip_code: 'ABC126' }, clubId: 'club-1', adminPin: '2468' }, withClubs, NOW)
+    eq(lent.status, 200, 'with a PIN typed in')
+    eq(clubs.get('trip-2'), { clubId: 'club-1', access: 'pin' }, '  …it is a PIN lent to helpers')
+    ok(!!members.get('admin:trip-2')?.organiserUntil, '  …and this phone, which knows it, is the organiser for twelve hours')
+
+    await runCreate({ token: 'tok-admin', row: { ...ROW, trip_code: 'ABC127' } }, withClubs, NOW)
+    ok(!clubs.has('trip-3'), '"Just mine": no club asked for, none written')
+  }
   {
     const { store } = standIn({ taken: true })
     const out = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)

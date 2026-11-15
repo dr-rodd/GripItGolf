@@ -16,13 +16,12 @@
 // routes under ./door, ./pin, ./extend and ./play-together are plumbing.
 
 import { passcodeError } from '@/lib/passcode'
-import { entryToken, hashPin, verifyPin } from '@/lib/pinHash'
+import { entryToken, hashPin, unheldPin, verifyPin } from '@/lib/pinHash'
 import { teeSheetAccess } from '@/lib/eventPermissions'
 import { withPlayTogether } from '@/lib/partnerships'
 import { mayChangeEvent, mayWrite, mergeGrant, type EventFacts, type Membership } from '@/lib/membership'
 import { isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
-import { randomInt } from 'crypto'
 import { parseClubAccess, type ClubAccess } from '@/lib/clubs'
 import { checkPin, factsOf, withOwner, type EntryStore, type EntryTrip } from '../entry/entry'
 
@@ -237,11 +236,6 @@ export interface EventClubView {
   runsClub: boolean
   /** The club's own, or the event's owner: may take it out of the club. */
   mayTakeOut: boolean
-}
-
-/** A PIN nobody is given: the lock on a club event kept to its admins. */
-function unheldPin(): string {
-  return String(randomInt(10_000_000, 100_000_000))
 }
 
 /**

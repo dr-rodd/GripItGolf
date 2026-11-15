@@ -40,6 +40,7 @@ import { CODE_CHAR, FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/com
 import WizardShell from '@/app/components/WizardShell'
 import { tripBase } from '@/lib/tripPaths'
 import { createTripRow, enterEvent } from '@/lib/entryClient'
+import { ClubPinNote, clubPinIssue, useEventClub } from './EventClub'
 
 /**
  * Creating a continuous knockout — an ongoing match play event occupying a
@@ -119,6 +120,8 @@ export default function CreateKnockoutForm({ onExit }: {
   const [perms, setPerms] = useState<EventPermissions>(defaultPermissions)
   const [passcode, setPasscode] = useState('')
   const [passcodeConfirm, setPasscodeConfirm] = useState('')
+  // Q3, D153: "the club's" — the PIN becomes one lent to helpers, optional.
+  const club = useEventClub()
   const [publicPin, setPublicPin] = useState(NO_PUBLIC_PIN)
 
   const [submitting, setSubmitting] = useState(false)
@@ -133,9 +136,9 @@ export default function CreateKnockoutForm({ onExit }: {
     ? null
     : duplicateNameError(players[duplicateIndex].name)
 
-  const passcodeIssue =
+  const passcodeIssue = clubPinIssue(club, passcode, passcodeConfirm,
     passcodeError(passcode) ??
-    (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null)
+    (passcode !== passcodeConfirm ? 'The two passcodes do not match.' : null))
   // The public PIN, beside it on an event (lib/publicPin.ts).
   const publicIssue = publicPinIssue(publicPin, passcode)
 
@@ -184,7 +187,7 @@ export default function CreateKnockoutForm({ onExit }: {
 
     // The PINs as typed: sent beside the row and stored salted and slow by
     // the server (row-level security stage 4, D64) — no hash is made here.
-    const pins = { adminPin: passcode, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
+    const pins = { adminPin: passcode || null, clubId: club?.id ?? null, publicPin: publicIssue === null && publicPin.on ? publicPin.pin : null }
 
 
     // 1. The trip row. No rounds and no itinerary follow — the golf comes
@@ -348,9 +351,14 @@ export default function CreateKnockoutForm({ onExit }: {
 
           <div className={`mb-4 px-4 py-3 ${cardClass()}`}>
             <p className="text-ink/80 text-[13px] leading-snug">
-              Your organiser PIN is set. Keep it safe — you can change it in the organiser
-              area, and Forgot PIN? emails a link to choose a new one to the address
-              this event was made with.
+              {passcode ? <>
+                Your organiser PIN is set. Keep it safe — you can change it in the organiser
+                area, and Forgot PIN? emails a link to choose a new one to the address
+                this event was made with.
+              </> : <>
+                {club?.name ?? 'The club'}’s owners and admins run this event on any phone they sign in on.
+                Lend helpers a PIN any time from the organiser area.
+              </>}
             </p>
           </div>
 
@@ -540,6 +548,7 @@ export default function CreateKnockoutForm({ onExit }: {
               </p>
             </div>
 
+            {club && <ClubPinNote club={club} />}
             <div className="px-4 py-3.5 bg-rust/10 border border-rust/40 rounded-xl">
               <p className="text-rust-deep text-sm font-semibold leading-snug">
                 Write it down.

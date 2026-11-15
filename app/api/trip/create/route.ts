@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { writeLeadEmail } from '@/lib/leadEmail'
+import { actionStore } from '@/app/api/entry/store'
 import { runCreate, type CreateStore } from './create'
 
-// POST /api/trip/create — `{ row, adminPin?, publicPin? }` with the phone's Supabase token as
+// POST /api/trip/create — `{ row, adminPin?, publicPin?, clubId? }` with the phone's Supabase token as
 // `Authorization: Bearer …` (a Green Dot member's, D135 — a phone with no
 // account is refused, 403): makes a new event's row and the phone's
 // membership of it (row-level security, stage 3). Answers in supabase-js's own
@@ -16,12 +17,14 @@ export const dynamic = 'force-dynamic'
 const NO_STORE = { 'Cache-Control': 'no-store' }
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null) as { row?: unknown; adminPin?: unknown; publicPin?: unknown } | null
+  const body = await req.json().catch(() => null) as { row?: unknown; adminPin?: unknown; publicPin?: unknown; clubId?: unknown } | null
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
     const db = createAdminClient()
     // The user the token names, kept for the member check — one read, not two.
     let user: { id: string; is_anonymous?: boolean; email?: string; email_confirmed_at?: string; confirmed_at?: string } | null = null
+    // The club's own reads and writes, the organiser area's (Q3, D153).
+    const clubs = actionStore(db)
     const store: CreateStore = {
       async userFromToken(t) {
         const { data, error } = await db.auth.getUser(t)
@@ -59,8 +62,10 @@ export async function POST(req: NextRequest) {
         // Before migration 085 there is no owner column: the event is made all the same.
         if (e && e.code !== '42703' && e.code !== 'PGRST204') throw e
       },
+      adminClubs: clubs.adminClubs,
+      async setEventClub(tripId, clubId, access) { await clubs.setEventClub!(tripId, clubId, access) },
     }
-    const out = await runCreate({ token, row: body?.row, adminPin: body?.adminPin, publicPin: body?.publicPin }, store, new Date())
+    const out = await runCreate({ token, row: body?.row, adminPin: body?.adminPin, publicPin: body?.publicPin, clubId: body?.clubId }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
     if (out.status === 200 && out.doorCookie) {
       const code = String((body?.row as { trip_code?: unknown } | undefined)?.trip_code ?? '')

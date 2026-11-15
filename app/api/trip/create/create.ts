@@ -16,9 +16,10 @@
 // hash column.
 
 import { CREATE_NEEDS_ACCOUNT, CREATE_REFUSED } from '@/lib/account'
+import type { ClubAccess } from '@/lib/clubs'
 import { mergeGrant, type Membership } from '@/lib/membership'
 import { passcodeError } from '@/lib/passcode'
-import { entryToken, hashPin } from '@/lib/pinHash'
+import { entryToken, hashPin, unheldPin } from '@/lib/pinHash'
 
 /**
  * Every column a create form puts on a new event. Anything else is refused
@@ -53,6 +54,14 @@ export interface CreateStore {
    * never fails the event's making.
    */
   recordOwner?(userId: string, tripId: string): Promise<void>
+  /**
+   * Q3, D153: the verified clubs this account is an owner or admin of — the
+   * only clubs it may make an event under. Absent, no event is made under a
+   * club.
+   */
+  adminClubs?(userId: string): Promise<{ id: string; name: string }[]>
+  /** The new event put under its club, with who edits it (086's columns). */
+  setEventClub?(tripId: string, clubId: string, access: ClubAccess): Promise<void>
 }
 
 export type CreateOutcome =
@@ -63,7 +72,7 @@ const fail = (status: 400 | 401 | 403 | 409 | 503, message: string, code?: strin
   ({ status, body: { data: null, error: { message, ...(code ? { code } : {}) } } })
 
 export async function runCreate(
-  input: { token: string | null; row: unknown; adminPin?: unknown; publicPin?: unknown },
+  input: { token: string | null; row: unknown; adminPin?: unknown; publicPin?: unknown; clubId?: unknown },
   store: CreateStore,
   now: Date,
 ): Promise<CreateOutcome> {
@@ -90,8 +99,20 @@ export async function runCreate(
     if (issue) return fail(400, issue)
   }
   if (adminPin && publicPin && adminPin === publicPin) return fail(400, 'Use a different PIN from the admin PIN.')
+
+  // Q3, D153: "the club's" — made under a verified club this account runs,
+  // beside the row, never a column. Club admins only (D138–D140) is an
+  // organiser PIN nobody is given; a PIN typed in is one lent to helpers.
+  let club: { id: string; name: string } | null = null
+  if (input.clubId !== undefined && input.clubId !== null) {
+    if (typeof input.clubId !== 'string' || !store.adminClubs || !store.setEventClub) return fail(400, 'Not a club this event can go under.')
+    club = (await store.adminClubs(userId)).find(k => k.id === input.clubId) ?? null
+    if (!club) return fail(403, 'Only a verified club’s owners and admins make its events.')
+  }
+  const access: ClubAccess | null = club ? (adminPin ? 'pin' : 'admins') : null
+
   const [adminHash, publicHash] = await Promise.all([
-    adminPin ? hashPin(adminPin, r.trip_code) : null,
+    adminPin ? hashPin(adminPin, r.trip_code) : access === 'admins' ? hashPin(unheldPin(), r.trip_code) : null,
     publicPin ? hashPin(publicPin, r.trip_code) : null,
   ])
 
@@ -108,10 +129,13 @@ export async function runCreate(
   // The phone that made it is in it from the first moment — the organiser
   // for twelve hours if it set the PIN (it knows it), and on an event with
   // no PIN every member is the organiser anyway (lib/membership.ts).
-  const membership = mergeGrant(null, { organiser: !!adminHash }, now)
+  // A club's event kept to its admins: nobody holds the PIN, so the maker is
+  // its organiser as one of the club's admins, signed in — never by a PIN.
+  const membership = mergeGrant(null, { organiser: !!adminPin }, now)
   try {
     await store.writeMembership(userId, made.id, membership)
     if (typeof leadEmail === 'string' && leadEmail.trim()) await store.writeLeadEmail(made.id, leadEmail.trim())
+    if (club && access && store.setEventClub) await store.setEventClub(made.id, club.id, access)
   } catch {
     await store.deleteTrip(made.id).catch(() => undefined)
     return fail(503, 'Could not create the event — try again.')

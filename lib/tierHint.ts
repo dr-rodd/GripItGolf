@@ -41,16 +41,18 @@ export function homeOf(h: TierHint): string {
 
 /**
  * Before the first paint, on the front page only, with nothing in the
- * address after the slash: a hinted phone goes on to its home. On `/home`, a
- * Club member's hint goes on to their club, so the personal page never
- * flashes first. `replace`, so Back does not land on a page that would send
+ * address after the slash: a hinted phone goes on to its home. On `/home`
+ * alone, a Club member's hint goes on to their club, so the personal page
+ * never flashes first; `/home?tab=…` is the personal page asked for by name
+ * (the club area's Your events, stage (h)) and stays. `replace`, so Back does not land on a page that would send
  * it straight forward again. Never throws — storage can be refused, and then
  * the page asked for shows.
  */
 export const TIER_BOOT_SCRIPT =
   `(function(){try{` +
-  `var p=location.pathname,f=p==='/'&&!location.search&&!location.hash;` +
-  `if(!f&&p!=='/home')return;` +
+  `var p=location.pathname,f=p==='/'&&!location.search&&!location.hash,` +
+  `o=p==='/home'&&!location.search;` +
+  `if(!f&&!o)return;` +
   `var h=localStorage.getItem('${TIER_KEY}');` +
   `var m=/^club:([a-z0-9-]{1,60})$/.exec(h||'');` +
   `if(m){location.replace('/club/'+m[1]);return}` +
