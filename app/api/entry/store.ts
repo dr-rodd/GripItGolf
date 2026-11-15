@@ -2,11 +2,37 @@
 // other route that checks an event's PIN on the server, which shares
 // `entry_attempts` and its retry limit through `checkPin`.
 
+import { parseClubAccess } from '@/lib/clubs'
 import type { NextRequest } from 'next/server'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { fieldOpenEnded, type AttemptWindow, type Membership } from '@/lib/membership'
-import type { EntryStore } from './entry'
+import type { EntryStore, EntryTrip } from './entry'
 import type { ActionStore } from '../event/actions'
+
+/**
+ * The club an event belongs to, who changes it, and the accounts that run
+ * it through the club — a verified club's owners and admins, linked and not
+ * removed (D139). Fail-soft: before migration 086, or on a failed read, no
+ * club.
+ */
+export async function eventClub(db: ReturnType<typeof createAdminClient>, tripId: string): Promise<Pick<EntryTrip, 'clubId' | 'clubName' | 'clubAccess' | 'clubAdminIds'>> {
+  const none = { clubId: null, clubName: null, clubAccess: null, clubAdminIds: [] }
+  const priv = await db.from('trip_private').select('club_id, club_access').eq('trip_id', tripId).maybeSingle()
+  const p = (priv.error ? null : priv.data) as { club_id?: string | null; club_access?: string | null } | null
+  if (!p?.club_id) return none
+  const [club, admins] = await Promise.all([
+    db.from('clubs').select('name, verified_at').eq('id', p.club_id).maybeSingle(),
+    db.from('club_members').select('user_id').eq('club_id', p.club_id).in('role', ['owner', 'admin'])
+      .is('removed_at', null).not('user_id', 'is', null),
+  ])
+  const c = (club.error ? null : club.data) as { name?: string; verified_at?: string | null } | null
+  return {
+    clubId: p.club_id,
+    clubName: c?.name ?? null,
+    clubAccess: parseClubAccess(p.club_access),
+    clubAdminIds: c?.verified_at && !admins.error ? ((admins.data ?? []) as { user_id: string }[]).map(r => r.user_id) : [],
+  }
+}
 
 export function serviceStore(db: ReturnType<typeof createAdminClient>): EntryStore {
   return {
@@ -24,10 +50,13 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       const row = data as { id: string; end_date: string | null; settings_passcode_hash: string | null }
       // The owner and D107's answer (migration 085) in a query of their own
       // too: before 085 there is no owner, and nothing changes.
-      const [pub, shape, priv] = await Promise.all([
+      const [pub, shape, priv, club] = await Promise.all([
         db.from('trips').select('public_passcode_hash').eq('id', row.id).maybeSingle(),
         db.from('trips').select('kind, bracket_setup, event_permissions').eq('id', row.id).maybeSingle(),
         db.from('trip_private').select('owner_id, settings_by').eq('trip_id', row.id).maybeSingle(),
+        // The event's club (migration 086) in a query of its own: before
+        // 086 there is no club, and nothing changes.
+        eventClub(db, row.id),
       ])
       const p = (priv.error ? null : priv.data) as { owner_id?: string | null; settings_by?: string | null } | null
       const s = (shape.error ? null : shape.data) as { kind?: unknown; bracket_setup?: unknown; event_permissions?: unknown } | null
@@ -40,6 +69,7 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
         openEnded: fieldOpenEnded({ kind: s?.kind, bracketSetup: s?.bracket_setup, eventPermissions: s?.event_permissions }),
         ownerId: p?.owner_id ?? null,
         settingsBy: p?.settings_by === 'owner' || p?.settings_by === 'anyone' ? p.settings_by : null,
+        ...club,
       }
     },
     async linkPlayer(userId, tripId, playerId) {
@@ -111,6 +141,22 @@ export function addressOf(req: NextRequest): string {
 export function actionStore(db: ReturnType<typeof createAdminClient>): ActionStore {
   return {
     ...serviceStore(db),
+    async adminClubs(userId) {
+      const rows = await db.from('club_members').select('club_id').eq('user_id', userId)
+        .in('role', ['owner', 'admin']).is('removed_at', null)
+      // Before migration 086 nobody runs a club.
+      if (rows.error || !rows.data?.length) return []
+      const { data, error } = await db.from('clubs').select('id, name')
+        .in('id', (rows.data as { club_id: string }[]).map(r => r.club_id)).not('verified_at', 'is', null).order('name')
+      if (error) throw error
+      return (data ?? []) as { id: string; name: string }[]
+    },
+    async setEventClub(tripId, clubId, access) {
+      const now = new Date().toISOString()
+      const { error } = await db.from('trip_private')
+        .upsert({ trip_id: tripId, club_id: clubId, club_access: access, updated_at: now }, { onConflict: 'trip_id' })
+      if (error) throw error
+    },
     async tripColumns(tripId, columns) {
       const { data, error } = await db.from('trips').select(columns.join(', ')).eq('id', tripId).maybeSingle()
       return error || !data ? null : (data as unknown as Record<string, unknown>)

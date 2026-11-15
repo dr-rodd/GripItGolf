@@ -15,6 +15,7 @@
 // against its server-only hash (lib/pinHash.ts) and re-stored salted and
 // slow, silently, the first time it is right.
 
+import type { ClubAccess } from '@/lib/clubs'
 import { createHash } from 'crypto'
 import { entryAllowed, hashPin, verifyPin } from '@/lib/pinHash'
 import { isPlayerId } from '@/lib/playerCookie'
@@ -35,6 +36,17 @@ export interface EntryTrip {
   ownerId?: string | null
   /** D107: 'owner' keeps an owned, PIN-less event to its owner; null is today's rule. */
   settingsBy?: 'owner' | 'anyone' | null
+  /** The club the event belongs to (migration 086) — server only. */
+  clubId?: string | null
+  clubName?: string | null
+  /** D138–D140: who changes a club event. */
+  clubAccess?: ClubAccess | null
+  /**
+   * The accounts that run the event through its club: the owners and admins
+   * on a verified club's list, linked and not removed (D139). Empty for an
+   * event outside a club, or a club not yet verified.
+   */
+  clubAdminIds?: string[]
 }
 
 /** What the rules need to know about an event, the one copy (entry, the event actions). */
@@ -49,7 +61,12 @@ export function factsOf(trip: EntryTrip): EventFacts {
 
 /** This phone's row with whether its signed-in account owns the event — never stored. */
 export function withOwner(m: Membership | null, trip: EntryTrip, userId: string): Membership | null {
-  return m ? { ...m, owner: !!trip.ownerId && trip.ownerId === userId } : null
+  if (!m) return null
+  // An owner runs their event on any phone they are signed in on (085), and
+  // a verified club's owners and admins run the club's events (086, D139):
+  // the same in the database, through account_trips().
+  const runs = (!!trip.ownerId && trip.ownerId === userId) || (trip.clubAdminIds ?? []).includes(userId)
+  return { ...m, owner: runs }
 }
 
 export interface EntryStore {

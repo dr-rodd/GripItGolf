@@ -11,7 +11,7 @@ import { serviceStore } from '../entry/store'
 
 type Db = ReturnType<typeof createAdminClient>
 
-function asUser(u: {
+export function asUser(u: {
   id: string; is_anonymous?: boolean | null; email?: string | null
   email_confirmed_at?: string | null; confirmed_at?: string | null
   app_metadata?: Record<string, unknown> | null
@@ -28,6 +28,28 @@ function asUser(u: {
 
 const asMembership = (r: { role: Membership['role']; player_id: string | null; organiser_until: string | null }): Membership =>
   ({ role: r.role, playerId: r.player_id, organiserUntil: r.organiser_until })
+
+/**
+ * The events of the verified clubs this account is on the list of, with the
+ * club's name and whether the account runs them (owner or admin). Empty
+ * before migration 086, or on any failed read — My events lists the rest.
+ */
+async function clubEvents(db: Db, userId: string): Promise<Map<string, { name: string; admin: boolean }>> {
+  const out = new Map<string, { name: string; admin: boolean }>()
+  const rows = await db.from('club_members').select('club_id, role').eq('user_id', userId).is('removed_at', null)
+  if (rows.error || !rows.data?.length) return out
+  const roles = new Map((rows.data as { club_id: string; role: string }[]).map(r => [r.club_id, r.role]))
+  const clubs = await db.from('clubs').select('id, name').in('id', [...roles.keys()]).not('verified_at', 'is', null)
+  if (clubs.error || !clubs.data?.length) return out
+  const names = new Map((clubs.data as { id: string; name: string }[]).map(c => [c.id, c.name]))
+  const events = await db.from('trip_private').select('trip_id, club_id').in('club_id', [...names.keys()])
+  if (events.error) return out
+  for (const e of (events.data ?? []) as { trip_id: string; club_id: string }[]) {
+    const role = roles.get(e.club_id)
+    out.set(e.trip_id, { name: names.get(e.club_id) ?? '', admin: role === 'owner' || role === 'admin' })
+  }
+  return out
+}
 
 export function accountStore(db: Db): AccountStore {
   return {
@@ -62,6 +84,20 @@ export function accountStore(db: Db): AccountStore {
         organiser_until: m.organiserUntil, updated_at: new Date().toISOString(),
       }, { onConflict: 'user_id,trip_id' })
       if (error) throw error
+    },
+    async soleOwnerOf(userId) {
+      const mine = await db.from('club_members').select('club_id').eq('user_id', userId).eq('role', 'owner').is('removed_at', null)
+      // Before migration 086 there are no clubs to hand on.
+      if (mine.error || !mine.data?.length) return []
+      const ids = (mine.data as { club_id: string }[]).map(r => r.club_id)
+      const [owners, clubs] = await Promise.all([
+        db.from('club_members').select('club_id').in('club_id', ids).eq('role', 'owner').is('removed_at', null),
+        db.from('clubs').select('id, name').in('id', ids),
+      ])
+      if (owners.error || clubs.error) throw owners.error ?? clubs.error
+      const count = new Map<string, number>()
+      for (const r of (owners.data ?? []) as { club_id: string }[]) count.set(r.club_id, (count.get(r.club_id) ?? 0) + 1)
+      return ((clubs.data ?? []) as { id: string; name: string }[]).filter(c => (count.get(c.id) ?? 0) <= 1).map(c => c.name)
     },
     async deleteUser(userId) {
       const { error } = await db.auth.admin.deleteUser(userId)
@@ -150,10 +186,11 @@ export function accountStore(db: Db): AccountStore {
       }
     },
     async eventsFor(userId) {
-      const [owned, entered, linked] = await Promise.all([
+      const [owned, entered, linked, clubbed] = await Promise.all([
         db.from('trip_private').select('trip_id').eq('owner_id', userId),
         db.from('trip_members').select('trip_id').eq('user_id', userId),
         db.from('account_players').select('trip_id, player_id').eq('user_id', userId),
+        clubEvents(db, userId),
       ])
       if (entered.error) throw entered.error
       const ownedIds = new Set(((owned.error ? [] : owned.data) ?? []).map(r => (r as { trip_id: string }).trip_id))
@@ -161,7 +198,9 @@ export function accountStore(db: Db): AccountStore {
         const x = r as { trip_id: string; player_id: string }
         return [x.trip_id, x.player_id] as const
       }))
-      const ids = [...new Set([...ownedIds, ...links.keys(), ...(entered.data ?? []).map(r => (r as { trip_id: string }).trip_id)])]
+      // D120: a club's events are in its people's one list; its admins run them.
+      for (const [tripId, c] of clubbed) if (c.admin) ownedIds.add(tripId)
+      const ids = [...new Set([...ownedIds, ...links.keys(), ...clubbed.keys(), ...(entered.data ?? []).map(r => (r as { trip_id: string }).trip_id)])]
       if (ids.length === 0) return []
       const [trips, players] = await Promise.all([
         db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', ids),
@@ -180,6 +219,7 @@ export function accountStore(db: Db): AccountStore {
             endDate: t.end_date,
             owned: ownedIds.has(t.id),
             player: pid ? { id: pid, name: names.get(pid) ?? '' } : null,
+            club: clubbed.get(t.id)?.name ?? null,
           }
         })
     },

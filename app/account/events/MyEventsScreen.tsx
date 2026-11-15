@@ -93,8 +93,8 @@ export default function MyEventsScreen() {
                     key={e.code}
                     href={`/${e.code}`}
                     label={e.name}
-                    hint={[KIND_WORD[e.kind], e.code, e.player ? `You’re ${e.player.name}` : null].filter(Boolean).join(' · ')}
-                    trailing={e.owned ? <Pill>Yours</Pill> : undefined}
+                    hint={[e.club ?? KIND_WORD[e.kind], e.code, e.player ? `You’re ${e.player.name}` : null].filter(Boolean).join(' · ')}
+                    trailing={e.owned ? <Pill>{e.club ? 'You run it' : 'Yours'}</Pill> : undefined}
                   />
                 ))}
               </ListGroup>

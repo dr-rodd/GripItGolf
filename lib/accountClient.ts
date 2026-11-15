@@ -106,9 +106,9 @@ function keepPending(p: Pending) {
   try { window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(p)) } catch { /* unavailable — the code still works this load */ }
 }
 
-async function askServer(token: string, body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> } | null> {
+async function askServer(token: string, body: Record<string, unknown>, url = '/api/account'): Promise<{ status: number; body: Record<string, unknown> } | null> {
   try {
-    const res = await fetch('/api/account', {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
@@ -400,4 +400,36 @@ export async function deleteAccount(): Promise<Answer> {
   } catch {
     return { ok: false, error: 'Could not delete the account — try again.' }
   }
+}
+
+// ─── Clubs (stage (c)) ─────────────────────────────────────────
+
+export type ClubRoleWord = 'owner' | 'admin' | 'member'
+export interface ClubSummary { id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'; role: ClubRoleWord }
+export interface ClubListEntry {
+  id: string; name: string; memberNumber: string | null; guiNumber: string | null; email: string | null
+  role: ClubRoleWord; linked: boolean; removed: boolean; onBoards: boolean
+}
+export interface ClubAnswer {
+  clubs?: ClubSummary[]
+  club?: ClubSummary
+  list?: ClubListEntry[]
+  added?: number
+  updated?: number
+  skipped?: { name: string; why: string }[]
+  sentTo?: string
+}
+
+/**
+ * One ask of /api/club, as this signed-in Green Dot member: `mine`,
+ * `create`, `club`, `members`, `add`, `update`, `remove`, `restore`,
+ * `invite`, `link`. Never throws.
+ */
+export async function askClub(action: string, body: Record<string, unknown> = {}): Promise<({ ok: true } & ClubAnswer) | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { ...body, action }, '/api/club')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as ClubAnswer) }
 }

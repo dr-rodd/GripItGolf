@@ -22,6 +22,8 @@ import { withPlayTogether } from '@/lib/partnerships'
 import { mayChangeEvent, mayWrite, mergeGrant, type EventFacts, type Membership } from '@/lib/membership'
 import { isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
+import { randomInt } from 'crypto'
+import { parseClubAccess, type ClubAccess } from '@/lib/clubs'
 import { checkPin, factsOf, withOwner, type EntryStore, type EntryTrip } from '../entry/entry'
 
 export interface ActionStore extends EntryStore {
@@ -39,6 +41,12 @@ export interface ActionStore extends EntryStore {
   playerLinks?(tripId: string): Promise<{ id: string; name: string }[]>
   /** A link the organiser undoes: the player is nobody's account's any more. */
   removePlayerLink?(tripId: string, playerId: string): Promise<void>
+
+  // Stage (c) — clubs (migration 086).
+  /** The verified clubs this account runs: owner or admin, linked, not removed. */
+  adminClubs?(userId: string): Promise<{ id: string; name: string }[]>
+  /** The event put under a club (or taken out, null), and who changes it. */
+  setEventClub?(tripId: string, clubId: string | null, access: ClubAccess | null): Promise<void>
 }
 
 type Fail = { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
@@ -210,9 +218,114 @@ export async function runSetAdminPin(
 
   await store.updateTrip(trip.id, { settings_passcode_hash: await hashPin(next, trip.code) })
   await store.endOrganisers(trip.id)
+  // A club event locked to its admins has a PIN nobody holds; one chosen
+  // here is a PIN to lend, so the event now says so (D140).
+  if (trip.clubId && trip.clubAccess !== 'pin' && store.setEventClub) await store.setEventClub(trip.id, trip.clubId, 'pin')
   const m = mergeGrant(await store.readMembership(c.userId, trip.id), { organiser: true }, now)
   await store.writeMembership(c.userId, trip.id, m)
   return { status: 200, body: { ok: true, organiserUntil: m.organiserUntil } }
+}
+
+// ─── An event's club (stage (c), D138–D140) ────────────────────
+
+export interface EventClubView {
+  club: { id: string; name: string } | null
+  access: ClubAccess | null
+  /** The verified clubs this account runs, to put the event under. */
+  clubs: { id: string; name: string }[]
+  /** This account runs the event's club, so may change who edits it. */
+  runsClub: boolean
+  /** The club's own, or the event's owner: may take it out of the club. */
+  mayTakeOut: boolean
+}
+
+/** A PIN nobody is given: the lock on a club event kept to its admins. */
+function unheldPin(): string {
+  return String(randomInt(10_000_000, 100_000_000))
+}
+
+/**
+ * The organiser's view of the event's club, and changing it. Putting an
+ * event under a club needs its organiser who is also an owner or admin of
+ * that verified club; changing who edits it needs one of the club's own.
+ * Who edits (`access`): **admins** — a fresh PIN nobody is given, so every
+ * page locks and the club's admins (signed in) are its organisers;
+ * **pin** — a PIN chosen here, to lend; **anyone** — no PIN. Taking an
+ * event out of a club keeps its PIN, and this phone the organiser for twelve
+ * hours to set a new one. Never touches a score.
+ */
+export async function runEventClub(
+  input: { token: string | null; code: unknown; clubId?: unknown; access?: unknown; pin?: unknown },
+  store: ActionStore,
+  now: Date,
+): Promise<{ status: 200; body: { ok: true } & EventClubView } | Fail> {
+  const c = await caller(store, input.token, input.code)
+  if (failed(c)) return c
+  if (!mayChangeEvent(c.m, c.facts, now)) return fail(403, 'Only the event organiser can change its club.')
+  if (!store.adminClubs || !store.setEventClub) return fail(503, 'Clubs aren’t set up yet.')
+  const clubs = await store.adminClubs(c.userId)
+  const { trip } = c
+  const view = (clubId: string | null, name: string | null, access: ClubAccess | null): { status: 200; body: { ok: true } & EventClubView } => ({
+    status: 200,
+    body: {
+      ok: true, club: clubId ? { id: clubId, name: name ?? '' } : null, access, clubs,
+      runsClub: !!clubId && clubs.some(k => k.id === clubId),
+      mayTakeOut: !!clubId && (clubs.some(k => k.id === clubId) || trip.ownerId === c.userId),
+    },
+  })
+
+  const lockToAdmins = async () => {
+    await store.updateTrip(trip.id, { settings_passcode_hash: await hashPin(unheldPin(), trip.code) })
+    await store.endOrganisers(trip.id)
+  }
+
+  // Taken out of its club.
+  if (input.clubId === null) {
+    if (!trip.clubId) return view(null, null, null)
+    // The club's own, or the event's owner — never a helper lent the PIN.
+    if (!clubs.some(k => k.id === trip.clubId) && trip.ownerId !== c.userId) {
+      return fail(403, `Only ${trip.clubName ?? 'the club'}’s owners and admins, or the event’s owner, take it out of the club.`)
+    }
+    await store.setEventClub(trip.id, null, null)
+    const m = mergeGrant(await store.readMembership(c.userId, trip.id), { organiser: true }, now)
+    await store.writeMembership(c.userId, trip.id, m)
+    return view(null, null, null)
+  }
+
+  // Put under a club: the caller runs it, and it is verified.
+  if (typeof input.clubId === 'string' && input.clubId !== trip.clubId) {
+    const club = clubs.find(k => k.id === input.clubId)
+    if (!club) return fail(403, 'You can only put an event under a verified club you run.')
+    const access = parseClubAccess(input.access) ?? 'admins'
+    if (access === 'pin') return fail(400, 'Put it under the club first, then choose a PIN to lend.')
+    if (access === 'admins') await lockToAdmins()
+    if (access === 'anyone') await store.updateTrip(trip.id, { settings_passcode_hash: null })
+    await store.setEventClub(trip.id, club.id, access)
+    return view(club.id, club.name, access)
+  }
+
+  if (input.access === undefined) {
+    if (trip.clubId) return view(trip.clubId, trip.clubName ?? null, trip.clubAccess ?? null)
+    return view(null, null, null)
+  }
+
+  // Who edits a club event: the club's own say.
+  if (!trip.clubId) return fail(400, 'This event isn’t a club’s.')
+  if (!clubs.some(k => k.id === trip.clubId)) return fail(403, `Only ${trip.clubName ?? 'the club'}’s owners and admins change who edits its events.`)
+  const access = parseClubAccess(input.access)
+  if (!access) return fail(400, 'Choose who can edit.')
+  if (access === 'admins') await lockToAdmins()
+  if (access === 'anyone') await store.updateTrip(trip.id, { settings_passcode_hash: null })
+  if (access === 'pin') {
+    const pin = str(input.pin) ?? ''
+    const issue = passcodeError(pin)
+    if (issue) return fail(400, issue)
+    if (trip.publicHash && (await verifyPin(pin, trip.publicHash)).ok) return fail(400, 'Use a different PIN from the public PIN.')
+    await store.updateTrip(trip.id, { settings_passcode_hash: await hashPin(pin, trip.code) })
+    await store.endOrganisers(trip.id)
+  }
+  await store.setEventClub(trip.id, trip.clubId, access)
+  return view(trip.clubId, trip.clubName ?? null, access)
 }
 
 // ─── Players linked to Green Dot members (D134, stage (b2)) ────

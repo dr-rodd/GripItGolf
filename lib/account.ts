@@ -258,6 +258,8 @@ export interface MyEvent {
   owned: boolean
   /** The player this account is linked to there (D134), if any. */
   player: { id: string; name: string } | null
+  /** The verified club the event belongs to, where this account is on its list (D120). */
+  club?: string | null
 }
 
 /** Newest first by start date, events without a date last, then by name. */

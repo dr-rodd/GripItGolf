@@ -731,6 +731,28 @@ untouched**, and every event made before keeps working exactly as it did.
 The privacy notice says an account is needed only to make an event. No
 migration.
 
+**(c) — built 15 Nov 2026: clubs and their lists.** Migration **086**
+(below as drawn, plus `trip_private.club_access`). Built: setting up a club
+(`/account/clubs`, unverified until Ross verifies it in `/admin/clubs`), the
+list (`/account/club`: add one, paste a whole list, change, email a code,
+take off — the row kept, the link cut — put back, still on the boards),
+joining by the emailed code (8 characters, kept hashed, 14 days, one use,
+wrong tries limited per address as PINs are; one GUI number to one account,
+a clash held for the club), the club's events (`ClubEventCard` in the
+organiser area and Trip Setup: put an event under a verified club you run;
+Who can edit — Club admins only / Club admins and anyone with the PIN /
+Anyone in the event), D120's one list (My events, the club's name on each),
+`mayUseFeature` (yes for all), the privacy notice's Clubs section, and
+deleting an account refused while it is a club's only owner. **Decided while
+building — "Club admins only" is an organiser PIN nobody is given** (D136's
+"Just me is setting a PIN", for clubs): every page already locks on a PIN,
+the club's admins are organisers through `account_trips()` and `withOwner`
+on any phone they are signed in on, and so the 35 files that read `pinSet`
+did not change, nor did `organiser_trips()`. Choosing a PIN to lend (here or
+on the PIN card) marks the event 'pin'. Not built: the public club page and
+the members area (stage (e), with the skin), club invites by bulk send,
+closing a club (by support for now).
+
 **(b) My events, ownership and D134 linking.** Migration **085**:
 - `trip_private.owner_id` (`auth.users ON DELETE SET NULL`),
   `trip_private.settings_by` (`'owner'` | `'anyone'`, D107 — read only for

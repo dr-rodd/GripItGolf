@@ -481,6 +481,7 @@ export default function AccountScreen() {
             </p>
             {errorLine}
             <ButtonLink href="/account/events" variant="secondary" className="mt-8">My events</ButtonLink>
+            <ButtonLink href="/account/clubs" variant="secondary" className="mt-3">Clubs</ButtonLink>
             <button type="button" onClick={signOut} disabled={busy} className={`${buttonClass('secondary')} mt-3`}>
               Sign out
             </button>

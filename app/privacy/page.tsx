@@ -1,3 +1,4 @@
+import { INVITE_DAYS } from '@/lib/clubs'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SITE } from '@/config/site'
@@ -93,6 +94,9 @@ export default function PrivacyPage() {
             and is not kept.
           </li>
           <li><B>Preferences</B>, such as dark mode, so they follow you between phones.</li>
+          <li>
+            <B>A club&apos;s list</B>, where the event is run by a golf club on Green Dot — see Clubs below.
+          </li>
         </ul>
         <p className="mt-3">
           To stop people guessing event PINs, we count wrong PINs for a short time: no more than{' '}
@@ -129,7 +133,32 @@ export default function PrivacyPage() {
           password, and the account&apos;s record of the events it entered, owns and is linked to are
           deleted straight away, and the screen says so. An event you owned carries on, run by its
           organiser PIN as before. Your names and scores stay with the events they were played in, as
-          anybody&apos;s do; ask the organiser, or write to {mail}, to have those removed too.
+          anybody&apos;s do; ask the organiser, or write to {mail}, to have those removed too. While you
+          are the only owner of a club, make somebody else an owner first: a club always has one.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="Clubs">
+        <p>
+          A golf club on Green Dot can keep its list of members here: each person&apos;s <B>name</B>, the
+          club&apos;s own <B>member number</B>, their national <B>(GUI) membership number</B> if they have
+          one, their <B>email address</B>, and whether they are an owner, admin or member. The club&apos;s
+          owners and admins add, change and remove those details, and are responsible for them being
+          accurate; Green Dot holds them for the club, so members can link their own account and see
+          the club&apos;s events and results. A member links their account themselves, with a code the
+          club emails to the address on its list (the code is kept only in a scrambled form, and works
+          once, for {INVITE_DAYS} days). Only the club&apos;s owners and admins see the list, and
+          membership numbers are shown partly hidden. One GUI number links to one account. Green Dot
+          checks each club before it is verified.
+        </p>
+        <p className="mt-3">
+          When a membership lapses, the golf played stays. When a club takes somebody off its list,
+          their link to the club ends at once and the access it gave with it; their own account is
+          never touched by a club, their names and scores stay with the events they played in, and
+          the club decides whether they still appear on its leaderboards. If you delete your account,
+          your golf stays on the leaderboards it was played on, and the club may choose to delete it
+          from its own events. A club&apos;s list is deleted when the club is closed, and anybody on it can
+          ask the club, or write to {mail}, to be taken off it.
         </p>
       </LegalSection>
 
@@ -242,7 +271,8 @@ export default function PrivacyPage() {
           To run an event you take part in — including when an organiser adds you to one — we rely
           on our legitimate interest, and theirs, in the event working: scores counted, teams kept,
           the leaderboard right. The organiser&apos;s email, and an account&apos;s, are used to provide what
-          they asked for.
+          they asked for. A club&apos;s list is held on the club&apos;s legitimate interest in running its
+          membership, for the club.
           Strava data is held on your consent, which you can withdraw at any time.
         </p>
       </LegalSection>

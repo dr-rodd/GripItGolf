@@ -249,3 +249,20 @@ SELECT
   NOT has_table_privilege('authenticated', 'public.account_attempts',  'SELECT') AS attempts_closed,
   NOT has_function_privilege('authenticated', 'public.account_has_password(uuid)', 'EXECUTE') AS password_check_closed,
   (SELECT relrowsecurity FROM pg_class WHERE relname = 'account_usernames') AS usernames_rls_on;
+
+-- ─── Stage (c) (migration 086): clubs and their lists ───────────────
+-- Phones never reach a club, its list or its codes; a club's admins are
+-- added to account_trips() beside the owner, nothing else. One row, every
+-- column true:
+SELECT
+  NOT has_table_privilege('authenticated', 'public.clubs',        'SELECT') AS clubs_closed,
+  NOT has_table_privilege('authenticated', 'public.club_members', 'SELECT') AS list_closed,
+  NOT has_table_privilege('anon',          'public.club_members', 'SELECT') AS list_closed_anon,
+  NOT has_table_privilege('authenticated', 'public.club_invites', 'SELECT') AS invites_closed,
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'club_members')      AS list_rls_on,
+  pg_get_functiondef('public.writable_trips()'::regprocedure)  LIKE '%end_date + 31%' AS cap_kept,
+  pg_get_functiondef('public.organiser_trips()'::regprocedure) LIKE '%account_trips()%' AS organiser_reads_accounts;
+
+-- A phone with no account is in no club's list and owns nothing, so it
+-- reads every event exactly as stage 4 answered. Expect 0:
+SELECT count(*) FROM club_members WHERE user_id IN (SELECT id FROM auth.users WHERE is_anonymous IS TRUE);

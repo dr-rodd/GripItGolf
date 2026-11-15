@@ -75,6 +75,10 @@ export interface AccountStore {
   setOwner(tripId: string, userId: string): Promise<'ok' | 'taken'>
   /** Where a PIN's wrong tries are counted — /api/entry's own (`checkPin`). */
   pins: AttemptStore
+
+  // Stage (c) — clubs (migration 086).
+  /** The clubs where this account is the only owner still on the list. */
+  soleOwnerOf?(userId: string): Promise<string[]>
 }
 
 export type AccountBody = {
@@ -241,6 +245,9 @@ export async function runAccount(
 
   if (input.action === 'delete') {
     if (!isAccount(user)) return fail(403, 'This phone is not signed in to an account.')
+    // A club always has an owner: hand it on first (stage (c)).
+    const sole = store.soleOwnerOf ? await store.soleOwnerOf(user.id) : []
+    if (sole.length > 0) return fail(409, `You’re the only owner of ${sole.join(' and ')}. Make somebody else an owner on the club’s list first.`)
     await store.deleteUser(user.id)
     return { status: 200, body: { ok: true } }
   }

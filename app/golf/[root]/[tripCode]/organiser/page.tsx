@@ -20,6 +20,7 @@ import OrganiserClient from './OrganiserClient'
 import PublicPinCard from './PublicPinCard'
 import AdminPinCard from '@/app/components/AdminPinCard'
 import LinkedPlayersCard from '@/app/components/LinkedPlayersCard'
+import ClubEventCard from '@/app/components/ClubEventCard'
 import { fetchEntryLock } from '../kind'
 import { golfIrelandRequests } from '../golfIreland'
 import { tripHomeAt } from '@/lib/tripPaths'
@@ -276,6 +277,7 @@ export default async function OrganiserPage({ params }: {
         <AdminPinCard tripCode={tripCode} pinSet={isLocked(trip.settings_passcode_hash)} isTrip={false} />
         <PublicPinCard tripCode={tripCode} hasPin={!!publicLock} adminPinSet={isLocked(trip.settings_passcode_hash)} />
         <LinkedPlayersCard tripCode={tripCode} pinSet={isLocked(trip.settings_passcode_hash)} isTrip={false} />
+        <ClubEventCard tripCode={tripCode} pinSet={isLocked(trip.settings_passcode_hash)} isTrip={false} />
       </>}
       // The door to the team picker, while a leaderboard plays in teams.
       hasTeamBoards={boards.some(b => b.audience === 'team' && !b.tagMode)}

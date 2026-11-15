@@ -430,6 +430,38 @@ export async function readPlayerLinks(tripCode: string, unlink?: string): Promis
     .map(p => ({ id: p.id as string, name: p.name as string }))
 }
 
+// ─── An event's club (stage (c), D138–D140) ────────────────────
+
+export type ClubAccessChoice = 'admins' | 'pin' | 'anyone'
+export interface EventClubView {
+  club: { id: string; name: string } | null
+  access: ClubAccessChoice | null
+  clubs: { id: string; name: string }[]
+  runsClub: boolean
+  mayTakeOut: boolean
+}
+
+/**
+ * For the organiser: the event's club and who edits it, and the verified
+ * clubs this signed-in Green Dot member runs; with `change`, the event put
+ * under a club (`clubId`), taken out (`clubId: null`), or who edits it
+ * changed (`access`, a `pin` to lend). Null when this phone is not the
+ * organiser or cannot reach Green Dot; an error the server gave otherwise.
+ */
+export async function eventClub(
+  tripCode: string,
+  change?: { clubId?: string | null; access?: ClubAccessChoice; pin?: string },
+): Promise<EventClubView | { error: string } | null> {
+  if (!inBrowser() || !tripCode) return null
+  // A phone with no Green Dot account runs no club: nothing to ask.
+  if (!change && !(await databaseReady() && (await phoneSession())?.account)) return null
+  const r = await ask('/api/event/club', { code: tripCode.trim().toUpperCase(), ...(change ?? {}) })
+  if (!r) return change ? { error: 'Could not reach Green Dot — try again.' } : null
+  if (r.status !== 200) return change ? { error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.' } : null
+  const b = r.body as unknown as EventClubView
+  return { club: b.club ?? null, access: b.access ?? null, clubs: Array.isArray(b.clubs) ? b.clubs : [], runsClub: b.runsClub === true, mayTakeOut: b.mayTakeOut === true }
+}
+
 // ─── Forgot PIN (D67) ──────────────────────────────────────────
 
 /**
