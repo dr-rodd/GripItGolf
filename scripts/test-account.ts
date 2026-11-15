@@ -19,7 +19,8 @@ import path from 'path'
 import {
   ACCOUNTS_LINKED, ACCOUNT_PATH, ACCOUNT_WORDS, CODE_LENGTH, MERGE_TICKET_MS, PASSWORD_MAX, PASSWORD_MIN,
   RESERVED_USERNAMES, SIGN_IN_FAILED, SIGN_IN_LIMITS, USERNAME_CHECK_LIMIT, codeDigits, codeIssue, credentialsRefused,
-  emailIssue, isAccount, mergeMemberships, normaliseEmail, normaliseUsername, passwordIssue, signInRoute, usernameIssue,
+  emailIssue, isAccount, mergeMemberships, normaliseEmail, normaliseUsername, passwordConfirmIssue, passwordIssue,
+  signInRoute, usernameIssue,
   type AuthUser,
 } from '../lib/account'
 import { attemptKey, readTicket, runAccount, type AccountStore } from '../app/api/account/account'
@@ -96,6 +97,16 @@ function ruleTests() {
   eq(passwordIssue('aaaaaaaa'), null, '…not even a mix of kinds')
   ok(passwordIssue('x'.repeat(73)) !== null, '73 is too long')
   ok(passwordIssue('é'.repeat(40)) !== null, '…counted in bytes, as bcrypt counts')
+
+  section('Passwords are typed twice when they are chosen')
+  eq(passwordConfirmIssue('correct-horse', 'correct-horse'), null, 'two the same will do')
+  eq(passwordConfirmIssue('correct-horse', 'correct-horsE'), 'The two passwords don’t match.', 'a slip is caught, case and all')
+  ok(passwordConfirmIssue('correct-horse', '') !== null, '…and an empty second box')
+  const screenSrc = read('app/account/AccountScreen.tsx')
+  ok(/passwordConfirmIssue\(password, again\)/.test(screenSrc), 'the setup screen checks them against each other before saving')
+  ok(screenSrc.includes('id="account-confirm-password"'), '…with a Confirm password box')
+  const signInForm = screenSrc.slice(screenSrc.indexOf("view.kind === 'signIn' && ("), screenSrc.indexOf("(view.kind === 'join'"))
+  ok(!signInForm.includes('Confirm password'), 'signing in still asks once')
 
   section('Signing in: one field, an @ means email (D132)')
   eq(signInRoute('Ross@Example.ie '), { kind: 'email', email: 'ross@example.ie' }, 'an @ is an email')

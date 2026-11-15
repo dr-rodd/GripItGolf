@@ -113,6 +113,15 @@ export function passwordIssue(raw: string): string | null {
   return null
 }
 
+/**
+ * The second box when a password is chosen (Ross, 15 Nov 2026): typed twice
+ * so a slip is caught here, not at the next sign-in. Only where a password
+ * is *set* — signing in asks for it once.
+ */
+export function passwordConfirmIssue(password: string, again: string): string | null {
+  return String(password ?? '') === String(again ?? '') ? null : 'The two passwords don’t match.'
+}
+
 // ─── Signing in (D132) ─────────────────────────────────────────
 
 /** One field, two kinds: anything with an @ in it is an email, anything else a username. */

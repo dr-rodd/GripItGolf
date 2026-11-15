@@ -6,7 +6,8 @@ import BackButton from '@/app/components/BackButton'
 import { IconEye, IconEyeOff } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass, iconButtonClass } from '@/app/components/ui'
 import {
-  ACCOUNT_WORDS, CODE_LENGTH, PASSWORD_MIN, codeDigits, codeIssue, emailIssue, passwordIssue, usernameIssue,
+  ACCOUNT_WORDS, CODE_LENGTH, PASSWORD_MIN, codeDigits, codeIssue, emailIssue, passwordConfirmIssue, passwordIssue,
+  usernameIssue,
 } from '@/lib/account'
 import {
   accountStatus, checkUsername, confirmCode, deleteAccount, forgetPending, passwordOwed, readAccount, readPending,
@@ -48,6 +49,7 @@ export default function AccountScreen() {
   const [email, setEmail] = useState('')
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [again, setAgain] = useState('')
   const [code, setCode] = useState('')
   const [username, setUsername] = useState('')
   const [check, setCheck] = useState<UsernameCheck | null>(null)
@@ -96,7 +98,7 @@ export default function AccountScreen() {
     return () => window.clearTimeout(t)
   }, [username, view, renaming])
 
-  const go = (next: View) => { setError(''); setReauth(false); setPassword(''); setCode(''); setView(next) }
+  const go = (next: View) => { setError(''); setReauth(false); setPassword(''); setAgain(''); setCode(''); setView(next) }
 
   async function submitSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -143,7 +145,7 @@ export default function AccountScreen() {
       if (issue) { setError(issue); return }
     }
     if (view.needPassword) {
-      const issue = passwordIssue(password)
+      const issue = passwordIssue(password) ?? passwordConfirmIssue(password, again)
       if (issue) { setError(issue); return }
     }
     setBusy(true); setError(''); setReauth(false)
@@ -163,6 +165,7 @@ export default function AccountScreen() {
     }
     setBusy(false)
     setPassword('')
+    setAgain('')
     await refresh()
   }
 
@@ -346,6 +349,8 @@ export default function AccountScreen() {
                 <PasswordField id="account-new-password" label="Password" value={password} autoComplete="new-password"
                   onChange={v => { setPassword(v); setError('') }} />
                 <p className="t-cap text-ink/65 mt-2">At least {PASSWORD_MIN} characters.</p>
+                <PasswordField id="account-confirm-password" label="Confirm password" value={again} autoComplete="new-password"
+                  onChange={v => { setAgain(v); setError('') }} />
               </>
             )}
             {errorLine}
@@ -354,7 +359,7 @@ export default function AccountScreen() {
                 Forgot password
               </button>
             )}
-            <button type="submit" disabled={busy || (view.needUsername && check === 'taken')} className={`${buttonClass('primary')} mt-6`}>
+            <button type="submit" disabled={busy || (view.needUsername && check === 'taken') || (view.needPassword && !again)} className={`${buttonClass('primary')} mt-6`}>
               {busy ? 'Saving…' : 'Save'}
             </button>
           </form>
