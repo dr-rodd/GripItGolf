@@ -45,3 +45,9 @@ export function daysBefore(date: string, days: number): string | null {
   if (!Number.isFinite(ms)) return null
   return new Date(ms - days * 86_400_000).toISOString().slice(0, 10)
 }
+
+/** "Good morning", "Good afternoon" or "Good evening" by the clock in Ireland — the club area's and the personal page's greeting. */
+export function irishGreeting(now: Date, timeZone = IRISH_TIME_ZONE): string {
+  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(now))
+  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
+}

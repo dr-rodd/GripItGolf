@@ -71,8 +71,16 @@ export default function AccountScreen() {
     setNext(safeNext(q.get('next')))
     if (q.get('join') === '1') setView(v => (v.kind === 'loading' || v.kind === 'signIn' ? { kind: 'join' } : v))
   }, [])
+  // Signed in just now (not already, on arrival): on to where it was sent
+  // from, else the member's own home (D148). Already signed in, this page is
+  // the account's settings, reached from Me.
+  const firstView = useRef<View['kind'] | null>(null)
   useEffect(() => {
-    if (view.kind === 'signedIn' && next) router.replace(next)
+    if (view.kind === 'loading') return
+    if (firstView.current === null) firstView.current = view.kind
+    if (view.kind !== 'signedIn') return
+    if (next) router.replace(next)
+    else if (firstView.current !== 'signedIn') router.replace('/home')
   }, [view.kind, next, router])
 
   const refresh = useCallback(async () => {
@@ -223,7 +231,8 @@ export default function AccountScreen() {
     const r = await signOutAccount()
     setBusy(false)
     if (!r.ok) { setError(r.error); return }
-    go({ kind: 'signIn' })
+    // Signed out, the front page comes back (D147).
+    router.replace('/')
   }
 
   async function remove() {
@@ -480,7 +489,7 @@ export default function AccountScreen() {
               The events this phone has entered stay with you. Sign in on another phone to have them there too.
             </p>
             {errorLine}
-            <ButtonLink href="/account/events" variant="secondary" className="mt-8">My events</ButtonLink>
+            <ButtonLink href="/home" variant="secondary" className="mt-8">Your page</ButtonLink>
             <ButtonLink href="/account/clubs" variant="secondary" className="mt-3">Clubs</ButtonLink>
             <button type="button" onClick={signOut} disabled={busy} className={`${buttonClass('secondary')} mt-3`}>
               Sign out

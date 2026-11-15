@@ -37,6 +37,8 @@ import {
 import { afterFailure, attemptBlocked, type AttemptLimit, type AttemptWindow, type Membership } from '@/lib/membership'
 import { claimCodeIssue, sortMyEvents, type MyEvent } from '@/lib/account'
 import { checkPin, type AttemptStore } from '../entry/entry'
+import { irishToday } from '@/lib/clubs'
+import type { SeasonRow } from '@/lib/cardSummary'
 
 export interface AccountStore {
   userFromToken(token: string): Promise<AuthUser | null>
@@ -79,6 +81,12 @@ export interface AccountStore {
   // Stage (c) — clubs (migration 086).
   /** The clubs where this account is the only owner still on the list. */
   soleOwnerOf?(userId: string): Promise<string[]>
+
+  // Stage (g) — the personal page (D143, D148).
+  /** The verified club this account is on the list of, linked and not taken off — its address and name. */
+  homeClub?(userId: string): Promise<{ slug: string; name: string } | null>
+  /** This account's own players' signed cards this year (migration 088), and the courses' names. */
+  seasonFor?(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
 }
 
 export type AccountBody = {
@@ -91,6 +99,9 @@ export type AccountBody = {
   error?: string
   session?: { access_token: string; refresh_token: string }
   events?: MyEvent[]
+  club?: { slug: string; name: string } | null
+  season?: SeasonRow[]
+  courses?: Record<string, string>
 }
 
 export type AccountOutcome =
@@ -213,6 +224,26 @@ export async function runAccount(
     await store.claimByEmail(user.id, user.email ?? '')
     await store.syncLinks(user.id)
     return { status: 200, body: { ok: true, events: sortMyEvents(await store.eventsFor(user.id)) } }
+  }
+
+  // The personal page (stage (g)): one ask after it paints — who, which
+  // home, the events and the season (Q5). A Club member is told their club
+  // and the phone goes on to it (D148).
+  if (input.action === 'home') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    await store.claimByEmail(user.id, user.email ?? '')
+    await store.syncLinks(user.id)
+    const year = Number(irishToday(now).slice(0, 4))
+    const [username, events, club, season] = await Promise.all([
+      store.usernameOf(user.id),
+      store.eventsFor(user.id),
+      store.homeClub ? store.homeClub(user.id) : Promise.resolve(null),
+      store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [], courses: {} }),
+    ])
+    return {
+      status: 200,
+      body: { ok: true, username, events: sortMyEvents(events), club, season: season.rows, courses: season.courses },
+    }
   }
 
   if (input.action === 'claim') {

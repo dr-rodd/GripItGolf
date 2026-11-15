@@ -453,13 +453,13 @@ export function irishToday(now: Date): string {
 }
 
 /**
- * A club's events in the members area's order (D159): on now, then upcoming
+ * Events in the members area's order (D159) — a club's, or a Dot member's own on the personal page: on now, then upcoming
  * soonest first, then results newest first.
  */
-export function groupClubEvents(events: readonly ClubEvent[], today: string): Record<ClubEventWhen, ClubEvent[]> {
-  const out: Record<ClubEventWhen, ClubEvent[]> = { now: [], upcoming: [], past: [] }
+export function groupClubEvents<E extends Pick<ClubEvent, 'startDate' | 'endDate' | 'name'>>(events: readonly E[], today: string): Record<ClubEventWhen, E[]> {
+  const out: Record<ClubEventWhen, E[]> = { now: [], upcoming: [], past: [] }
   for (const e of events) out[clubEventWhen(e, today)].push(e)
-  const by = (k: 'startDate' | 'endDate', dir: 1 | -1) => (a: ClubEvent, b: ClubEvent) =>
+  const by = (k: 'startDate' | 'endDate', dir: 1 | -1) => (a: E, b: E) =>
     dir * ((a[k] ?? '9999') < (b[k] ?? '9999') ? -1 : (a[k] ?? '9999') > (b[k] ?? '9999') ? 1 : a.name.localeCompare(b.name))
   out.now.sort(by('startDate', 1))
   out.upcoming.sort(by('startDate', 1))

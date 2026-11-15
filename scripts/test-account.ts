@@ -28,6 +28,8 @@ import type { AttemptWindow } from '../lib/membership'
 import { legacyPinHash } from '../lib/pinHash'
 import type { MyEvent } from '../lib/account'
 import type { AttemptStore } from '../app/api/entry/entry'
+import vm from 'vm'
+import { TIER_BOOT_SCRIPT, TIER_KEY, homeOf, parseTierHint, serialiseTierHint } from '../lib/tierHint'
 import { sealJson } from '../lib/signedState'
 import type { Membership } from '../lib/membership'
 
@@ -503,11 +505,11 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/dashboard/create/MemberGate.tsx'],
-    'only the account pages import it, the gate in front of making an event (D135), and a club page asking whether this phone is on its list (D157)')
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
+    'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), and a member\'s home (D148)')
   ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
     '  …which only asks whether this phone is signed in')
-  ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/account/events/MyEventsScreen.tsx'), '  …the account screen and My events')
+  ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/home/EventsTab.tsx'), '  …the account screen and the Events tab (was My events)')
   const reached = files.filter(f => f.startsWith('app/api/')
     && /^import (?!type )[^\n]*from ['"](@\/app\/api\/account\/account|\.\/account)['"]/m.test(read(f)))
   eq(reached.sort(), ['app/api/account/route.ts'], 'only /api/account runs the account logic')
@@ -553,9 +555,83 @@ function wiringTests() {
   ok(!/There are no accounts/.test(notice), 'the old “no accounts” line is gone')
 }
 
+// ─── Stage (g): the tiers, and a member's home (D147–D149, D154) ─
+
+/** The head script run as a browser would, at an address with a hint stored. */
+function bootAt(href: string, hint: string | null, refuse = false): string | null {
+  const url = new URL(href, 'https://greendot.live')
+  let went: string | null = null
+  const location = { pathname: url.pathname, search: url.search, hash: url.hash, replace: (to: string) => { went = to } }
+  const localStorage = { getItem: (k: string) => { if (refuse) throw new Error('refused'); return k === TIER_KEY ? hint : null } }
+  vm.runInNewContext(TIER_BOOT_SCRIPT, { location, localStorage })
+  return went
+}
+
+async function tierTests() {
+  section('The hint (D154): a kind and a club’s address, never a name')
+  eq(parseTierHint('dot'), { kind: 'dot' }, 'a Dot member')
+  eq(parseTierHint('club:lahinch-golf-club'), { kind: 'club', slug: 'lahinch-golf-club' }, 'a Club member, by the club’s address')
+  eq([parseTierHint('club:Ross O’Grady'), parseTierHint('ross@example.ie'), parseTierHint(''), parseTierHint(null)], [null, null, null, null],
+    'anything else is no hint at all')
+  eq([serialiseTierHint({ kind: 'dot' }), serialiseTierHint({ kind: 'club', slug: 'lahinch' })], ['dot', 'club:lahinch'], 'kept as it is read')
+  eq([homeOf({ kind: 'dot' }), homeOf({ kind: 'club', slug: 'lahinch' })], ['/home', '/club/lahinch'], 'each tier’s home (D148)')
+
+  section('Before the first paint, on the front page only')
+  eq(bootAt('/', 'dot'), '/home', 'a Dot member opens on their home')
+  eq(bootAt('/', 'club:lahinch'), '/club/lahinch', 'a Club member on their club')
+  eq(bootAt('/', null), null, 'no hint: the front page, as for everybody')
+  eq(bootAt('/?front', 'dot'), null, '/?front asks for the front page itself')
+  eq(bootAt('/#x', 'dot'), null, '…as does anything after the slash')
+  eq(bootAt('/GX7K2P', 'dot'), null, 'an event’s short link is never turned aside')
+  eq(bootAt('/golf/trip/GX7K2P', 'club:lahinch'), null, '…nor any other page')
+  eq(bootAt('/home', 'club:lahinch'), '/club/lahinch', 'a Club member at /home goes on to the club, so the personal page never flashes')
+  eq(bootAt('/home', 'dot'), null, '…a Dot member stays')
+  eq(bootAt('/', 'club:"><script>'), null, 'a hint that is not an address goes nowhere')
+  eq(bootAt('/', 'dot', true), null, 'storage refused: the front page shows')
+
+  section('The personal page’s one ask (Q5)')
+  const now = new Date('2026-11-14T12:00:00Z')
+  const s = new Stand()
+  const account: AuthUser = { id: 'acct', isAnonymous: false, email: 'a@b.ie', emailConfirmed: true }
+  const phone: AuthUser = { id: 'phone', isAnonymous: true, email: null, emailConfirmed: false }
+  s.add(account, 'ta'); s.add(phone, 'tp')
+  s.usernames.set('acct', 'ross.og')
+  s.owners.set('T1', 'acct')
+  eq((await runAccount({ token: 'tp', action: 'home' }, s, now)).status, 403, 'a phone with no account has no home page')
+  const plain = await runAccount({ token: 'ta', action: 'home' }, s, now)
+  ok(plain.status === 200 && plain.body.username === 'ross.og' && plain.body.events?.length === 1 && plain.body.club === null,
+    'a Dot member: who, the events, no club')
+  eq(plain.status === 200 && plain.body.season, [], '…and no season where the store has none')
+  const withClub: AccountStore = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
+    homeClub: async () => ({ slug: 'lahinch', name: 'Lahinch' }),
+    seasonFor: async (_u: string, year: number) => ({ rows: year === 2026 ? [{ round_id: 'r', trip_id: 't', played_on: '2026-05-01', holes: 18, gross: 80, par: 72, points: 34, origin: 'club', club_id: 'c', course_id: 'c1' }] : [], courses: { c1: 'Lahinch -- Old' } }),
+  })
+  const club = await runAccount({ token: 'ta', action: 'home' }, withClub, now)
+  ok(club.status === 200 && club.body.club?.slug === 'lahinch', 'a Club member is told their club, and the phone goes on to it (D148)')
+  ok(club.status === 200 && club.body.season?.length === 1 && club.body.courses?.c1 === 'Lahinch -- Old', '…the season read for this year in Ireland')
+
+  section('Where the tiers land')
+  const screen = read('app/home/HomeScreen.tsx')
+  ok(/if \(r\.signedOut\) \{ forgetTier\(\); window\.location\.replace\('\/'\)/.test(screen), 'a stale hint is cleared and the front page shown')
+  ok(/if \(r\.home\.club\) \{ window\.location\.replace\(`\/club\/\$\{r\.home\.club\.slug\}`\)/.test(screen), 'a Club member goes on to the club area')
+  ok(/'home', 'events', 'board', 'stats', 'me'/.test(read('app/home/HomeTabBar.tsx')), 'Home · Events · Board · Stats · Me (D149)')
+  ok(/text-accent-deep/.test(read('app/home/HomeTabBar.tsx')) && !/club/.test(read('app/home/HomeTabBar.tsx').replace(/\/\*[\s\S]*?\*\//g, '')),
+    '  …lit in emerald: no skin outside a club (D151)')
+  ok(/g\.now\[0\] \?\? g\.past\[0\] \?\? g\.upcoming\[0\]/.test(screen), 'Board opens the live event, else the latest, else the next — never empty')
+  ok(/action: 'home'/.test(read('lib/accountClient.ts')) && /forgetTier\(\)[\s\S]{0,80}\n[\s\S]*signOut/.test(read('lib/accountClient.ts')),
+    'the account’s own reads keep the hint true, and signing out clears it')
+  const client = read('lib/accountClient.ts')
+  ok((client.match(/forgetTier\(\)/g) ?? []).length >= 3, '  …on reading no sign-in, signing out and deleting')
+  ok(/rememberTier\(\{ kind: 'club', slug: face\.slug \}\)/.test(read('app/club/[slug]/ClubView.tsx')), 'the club page notes a Club member')
+  const landing = read('app/Landing.tsx')
+  ok(/!readTierHint\(\) && storedAccountSession\(\)/.test(landing), 'a phone signed in before the hint existed is noticed on the front page, once')
+  ok(!/@\/lib\/accountClient/.test(landing), '…without loading the account code there')
+}
+
 async function main() {
   ruleTests()
   await routeTests()
+  await tierTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

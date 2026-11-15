@@ -8,6 +8,7 @@ import type { AttemptWindow, Membership } from '@/lib/membership'
 import type { MyEvent } from '@/lib/account'
 import type { AccountStore } from './account'
 import { serviceStore } from '../entry/store'
+import { readSeason } from '../stats/season'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -98,6 +99,18 @@ export function accountStore(db: Db): AccountStore {
       const count = new Map<string, number>()
       for (const r of (owners.data ?? []) as { club_id: string }[]) count.set(r.club_id, (count.get(r.club_id) ?? 0) + 1)
       return ((clubs.data ?? []) as { id: string; name: string }[]).filter(c => (count.get(c.id) ?? 0) <= 1).map(c => c.name)
+    },
+    async homeClub(userId) {
+      const rows = await db.from('club_members').select('club_id').eq('user_id', userId).is('removed_at', null)
+      // Before migration 086 there are no clubs: a Dot member.
+      if (rows.error || !rows.data?.length) return null
+      const { data } = await db.from('clubs').select('slug, name, verified_at')
+        .in('id', (rows.data as { club_id: string }[]).map(r => r.club_id)).not('verified_at', 'is', null).limit(1)
+      const c = (data ?? [])[0] as { slug: string; name: string } | undefined
+      return c ? { slug: c.slug, name: c.name } : null
+    },
+    async seasonFor(userId, year) {
+      return readSeason(db, userId, year)
     },
     async deleteUser(userId) {
       const { error } = await db.auth.admin.deleteUser(userId)

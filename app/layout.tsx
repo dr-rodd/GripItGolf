@@ -4,6 +4,7 @@ import KeyboardWatch from "./components/KeyboardWatch";
 import { Archivo, Schibsted_Grotesk } from "next/font/google";
 import { THEME_BOOT_SCRIPT } from "@/lib/theme";
 import { STYLE_BOOT_SCRIPT } from "@/lib/styleLab";
+import { TIER_BOOT_SCRIPT } from "@/lib/tierHint";
 import "./globals.css";
 // The style lab (/admin/style) — after globals.css so its rules win ties.
 // @font-face and html[data-…] rules only: with no lab attribute on <html>
@@ -125,7 +126,10 @@ export default function RootLayout({
         {/* The style lab's attributes ride in the same script, for the
             same reason: they must be on <html> before the first paint, and
             the cookie must never be read on the server. */}
-        <script dangerouslySetInnerHTML={{ __html: `${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}` }} />
+        {/* A phone signed in to a Green Dot account opens greendot.live on
+            its own home (D154): the hint is read here, first, so the front
+            page never paints for it. On "/" alone — lib/tierHint.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: `${TIER_BOOT_SCRIPT};${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}` }} />
         <link rel="preconnect" href="https://api.fontshare.com" />
         <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="" />
         <link rel="stylesheet" href={FONTSHARE} />

@@ -318,7 +318,8 @@ section('Running is a door beside golf, not a change to it')
   ok(chooser.includes('href="/golf"') && chooser.includes('href="/dashboard/create?type=run"'),
     'the sport chooser offers golf\'s doorway and running\'s door')
   ok(!chooser.includes('supabase') && !chooser.includes('force-dynamic'), 'and is static')
-  ok(read('app/Landing.tsx').includes('href="/create"'), 'Create an Event goes to the chooser')
+  // D146–D147: making an event left the front page for a member's own page.
+  ok(read('app/home/HomeScreen.tsx').includes('href="/create"'), 'Make an event goes to the chooser, from a member\'s home')
 
   const flow = read('app/dashboard/create/CreateFlow.tsx')
   ok(flow.includes("if (type === 'run') return <CreateRunForm />"), 'the create route opens the run wizard')

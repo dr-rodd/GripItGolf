@@ -932,6 +932,54 @@ line, the Stats tab's rounds this year, and Competitions' results' top
 club-round score ("Top score", from the summaries — not the event's own board,
 which may rank by another format). The personal page (g) reads the same rows.
 
+### Stage (g) as built — the front page by tier and the personal page (15 Nov 2026; D141, D143, D146–D149, D151, D154)
+
+No migration. **The hint** (`lib/tierHint.ts`, Q1's option A): `gd.tier.v1`
+in localStorage, `dot` or `club:<slug>` — a kind and a club's address, never
+a name (D154). The root layout's head script runs it first: on `/` with
+nothing after the slash, a hinted phone goes on to `/home` (or the club)
+before any paint; on `/home`, a club hint goes on to `/club/<slug>`, so a
+Club member never sees the personal page flash. `/?front` shows the front
+page anyway. Kept true by the account code itself — every read of the
+sign-in writes `dot` if there is no hint and clears it if there is no
+account; signing out and deleting clear it; `/home`'s ask writes the club
+or `dot`; the club page writes the club, and back to `dot` once taken off
+its list. A phone signed in before the hint existed is noticed by the front
+page once (it peeks at supabase-js's stored session without loading it —
+`storedAccountSession`) and goes on to `/home`: one blink, once.
+
+**The front page** (D147): the code box first, then the **Green Dot
+members** card — Sign in, Join, one line ("Your events, your rounds and
+your season in one place — and where events are made") — then a quiet
+**Organise an event**, which is Join with `?next=/create`. **Create an event
+is gone** (D146). One emerald button still: Join event.
+
+**`/home`** (D143, D148, D149, D151): static, one ask after it paints
+(`/api/account` `home`: username, events, the club if any, this year's
+season and its courses). **Home · Events · Board · Stats · Me**, no skin,
+the lit tab emerald.
+- **Home**: the greeting with the username, the date, the code box, **Make
+  an event** (→ `/create`, `MemberGate` as ever), then Live now, Coming up
+  (date tiles) and Your season — each only when it has something.
+- **Events**: what `/account/events` was (`app/home/EventsTab.tsx`) — the
+  list, Your players with Unlink, Add an event you run.
+- **Board**: the live event's leaderboard, else the latest result, else
+  the next — never an empty board.
+- **Stats**: Your season — the tiles and the rounds, `app/components/Season.tsx`,
+  shared with the club area; the reads are one copy too (`app/api/stats/season.ts`).
+- **Me**: Your account (`/account`), Clubs, Privacy, Terms.
+
+**What moved:** `/account/events` and `/dashboard` redirect to `/home`
+(Next's own `redirects()`); `/account` signed in just now goes on to
+`/home`, reached already signed in it is the settings; Sign out lands on the
+front page. **Not yet:** a Club member is sent on to their club's page
+(the members area there), until (h) brings it under `/home` with Q3's
+"Whose event is this?"; `/account/clubs` and `/account/club` stay where
+they are until then. **Departure from the plan's table:** `/account` does
+not redirect to `/home/me` — Me links to it, so it stays the settings page,
+and the tabs are one page (`/home?tab=…`) rather than `/home/me` and
+`/home/events`.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:

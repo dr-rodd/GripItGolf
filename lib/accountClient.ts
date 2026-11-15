@@ -30,6 +30,7 @@ import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
+import { forgetTier, readTierHint, rememberTier } from './tierHint'
 
 export type Mode = 'upgrade' | 'existing'
 
@@ -69,7 +70,12 @@ export async function readAccount(): Promise<{ email: string } | null> {
   try {
     const { data } = await (await client()).auth.getSession()
     const u = data.session?.user
-    return u && !u.is_anonymous && u.email ? { email: u.email.toLowerCase() } : null
+    const signedIn = !!(u && !u.is_anonymous && u.email)
+    // Kept true on every read (D154): a phone signed in has a hint, one
+    // signed out has none. A club's hint is the club page's to set or drop.
+    if (!signedIn) forgetTier()
+    else if (!readTierHint()) rememberTier({ kind: 'dot' })
+    return signedIn ? { email: u!.email!.toLowerCase() } : null
   } catch {
     return null
   }
@@ -221,6 +227,7 @@ export async function confirmCode(pending: Pending, code: string): Promise<Answe
       try { window.sessionStorage.setItem(OWED_KEY, '1') } catch { /* asked again from status */ }
     }
     forgetPending()
+    if (!readTierHint()) rememberTier({ kind: 'dot' })
     return { ok: true }
   } catch {
     return { ok: false, error: ACCOUNT_WORDS.noReach }
@@ -323,6 +330,7 @@ export async function signIn(identifier: string, password: string): Promise<Answ
     const { error } = await (await client()).auth.setSession({ access_token: at, refresh_token: rt })
     if (error) return { ok: false, error: ACCOUNT_WORDS.noReach }
     forgetPending()
+    if (!readTierHint()) rememberTier({ kind: 'dot' })
     return { ok: true }
   } catch {
     return { ok: false, error: ACCOUNT_WORDS.noReach }
@@ -343,6 +351,43 @@ export async function myEvents(): Promise<{ ok: true; events: MyEvent[] } | { ok
   const r = await askServer(token, { action: 'events' })
   if (r?.status !== 200 || !Array.isArray(r.body.events)) return { ok: false, error: 'Could not load your events — try again.' }
   return { ok: true, events: r.body.events as MyEvent[] }
+}
+
+/** What the personal page reads, in one ask after it paints (stage (g), Q5). */
+export interface HomeData {
+  username: string | null
+  events: MyEvent[]
+  /** The verified club this account is on the list of — the phone goes on to it (D148). */
+  club: { slug: string; name: string } | null
+  season: SeasonRow[]
+  courses: Record<string, string>
+}
+
+/**
+ * The personal page's one ask. `signedOut` when this phone holds no account
+ * — the page then clears its hint and shows the front page (D154).
+ */
+export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: false; signedOut?: true; error: string }> {
+  if (!(await readAccount())) return { ok: false, signedOut: true, error: ACCOUNT_WORDS.noReach }
+  const token = await accountToken()
+  if (!token) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  const r = await askServer(token, { action: 'home' })
+  if (r?.status === 401 || r?.status === 403) return { ok: false, signedOut: true, error: ACCOUNT_WORDS.noReach }
+  if (r?.status !== 200 || !Array.isArray(r.body.events)) return { ok: false, error: 'Could not load your page — try again.' }
+  const b = r.body as Record<string, unknown>
+  const club = b.club && typeof b.club === 'object' ? b.club as HomeData['club'] : null
+  if (club) rememberTier({ kind: 'club', slug: club.slug })
+  else if (readTierHint()?.kind !== 'dot') rememberTier({ kind: 'dot' })
+  return {
+    ok: true,
+    home: {
+      username: typeof b.username === 'string' ? b.username : null,
+      events: b.events as MyEvent[],
+      club,
+      season: Array.isArray(b.season) ? b.season as SeasonRow[] : [],
+      courses: b.courses && typeof b.courses === 'object' ? b.courses as Record<string, string> : {},
+    },
+  }
 }
 
 /** "Add an event you run": its code and organiser PIN make it this account's. */
@@ -375,6 +420,7 @@ export async function signOutAccount(): Promise<Answer> {
   try {
     await (await client()).auth.signOut({ scope: 'local' })
     forgetOwnerUnlocks()
+    forgetTier()
     forgetPending()
     try { window.sessionStorage.removeItem(OWED_KEY) } catch { /* nothing owed */ }
     return { ok: true }
@@ -397,6 +443,7 @@ export async function deleteAccount(): Promise<Answer> {
     }
     await s.auth.signOut({ scope: 'local' }).catch(() => null)
     forgetOwnerUnlocks()
+    forgetTier()
     forgetPending()
     return { ok: true }
   } catch {

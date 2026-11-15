@@ -5,15 +5,19 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import { HERO_SPACE } from '@/app/components/headerMetrics'
-import { FIELD, buttonClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
+import { accountLink } from '@/lib/account'
+import { readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
 import LegalLinks from '@/app/components/LegalLinks'
 
 /**
  * The entry screen, and the way out of it.
  *
  * The wordmark is the page. Below it, one sentence saying what the platform
- * is, and the two things you can do: type the event code you were given, or
- * create an event of your own. Nothing else — no feature list, no marketing.
+ * is, the event code you were given, and the Green Dot members card (D147):
+ * sign in or join. Nothing else — no feature list, no marketing. A phone
+ * signed in to an account never sees this page: the head script sends it on
+ * to its home before the first paint (lib/tierHint.ts).
  *
  * The code goes straight in here rather than behind a Join button: the most
  * common visitor is somebody holding a six-character code from a group chat,
@@ -35,7 +39,7 @@ import LegalLinks from '@/app/components/LegalLinks'
  * movement where it means something — you are leaving, and the mark going
  * up to the bar is where it lives on the screen you are going to.
  *
- * The create path is prefetched, so the pause after the animation is as
+ * The account page is prefetched, so the pause after the animation is as
  * near to nothing as it can be.
  */
 
@@ -61,6 +65,9 @@ const FADE_MS = 220
  * mark leave gently and arrive gently.
  */
 const smooth = (p: number) => p * p * (3 - 2 * p)
+
+/** Somebody who came to organise joins first, then lands in the sport chooser (D147). */
+const ORGANISE = accountLink('/create', true)
 
 export default function Landing() {
   const router = useRouter()
@@ -92,8 +99,15 @@ export default function Landing() {
     : smooth(Math.max(0, Math.min(1, (elapsed - WOBBLE_MS) / TRAVEL_MS)))
 
   useEffect(() => {
-    router.prefetch('/create')
-    router.prefetch('/dashboard/create')
+    // A phone signed in before the hint existed (D154) has no hint for the
+    // head script to read: it is noticed here, once, and goes on to its
+    // home. Never for /?front, which asks for this page itself.
+    if (!window.location.search && !window.location.hash && !readTierHint() && storedAccountSession()) {
+      rememberTier({ kind: 'dot' })
+      window.location.replace('/home')
+      return
+    }
+    router.prefetch('/account')
     router.prefetch('/join')
   }, [router])
 
@@ -251,27 +265,24 @@ export default function Landing() {
             </button>
           </form>
 
-          <div className="w-full flex items-center gap-3 my-6" aria-hidden="true">
-            <span className="h-px flex-1 bg-line" />
-            <span className="t-cap text-ink/65">or</span>
-            <span className="h-px flex-1 bg-line" />
-          </div>
+          {/* D147: under the code box, the Green Dot members card. Making an
+              event is a member's (D135) and lives on their own page now
+              (D146), so Create is gone from here; a quiet line under the
+              card is the way in for somebody who came to organise. */}
+          <section className={`${cardClass('flat')} w-full mt-10 p-5`} aria-labelledby="members-heading">
+            <h2 id="members-heading" className="t-card text-ink">Green Dot members</h2>
+            <p className="t-body text-ink/80 mt-1">
+              Your events, your rounds and your season in one place — and where events are made.
+            </p>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <Link href="/account" onClick={leave('/account')} className={buttonClass('secondary')}>Sign in</Link>
+              <Link href="/account?join=1" onClick={leave('/account?join=1')} className={buttonClass('secondary')}>Join</Link>
+            </div>
+          </section>
 
-          {/* Still a real link: it prefetches, it survives a long press,
-              and without JavaScript it simply navigates. */}
-          <Link
-            href="/create"
-            onClick={leave('/create')}
-            className={buttonClass('secondary')}
-          >
-            Create an event
-          </Link>
-
-          {/* Events are made by Green Dot members (D135); joining never
-              asks for an account, so this stays a quiet line under the
-              two ways in. */}
-          <Link href="/account" className="t-cap text-ink/65 hover:text-ink/80 transition-colors mt-4 py-2">
-            Green Dot members: sign in
+          <Link href={ORGANISE} onClick={leave(ORGANISE)}
+            className="t-cap text-ink/65 hover:text-ink/80 transition-colors mt-4 py-2">
+            Organise an event
           </Link>
 
           {/* Set as a quotation rather than as a sentence: the words sit on

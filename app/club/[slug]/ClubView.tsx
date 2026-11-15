@@ -13,8 +13,10 @@ import {
 } from '@/lib/clubs'
 import { seasonOf, selfClaimedLine, type SeasonRow } from '@/lib/cardSummary'
 import { tripBase } from '@/lib/tripPaths'
-import { courseLabel } from '@/lib/courseDirectory'
+import { irishGreeting } from '@/lib/irishTime'
+import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
+import { readTierHint, rememberTier } from '@/lib/tierHint'
 import ClubTabBar, { type ClubTab } from './ClubTabBar'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
@@ -59,7 +61,15 @@ export default function ClubView({ face }: { face: ClubFace }) {
     ;(async () => {
       if (!(await readAccount())) return
       const r = await askClub('home', { slug: face.slug })
-      if (!live || !r.ok || !r.club) return
+      if (!live) return
+      // D154: on the list, this phone opens on the club; taken off it, a
+      // hint naming this club falls back to the personal page.
+      const hint = readTierHint()
+      if (!r.ok || !r.club) {
+        if (!r.ok && /not on this club/i.test(r.error) && hint?.kind === 'club' && hint.slug === face.slug) rememberTier({ kind: 'dot' })
+        return
+      }
+      rememberTier({ kind: 'club', slug: face.slug })
       setMembers({
         clubId: r.club.id, role: r.club.role, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
@@ -200,11 +210,6 @@ function useGroups(events: ClubEvent[]) {
   return useMemo(() => groupClubEvents(events, irishToday(new Date())), [events])
 }
 
-function greeting(now: Date): string {
-  const hour = Number(new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Dublin', hour: '2-digit', hourCycle: 'h23' }).format(now))
-  return hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'
-}
-
 function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   const g = useGroups(m.events)
   const now = new Date()
@@ -214,7 +219,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   return (
     <>
       <div className="h-[168px]" aria-hidden="true" />
-      <h1 className="t-h1 text-ink">{greeting(now)}{first ? `, ${first}` : ''}</h1>
+      <h1 className="t-h1 text-ink">{irishGreeting(now)}{first ? `, ${first}` : ''}</h1>
       <p className="t-cap text-ink/65 mt-1">
         {new Intl.DateTimeFormat('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }).format(now)}
         {' · '}{roleWord(m.role, face.name)}
@@ -291,26 +296,6 @@ function CalendarRow({ e, mine }: { e: ClubEvent; mine: boolean }) {
         {e.access !== 'anyone' && e.access !== null ? <MembersOnly /> : <IconChevronRight size={20} className="text-ink/50" />}
       </Link>
     </li>
-  )
-}
-
-/** Your season's three tiles (D143): rounds, average and best Stableford. */
-function SeasonTiles({ rows }: { rows: SeasonRow[] }) {
-  const s = seasonOf(rows)
-  const tiles = [
-    { label: 'Rounds', value: String(s.rounds) },
-    { label: 'Average points', value: s.averagePoints != null ? String(s.averagePoints) : '–' },
-    { label: 'Best', value: s.bestPoints != null ? String(s.bestPoints) : '–' },
-  ]
-  return (
-    <div className="grid grid-cols-3 gap-2 mt-3">
-      {tiles.map(t => (
-        <div key={t.label} className={`${cardClass('raised')} rounded-tile p-3`}>
-          <p className="t-data text-[24px] leading-none text-ink">{t.value}</p>
-          <p className="t-cap text-ink/65 mt-1">{t.label}</p>
-        </div>
-      ))}
-    </div>
   )
 }
 
@@ -391,24 +376,12 @@ function Stats({ face, m }: { face: ClubFace; m: Members }) {
     <section className="mt-6">
       <h1 className="t-h1 text-ink">Your season</h1>
       {m.season.length === 0 ? (
-        <p className="text-ink/65 text-[15px] leading-relaxed mt-2">
-          Your rounds show here once you’ve signed a card on a name linked to your account — claim your name in an event while signed in.
-        </p>
+        <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
       ) : (
         <>
           <SeasonTiles rows={m.season} />
           {selfClaimedLine(season, face.name) && <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p>}
-          <ListGroup className="mt-6">
-            {m.season.map(r => (
-              <ListRow
-                key={r.round_id}
-                label={m.courses[r.course_id ?? ''] ? courseLabel(m.courses[r.course_id ?? '']) : 'A round'}
-                hint={[r.played_on ? clubEventDates(r.played_on, r.played_on) : null, r.holes < 18 ? `${r.holes} holes` : null,
-                  r.origin === 'club' ? 'Club round' : 'Open event'].filter(Boolean).join(' · ')}
-                value={<span className="t-data text-[17px] text-ink">{r.points} pts{r.gross != null ? ` · ${r.gross}` : ''}</span>}
-              />
-            ))}
-          </ListGroup>
+          <SeasonRounds rows={m.season} courses={m.courses} />
         </>
       )}
     </section>

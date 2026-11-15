@@ -352,7 +352,7 @@ export default function PrivacyPage() {
           A few small cookies and stored settings, all needed for the site to work, none for
           tracking: which player you are on each event, so the screens are yours; whether you have
           seen the introduction; dark mode; that this phone unlocked an event&apos;s settings, for{' '}
-          {ORGANISER_HOURS} hours; that this phone made an event; the sign-in to your account, if you made one; and golf scores entered but not yet sent, so a
+          {ORGANISER_HOURS} hours; that this phone made an event; the sign-in to your account, if you made one, with a note of which home it opens on (your own page, or your club&apos;s — never your name); and golf scores entered but not yet sent, so a
           bad signal on the course loses nothing. Clearing your browser&apos;s data removes them all.
         </p>
         <p className="mt-3">

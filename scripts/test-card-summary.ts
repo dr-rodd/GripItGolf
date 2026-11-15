@@ -120,7 +120,10 @@ function wiringTests() {
   section('Read where the plan says (D143)')
   ok(/const STATS_READY = true/.test(read('app/club/[slug]/ClubTabBar.tsx')), 'the club area’s Stats tab is on')
   ok(/m\.season\.length > 0 &&/.test(read('app/club/[slug]/ClubView.tsx')), 'Your season is drawn only when there is one')
-  ok(/from\('account_players'\)[\s\S]{0,300}from\('card_summaries'\)/.test(read('app/api/club/store.ts')), 'a member reads only their own players’ rows')
+  ok(/from\('account_players'\)[\s\S]{0,300}from\('card_summaries'\)/.test(read('app/api/stats/season.ts')), 'a member reads only their own players’ rows')
+  ok(/readSeason\(db/.test(read('app/api/club/store.ts')) && /readSeason\(db/.test(read('app/api/account/store.ts')),
+    '  …one reader for the club area and the personal page (D143)')
+  ok(/<StatsTab home=/.test(read('app/home/HomeScreen.tsx')), 'the personal page’s Stats tab reads it (stage (g))')
   ok(/a short summary of each signed card/.test(read('app/privacy/page.tsx')), 'the privacy notice says a summary is kept')
 }
 

@@ -1106,7 +1106,7 @@ section('The collapse happens on leaving the landing page, and nowhere else')
     'the content clears before the next screen is asked for')
   ok(/if \(t < total\)[\s\S]{0,120}router\.push/.test(landing),
     'which happens only once the mark has landed')
-  ok(landing.includes("router.prefetch('/dashboard/create')") &&
+  ok(landing.includes("router.prefetch('/account')") &&
      landing.includes("router.prefetch('/join')"),
     'both destinations are prefetched, so the wait after it is as short as it can be')
 
@@ -1874,10 +1874,11 @@ section('The destinations are prefetchable whole')
 
   // Prefetched on the landing page, or none of the above helps
   const landing = read('app/Landing.tsx')
-  ok(landing.includes("router.prefetch('/dashboard/create')") &&
-     landing.includes("router.prefetch('/join')") &&
-     landing.includes("router.prefetch('/create')"),
-    'all three are prefetched while the landing page sits there')
+  ok(landing.includes("router.prefetch('/join')") && landing.includes("router.prefetch('/account')"),
+    'the front page\'s two ways on are prefetched while it sits there')
+  // Making an event is a member's now (D146): their home prefetches the chooser.
+  ok(read('app/home/HomeScreen.tsx').includes("router.prefetch('/create')"),
+    '  …and a member\'s home prefetches the sport chooser')
 }
 
 // ─── One header, everywhere ────────────────────────────────────
@@ -2440,13 +2441,17 @@ section('Landing page')
   // person holding a code and typing it. /join survives for shared links.
   ok(home.includes('maxLength="6"'), 'the event code is typed straight into the page')
   ok(/Join Event/i.test(home), 'and joined from it')
-  // Creating asks which sport first — golf's doorway and running's door
-  // both sit behind /create, so a new sport is a card there, not a change here.
-  ok(home.includes('/create'), 'creating goes through the sport chooser')
+  // D146–D147: making an event moved onto a member's own page. Under the
+  // code box is the Green Dot members card — Sign in, Join, one line — and
+  // a quiet "Organise an event" that joins first and then lands in the sport
+  // chooser, where golf's doorway and running's door both sit.
+  ok(!/Create an Event/i.test(home), 'Create an event has left the front page')
+  ok(/Green Dot members/.test(home) && /href="\/account"/.test(home) && /href="\/account\?join=1"/.test(home),
+    'the Green Dot members card: Sign in and Join')
+  ok(/Organise an event/.test(home) && home.includes('next=%2Fcreate'), '  …and Organise an event, by way of Join, to the sport chooser')
   ok(read('app/create/page.tsx').includes('href="/golf"') &&
      read('app/create/page.tsx').includes('/dashboard/create?type=run'),
     '  …which offers golf\'s doorway and running\'s door')
-  ok(/Create an Event/i.test(home), 'named plainly')
 
   // One primary action: joining, which is the box directly above it.
   // Creating is secondary.
@@ -2759,8 +2764,8 @@ section('The style lab is fenced in')
   ok(layout.includes('STYLE_BOOT_SCRIPT'), 'the lab setup is applied by the head script, before first paint')
   // Two IIFEs joined bare read as `(…)()(…)()` — the second calls the first's
   // undefined result and throws, so the lab never reached a reloaded page.
-  ok(layout.includes('`${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}`'),
-    '  …joined to the theme script with a semicolon, or it never runs')
+  ok(layout.includes('`${TIER_BOOT_SCRIPT};${THEME_BOOT_SCRIPT};${STYLE_BOOT_SCRIPT}`'),
+    '  …joined to the theme script (and the tier hint\'s, D154) with semicolons, or it never runs')
 
   const preview = read('app/style-preview/page.tsx')
   ok(!/searchParams/.test(stripComments(preview)), '/style-preview takes no searchParams')
