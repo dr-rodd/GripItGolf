@@ -25,8 +25,9 @@
 //
 // Never throws: every function resolves to an answer the screen can say.
 
-import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername } from './account'
+import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
+import { forgetOwnerUnlocks } from './passcode'
 
 export type Mode = 'upgrade' | 'existing'
 
@@ -320,6 +321,40 @@ export async function signIn(identifier: string, password: string): Promise<Answ
   }
 }
 
+// ─── My events (stage (b1), D134) ──────────────────────────────
+
+/**
+ * Every event this account owns, has entered, or is linked to a player in —
+ * asked after the page has painted. Asking also takes on any event made with
+ * this account's email that nobody owns yet, and links the names this
+ * account has claimed.
+ */
+export async function myEvents(): Promise<{ ok: true; events: MyEvent[] } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  const r = await askServer(token, { action: 'events' })
+  if (r?.status !== 200 || !Array.isArray(r.body.events)) return { ok: false, error: 'Could not load your events — try again.' }
+  return { ok: true, events: r.body.events as MyEvent[] }
+}
+
+/** "Add an event you run": its code and organiser PIN make it this account's. */
+export async function claimEvent(code: string, pin: string): Promise<Answer> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  const r = await askServer(token, { action: 'claim', code: code.trim().toUpperCase(), pin })
+  if (r?.status === 200) return { ok: true }
+  return { ok: false, error: typeof r?.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+}
+
+/** This account's link to its player in one event, undone (D134). */
+export async function unlinkPlayer(code: string): Promise<Answer> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  const r = await askServer(token, { action: 'unlink', code })
+  if (r?.status === 200) return { ok: true }
+  return { ok: false, error: typeof r?.body.error === 'string' ? r.body.error : 'Could not unlink — try again.' }
+}
+
 // ─── Leaving ───────────────────────────────────────────────────
 
 /**
@@ -331,6 +366,7 @@ export async function signOutAccount(): Promise<Answer> {
   if (!inBrowser()) return { ok: false, error: ACCOUNT_WORDS.noReach }
   try {
     await (await client()).auth.signOut({ scope: 'local' })
+    forgetOwnerUnlocks()
     forgetPending()
     try { window.sessionStorage.removeItem(OWED_KEY) } catch { /* nothing owed */ }
     return { ok: true }
@@ -352,6 +388,7 @@ export async function deleteAccount(): Promise<Answer> {
       return { ok: false, error: typeof r?.body.error === 'string' ? r.body.error : 'Could not delete the account — try again.' }
     }
     await s.auth.signOut({ scope: 'local' }).catch(() => null)
+    forgetOwnerUnlocks()
     forgetPending()
     return { ok: true }
   } catch {

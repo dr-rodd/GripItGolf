@@ -657,6 +657,20 @@ of them is what the entries below and above say.
 Every stage below changes nothing for a phone with no account, and nothing
 about an event made outside a club. Migration numbers follow 084.
 
+**(b1) — built 15 Nov 2026** (unlinked, `/account/events`): owners, claiming
+by email and by PIN, the owner's padlock, My events, and D134's link on
+claiming with Unlink. Migration 085 as below, plus `claim_events_by_email()`.
+Two choices made while building: **My events lives at `/account/events`**
+while the account area is unlinked (`/dashboard` when it opens), and **a
+name this account's phones claimed before signing in is linked too** when
+My events loads — the phone is the account's from then on. A name another
+account is linked to is never taken.
+
+**(b2) — still to build**: the organiser undoing a wrong link; D107's
+question on screen (Trip Setup's Who can edit, and the organiser area) —
+its column and its SQL are in 085 already, unanswered meaning today's rule;
+an owner changing the PIN without the old one.
+
 **(b) My events, ownership and D134 linking.** Migration **085**:
 - `trip_private.owner_id` (`auth.users ON DELETE SET NULL`),
   `trip_private.settings_by` (`'owner'` | `'anyone'`, D107 — read only for

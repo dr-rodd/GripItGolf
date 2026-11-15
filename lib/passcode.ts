@@ -45,6 +45,8 @@ export function isLocked(hash: string | null | undefined): boolean {
 // recorded it, so its writes would be refused; the PIN is asked once more.
 
 const key = (tripCode: string) => `gd-organiser-until-${tripCode.toUpperCase()}`
+/** Set while the open lock is this phone's account owning the event (stage (b1)), not a PIN. */
+const ownerKey = (tripCode: string) => `gd-organiser-owner-${tripCode.toUpperCase()}`
 
 /**
  * Said on the window whenever this device's unlock changes, so every
@@ -66,13 +68,38 @@ export function unlockOpen(stored: string | null, now: number): boolean {
 /**
  * The server's answer, remembered: open until `until` (ISO), or shut when
  * there is none. Only lib/entryClient.ts calls it, with what the server said.
+ * `owner`: open because this phone's Green Dot account owns the event — the
+ * lock then shows open and is not shut by a tap (an owner is the organiser
+ * wherever they are signed in); the server is asked again on every page load.
  */
-export function rememberUnlock(tripCode: string, until: string | null) {
+export function rememberUnlock(tripCode: string, until: string | null, owner = false) {
   try {
     if (until && unlockOpen(until, Date.now())) localStorage.setItem(key(tripCode), until)
     else localStorage.removeItem(key(tripCode))
+    if (owner && until) localStorage.setItem(ownerKey(tripCode), '1')
+    else localStorage.removeItem(ownerKey(tripCode))
   } catch { /* unavailable */ }
   announce()
+}
+
+/**
+ * Every lock this phone holds as an owner, shut — signing out or deleting
+ * the account. A PIN's twelve hours are left as they are.
+ */
+export function forgetOwnerUnlocks() {
+  try {
+    const owned = Object.keys(localStorage).filter(k => k.startsWith('gd-organiser-owner-'))
+    for (const k of owned) {
+      localStorage.removeItem(k)
+      localStorage.removeItem(k.replace('gd-organiser-owner-', 'gd-organiser-until-'))
+    }
+  } catch { /* unavailable */ }
+  announce()
+}
+
+/** Whether the open lock is this phone's account owning the event. */
+export function ownsHere(tripCode: string): boolean {
+  try { return hasUnlocked(tripCode) && localStorage.getItem(ownerKey(tripCode)) === '1' } catch { return false }
 }
 
 /** Shut on this phone — the server told separately (lib/entryClient.ts `lockShut`). */

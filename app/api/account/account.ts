@@ -35,6 +35,8 @@ import {
   mergeMemberships, normaliseUsername, passwordIssue, signInRoute, usernameIssue, type AuthUser,
 } from '@/lib/account'
 import { afterFailure, attemptBlocked, type AttemptLimit, type AttemptWindow, type Membership } from '@/lib/membership'
+import { claimCodeIssue, sortMyEvents, type MyEvent } from '@/lib/account'
+import { checkPin, type AttemptStore } from '../entry/entry'
 
 export interface AccountStore {
   userFromToken(token: string): Promise<AuthUser | null>
@@ -57,6 +59,22 @@ export interface AccountStore {
   passwordSignIn(email: string, password: string): Promise<{ userId: string; accessToken: string; refreshToken: string } | null>
   readAttempts(keys: string[]): Promise<Map<string, AttemptWindow>>
   writeAttempt(key: string, w: AttemptWindow): Promise<void>
+
+  // Stage (b1) — owners and links (migration 085).
+  /** The events made with this email and owned by nobody become this account's (D106). */
+  claimByEmail(userId: string, email: string): Promise<number>
+  /** Links the players this account has claimed on its phones, where nobody else is linked (D134). */
+  syncLinks(userId: string): Promise<void>
+  /** Every event this account owns, has entered, or is linked to a player in. */
+  eventsFor(userId: string): Promise<MyEvent[]>
+  /** This account's link in one event, undone. */
+  unlinkPlayer(userId: string, tripCode: string): Promise<void>
+  /** An event by its code, for claiming by its PIN: its admin PIN's hash and its owner. */
+  tripForClaim(code: string): Promise<{ id: string; code: string; adminHash: string | null; ownerId: string | null } | null>
+  /** Make this account the owner where nobody is — 'taken' if somebody else is. */
+  setOwner(tripId: string, userId: string): Promise<'ok' | 'taken'>
+  /** Where a PIN's wrong tries are counted — /api/entry's own (`checkPin`). */
+  pins: AttemptStore
 }
 
 export type AccountBody = {
@@ -68,13 +86,14 @@ export type AccountBody = {
   result?: 'free' | 'taken' | 'invalid'
   error?: string
   session?: { access_token: string; refresh_token: string }
+  events?: MyEvent[]
 }
 
 export type AccountOutcome =
   | { status: 200; body: AccountBody }
-  | { status: 400 | 401 | 403 | 409 | 429 | 503; body: { ok: false; error: string } }
+  | { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
 
-const fail = (status: 400 | 401 | 403 | 409 | 429 | 503, error: string): AccountOutcome =>
+const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): AccountOutcome =>
   ({ status, body: { ok: false, error } })
 
 const TOO_MANY = 'Too many tries — wait a few minutes and try again.'
@@ -122,6 +141,9 @@ export async function runAccount(
     identifier?: unknown
     password?: unknown
     username?: unknown
+    /** An event's code and organiser PIN, for claiming it (stage (b1)). */
+    code?: unknown
+    pin?: unknown
     /** The caller's network address; only ever stored hashed. */
     address?: string
   },
@@ -177,6 +199,44 @@ export async function runAccount(
     const username = normaliseUsername(str(input.username))
     if ((await store.setUsername(user.id, username)) === 'taken') return fail(409, 'That username isn’t available.')
     return { status: 200, body: { ok: true, username } }
+  }
+
+  if (input.action === 'events') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    // Claimed by the email they were made with (D106) — whoever reads that
+    // inbox can already become organiser through Forgot PIN, so this gives
+    // nothing new — then this account's claimed names linked (D134).
+    await store.claimByEmail(user.id, user.email ?? '')
+    await store.syncLinks(user.id)
+    return { status: 200, body: { ok: true, events: sortMyEvents(await store.eventsFor(user.id)) } }
+  }
+
+  if (input.action === 'claim') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    const code = str(input.code).trim().toUpperCase()
+    const issue = claimCodeIssue(code)
+    if (issue) return fail(400, issue)
+    const trip = await store.tripForClaim(code)
+    if (!trip) return fail(404, 'No event with that code.')
+    if (trip.ownerId === user.id) return { status: 200, body: { ok: true } }
+    if (trip.ownerId) return fail(409, 'This event already belongs to another Green Dot member.')
+    // An event with no PIN has nothing to prove ownership with: its email does.
+    if (!trip.adminHash) return fail(403, 'This event has no organiser PIN. It becomes yours if it was made with your email.')
+    const pin = str(input.pin)
+    if (!pin) return fail(403, 'Enter the event’s organiser PIN.')
+    const r = await checkPin(store.pins, { tripId: trip.id, code: trip.code, kind: 'admin', address: input.address ?? 'unknown', pin, hash: trip.adminHash }, now)
+    if (r === 'blocked') return fail(429, TOO_MANY)
+    if (r === 'wrong') return fail(403, 'That isn’t the organiser PIN.')
+    if ((await store.setOwner(trip.id, user.id)) === 'taken') return fail(409, 'This event already belongs to another Green Dot member.')
+    return { status: 200, body: { ok: true } }
+  }
+
+  if (input.action === 'unlink') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    const code = str(input.code).trim().toUpperCase()
+    if (claimCodeIssue(code)) return fail(400, 'No event code.')
+    await store.unlinkPlayer(user.id, code)
+    return { status: 200, body: { ok: true } }
   }
 
   if (input.action === 'delete') {

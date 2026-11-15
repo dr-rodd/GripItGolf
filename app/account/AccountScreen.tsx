@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import BackButton from '@/app/components/BackButton'
 import { IconEye, IconEyeOff } from '@/app/components/icons'
-import { FIELD, FIELD_LABEL, Segmented, buttonClass, iconButtonClass } from '@/app/components/ui'
+import { ButtonLink, FIELD, FIELD_LABEL, Segmented, buttonClass, iconButtonClass } from '@/app/components/ui'
 import {
   ACCOUNT_WORDS, CODE_LENGTH, PASSWORD_MIN, codeDigits, codeIssue, emailIssue, passwordConfirmIssue, passwordIssue,
   usernameIssue,
@@ -404,7 +404,8 @@ export default function AccountScreen() {
               The events this phone has entered stay with you. Sign in on another phone to have them there too.
             </p>
             {errorLine}
-            <button type="button" onClick={signOut} disabled={busy} className={`${buttonClass('secondary')} mt-8`}>
+            <ButtonLink href="/account/events" variant="secondary" className="mt-8">My events</ButtonLink>
+            <button type="button" onClick={signOut} disabled={busy} className={`${buttonClass('secondary')} mt-3`}>
               Sign out
             </button>
 

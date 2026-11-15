@@ -40,6 +40,12 @@ export interface CreateStore {
   writeLeadEmail(tripId: string, email: string): Promise<void>
   /** Takes back a row whose membership could not be written. */
   deleteTrip(tripId: string): Promise<void>
+  /**
+   * A Green Dot member made it: they own it (stage (b1), migration 085).
+   * The store checks the maker is an account — a phone owns nothing — and
+   * never fails the event's making.
+   */
+  recordOwner?(userId: string, tripId: string): Promise<void>
 }
 
 export type CreateOutcome =
@@ -99,6 +105,9 @@ export async function runCreate(
   } catch {
     await store.deleteTrip(made.id).catch(() => undefined)
     return fail(503, 'Could not create the event — try again.')
+  }
+  if (store.recordOwner) {
+    try { await store.recordOwner(userId, made.id) } catch (e) { console.error('owner record failed:', e) }
   }
   return {
     status: 200,

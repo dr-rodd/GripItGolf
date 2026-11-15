@@ -40,6 +40,16 @@ export async function POST(req: NextRequest) {
       async deleteTrip(tripId) {
         await db.from('trips').delete().eq('id', tripId)
       },
+      async recordOwner(userId, tripId) {
+        const { data, error } = await db.auth.admin.getUserById(userId)
+        const u = error ? null : data.user
+        if (!u || u.is_anonymous || !u.email || !(u.email_confirmed_at ?? u.confirmed_at)) return
+        const now = new Date().toISOString()
+        const { error: e } = await db.from('trip_private')
+          .upsert({ trip_id: tripId, owner_id: userId, owner_claimed_at: now, updated_at: now }, { onConflict: 'trip_id' })
+        // Before migration 085 there is no owner column: the event is made all the same.
+        if (e && e.code !== '42703' && e.code !== 'PGRST204') throw e
+      },
     }
     const out = await runCreate({ token, row: body?.row, adminPin: body?.adminPin, publicPin: body?.publicPin }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })

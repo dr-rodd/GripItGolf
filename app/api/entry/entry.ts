@@ -19,7 +19,7 @@ import { createHash } from 'crypto'
 import { entryAllowed, hashPin, verifyPin } from '@/lib/pinHash'
 import { isPlayerId } from '@/lib/playerCookie'
 import {
-  ATTEMPT_LIMITS, afterFailure, attemptBlocked, closeOrganiser, mayWrite, mergeGrant, roleOf,
+  ATTEMPT_LIMITS, afterFailure, attemptBlocked, closeOrganiser, mayWrite, mergeGrant, organiserByPin, roleOf,
   type AttemptKind, type AttemptLimit, type AttemptWindow, type EventFacts, type Membership, type Role,
 } from '@/lib/membership'
 
@@ -31,6 +31,25 @@ export interface EntryTrip {
   publicHash: string | null
   /** The field may still add rounds (lib/membership.ts `fieldOpenEnded`). */
   openEnded: boolean
+  /** The Green Dot member who owns the event, if any (migration 085) — server only. */
+  ownerId?: string | null
+  /** D107: 'owner' keeps an owned, PIN-less event to its owner; null is today's rule. */
+  settingsBy?: 'owner' | 'anyone' | null
+}
+
+/** What the rules need to know about an event, the one copy (entry, the event actions). */
+export function factsOf(trip: EntryTrip): EventFacts {
+  return {
+    adminPinSet: !!trip.adminHash,
+    endDate: trip.endDate,
+    openEnded: trip.openEnded,
+    ownerOnly: !trip.adminHash && !!trip.ownerId && trip.settingsBy === 'owner',
+  }
+}
+
+/** This phone's row with whether its signed-in account owns the event — never stored. */
+export function withOwner(m: Membership | null, trip: EntryTrip, userId: string): Membership | null {
+  return m ? { ...m, owner: !!trip.ownerId && trip.ownerId === userId } : null
 }
 
 export interface EntryStore {
@@ -45,6 +64,12 @@ export interface EntryStore {
   writeAttempt(key: string, tripId: string, w: AttemptWindow): Promise<void>
   /** A right PIN still stored the old way, re-stored salted and slow. */
   upgradePin(tripId: string, kind: AttemptKind, hash: string): Promise<void>
+  /**
+   * D134: a Green Dot member who claims a name is linked to that player —
+   * only an account (checked by the store), only a player nobody else is
+   * linked to, one per account per event. Never in the way of entering.
+   */
+  linkPlayer?(userId: string, tripId: string, playerId: string): Promise<void>
 }
 
 export interface EntryInput {
@@ -64,7 +89,7 @@ export interface EntryInput {
 }
 
 export type EntryOutcome =
-  | { status: 200; body: { ok: true; tripId: string; role: Role | null; organiserUntil: string | null; readOnly: boolean } }
+  | { status: 200; body: { ok: true; tripId: string; role: Role | null; organiserUntil: string | null; readOnly: boolean; organiserBy: 'pin' | 'account' | null } }
   | { status: 400 | 401 | 403 | 404 | 429 | 503; body: { ok: false; error: string } }
 
 const fail = (status: 400 | 401 | 403 | 404 | 429 | 503, error: string): EntryOutcome =>
@@ -131,7 +156,7 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
 
   const trip = await store.tripByCode(code)
   if (!trip) return fail(404, 'No event with that code.')
-  const facts: EventFacts = { adminPinSet: !!trip.adminHash, endDate: trip.endDate, openEnded: trip.openEnded }
+  const facts: EventFacts = factsOf(trip)
 
   // What this phone is, asked without entering — or the padlock shut.
   if (input.peek === true || input.close === true) {
@@ -140,7 +165,7 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
       m = closeOrganiser(m)
       await store.writeMembership(userId, trip.id, m)
     }
-    return answer(trip.id, m, facts, now)
+    return answer(trip.id, withOwner(m, trip, userId), facts, now)
   }
 
   const adminPin = str(input.adminPin)
@@ -180,7 +205,10 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
   const existing = await store.readMembership(userId, trip.id)
   const next = mergeGrant(existing, { organiser, playerId }, now)
   await store.writeMembership(userId, trip.id, next)
-  return answer(trip.id, next, facts, now)
+  if (playerId && store.linkPlayer) {
+    try { await store.linkPlayer(userId, trip.id, playerId) } catch (e) { console.error('player link failed:', e) }
+  }
+  return answer(trip.id, withOwner(next, trip, userId), facts, now)
 }
 
 /** What a phone is told: its role, and when the PIN's hours end — never anything about the PIN itself. */
@@ -193,6 +221,8 @@ function answer(tripId: string, m: Membership | null, facts: EventFacts, now: Da
       role: roleOf(m, facts, now),
       organiserUntil: m?.organiserUntil ?? null,
       readOnly: !mayWrite(m, facts, now),
+      // How this phone is the organiser: its account owns the event, or the PIN.
+      organiserBy: m?.owner ? 'account' : organiserByPin(m, now) ? 'pin' : null,
     },
   }
 }

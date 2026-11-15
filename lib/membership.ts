@@ -55,6 +55,13 @@ export interface Membership {
   playerId: string | null
   /** ISO instant; the organiser grant lasts until then. */
   organiserUntil: string | null
+  /**
+   * The Green Dot member signed in on this phone owns the event (stage (b1),
+   * migration 085) — read from `trip_private.owner_id` on every ask, never
+   * stored on the row. An owner is the organiser on any phone they are signed
+   * in on: no PIN, no twelve hours, never capped. SQL: `account_trips()`.
+   */
+  owner?: boolean
 }
 
 /** What the rules need to know about the event. */
@@ -69,6 +76,12 @@ export interface EventFacts {
    * waits until the organiser turns `add_rounds` off (D59, 11 Nov 2026).
    */
   openEnded?: boolean
+  /**
+   * D107: an owned event with no PIN, its owner having answered "Just me"
+   * (`trip_private.settings_by = 'owner'`). Then only the owner changes it;
+   * unanswered, it is every member's, as an event with no PIN always was.
+   */
+  ownerOnly?: boolean
 }
 
 /** What one entry asks for. The route has already checked every part of it. */
@@ -119,15 +132,25 @@ export function organiserByPin(m: Membership | null, now: Date): boolean {
 }
 
 /**
+ * The organiser now by something this phone holds: the PIN's twelve hours,
+ * or owning the event (stage (b1)). An owner is never capped and needs no
+ * PIN — the database's `account_trips()` beside `organiser_until`.
+ */
+export function organiserNow(m: Membership | null, now: Date): boolean {
+  return organiserByPin(m, now) || m?.owner === true
+}
+
+/**
  * The phone's role in this event now — null for no row at all. The
- * organiser while the PIN's twelve hours run, or on an event nobody locked;
- * otherwise what it is in the field.
+ * organiser while the PIN's twelve hours run, as the event's owner, or on an
+ * event nobody locked (and whose owner has not kept it to themselves,
+ * D107); otherwise what it is in the field.
  */
 export function roleOf(m: Membership | null, event: EventFacts, now: Date): Role | null {
   if (!m) return null
-  if (organiserByPin(m, now)) return 'organiser'
+  if (organiserNow(m, now)) return 'organiser'
   const field: FieldRole = isFieldRole(m.role) ? m.role : 'spectator'
-  if (!event.adminPinSet && field !== 'spectator') return 'organiser'
+  if (!event.adminPinSet && !event.ownerOnly && field !== 'spectator') return 'organiser'
   return field
 }
 
@@ -155,7 +178,7 @@ export function fieldReadOnlyFrom(endDate: string | null): Date | null {
  * event with no PIN that is everybody — may until the field goes read-only.
  */
 export function mayWrite(m: Membership | null, event: EventFacts, now: Date): boolean {
-  if (organiserByPin(m, now)) return true
+  if (organiserNow(m, now)) return true
   const role = roleOf(m, event, now)
   if (!isMember(role)) return false
   if (event.openEnded) return true
@@ -170,8 +193,8 @@ export function mayWrite(m: Membership | null, event: EventFacts, now: Date): bo
  * database's `organiser_trips()` (migration 071) says the same in SQL.
  */
 export function mayChangeEvent(m: Membership | null, event: EventFacts, now: Date): boolean {
-  if (organiserByPin(m, now)) return true
-  return !event.adminPinSet && mayWrite(m, event, now)
+  if (organiserNow(m, now)) return true
+  return !event.adminPinSet && !event.ownerOnly && mayWrite(m, event, now)
 }
 
 /**

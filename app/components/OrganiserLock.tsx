@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { MAX_PASSCODE } from '@/lib/passcode'
+import { MAX_PASSCODE, ownsHere } from '@/lib/passcode'
 import { useUnlocked } from './useUnlocked'
 import { IconLock, IconLockOpen } from './icons'
 import { FIELD, buttonClass, cardClass } from './ui'
@@ -54,11 +54,19 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
   if (!pinSet) return null
 
   const what = isTrip ? 'Trip Setup passcode' : 'organiser PIN'
+  // Open because this phone's Green Dot account owns the event: a tap says
+  // so rather than shutting it — the owner is the organiser wherever they
+  // are signed in (stage (b1)).
+  const owner = unlocked && ownsHere(tripCode)
 
   function tap() {
     setWobble(n => n + 1)
     setError('')
     setForgot(false)
+    if (owner) {
+      setOpen(o => !o)
+      return
+    }
     if (unlocked) {
       lockShut(tripCode)
       setOpen(false)
@@ -88,10 +96,12 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
       <button
         type="button"
         onClick={tap}
-        aria-expanded={unlocked ? undefined : open}
-        aria-label={unlocked
-          ? 'Organiser settings open — tap to lock them'
-          : 'Organiser settings locked — tap to unlock them'}
+        aria-expanded={unlocked && !owner ? undefined : open}
+        aria-label={owner
+          ? 'Organiser settings open — you own this event'
+          : unlocked
+            ? 'Organiser settings open — tap to lock them'
+            : 'Organiser settings locked — tap to unlock them'}
         className={`w-10 h-10 rounded-tile flex items-center justify-center press ${
           unlocked ? 'text-accent-deep bg-accent-tint' : 'text-ink/65 hover:text-ink'
         }`}
@@ -100,6 +110,15 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
           {unlocked ? <IconLockOpen size={20} /> : <IconLock size={20} />}
         </span>
       </button>
+
+      {open && owner && (
+        <div className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`} role="status">
+          <p className="t-label text-ink">You own this {isTrip ? 'trip' : 'event'}</p>
+          <p className="t-cap text-ink/65 mt-1">
+            Organiser settings are open whenever you’re signed in to your Green Dot account. Sign out to close them on this phone.
+          </p>
+        </div>
+      )}
 
       {open && !unlocked && forgot && (
         <div className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`}>

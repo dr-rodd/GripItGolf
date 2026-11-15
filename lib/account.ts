@@ -207,6 +207,38 @@ export function mergeMemberships(account: Membership | null, phone: Membership):
   }
 }
 
+// ─── My events (stage (b1), D134) ──────────────────────────────
+
+/**
+ * One event on a Green Dot member's list: one they own, one they have
+ * entered on a phone signed in to their account, or one where they are linked
+ * to a player. Reached through the short link, which knows where a code lives.
+ */
+export interface MyEvent {
+  code: string
+  name: string
+  kind: 'trip' | 'tournament' | 'run'
+  startDate: string | null
+  endDate: string | null
+  owned: boolean
+  /** The player this account is linked to there (D134), if any. */
+  player: { id: string; name: string } | null
+}
+
+/** Newest first by start date, events without a date last, then by name. */
+export function sortMyEvents(events: MyEvent[]): MyEvent[] {
+  return [...events].sort((a, b) => {
+    const da = a.startDate ?? '', db = b.startDate ?? ''
+    if (da !== db) return da && db ? (da < db ? 1 : -1) : da ? -1 : 1
+    return a.name.localeCompare(b.name)
+  })
+}
+
+/** An event code as typed into "Add an event you run": six letters and digits. */
+export function claimCodeIssue(raw: string): string | null {
+  return /^[A-Z0-9]{6}$/.test(String(raw ?? '').trim().toUpperCase()) ? null : 'An event code is 6 letters and numbers.'
+}
+
 // ─── The words ─────────────────────────────────────────────────
 
 /**

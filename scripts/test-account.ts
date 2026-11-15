@@ -25,8 +25,14 @@ import {
 } from '../lib/account'
 import { attemptKey, readTicket, runAccount, type AccountStore } from '../app/api/account/account'
 import type { AttemptWindow } from '../lib/membership'
+import { legacyPinHash } from '../lib/pinHash'
+import type { MyEvent } from '../lib/account'
+import type { AttemptStore } from '../app/api/entry/entry'
 import { sealJson } from '../lib/signedState'
 import type { Membership } from '../lib/membership'
+
+// A PIN re-stored on its first right try is keyed by the server's secret.
+process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -153,6 +159,53 @@ class Stand implements AccountStore {
   }
   async readAttempts(keys: string[]) { return new Map(keys.filter(k => this.attempts.has(k)).map(k => [k, this.attempts.get(k)!])) }
   async writeAttempt(key: string, w: AttemptWindow) { this.attempts.set(key, w) }
+  // Stage (b1)
+  owners = new Map<string, string | null>()            // trip → owner
+  leadEmails = new Map<string, string>()               // trip → email
+  adminHashes = new Map<string, string | null>()       // code → hash
+  links = new Map<string, string>()                    // `${user}|${trip}` → player
+  pinAttempts = new Map<string, AttemptWindow>()
+  async claimByEmail(userId: string, email: string) {
+    let n = 0
+    for (const [trip, e] of this.leadEmails) {
+      if (!this.owners.get(trip) && e.trim().toLowerCase() === email.trim().toLowerCase()) { this.owners.set(trip, userId); n++ }
+    }
+    return n
+  }
+  async syncLinks(userId: string) {
+    for (const [k, m] of this.rows) {
+      const [u, trip] = k.split('|')
+      if (u !== userId || !m.playerId) continue
+      const taken = [...this.links].some(([lk, p]) => p === m.playerId && !lk.startsWith(`${userId}|`))
+      if (!taken && !this.links.has(`${userId}|${trip}`)) this.links.set(`${userId}|${trip}`, m.playerId)
+    }
+  }
+  async eventsFor(userId: string): Promise<MyEvent[]> {
+    const trips = new Set<string>()
+    for (const [t, o] of this.owners) if (o === userId) trips.add(t)
+    for (const k of this.rows.keys()) if (k.startsWith(`${userId}|`)) trips.add(k.split('|')[1])
+    for (const k of this.links.keys()) if (k.startsWith(`${userId}|`)) trips.add(k.split('|')[1])
+    return [...trips].map(t => {
+      const pid = this.links.get(`${userId}|${t}`)
+      return { code: t, name: `Event ${t}`, kind: 'tournament', startDate: null, endDate: null,
+        owned: this.owners.get(t) === userId, player: pid ? { id: pid, name: `Player ${pid}` } : null }
+    })
+  }
+  async unlinkPlayer(userId: string, code: string) { this.links.delete(`${userId}|${code}`) }
+  async tripForClaim(code: string) {
+    if (!this.adminHashes.has(code)) return null
+    return { id: code, code, adminHash: this.adminHashes.get(code) ?? null, ownerId: this.owners.get(code) ?? null }
+  }
+  async setOwner(tripId: string, userId: string): Promise<'ok' | 'taken'> {
+    const o = this.owners.get(tripId)
+    if (o && o !== userId) return 'taken'
+    this.owners.set(tripId, userId); return 'ok'
+  }
+  pins: AttemptStore = {
+    readAttempts: async keys => new Map(keys.filter(k => this.pinAttempts.has(k)).map(k => [k, this.pinAttempts.get(k)!])),
+    writeAttempt: async (key, _trip, w) => { this.pinAttempts.set(key, w) },
+    upgradePin: async () => {},
+  }
   async userFromToken(t: string) { const id = this.tokens.get(t); return id ? this.users.get(id) ?? null : null }
   async userById(id: string) { return this.users.get(id) ?? null }
   async membershipsOf(userId: string) {
@@ -237,6 +290,60 @@ async function routeTests() {
   }
 
   await signInTests(now, fresh, phone, account, other)
+  await eventTests(now, fresh)
+}
+
+async function eventTests(now: Date, fresh: () => Stand) {
+  section('My events: owned, entered, linked (stage (b1), D134)')
+  {
+    const s = fresh()
+    s.leadEmails.set('MADE01', ' A@B.ie ')        // made with this account's email
+    s.leadEmails.set('MADE02', 'a@b.ie')
+    s.owners.set('MADE02', 'other')               // …but already somebody else's
+    s.leadEmails.set('OTHER1', 'o@b.ie')
+    s.rows.set('acct|TRIP03', { role: 'player', playerId: 'p3', organiserUntil: null })
+    s.rows.set('other|T4', { role: 'player', playerId: 'p4', organiserUntil: null })
+    s.links.set('other|T5', 'p5')
+    s.rows.set('acct|T5', { role: 'player', playerId: 'p5', organiserUntil: null })
+    const r = await runAccount({ token: 'ta', action: 'events' }, s, now)
+    const events = r.status === 200 ? r.body.events ?? [] : []
+    eq(s.owners.get('MADE01'), 'acct', 'an event made with this email and owned by nobody becomes this account\'s (D106)')
+    eq(s.owners.get('MADE02'), 'other', '  …never one somebody else owns')
+    eq(s.owners.get('OTHER1'), undefined, '  …never one made with another email')
+    ok(events.some(e => e.code === 'MADE01' && e.owned), 'it is listed as yours')
+    ok(events.some(e => e.code === 'TRIP03' && e.player?.id === 'p3'), 'a name this account claimed is linked and listed (D134)')
+    eq(s.links.get('acct|T5'), undefined, 'a player another account is linked to is never taken from them')
+    ok(!events.some(e => e.code === 'T4'), 'nobody else\'s events are listed')
+    eq((await runAccount({ token: 'tp', action: 'events' }, s, now)).status, 403, 'a phone with no account has no list')
+    eq((await runAccount({ token: 'ta', action: 'unlink', code: 'TRIP03' }, s, now)).status, 200, 'unlinking a player')
+    eq(s.links.get('acct|TRIP03'), undefined, '  …takes the link away')
+  }
+
+  section('Claiming an event by its organiser PIN')
+  {
+    const s = fresh()
+    s.adminHashes.set('CLAIM1', await legacyPinHash('4321'))
+    s.adminHashes.set('NOPIN1', null)
+    s.adminHashes.set('OWNED1', await legacyPinHash('4321'))
+    s.owners.set('OWNED1', 'other')
+    const claim = (code: string, pin: string, token = 'ta', address = '9.9.9.9') =>
+      runAccount({ token, action: 'claim', code, pin, address }, s, now)
+    eq((await claim('CLAIM1', '9999')).status, 403, 'the wrong PIN claims nothing')
+    eq(s.owners.get('CLAIM1'), undefined, '  …and the event stays nobody\'s')
+    eq((await claim('claim1', '4321')).status, 200, 'the right PIN makes it this account\'s, any case of code')
+    eq(s.owners.get('CLAIM1'), 'acct', '  …and it is')
+    eq((await claim('CLAIM1', '4321', 'to')).status, 409, 'a second account cannot take it')
+    eq((await claim('OWNED1', '4321')).status, 409, 'nor an event somebody owns already')
+    eq((await claim('NOPIN1', '')).status, 403, 'an event with no PIN is claimed only by its email')
+    eq((await claim('NOPE01', '4321')).status, 404, 'a code that is no event')
+    eq((await claim('AB', '4321')).status, 400, 'a code that is no code')
+    eq((await claim('CLAIM1', '4321', 'tp')).status, 403, 'a phone with no account claims nothing')
+    const t = fresh()
+    t.adminHashes.set('GUESS1', await legacyPinHash('4321'))
+    let last = null as Awaited<ReturnType<typeof runAccount>> | null
+    for (let i = 0; i < 11; i++) last = await runAccount({ token: 'ta', action: 'claim', code: 'GUESS1', pin: String(1000 + i), address: '7.7.7.7' }, t, now)
+    eq(last?.status, 429, 'guessing a PIN is held by the PIN\'s own retry limit')
+  }
 }
 
 async function signInTests(
@@ -366,7 +473,8 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers, ['app/account/AccountScreen.tsx'], 'only the account page imports it')
+  eq(importers.filter(f => !f.startsWith('app/account/')), [], 'only the account pages import it')
+  ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/account/events/MyEventsScreen.tsx'), '  …the account screen and My events')
   const reached = files.filter(f => f.startsWith('app/api/')
     && /^import (?!type )[^\n]*from ['"](@\/app\/api\/account\/account|\.\/account)['"]/m.test(read(f)))
   eq(reached.sort(), ['app/api/account/route.ts'], 'only /api/account runs the account logic')

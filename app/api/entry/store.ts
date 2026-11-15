@@ -22,10 +22,14 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       // rounds, each in its own query, as the trip layout reads them
       // (kind.ts): columns the main select must never depend on.
       const row = data as { id: string; end_date: string | null; settings_passcode_hash: string | null }
-      const [pub, shape] = await Promise.all([
+      // The owner and D107's answer (migration 085) in a query of their own
+      // too: before 085 there is no owner, and nothing changes.
+      const [pub, shape, priv] = await Promise.all([
         db.from('trips').select('public_passcode_hash').eq('id', row.id).maybeSingle(),
         db.from('trips').select('kind, bracket_setup, event_permissions').eq('id', row.id).maybeSingle(),
+        db.from('trip_private').select('owner_id, settings_by').eq('trip_id', row.id).maybeSingle(),
       ])
+      const p = (priv.error ? null : priv.data) as { owner_id?: string | null; settings_by?: string | null } | null
       const s = (shape.error ? null : shape.data) as { kind?: unknown; bracket_setup?: unknown; event_permissions?: unknown } | null
       return {
         id: row.id,
@@ -34,7 +38,24 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
         adminHash: row.settings_passcode_hash || null,
         publicHash: pub.error ? null : ((pub.data as { public_passcode_hash?: string | null } | null)?.public_passcode_hash || null),
         openEnded: fieldOpenEnded({ kind: s?.kind, bracketSetup: s?.bracket_setup, eventPermissions: s?.event_permissions }),
+        ownerId: p?.owner_id ?? null,
+        settingsBy: p?.settings_by === 'owner' || p?.settings_by === 'anyone' ? p.settings_by : null,
       }
+    },
+    async linkPlayer(userId, tripId, playerId) {
+      // Only a Green Dot member — a confirmed email, never an anonymous phone.
+      const { data, error } = await db.auth.admin.getUserById(userId)
+      const u = error ? null : data.user
+      if (!u || u.is_anonymous || !u.email || !(u.email_confirmed_at ?? u.confirmed_at)) return
+      // One account per player: somebody else's link is left alone (UNIQUE
+      // player_id refuses it anyway). One player per account per event: a new
+      // claim replaces this account's old one here.
+      const { data: held } = await db.from('account_players').select('user_id').eq('player_id', playerId).maybeSingle()
+      const holder = (held as { user_id?: string } | null)?.user_id
+      if (holder && holder !== userId) return
+      const { error: e } = await db.from('account_players')
+        .upsert({ user_id: userId, trip_id: tripId, player_id: playerId, linked_at: new Date().toISOString() }, { onConflict: 'user_id,trip_id' })
+      if (e && e.code !== '23505' && e.code !== '42P01' && e.code !== 'PGRST205') throw e
     },
     async claimedPlayer(tripId, playerId) {
       const { data, error } = await db.from('players')

@@ -8,7 +8,7 @@ import { STRAVA_APPS_URL } from '@/lib/stravaLinks'
 import {
   ATTEMPT_LIMITS, ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_RULE, ORGANISER_HOURS,
 } from '@/lib/membership'
-import { CODE_LENGTH } from '@/lib/account'
+import { ACCOUNT_ATTEMPT_KEEP_HOURS, CODE_LENGTH } from '@/lib/account'
 import { LegalPage, LegalSection, LEGAL_LINK } from '@/app/components/LegalPage'
 
 export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
@@ -43,7 +43,7 @@ export const metadata: Metadata = { title: `Privacy — ${SITE.name}` }
  * Strava's review — docs/run.md.
  */
 
-const UPDATED = '14 November 2026'
+const UPDATED = '15 November 2026'
 
 const minutes = (ms: number) => ms / 60_000
 const hours = (ms: number) => ms / 3_600_000
@@ -68,7 +68,7 @@ export default function PrivacyPage() {
         <ul className="list-disc pl-5 space-y-1.5">
           <li>We hold what an event needs to run, and nothing for advertising — no ads, no analytics tracking, nothing sold.</li>
           <li>You never need an account. <B>An event&apos;s code is its key</B>: anyone with it can see the names, scores and leaderboards in that event.</li>
-          <li>An account is optional — an email address and a code, so your events follow you to another phone — and you can delete it yourself in one tap.</li>
+          <li>An account is optional — an email address, a username and a password, so your events follow you to another phone — and you can delete it yourself in one tap.</li>
           <li>Strava is optional, only with your consent, and only for the challenge you connect it to.</li>
           <li>You can have your data deleted. Runners can do it themselves in one tap; anyone can write to {mail}.</li>
         </ul>
@@ -106,18 +106,30 @@ export default function PrivacyPage() {
 
       <LegalSection title="Accounts">
         <p>
-          You never need an account to join, play, score or watch. If you choose to make one, we
-          hold <B>your email address</B> and when you signed in, and link it to the identity this
-          phone already has — so the events it has entered stay with you on another phone. We email
-          you a {CODE_LENGTH}-digit code each time you sign in; there is no password, and the code
-          is not kept once used. An account changes nothing about what you can see or do in any
-          event, and nobody else in an event sees your email address.
+          You never need an account to join, play, score or watch. If you choose to become a Green
+          Dot member, we hold <B>your email address</B>, <B>the username you choose</B>, and{' '}
+          <B>your password</B> — kept only in a scrambled form by Supabase, which runs the sign-in,
+          and readable by nobody, us included — with when you signed in. We email you a{' '}
+          {CODE_LENGTH}-digit code when you join or reset your password; the code is not kept once
+          used. Your account is linked to the identity this phone already has, so the events it has
+          entered stay with you on another phone. Wrong sign-ins are counted for a short while to
+          stop guessing, with the network address and the name typed only ever kept scrambled, and
+          the counts deleted within {(ACCOUNT_ATTEMPT_KEEP_HOURS * 2) / 24} days.
         </p>
         <p className="mt-3">
-          <B>Deleting it:</B> Your account → Delete my account. Your email address and the
-          account&apos;s record of which events it entered are deleted straight away, and the screen
-          says so. Your names and scores stay with the events they were played in, as anybody&apos;s
-          do; ask the organiser, or write to {mail}, to have those removed too.
+          Your account also remembers <B>the events you own</B> — ones you made while signed in, ones
+          made with your email, and ones you add with their organiser PIN — whose settings are then
+          open to you on any phone you are signed in on; and, when you claim your name in an event
+          while signed in, <B>which player you are there</B>, so your events are listed together
+          under My events. You can unlink a player at any time. Nobody else in an event sees your
+          email address or username.
+        </p>
+        <p className="mt-3">
+          <B>Deleting it:</B> Your account → Delete my account. Your email address, username,
+          password, and the account&apos;s record of the events it entered, owns and is linked to are
+          deleted straight away, and the screen says so. An event you owned carries on, run by its
+          organiser PIN as before. Your names and scores stay with the events they were played in, as
+          anybody&apos;s do; ask the organiser, or write to {mail}, to have those removed too.
         </p>
       </LegalSection>
 

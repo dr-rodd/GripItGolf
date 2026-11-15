@@ -19,7 +19,7 @@
 //
 // Browser only: on the server every function returns null at once.
 
-import { entryStamp, needsEntry, type Role } from './membership'
+import { ORGANISER_MS, entryStamp, needsEntry, type Role } from './membership'
 import { forgetUnlock, hasUnlocked, rememberUnlock } from './passcode'
 import { playerCookieName, readPlayerId } from './playerCookie'
 
@@ -37,6 +37,16 @@ export interface EntryResult {
   role: Role | null
   organiserUntil: string | null
   readOnly: boolean
+  /** How this phone is the organiser, if it is: its account owns the event, or the PIN. */
+  organiserBy?: 'pin' | 'account' | null
+}
+
+/**
+ * An owner's lock, remembered for twelve hours at a time and asked again on
+ * every page load (`settleOrganiser`) — the server's word, never the phone's.
+ */
+function rememberOwner(code: string) {
+  rememberUnlock(code, new Date(Date.now() + ORGANISER_MS).toISOString(), true)
 }
 
 const READY_KEY = 'gd.entry.ready.v1'
@@ -71,14 +81,14 @@ async function databaseReady(): Promise<boolean> {
 
 // ─── This phone's identity ─────────────────────────────────────
 
-let signingIn: Promise<{ userId: string; token: string } | null> | null = null
+let signingIn: Promise<{ userId: string; token: string; account?: boolean } | null> | null = null
 
 /**
  * The phone's session, signing it in anonymously the first time. One sign-in
  * at a time: two calls racing would otherwise make two identities and
  * remember whichever finished last.
  */
-async function phoneSession(): Promise<{ userId: string; token: string } | null> {
+async function phoneSession(): Promise<{ userId: string; token: string; account?: boolean } | null> {
   // Loaded here, not at the top: the unlock and claim components import this
   // file, and some render on the server and in tests, where the client must
   // never be built. Importing this file does nothing until a phone signs in.
@@ -90,7 +100,8 @@ async function phoneSession(): Promise<{ userId: string; token: string } | null>
   }
   try {
     const { data } = await supabase.auth.getSession()
-    if (data.session) return { userId: data.session.user.id, token: data.session.access_token }
+    // `account`: a Green Dot member is signed in on this phone, not just the phone itself.
+    if (data.session) return { userId: data.session.user.id, token: data.session.access_token, account: data.session.user.is_anonymous === false }
   } catch {
     return null
   }
@@ -173,9 +184,11 @@ async function post(code: string, extras: EntryExtras): Promise<EntryResult | nu
     if (!res.ok) return null
     const body = await res.json() as EntryResult & { ok?: boolean }
     writeLocal(stampKey(code), entryStamp(session.userId, playerId))
-    // A PIN entry's twelve hours, as the server counts them.
-    if (extras.adminPin) rememberUnlock(code, body.organiserUntil)
-    return { tripId: body.tripId, role: body.role, organiserUntil: body.organiserUntil, readOnly: body.readOnly }
+    // The owner's lock is open wherever they are signed in; else a PIN
+    // entry's twelve hours, as the server counts them.
+    if (body.organiserBy === 'account') rememberOwner(code)
+    else if (extras.adminPin) rememberUnlock(code, body.organiserUntil)
+    return { tripId: body.tripId, role: body.role, organiserUntil: body.organiserUntil, readOnly: body.readOnly, organiserBy: body.organiserBy ?? null }
   } catch {
     return null
   }
@@ -211,7 +224,7 @@ export async function ensureMember(tripCode: string): Promise<void> {
   const session = await phoneSession()
   if (!session) return
   if (needsEntry(readLocal(stampKey(code)), session.userId, cookiePlayer(code))) await enterEvent(code)
-  await settleOrganiser(code)
+  await settleOrganiser(code, session.account === true)
 }
 
 /**
@@ -294,14 +307,19 @@ async function tellShut(code: string): Promise<boolean> {
 
 const settled = new Set<string>()
 
-/** Once a page load per event: a shut padlock told, a remembered unlock checked. */
-async function settleOrganiser(code: string): Promise<void> {
+/**
+ * Once a page load per event: a shut padlock told, a remembered unlock
+ * checked — and, for a Green Dot member signed in on this phone, whether
+ * their account owns the event, which opens the lock with no PIN.
+ */
+async function settleOrganiser(code: string, account = false): Promise<void> {
   if (settled.has(code)) return
   settled.add(code)
   if (readLocal(closeKey(code)) === '1' && !(await tellShut(code))) return
-  if (!hasUnlocked(code)) return
+  if (!hasUnlocked(code) && !account) return
   const r = await ask('/api/entry', { code, peek: true })
   if (r?.status !== 200) return
+  if (r.body.organiserBy === 'account') { rememberOwner(code); return }
   const until = isoOrNull(r.body.organiserUntil)
   // The server's word: its time if it has one running, else shut.
   rememberUnlock(code, until)

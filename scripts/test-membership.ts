@@ -22,7 +22,7 @@ import {
 import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '../lib/pinHash'
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runExtend, runPlayTogether, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
-import { closeOrganiser, fieldOpenEnded, mayChangeEvent } from '../lib/membership'
+import { closeOrganiser, fieldOpenEnded, mayChangeEvent, organiserNow } from '../lib/membership'
 import { SaveStepError, runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
 import { RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
 
@@ -306,7 +306,7 @@ function wiringTests() {
     eq(unlockers, [], 'no screen remembers an unlock of its own — only lib/entryClient.ts, with what the server said')
     const lock = read('app/components/OrganiserLock.tsx')
     ok(lock.includes('lockShut(tripCode)') && !lock.includes('forgetUnlock('), 'shutting the padlock tells the server (D61)')
-    ok(/settleOrganiser\(code\)/.test(read('lib/entryClient.ts')), 'a page load checks a remembered unlock against the server, and tells a shut padlock it missed')
+    ok(/settleOrganiser\(code(, [^)]*)?\)/.test(read('lib/entryClient.ts')), 'a page load checks a remembered unlock against the server, and tells a shut padlock it missed')
   }
 
   section('Nobody is signed in before migration 068 is in')
@@ -750,8 +750,79 @@ async function forgotPinTests() {
   ok(/pin_resets/.test(read('app/api/cleanup/route.ts')), 'the nightly cleanup deletes old links')
 }
 
+async function ownerTests() {
+  section('Owners (stage (b1), migration 085): the organiser wherever they are signed in')
+  {
+    const guest: Membership = { role: 'guest', playerId: null, organiserUntil: null }
+    const owner: Membership = { ...guest, owner: true }
+    const locked: EventFacts = { adminPinSet: true, endDate: null }
+    ok(organiserNow(owner, NOW) && !organiserNow(guest, NOW), 'owning the event is organiser now; a guest is not')
+    eq(roleOf(owner, locked, NOW), 'organiser', 'an owner is the organiser on an event with a PIN, without it')
+    ok(mayChangeEvent(owner, locked, NOW) && !mayChangeEvent(guest, locked, NOW), '…and may change the event; the field may not')
+    const long: EventFacts = { adminPinSet: true, endDate: '2020-01-01' }
+    ok(mayWrite(owner, long, NOW) && !mayWrite(guest, long, NOW), 'never capped at 30 days, as the PIN holder is not')
+    eq(roleOf(null, locked, NOW), null, 'still a member first: no row, no role')
+
+    section('D107: an owned event with no PIN, kept to its owner')
+    const open: EventFacts = { adminPinSet: false, endDate: null }
+    const mine: EventFacts = { adminPinSet: false, endDate: null, ownerOnly: true }
+    eq(roleOf(guest, open, NOW), 'organiser', 'unanswered: every member of a PIN-less event is its organiser, as ever')
+    eq(roleOf(guest, mine, NOW), 'guest', '"Just me": the field is the field')
+    ok(!mayChangeEvent(guest, mine, NOW) && mayWrite(guest, mine, NOW), '  …may not change the event, still scores')
+    eq(roleOf(owner, mine, NOW), 'organiser', '  …and the owner is the organiser')
+  }
+  {
+    const { store } = await world({ ownerId: 'u1' })
+    const linked: string[] = []
+    store.linkPlayer = async (u, tr, p) => { linked.push(`${u}|${tr}|${p}`) }
+    const me = await runEntry(base, store, NOW)
+    eq(me.status === 200 && [me.body.role, me.body.organiserBy], ['organiser', 'account'], 'the owner enters as the organiser, by their account')
+    const them = await runEntry({ ...base, token: 'tok-u2' }, store, NOW)
+    eq(them.status === 200 && [them.body.role, them.body.organiserBy], ['guest', null], 'anybody else enters as before')
+    const peek = await runEntry({ ...base, peek: true }, store, NOW)
+    eq(peek.status === 200 && peek.body.organiserBy, 'account', 'the padlock\'s check says so too')
+    const pin = await runEntry({ ...base, token: 'tok-u3', adminPin: ADMIN }, store, NOW)
+    eq(pin.status === 200 && pin.body.organiserBy, 'pin', 'the PIN still lends organiser to a helper, and says it was the PIN')
+    await runEntry({ ...base, token: 'tok-u4', playerId: P1 }, store, NOW)
+    eq(linked, [`u4|trip-1|${P1}`], 'claiming a name asks for the player link (D134)')
+  }
+  {
+    const { store } = await world({ adminHash: null, ownerId: 'u1', settingsBy: 'owner' })
+    const them = await runEntry({ ...base, token: 'tok-u2' }, store, NOW)
+    eq(them.status === 200 && them.body.role, 'guest', 'an owned PIN-less event set to Just me: the field is not the organiser')
+    const unanswered = await world({ adminHash: null, ownerId: 'u1', settingsBy: null })
+    const r = await runEntry({ ...base, token: 'tok-u2' }, unanswered.store, NOW)
+    eq(r.status === 200 && r.body.role, 'organiser', 'unanswered, the field is the organiser as ever')
+  }
+  {
+    const { store } = await world()
+    store.linkPlayer = async () => { throw new Error('down') }
+    eq((await runEntry({ ...base, playerId: P1 }, store, NOW)).status, 200, 'a link that fails never stops a phone entering')
+  }
+
+  section('Migration 085 says the same in SQL')
+  {
+    const sql = read('supabase/migrations/20260101000085_event_owners.sql')
+    const code = sql.replace(/--[^\n]*/g, '')
+    const fn = (name: string) => code.slice(code.indexOf(`FUNCTION public.${name}()`), code.indexOf('$$;', code.indexOf(`FUNCTION public.${name}()`)))
+    for (const name of ['writable_trips', 'organiser_trips']) {
+      ok(fn(name).includes('m.trip_id IN (SELECT public.account_trips())'), `${name}() lets the owner in`)
+      ok(/m\.organiser_until > now\(\)\s*OR m\.trip_id IN \(SELECT public\.account_trips\(\)\)/.test(fn(name)), `  …beside the PIN's twelve hours, OR-ed on`)
+      ok(fn(name).includes('m.user_id = (SELECT auth.uid())'), '  …still a member row first')
+    }
+    ok(fn('writable_trips').includes("(t.end_date + 31)::timestamp AT TIME ZONE 'Europe/Dublin'") && fn('writable_trips').includes("t.event_permissions -> 'add_rounds'"),
+      'writable_trips() keeps 071\'s cap and open-ended series word for word')
+    ok(/p\.settings_by = 'owner'/.test(fn('organiser_trips')) && /NOT EXISTS/.test(fn('organiser_trips')),
+      'organiser_trips() narrows an owned PIN-less event only on "Just me" (D107)')
+    ok(/REVOKE ALL ON public\.account_players FROM anon, authenticated/.test(code), 'the links are closed to phones')
+    ok(/REVOKE ALL ON FUNCTION public\.claim_events_by_email\(uuid, text\) FROM PUBLIC, anon, authenticated/.test(code), 'claiming by email is the server\'s alone')
+    ok(sql.includes('Did it land?') && sql.includes('Undo'), '085 carries its check and its undo')
+  }
+}
+
 async function main() {
   await routeTests()
+  await ownerTests()
   await stageFourTests()
   await forgotPinTests()
   await adminPinTests()

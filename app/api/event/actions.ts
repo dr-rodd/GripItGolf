@@ -22,7 +22,7 @@ import { withPlayTogether } from '@/lib/partnerships'
 import { mayChangeEvent, mayWrite, mergeGrant, type EventFacts, type Membership } from '@/lib/membership'
 import { isEvent } from '@/lib/eventHub'
 import { isRunChallenge } from '@/lib/runChallenge'
-import { checkPin, type EntryStore, type EntryTrip } from '../entry/entry'
+import { checkPin, factsOf, withOwner, type EntryStore, type EntryTrip } from '../entry/entry'
 
 export interface ActionStore extends EntryStore {
   /** Raw columns of the event's row, read fresh. Null on a failed read. */
@@ -52,8 +52,8 @@ async function caller(store: ActionStore, token: string | null, rawCode: unknown
   if (!userId) return fail(401, 'Not signed in.')
   const trip = await store.tripByCode(code)
   if (!trip) return fail(404, 'No event with that code.')
-  const m = await store.readMembership(userId, trip.id)
-  return { trip, userId, m, facts: { adminPinSet: !!trip.adminHash, endDate: trip.endDate, openEnded: trip.openEnded } }
+  const m = withOwner(await store.readMembership(userId, trip.id), trip, userId)
+  return { trip, userId, m, facts: factsOf(trip) }
 }
 const failed = (c: Caller | Fail): c is Fail => 'status' in c
 
