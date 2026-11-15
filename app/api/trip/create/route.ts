@@ -5,7 +5,8 @@ import { writeLeadEmail } from '@/lib/leadEmail'
 import { runCreate, type CreateStore } from './create'
 
 // POST /api/trip/create — `{ row, adminPin?, publicPin? }` with the phone's Supabase token as
-// `Authorization: Bearer …`: makes a new event's row and the phone's
+// `Authorization: Bearer …` (a Green Dot member's, D135 — a phone with no
+// account is refused, 403): makes a new event's row and the phone's
 // membership of it (row-level security, stage 3). Answers in supabase-js's own
 // shape, `{ data: { id }, error }`, so the create forms read it as they read
 // their insert. The rules are ./create.ts.
@@ -19,10 +20,18 @@ export async function POST(req: NextRequest) {
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
     const db = createAdminClient()
+    // The user the token names, kept for the member check — one read, not two.
+    let user: { id: string; is_anonymous?: boolean; email?: string; email_confirmed_at?: string; confirmed_at?: string } | null = null
     const store: CreateStore = {
       async userFromToken(t) {
         const { data, error } = await db.auth.getUser(t)
-        return error ? null : data.user?.id ?? null
+        user = error ? null : data.user ?? null
+        return user?.id ?? null
+      },
+      async isMember(userId) {
+        const u = user
+        if (!u || u.id !== userId) return false
+        return !u.is_anonymous && !!u.email && !!(u.email_confirmed_at ?? u.confirmed_at)
       },
       async insertTrip(row) {
         const { data, error } = await db.from('trips').insert(row).select('id').single()

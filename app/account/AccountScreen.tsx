@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import BackButton from '@/app/components/BackButton'
 import { IconEye, IconEyeOff } from '@/app/components/icons'
 import { ButtonLink, FIELD, FIELD_LABEL, Segmented, buttonClass, iconButtonClass } from '@/app/components/ui'
 import {
-  ACCOUNT_WORDS, CODE_LENGTH, PASSWORD_MIN, codeDigits, codeIssue, emailIssue, passwordConfirmIssue, passwordIssue,
+  ACCOUNT_WORDS, CODE_LENGTH, PASSWORD_MIN, codeDigits, safeNext, codeIssue, emailIssue, passwordConfirmIssue, passwordIssue,
   usernameIssue,
 } from '@/lib/account'
 import {
@@ -58,6 +59,20 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
+
+  // Where to go once signed in (`?next=`, D135 — the create wizard that sent
+  // this phone here), and whether to open on Join. Read after mount: the
+  // page is static.
+  const router = useRouter()
+  const [next, setNext] = useState<string | null>(null)
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search)
+    setNext(safeNext(q.get('next')))
+    if (q.get('join') === '1') setView(v => (v.kind === 'loading' || v.kind === 'signIn' ? { kind: 'join' } : v))
+  }, [])
+  useEffect(() => {
+    if (view.kind === 'signedIn' && next) router.replace(next)
+  }, [view.kind, next, router])
 
   const refresh = useCallback(async () => {
     const account = await readAccount()

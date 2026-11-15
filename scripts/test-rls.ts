@@ -19,6 +19,7 @@
 
 import fs from 'fs'
 import { runCreate, CREATE_COLUMNS, type CreateStore } from '../app/api/trip/create/create'
+import { CREATE_NEEDS_ACCOUNT } from '../lib/account'
 
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
 import { FIELD_WRITE_DAYS_AFTER_END, ORGANISER_MS, type Membership } from '../lib/membership'
@@ -58,6 +59,8 @@ function standIn(opts: { taken?: boolean; membershipFails?: boolean } = {}) {
   const emails = new Map<string, string>()
   const store: CreateStore = {
     async userFromToken(t) { return t.startsWith('tok-') ? t.slice(4) : null },
+    // Every user here is a Green Dot member but `phone-…` (D135).
+    async isMember(u) { return !u.startsWith('phone-') },
     async insertTrip(row) {
       if (opts.taken) return { error: { message: 'duplicate key value', code: '23505' } }
       const id = `trip-${trips.size + 1}`
@@ -86,6 +89,10 @@ async function createTests() {
     ok(!odd.body.data && /id, run_results/.test(odd.body.error?.message ?? ''), '  …naming it, never dropping it quietly')
     eq((await runCreate({ token: 'tok-u1', row: { ...ROW, name: ' ' } }, store, NOW)).status, 400, 'no name: refused')
     eq((await runCreate({ token: 'tok-u1', row: { ...ROW, trip_code: 'abc' } }, store, NOW)).status, 400, 'no proper code: refused')
+    const phone = await runCreate({ token: 'tok-phone-1', row: ROW }, store, NOW)
+    eq(phone.status, CREATE_NEEDS_ACCOUNT ? 403 : 200, 'a phone with no Green Dot account: refused while only members make events (D135)')
+    if (CREATE_NEEDS_ACCOUNT) eq(phone.body.error?.code, 'account_required', '  …saying why, so the wizard can send it to sign in')
+    if (!CREATE_NEEDS_ACCOUNT) trips.clear()
     eq(trips.size, 0, '  …and none of those made a row')
 
     const made = await runCreate({ token: 'tok-u1', row: ROW }, store, NOW)

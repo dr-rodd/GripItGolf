@@ -15,6 +15,7 @@
 // ever made on, or sent from, a phone. The row itself may not name either
 // hash column.
 
+import { CREATE_NEEDS_ACCOUNT, CREATE_REFUSED } from '@/lib/account'
 import { mergeGrant, type Membership } from '@/lib/membership'
 import { passcodeError } from '@/lib/passcode'
 import { entryToken, hashPin } from '@/lib/pinHash'
@@ -33,6 +34,12 @@ export const CREATE_COLUMNS = [
 
 export interface CreateStore {
   userFromToken(token: string): Promise<string | null>
+  /**
+   * Whether that user is a Green Dot member — a confirmed email, never an
+   * anonymous phone (D135). Only a member makes an event while
+   * `CREATE_NEEDS_ACCOUNT` is on.
+   */
+  isMember(userId: string): Promise<boolean>
   /** The new row's id, or the database's refusal (a code already taken is 23505). */
   insertTrip(row: Record<string, unknown>): Promise<{ id: string } | { error: { message: string; code?: string } }>
   writeMembership(userId: string, tripId: string, m: Membership): Promise<void>
@@ -50,9 +57,9 @@ export interface CreateStore {
 
 export type CreateOutcome =
   | { status: 200; body: { data: { id: string }; organiserUntil: string | null; error: null }; doorCookie: string | null }
-  | { status: 400 | 401 | 409 | 503; body: { data: null; error: { message: string; code?: string } } }
+  | { status: 400 | 401 | 403 | 409 | 503; body: { data: null; error: { message: string; code?: string } } }
 
-const fail = (status: 400 | 401 | 409 | 503, message: string, code?: string): CreateOutcome =>
+const fail = (status: 400 | 401 | 403 | 409 | 503, message: string, code?: string): CreateOutcome =>
   ({ status, body: { data: null, error: { message, ...(code ? { code } : {}) } } })
 
 export async function runCreate(
@@ -63,6 +70,9 @@ export async function runCreate(
   if (!input.token) return fail(401, 'Not signed in on this phone — try again.')
   const userId = await store.userFromToken(input.token)
   if (!userId) return fail(401, 'Not signed in on this phone — try again.')
+  // D135: the one door an account opens. Joining, playing, scoring and
+  // watching never come through here.
+  if (CREATE_NEEDS_ACCOUNT && !(await store.isMember(userId))) return fail(403, CREATE_REFUSED, 'account_required')
 
   const row = input.row
   if (!row || typeof row !== 'object' || Array.isArray(row)) return fail(400, 'Nothing to create.')

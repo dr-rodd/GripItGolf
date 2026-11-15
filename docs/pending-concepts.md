@@ -84,7 +84,7 @@ Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
 **Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.
 
-## Accounts and clubs (D94–D134)
+## Accounts and clubs (D94–D140)
 
 Ross, 14 Nov 2026: planned, not built. D117–D122 (the same day, from the
 Claude.ai project list) redraw stages (c) onward; D105–D116 are not
@@ -618,6 +618,35 @@ of them is what the entries below and above say.
   count to stats as self-claimed. A past event is reached through the
   normal door — its code, then the name — **never by searching**.
 
+### D135–D140 (Ross, 15 Nov 2026)
+
+- **D135** — only Green Dot members make events: trips, tournaments and run
+  challenges alike. Joining, playing, scoring and watching never need an
+  account (D94 stands). Built as (b3).
+- **D136** — every event but a totally open one has an organiser PIN, and
+  closing an event in its settings asks for one. A totally open event is a
+  trip on "Any player"; a tournament and a run challenge are made with a PIN,
+  as now. Answers D107: "Just me" is setting a PIN.
+- **D137** — a PIN is chosen per event, never a member's one PIN carried
+  over: lending one event's PIN must never lend all of them. A member may
+  type the same one each time if they choose. Nothing pre-fills it.
+- **D138** — a club event needs no PIN unless the club chooses one. **With
+  no PIN a club event is closed, not open**: only the club's admins change
+  it (today a PIN-less event is every member's to change — a club event is
+  the exception). Built in (c)/(d) through b1's `EventFacts.ownerOnly` and an
+  `organiser_trips()` branch on `trip_private.club_id`.
+- **D139** — a club admin edits every one of their club's events: an
+  account linked to the club's list with the admin role, signed in. *Taken as
+  suggested*: "all events" means all of **that club's** events, never
+  another club's or anybody's private trip; Green Dot's own `/admin` stays
+  the owner's tools page and gains no event editing.
+- **D140** — a club event may still let others edit (a charity day run by
+  the club with guests helping): the club opens it to the field ("Anyone in
+  the event", today's open event) or sets a PIN and lends it. Closed is the
+  default. *Taken as suggested*: the choice sits in the event's Who can edit
+  — Club admins only / Club admins and anyone with the PIN / Anyone in the
+  event.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:
@@ -670,16 +699,27 @@ account is linked to is never taken.
 (`LinkedPlayersCard`, organiser area and Trip Setup; the name, never who),
 and an owner changing the PIN without the old one. No migration.
 
-**D107 on screen — held for Ross.** Its column and SQL are in 085
-(unanswered = today's rule), but making "Just me" show on screen means every
-page that works out "does this event have a PIN" (35 files, each from the
-PIN hash alone) must also know about the owner — a read more on each, and a
-wide change. **Proposed instead:** "Just me" *is* setting a PIN. The owner
-never needs it (signed in, they are the organiser anyway), it is what lends
-organiser to a helper, and every page already locks on it. Trip Setup's Who
-can edit becomes "Just me (and anyone I give the PIN to)" / "Anyone in the
-trip" for an owner, the first asking for a PIN to lend. `settings_by` would
-then stay unused, and could be dropped in a later migration.
+**D107 — answered (Ross, 15 Nov 2026, D136): "Just me" *is* setting a
+PIN.** Every event but a totally open one has a PIN, and closing one in its
+settings asks for it. Trip Setup's Who can edit reads "Just me" for a
+signed-in owner (`AdminPinCard`), the passcode being what they lend a
+helper; they never need it themselves. `trip_private.settings_by` is unused
+and can be dropped in a later migration; 085's `organiser_trips()` branch on
+it never fires while nothing writes it.
+
+**(b3) — built 15 Nov 2026: only Green Dot members make events (D135).**
+Every create wizard — trip, tournament, run challenge — is drawn inside
+`MemberGate` (`app/dashboard/create/`): a phone with no account is asked to
+sign in or join, and the account page sends it back to the same address
+(`?next=`, `safeNext` in `lib/account.ts`). `/api/trip/create` refuses a
+phone with no account, 403 `account_required`, whatever the screen says
+(`CREATE_NEEDS_ACCOUNT`, `CreateStore.isMember`: a confirmed email, never
+an anonymous phone). `ACCOUNTS_LINKED` is on: the landing page carries
+"Green Dot members: sign in". The maker owns the event from the first moment
+(b1's `recordOwner`). **Joining, playing, scoring and watching are
+untouched**, and every event made before keeps working exactly as it did.
+The privacy notice says an account is needed only to make an event. No
+migration.
 
 **(b) My events, ownership and D134 linking.** Migration **085**:
 - `trip_private.owner_id` (`auth.users ON DELETE SET NULL`),
@@ -717,7 +757,16 @@ the column and the three tables. Builds: making a club (empty), Ross's
 approval in `/admin`, the list (paste or file), invites and linking by
 code, removing (severing, never deleting an account), `mayUseFeature`
 (club OR individual, yes for all), D120's one list of events, and the
-privacy notice's Clubs section in the same deploy. *Reads:* a members-area
+privacy notice's Clubs section in the same deploy. **D138–D140 land
+here**: `account_trips()` widened to a club's admins makes them the
+organiser of every club event; `organiser_trips()`'s no-PIN branch gains
+`AND NOT EXISTS (… p.club_id IS NOT NULL AND p.settings_by IS DISTINCT FROM
+'anyone')` so a PIN-less club event is the admins' alone unless opened, and
+`factsOf` sets `ownerOnly` to match. **The cost to name now**: the pages that
+draw the padlock decide "no PIN, no lock" from the hash alone, so a closed
+PIN-less club event must hand them `pinSet: true`-like — one fact more in
+the layout's cached reads (`trip_private.club_id`, `settings_by`), read once
+per page, not once per file. *Reads:* a members-area
 page, one `club_members` row for the asker; the list page, the club's rows
 (past 1,000 through `readAllRows`); nothing on any event page.
 

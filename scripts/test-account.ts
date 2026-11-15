@@ -17,7 +17,7 @@
 import fs from 'fs'
 import path from 'path'
 import {
-  ACCOUNTS_LINKED, ACCOUNT_PATH, ACCOUNT_WORDS, CODE_LENGTH, MERGE_TICKET_MS, PASSWORD_MAX, PASSWORD_MIN,
+  ACCOUNTS_LINKED, ACCOUNT_PATH, ACCOUNT_WORDS, CREATE_NEEDS_ACCOUNT, accountLink, safeNext, CODE_LENGTH, MERGE_TICKET_MS, PASSWORD_MAX, PASSWORD_MIN,
   RESERVED_USERNAMES, SIGN_IN_FAILED, SIGN_IN_LIMITS, USERNAME_CHECK_LIMIT, codeDigits, codeIssue, credentialsRefused,
   emailIssue, isAccount, mergeMemberships, normaliseEmail, normaliseUsername, passwordConfirmIssue, passwordIssue,
   signInRoute, usernameIssue,
@@ -123,8 +123,21 @@ function ruleTests() {
   ok(credentialsRefused({ junior: true }), 'a junior profile is refused a username and a password')
   ok(!credentialsRefused({ junior: false }) && !credentialsRefused({}), '…anybody else is not')
 
+  section('Coming back from the account page (D135)')
+  eq(safeNext('/dashboard/create?type=tournament&when=standalone'), '/dashboard/create?type=tournament&when=standalone', 'a path on this site is kept whole')
+  eq(safeNext('//evil.example/x'), null, 'another site is refused')
+  eq(safeNext('/\\evil.example'), null, '…however it is spelled')
+  eq(safeNext('https://evil.example'), null, '…or written in full')
+  eq(safeNext('/account'), null, 'the account page itself is nowhere to go back to')
+  eq(safeNext('/account?next=/x'), null, '…with or without a query')
+  eq(safeNext(null), null, 'nothing is nothing')
+  eq(safeNext('/x\ny'), null, 'a line break is refused')
+  eq(accountLink('/dashboard/create?type=run'), '/account?next=%2Fdashboard%2Fcreate%3Ftype%3Drun', 'the link carries where to come back to')
+  eq(accountLink('/dashboard/create', true), '/account?next=%2Fdashboard%2Fcreate&join=1', '…and opens on Join when asked')
+  eq(accountLink('//evil'), ACCOUNT_PATH, 'a bad way back is dropped, never carried')
+
   section('The words (D133): a Green Dot member, never a bare member')
-  const screen = read('app/account/AccountScreen.tsx')
+  const screen = read('app/account/AccountScreen.tsx') + read('app/dashboard/create/MemberGate.tsx')
   const wordsSrc = read('lib/account.ts').slice(read('lib/account.ts').indexOf('export const ACCOUNT_WORDS'))
   const strings = [...(screen + wordsSrc).matchAll(/(['"`])((?:(?!\1).)*?)\1/g)].map(m => m[2])
   const bare = strings.filter(t => /\bmembers?\b/i.test(t) && !/Green Dot members?\b/.test(t))
@@ -473,7 +486,10 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), [], 'only the account pages import it')
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/dashboard/create/MemberGate.tsx'],
+    'only the account pages import it, and the gate in front of making an event (D135)')
+  ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
+    '  …which only asks whether this phone is signed in')
   ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/account/events/MyEventsScreen.tsx'), '  …the account screen and My events')
   const reached = files.filter(f => f.startsWith('app/api/')
     && /^import (?!type )[^\n]*from ['"](@\/app\/api\/account\/account|\.\/account)['"]/m.test(read(f)))
@@ -482,25 +498,39 @@ function wiringTests() {
   eq(accountWords, [], 'nothing outside the account’s own files asks whether a phone has an account')
   for (const dir of ['app/golf', 'app/run', 'app/scoring', 'app/join', 'app/enter', 'app/api/entry', 'app/api/trip']) {
     if (!fs.existsSync(dir)) continue
-    const hits = walk(dir).filter(f => /@\/lib\/account(Client)?['"]/.test(read(f)))
+    // Making an event is the one door an account opens (D135).
+    const hits = walk(dir).filter(f => /@\/lib\/account(Client)?['"]/.test(read(f)) && f !== 'app/api/trip/create/create.ts')
     eq(hits, [], `${dir} names no account`)
   }
+
+  section('Only a Green Dot member makes an event (D135)')
+  const create = strip(read('app/api/trip/create/create.ts'))
+  ok(/import \{ CREATE_NEEDS_ACCOUNT, CREATE_REFUSED \} from '@\/lib\/account'/.test(create), 'the create route reads the one switch')
+  ok(/CREATE_NEEDS_ACCOUNT && !\(await store\.isMember\(userId\)\)/.test(create), '  …and refuses a phone without an account while it is on')
+  ok(/!u\.is_anonymous && !!u\.email && !!\(u\.email_confirmed_at \?\? u\.confirmed_at\)/.test(read('app/api/trip/create/route.ts')),
+    '  …a member being a confirmed email, never an anonymous phone')
+  ok(/<MemberGate><Doors \/><\/MemberGate>/.test(read('app/dashboard/create/CreateFlow.tsx')), 'every create wizard is behind the gate')
+  ok(/never need an account/.test(read('app/dashboard/create/MemberGate.tsx')), '  …which says joining, playing, scoring and watching never need one')
+  ok(CREATE_NEEDS_ACCOUNT ? ACCOUNTS_LINKED : true, 'while only members make events, the account page is linked')
+  ok(/safeNext\(q\.get\('next'\)\)/.test(read('app/account/AccountScreen.tsx')), 'the account page goes back where it was sent from, checked')
   const client = read('lib/accountClient.ts')
   ok(!/signInAnonymously\(/.test(client), 'the account page never makes a phone identity of its own — it borrows entryClient’s one')
   ok(/shouldCreateUser: false/.test(client), 'signing in to an existing account never makes one')
   ok(/type: pending\.mode === 'upgrade' \? 'email_change' : 'email'/.test(client), 'the upgrade confirms the email on the phone’s own identity')
   ok(!/throw\b/.test(strip(client)), 'the browser half never throws')
 
-  section('The page is not linked until it has been tried')
-  ok(ACCOUNTS_LINKED === false || ACCOUNTS_LINKED === true, 'the switch exists')
+  section('The page is linked once it has been tried')
+  const linked: boolean = ACCOUNTS_LINKED
   const linkers = files.filter(f => !f.startsWith('app/account/') && new RegExp(`['"\`]${ACCOUNT_PATH}['"\`?#]`).test(strip(read(f))) && f !== 'lib/account.ts')
-  if (!ACCOUNTS_LINKED) eq(linkers, [], 'while ACCOUNTS_LINKED is off, nothing points at /account')
+  if (!linked) eq(linkers, [], 'while ACCOUNTS_LINKED is off, nothing points at /account')
+  else ok(linkers.includes('app/Landing.tsx'), 'the landing page points at it (D135)')
   ok(/robots: \{ index: false/.test(read('app/account/page.tsx')), 'the page is not indexed')
 
   section('The privacy notice covers it before it opens')
   const notice = read('app/privacy/page.tsx')
   ok(notice.includes('title="Accounts"'), 'an Accounts section')
-  ok(/never need an account/.test(notice), '…saying nobody needs one')
+  ok(/never need an account to join, play, score or watch/.test(notice), '…saying nobody needs one to join, play, score or watch')
+  ok(/only to make an event/.test(notice), '…only to make an event (D135)')
   ok(/Delete my account/.test(notice) && /Delete my account/.test(read('app/account/AccountScreen.tsx')),
     '…and how to delete it, in the page’s own words')
   ok(!/There are no accounts/.test(notice), 'the old “no accounts” line is gone')

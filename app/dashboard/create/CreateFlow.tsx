@@ -10,6 +10,7 @@ import CreateTripForm from './CreateTripForm'
 import CreateLeagueForm from './CreateLeagueForm'
 import CreateKnockoutForm from './CreateKnockoutForm'
 import CreateRunForm from './CreateRunForm'
+import MemberGate from './MemberGate'
 import { cardClass } from '@/app/components/ui'
 
 /**
@@ -131,7 +132,12 @@ function Choice({ title, line, onClick }: { title: string; line: string; onClick
   )
 }
 
+/** Only a Green Dot member makes an event (D135): every door below is behind the gate. */
 export default function CreateFlow() {
+  return <MemberGate><Doors /></MemberGate>
+}
+
+function Doors() {
   const type = useSyncExternalStore(subscribe, readType, readOnServer)
   const search = useSyncExternalStore(subscribeChoice, readSearch, readSearchOnServer)
 

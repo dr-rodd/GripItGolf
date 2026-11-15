@@ -16,6 +16,11 @@ import { FIELD, buttonClass, chipClass } from './ui'
  * other phone stops being one. A trip with no passcode is anybody's to
  * change, which is what "Any player" means — the database says the same
  * (migration 071, `organiser_trips()`).
+ *
+ * **D136–D137 (Ross, 15 Nov 2026)**: every event but a totally open one has
+ * a PIN, and closing one here asks for it — for its owner "Just me", the PIN
+ * being what they lend a helper (D107, answered). A PIN is chosen per event,
+ * never carried over from another, so lending one lends nothing else.
  */
 export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
   tripCode: string
@@ -90,13 +95,15 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
             <button type="button" disabled={saving}
               onClick={() => { if (!pinSet) { reset(); setMode('set') } else reset() }}
               className={`${chipClass(pinSet)} flex-1`}>
-              Lead player only
+              {owner ? 'Just me' : 'Lead player only'}
             </button>
           </div>
           <p className="t-cap text-ink/65 mt-3 leading-snug">
             {pinSet
               ? 'Changes need the passcode, entered once on a phone for 12 hours — the padlock at the top.'
-              : 'Anyone with the trip code can change it. Lead player only asks for a passcode.'}
+              : owner
+                ? 'Anyone with the trip code can change it. Just me asks for a passcode, to lend to a helper — you never need it while signed in.'
+                : 'Anyone with the trip code can change it. Lead player only asks for a passcode.'}
           </p>
         </>
       ) : (
@@ -113,7 +120,9 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
           {currentField}
           {field(`admin-pin-${tripCode}-new`, `New ${w.pin}`, pin, setPin)}
           {field(`admin-pin-${tripCode}-again`, 'Type it again', again, setAgain)}
-          <p className="t-cap text-ink/65">4 to 8 digits.</p>
+          <p className="t-cap text-ink/65">
+            4 to 8 digits, for this {isTrip ? 'trip' : 'event'} alone: giving it to somebody lends this one, never your others.
+          </p>
           {pin.length > 0 && again.length >= pin.length && issue && <p className="t-cap text-rust-deep">{issue}</p>}
           <div className="flex gap-2">
             <button type="button" disabled={saving || !!issue || needsCurrent} onClick={() => { void write(pin) }} className={buttonClass('primary', false)}>

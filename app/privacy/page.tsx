@@ -67,8 +67,8 @@ export default function PrivacyPage() {
       <LegalSection title="The short version">
         <ul className="list-disc pl-5 space-y-1.5">
           <li>We hold what an event needs to run, and nothing for advertising — no ads, no analytics tracking, nothing sold.</li>
-          <li>You never need an account. <B>An event&apos;s code is its key</B>: anyone with it can see the names, scores and leaderboards in that event.</li>
-          <li>An account is optional — an email address, a username and a password, so your events follow you to another phone — and you can delete it yourself in one tap.</li>
+          <li>You never need an account to join, play, score or watch — only to make an event. <B>An event&apos;s code is its key</B>: anyone with it can see the names, scores and leaderboards in that event.</li>
+          <li>An account is an email address, a username and a password, so your events follow you to another phone. Only whoever makes an event needs one, and you can delete it yourself in one tap.</li>
           <li>Strava is optional, only with your consent, and only for the challenge you connect it to.</li>
           <li>You can have your data deleted. Runners can do it themselves in one tap; anyone can write to {mail}.</li>
         </ul>
@@ -106,8 +106,8 @@ export default function PrivacyPage() {
 
       <LegalSection title="Accounts">
         <p>
-          You never need an account to join, play, score or watch. If you choose to become a Green
-          Dot member, we hold <B>your email address</B>, <B>the username you choose</B>, and{' '}
+          You never need an account to join, play, score or watch. Making an event needs one, so the
+          event has an owner who can always reach its settings. If you become a Green Dot member, we hold <B>your email address</B>, <B>the username you choose</B>, and{' '}
           <B>your password</B> — kept only in a scrambled form by Supabase, which runs the sign-in,
           and readable by nobody, us included — with when you signed in. We email you a{' '}
           {CODE_LENGTH}-digit code when you join or reset your password; the code is not kept once

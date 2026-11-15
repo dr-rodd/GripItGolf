@@ -1,8 +1,7 @@
 // A person's account — the only copy of its rules (D94–D104; Ross,
 // 14 Nov 2026). Stage (a): signing in, signing out and deleting the account.
-// **No new powers**: an account changes nothing anybody may do in any event
-// yet — that is stage (b) — and nobody ever needs one to join, play, score
-// or watch. `docs/pending-concepts.md`, "Accounts and clubs", has the plan.
+// Nobody ever needs one to join, play, score or watch; **making an event
+// needs one** (D135, 15 Nov 2026 — `CREATE_NEEDS_ACCOUNT`). `docs/pending-concepts.md`, "Accounts and clubs", has the plan.
 //
 // One kind of account: a person, by email and a 6-digit code typed into the
 // same screen. No passwords, no links, no Google or Apple.
@@ -22,15 +21,51 @@
 import type { AttemptLimit, FieldRole, Membership } from './membership'
 
 /**
- * Whether the screens link to the account page. Off until Supabase sends
- * its codes through Resend and the page has been tried on a phone
- * (`docs/pending-concepts.md`, question E) — until then /account works for
- * whoever types the address, and nothing points at it.
+ * Whether the screens link to the account page. Switched on with
+ * `CREATE_NEEDS_ACCOUNT` (Ross, 15 Nov 2026): Supabase sends its codes
+ * through Resend and the page has been tried on a phone.
  */
-export const ACCOUNTS_LINKED = false
+export const ACCOUNTS_LINKED = true
 
 /** The account page. */
 export const ACCOUNT_PATH = '/account'
+
+// ─── Making an event (D135) ────────────────────────────────────
+
+/**
+ * Only a Green Dot member makes an event (Ross, 15 Nov 2026, D135): every
+ * create wizard asks the phone to sign in first, and `/api/trip/create`
+ * refuses a phone without an account. **Joining, playing, scoring and
+ * watching never need one** (D94) — this is the one door an account opens.
+ * Every event made before keeps working exactly as it does.
+ */
+export const CREATE_NEEDS_ACCOUNT = true
+
+/** The server's refusal of a phone with no account, said on the wizard if it is ever reached. */
+export const CREATE_REFUSED = 'Making an event needs a Green Dot account. Sign in, then try again.'
+
+/**
+ * Where the account page sends a member once they are signed in: a path on
+ * this site, never another site (`//evil`) and never the account page itself.
+ * Null when there is nowhere to go back to.
+ */
+export function safeNext(raw: string | null | undefined): string | null {
+  const s = String(raw ?? '')
+  if (!s.startsWith('/') || s.startsWith('//') || s.startsWith('/\\')) return null
+  if (s === ACCOUNT_PATH || s.startsWith(`${ACCOUNT_PATH}?`) || s.startsWith(`${ACCOUNT_PATH}/`) || s.startsWith(`${ACCOUNT_PATH}#`)) return null
+  if (s.length > 500 || /[\u0000-\u001f]/.test(s)) return null
+  return s
+}
+
+/** The account page, opened to come back to `next` — on its Join face when `join`. */
+export function accountLink(next: string | null, join = false): string {
+  const q = new URLSearchParams()
+  const back = safeNext(next)
+  if (back) q.set('next', back)
+  if (join) q.set('join', '1')
+  const s = q.toString()
+  return s ? `${ACCOUNT_PATH}?${s}` : ACCOUNT_PATH
+}
 
 /** Digits in a sign-in code — Supabase's Email OTP Length, set to match. */
 export const CODE_LENGTH = 6

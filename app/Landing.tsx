@@ -267,6 +267,13 @@ export default function Landing() {
             Create an event
           </Link>
 
+          {/* Events are made by Green Dot members (D135); joining never
+              asks for an account, so this stays a quiet line under the
+              two ways in. */}
+          <Link href="/account" className="t-cap text-ink/65 hover:text-ink/80 transition-colors mt-4 py-2">
+            Green Dot members: sign in
+          </Link>
+
           {/* Set as a quotation rather than as a sentence: the words sit on
               their own and the name steps out from under them, down and to
               the right, which is where an attribution has always gone. The
