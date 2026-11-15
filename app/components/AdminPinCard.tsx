@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { MAX_PASSCODE, passcodeError } from '@/lib/passcode'
+import { MAX_PASSCODE, ownsHere, passcodeError } from '@/lib/passcode'
+import { useUnlocked } from './useUnlocked'
 import { setAdminPin } from '@/lib/entryClient'
 import { FIELD, buttonClass, chipClass } from './ui'
 
@@ -24,6 +25,9 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
   isTrip: boolean
 }) {
   const router = useRouter()
+  // The event's owner, signed in, sets a new PIN without the old (stage (b2)).
+  const [unlocked] = useUnlocked(tripCode)
+  const owner = unlocked && ownsHere(tripCode)
   const [mode, setMode] = useState<'idle' | 'set' | 'remove'>('idle')
   const [current, setCurrent] = useState('')
   const [pin, setPin] = useState('')
@@ -34,7 +38,7 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
 
   const digits = (v: string) => v.replace(/\D/g, '').slice(0, MAX_PASSCODE)
   const issue = passcodeError(pin) ?? (pin !== again ? `The two ${w.pin}s don’t match.` : null)
-  const needsCurrent = pinSet && current.length === 0
+  const needsCurrent = pinSet && !owner && current.length === 0
 
   function reset() {
     setMode('idle'); setCurrent(''); setPin(''); setAgain(''); setError(null)
@@ -43,7 +47,7 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
   async function write(next: string | null) {
     setSaving(true)
     setError(null)
-    const r = await setAdminPin(tripCode, pinSet ? current : null, next)
+    const r = await setAdminPin(tripCode, pinSet && !owner ? current : null, next)
     setSaving(false)
     if (!r.ok) {
       setError(r.error)
@@ -68,7 +72,7 @@ export default function AdminPinCard({ tripCode, pinSet, isTrip }: {
       />
     </label>
   )
-  const currentField = pinSet && field(`admin-pin-${tripCode}-current`, `Current ${w.pin}`, current, setCurrent)
+  const currentField = pinSet && !owner && field(`admin-pin-${tripCode}-current`, `Current ${w.pin}`, current, setCurrent)
 
   return (
     <section className={isTrip ? '' : 'mb-10'}>

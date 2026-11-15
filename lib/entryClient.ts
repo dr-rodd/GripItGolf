@@ -414,6 +414,22 @@ export async function createTripRow(
   }
 }
 
+// ─── Players linked to Green Dot members (D134, stage (b2)) ────
+
+/**
+ * For the organiser: the players a Green Dot member has linked themselves to
+ * in this event — never who — and, with `unlink`, one taken off. `null` when
+ * this phone is not the organiser, or the server cannot be reached.
+ */
+export async function readPlayerLinks(tripCode: string, unlink?: string): Promise<{ id: string; name: string }[] | null> {
+  if (!inBrowser() || !tripCode) return null
+  const r = await ask('/api/event/links', { code: tripCode.trim().toUpperCase(), ...(unlink ? { unlink } : {}) })
+  if (r?.status !== 200 || !Array.isArray(r.body.linked)) return null
+  return (r.body.linked as { id?: unknown; name?: unknown }[])
+    .filter(p => typeof p.id === 'string' && typeof p.name === 'string')
+    .map(p => ({ id: p.id as string, name: p.name as string }))
+}
+
 // ─── Forgot PIN (D67) ──────────────────────────────────────────
 
 /**

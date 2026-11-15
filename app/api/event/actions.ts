@@ -32,6 +32,13 @@ export interface ActionStore extends EntryStore {
   leadPlayerId(tripId: string): Promise<string | null>
   /** Organiser access ended on every phone in the event (a new admin PIN, D67's rule). */
   endOrganisers(tripId: string): Promise<void>
+  /**
+   * D134: the players in this event linked to a Green Dot member — the
+   * player, never who the member is (stage (b2), migration 085).
+   */
+  playerLinks?(tripId: string): Promise<{ id: string; name: string }[]>
+  /** A link the organiser undoes: the player is nobody's account's any more. */
+  removePlayerLink?(tripId: string, playerId: string): Promise<void>
 }
 
 type Fail = { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
@@ -169,11 +176,15 @@ export async function runSetAdminPin(
   const word = isTrip ? 'passcode' : 'organiser PIN'
 
   if (trip.adminHash) {
-    const current = str(input.currentPin)
-    if (!current) return fail(403, `Enter the current ${word}.`)
-    const r = await checkPin(store, { tripId: trip.id, code: trip.code, kind: 'admin', address: input.address, pin: current, hash: trip.adminHash }, now)
-    if (r === 'blocked') return fail(429, TOO_MANY)
-    if (r === 'wrong') return fail(403, `That isn’t the current ${word}.`)
+    // The event's owner sets a new one without the old (stage (b2)): signed
+    // in, they are the organiser already, and the PIN is only theirs to lend.
+    if (!c.m?.owner) {
+      const current = str(input.currentPin)
+      if (!current) return fail(403, `Enter the current ${word}.`)
+      const r = await checkPin(store, { tripId: trip.id, code: trip.code, kind: 'admin', address: input.address, pin: current, hash: trip.adminHash }, now)
+      if (r === 'blocked') return fail(429, TOO_MANY)
+      if (r === 'wrong') return fail(403, `That isn’t the current ${word}.`)
+    }
   } else if (!mayChangeEvent(c.m, c.facts, now)) {
     // No PIN yet, and this phone may not change the event: not entered, or
     // past the 30-day read-only cap (D59), which on a trip with no passcode
@@ -202,6 +213,28 @@ export async function runSetAdminPin(
   const m = mergeGrant(await store.readMembership(c.userId, trip.id), { organiser: true }, now)
   await store.writeMembership(c.userId, trip.id, m)
   return { status: 200, body: { ok: true, organiserUntil: m.organiserUntil } }
+}
+
+// ─── Players linked to Green Dot members (D134, stage (b2)) ────
+
+/**
+ * The organiser's view of the event's player links — which players a Green
+ * Dot member has linked themselves to, never who — and undoing one that is
+ * wrong (`unlink`, a player id). The organiser's alone: the PIN's twelve
+ * hours, the owner, or anybody on an event nobody locked.
+ */
+export async function runPlayerLinks(
+  input: { token: string | null; code: unknown; unlink?: unknown },
+  store: ActionStore,
+  now: Date,
+): Promise<{ status: 200; body: { ok: true; linked: { id: string; name: string }[] } } | Fail> {
+  const c = await caller(store, input.token, input.code)
+  if (failed(c)) return c
+  if (!mayChangeEvent(c.m, c.facts, now)) return fail(403, 'Only the organiser can see who is linked.')
+  if (!store.playerLinks || !store.removePlayerLink) return { status: 200, body: { ok: true, linked: [] } }
+  const unlink = str(input.unlink)
+  if (unlink) await store.removePlayerLink(c.trip.id, unlink)
+  return { status: 200, body: { ok: true, linked: await store.playerLinks(c.trip.id) } }
 }
 
 // ─── An ad hoc series' end date, moved on ──────────────────────

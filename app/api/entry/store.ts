@@ -124,6 +124,20 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
         .select('id').eq('trip_id', tripId).eq('is_lead', true).limit(1).maybeSingle()
       return error || !data ? null : (data as { id: string }).id
     },
+    async playerLinks(tripId) {
+      const { data, error } = await db.from('account_players').select('player_id').eq('trip_id', tripId)
+      // Before migration 085 nobody is linked.
+      if (error) return []
+      const ids = ((data ?? []) as { player_id: string }[]).map(r => r.player_id)
+      if (ids.length === 0) return []
+      const { data: ps, error: e } = await db.from('players').select('id, name').in('id', ids)
+      if (e) throw e
+      return ((ps ?? []) as { id: string; name: string }[]).sort((a, b) => a.name.localeCompare(b.name))
+    },
+    async removePlayerLink(tripId, playerId) {
+      const { error } = await db.from('account_players').delete().eq('trip_id', tripId).eq('player_id', playerId)
+      if (error) throw error
+    },
     async endOrganisers(tripId) {
       const { error } = await db.from('trip_members')
         .update({ organiser_until: null, updated_at: new Date().toISOString() })

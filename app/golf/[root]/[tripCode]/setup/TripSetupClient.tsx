@@ -17,6 +17,7 @@ import LeaderboardSetup from '@/app/components/LeaderboardSetup'
 import TripHeader from '@/app/components/TripHeader'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import AdminPinCard from '@/app/components/AdminPinCard'
+import LinkedPlayersCard from '@/app/components/LinkedPlayersCard'
 import SupportLink from '@/app/components/SupportLink'
 import Toggle from '@/app/components/Toggle'
 import {
@@ -660,6 +661,7 @@ export default function TripSetupClient({
                 <div className="pt-4 border-t border-line">
                   <label className={FIELD_LABEL}>Who can edit</label>
                   <AdminPinCard tripCode={trip.trip_code} pinSet={pinSet} isTrip />
+                  <LinkedPlayersCard tripCode={trip.trip_code} pinSet={pinSet} isTrip />
                 </div>
               )}
 

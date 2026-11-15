@@ -666,10 +666,20 @@ name this account's phones claimed before signing in is linked too** when
 My events loads — the phone is the account's from then on. A name another
 account is linked to is never taken.
 
-**(b2) — still to build**: the organiser undoing a wrong link; D107's
-question on screen (Trip Setup's Who can edit, and the organiser area) —
-its column and its SQL are in 085 already, unanswered meaning today's rule;
-an owner changing the PIN without the old one.
+**(b2) — built 15 Nov 2026**: the organiser undoing a wrong link
+(`LinkedPlayersCard`, organiser area and Trip Setup; the name, never who),
+and an owner changing the PIN without the old one. No migration.
+
+**D107 on screen — held for Ross.** Its column and SQL are in 085
+(unanswered = today's rule), but making "Just me" show on screen means every
+page that works out "does this event have a PIN" (35 files, each from the
+PIN hash alone) must also know about the owner — a read more on each, and a
+wide change. **Proposed instead:** "Just me" *is* setting a PIN. The owner
+never needs it (signed in, they are the organiser anyway), it is what lends
+organiser to a helper, and every page already locks on it. Trip Setup's Who
+can edit becomes "Just me (and anyone I give the PIN to)" / "Anyone in the
+trip" for an owner, the first asking for a PIN to lend. `settings_by` would
+then stay unused, and could be dropped in a later migration.
 
 **(b) My events, ownership and D134 linking.** Migration **085**:
 - `trip_private.owner_id` (`auth.users ON DELETE SET NULL`),

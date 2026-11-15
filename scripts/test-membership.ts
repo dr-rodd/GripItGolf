@@ -21,7 +21,7 @@ import {
 } from '../lib/membership'
 import { legacyPinHash as hashPasscode, entryToken, hashPin, verifyPin } from '../lib/pinHash'
 import { runEntry, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
-import { runDoor, runExtend, runPlayTogether, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
+import { runDoor, runExtend, runPlayTogether, runPlayerLinks, runSetAdminPin, runSetPublicPin, type ActionStore } from '../app/api/event/actions'
 import { closeOrganiser, fieldOpenEnded, mayChangeEvent, organiserNow } from '../lib/membership'
 import { SaveStepError, runAskReset, runCheckReset, runSaveReset, resetTokenHash, type ResetStore, type ResetTrip, type ResetRow } from '../app/api/event/pinReset'
 import { RESET_LINK_MINUTES, newPinIssue } from '../lib/pinReset'
@@ -820,9 +820,48 @@ async function ownerTests() {
   }
 }
 
+async function stageB2Tests() {
+  section('Stage (b2): an owner sets a new PIN without the old one')
+  {
+    const w = await world({ ownerId: 'u1' })
+    await runEntry(base, w.store, NOW)
+    await runEntry({ ...base, token: 'tok-u2' }, w.store, NOW)
+    const r = await runSetAdminPin({ token: 'tok-u1', code: 'GX7K2P', currentPin: null, pin: '5678', address: '203.0.113.9' }, w.actions, NOW)
+    eq(r.status, 200, 'the owner, signed in, needs no current PIN')
+    ok(!!w.t.adminHash && (await verifyPin('5678', w.t.adminHash)).ok, '  …and the new one is stored')
+    const them = await runSetAdminPin({ token: 'tok-u2', code: 'GX7K2P', currentPin: null, pin: '1357', address: '203.0.113.9' }, w.actions, NOW)
+    eq(them.status, 403, 'anybody else is still asked for the current PIN')
+    ok((await verifyPin('5678', w.t.adminHash!)).ok, '  …and changes nothing')
+  }
+
+  section('Stage (b2): the organiser sees and undoes player links (D134)')
+  {
+    const w = await world()
+    const links = new Map<string, string>([[P1, 'Ross'], [P2, 'Dave']])
+    w.actions.playerLinks = async () => [...links].map(([id, name]) => ({ id, name }))
+    w.actions.removePlayerLink = async (_t, pid) => { links.delete(pid) }
+    const ask = (token: string, unlink?: string) => runPlayerLinks({ token, code: 'GX7K2P', unlink }, w.actions, NOW)
+    await runEntry({ ...base, token: 'tok-u2' }, w.store, NOW)
+    eq((await ask('tok-u2')).status, 403, 'the field cannot see who is linked')
+    eq((await ask('tok-u2', P1)).status, 403, '  …nor unlink anybody')
+    eq(links.size, 2, '  …and nothing changed')
+    await runEntry({ ...base, adminPin: ADMIN }, w.store, NOW)
+    const seen = await ask('tok-u1')
+    eq(seen.status === 200 && seen.body.linked.map(p => p.name), ['Ross', 'Dave'], 'the organiser sees the linked players — names, never who')
+    const after = await ask('tok-u1', P1)
+    eq(after.status === 200 && after.body.linked.map(p => p.id), [P2], 'and undoes a wrong link')
+    const owned = await world({ ownerId: 'u3' })
+    owned.actions.playerLinks = async () => []
+    owned.actions.removePlayerLink = async () => {}
+    await runEntry({ ...base, token: 'tok-u3' }, owned.store, NOW)
+    eq((await runPlayerLinks({ token: 'tok-u3', code: 'GX7K2P' }, owned.actions, NOW)).status, 200, 'the owner, with no PIN typed, may too')
+  }
+}
+
 async function main() {
   await routeTests()
   await ownerTests()
+  await stageB2Tests()
   await stageFourTests()
   await forgotPinTests()
   await adminPinTests()
