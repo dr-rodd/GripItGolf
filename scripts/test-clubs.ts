@@ -15,6 +15,7 @@ import {
   clubAssetUrl, clubEventWhen, clubImageIssue, groupClubEvents, irishToday, oneClubIssue, publicClubEvents, type ClubEvent,
 } from '../lib/clubs'
 import { FEATURES, mayUseFeature } from '../lib/tiers'
+import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import { inviteHash, runClub, runUpload, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
@@ -228,6 +229,10 @@ class Stand implements ClubStore {
   }
   async clubEvents(clubId: string) { return this.events.get(clubId) ?? [] }
   async entries(userId: string, codes: string[]) { return (this.linked.get(userId) ?? []).filter(c => codes.includes(c)) }
+  season: SeasonRow[] = []
+  async seasonRows() { return { rows: this.season, courses: { c1: 'Lahinch Old' } } }
+  async outsideEvents(_u: string, exclude: string[]) { return [{ code: 'TRIP01', name: 'Lads’ trip', kind: 'trip' as const, startDate: '2026-12-01', endDate: '2026-12-03', access: null }].filter(e => !exclude.includes(e.code)) }
+  async topScores(codes: string[]): Promise<Record<string, { name: string; points: number }>> { return codes.includes('OLDMED') ? { OLDMED: { name: 'Ann Lee', points: 39 } } : {} }
   async putImage(path: string, bytes: Uint8Array) { this.stored.set(path, bytes) }
   async removeImage(path: string) { this.stored.delete(path) }
 }
@@ -534,6 +539,8 @@ async function pageRouteTests() {
   const home = await ask('tok-dave', 'home', { slug: 'portmarnock' })
   ok(home.status === 200 && home.body.events?.length === 2 && home.body.club?.role === 'member', 'a member on the list sees every club event')
   eq(home.status === 200 ? home.body.entries : null, ['MEDAL1'], '…and their own entries among them')
+  ok(home.status === 200 && home.body.me?.name === 'Dave', '…greeted by the name on the club’s list')
+  ok(home.status === 200 && home.body.outside?.[0]?.code === 'TRIP01', '…with their events outside the club')
   eq((await ask('tok-ann', 'home', { slug: 'portmarnock' })).status, 403, 'anybody else is not on the list — their page stays the public face')
   eq((await ask('tok-ross', 'home', { slug: 'nowhere' })).status, 404, 'an unknown club: not found')
   s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: NOW.toISOString(), userId: null })

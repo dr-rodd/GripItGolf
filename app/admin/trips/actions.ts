@@ -5,6 +5,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { deleteTrip } from '@/lib/tripDelete'
 import { why } from '@/lib/writeFailure'
 import { requireAdmin } from '../adminGate'
+import { fillSummaries } from '@/app/api/stats/store'
 
 /**
  * Deleting a trip — everything it owns, in lib/tripDelete's order.
@@ -57,4 +58,22 @@ export async function deleteTripAction(
 
   revalidatePath('/admin/trips')
   return { error: null, deleted: true }
+}
+
+/**
+ * The card summaries backfill (stage (f), migration 088): every signed round
+ * without summary rows — or written under older rules — filled, as many as
+ * fit in about fifty seconds. Tapped again until nothing is left; North West
+ * 26's rounds included, read only from their scores.
+ */
+export async function backfillSummaries(): Promise<{ error: string | null; filled?: number; remaining?: number }> {
+  if (!(await requireAdmin())) return { error: 'Signed out — log in again.' }
+  try {
+    const r = await fillSummaries({ limit: 200, rewriteOlder: true, deadline: Date.now() + 50_000 }, createAdminClient())
+    if ('notReady' in r) return { error: 'Paste migration 088 first.' }
+    return { error: null, ...r }
+  } catch (e) {
+    console.error('backfillSummaries failed:', e)
+    return { error: 'Could not fill the summaries — try again.' }
+  }
 }

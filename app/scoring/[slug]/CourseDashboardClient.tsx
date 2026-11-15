@@ -1,5 +1,6 @@
 "use client"
 
+import { summariseCard } from "@/lib/entryClient"
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from "react"
 import Link from "next/link"
 import { supabase } from "@/lib/supabase"
@@ -361,7 +362,7 @@ export default function CourseDashboardClient({
     // on standing on the leaderboard.
     const failure = await voidScorecardData(liveRoundId, voidRoundId)
     if (failure) setSettingsError(`Could not void that scorecard${why(failure)}`)
-    else setSettingsVoidId(null)
+    else { setSettingsVoidId(null); summariseCard(tripCode, voidRoundId) }
     setSettingsWorking(false)
     fetchScorecards()
   }
@@ -467,6 +468,7 @@ export default function CourseDashboardClient({
           return
         }
       }
+      summariseCard(tripCode, roundId)
 
       setSettingsVoidSession(false)
     } catch {

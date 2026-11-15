@@ -5,6 +5,8 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { voidScorecard } from '@/lib/scorecardVoid'
 import { why } from '@/lib/writeFailure'
 import { requireAdmin } from '../adminGate'
+import { writeRoundSummaries } from '@/app/api/stats/summaries'
+import { summaryDeps } from '@/app/api/stats/store'
 
 /**
  * The two things an admin can do to a scorecard, and the difference matters:
@@ -53,6 +55,10 @@ export async function voidCard(
   if (failure) {
     return { error: `Could not void the scorecard${why(failure)}` }
   }
+  // The void's card summaries let go (stage (f)), never in the way of it.
+  const { data: round } = await db.from('rounds').select('trips(trip_code)').eq('id', roundId).maybeSingle()
+  const code = (round as { trips?: { trip_code?: string } | null } | null)?.trips?.trip_code
+  if (code) await writeRoundSummaries(code, roundId, summaryDeps(db), new Date()).catch(e => console.error('card summary after void failed:', e))
 
   revalidatePath('/admin/live')
   return { error: null }

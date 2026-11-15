@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { writeRoundSummaries } from '@/app/api/stats/summaries'
+import { summaryDeps } from '@/app/api/stats/store'
 import { createAdminClient } from '@/lib/supabase-admin'
 import {
   HOLE_COLUMNS, validHoleUpdate, validTeeUpdate, validateNewHoleRows,
@@ -171,6 +173,12 @@ async function handle(req: NextRequest) {
           .select('id')
         if (rescoreError) console.error('card-check rescore failed:', rescoreError)
         rescored = touched?.length ?? 0
+        // The re-scored cards summed up again (stage (f)), never in the way
+        // of the correction: a failure is the nightly job's to fill.
+        if (!rescoreError && rescored > 0) {
+          const deps = summaryDeps(supabaseAdmin)
+          await Promise.all(roundIds.map(id => writeRoundSummaries(tripCode, id, deps, new Date()).catch(e => console.error('card summary after card check failed:', e))))
+        }
       }
     }
   }

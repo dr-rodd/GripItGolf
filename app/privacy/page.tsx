@@ -173,6 +173,14 @@ export default function PrivacyPage() {
           </li>
           <li><B>Putts and fairways</B>, only when a trip switches stats on.</li>
           <li>
+            <B>Card summaries</B> — a short summary of each signed card (the course, the day, your
+            strokes and points, putts, fairways and greens, birdies and the like), worked out from the
+            scores, so a Green Dot member&apos;s own season can be shown without reading every hole again.
+            Each says whether it was a club round or an open event&apos;s, where your name is your own say-so
+            and never counts towards a club honour. Deleted with the event or the player, or by voiding
+            the card; a club sees only its own events&apos; rounds.
+          </li>
+          <li>
             <B>Scorecard photos</B> taken for the card check are sent to Anthropic&apos;s Claude service to
             read the card&apos;s pars, indexes and ratings. The photo is not kept.
           </li>

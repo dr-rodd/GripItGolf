@@ -462,6 +462,19 @@ export async function eventClub(
   return { club: b.club ?? null, access: b.access ?? null, clubs: Array.isArray(b.clubs) ? b.clubs : [], runsClub: b.runsClub === true, mayTakeOut: b.mayTakeOut === true }
 }
 
+// ─── A signed card summed up (stage (f)) ───────────────────────
+
+/**
+ * Asks the server to write a round's card summaries again from its scores,
+ * after a card is committed or voided here. Fire and forget: never awaited
+ * by a screen, never in the way of the card — the nightly job fills
+ * anything a lost signal missed.
+ */
+export function summariseCard(tripCode: string | null | undefined, roundId: string | null | undefined): void {
+  if (!inBrowser() || !tripCode || !roundId) return
+  void ask('/api/stats/card', { code: tripCode.trim().toUpperCase(), roundId }).catch(() => null)
+}
+
 // ─── Forgot PIN (D67) ──────────────────────────────────────────
 
 /**

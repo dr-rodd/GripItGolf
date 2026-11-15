@@ -24,12 +24,14 @@
 import { createHash } from 'crypto'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cleanHex } from '@/lib/clubColour'
+import type { SeasonRow } from '@/lib/cardSummary'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
 import {
   INVITE_DAYS, INVITE_RESEND_MINUTES, INVITE_TRY_LIMIT, MAX_CLUBS_MADE, MAX_LIST_ROWS,
   clubNameIssue, clubSlug, clubStatus, cleanRow, inviteCodeFrom, inviteCodeIssue, inviteEmail,
   lastOwnerIssue, listRowIssue, maskNumber, mayAdminister, mayChangeRoles, nextSlug, normaliseClubName,
   normaliseInviteCode, planList, oneClubIssue, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
+  clubEventWhen, irishToday,
   type ClubEvent, type ClubImageKind, type ClubRole, type ClubStatus, type ListRow,
 } from '@/lib/clubs'
 
@@ -102,6 +104,12 @@ export interface ClubStore {
   clubEvents(clubId: string): Promise<ClubEvent[]>
   /** Of those events, the ones this account is linked to a player in (D134). */
   entries(userId: string, codes: string[]): Promise<string[]>
+  /** Stage (f): this account's own card summaries for a year, and their courses' names. Empty before 088. */
+  seasonRows(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
+  /** This account's events outside the club, on now or to come (D143's "Outside the club"). */
+  outsideEvents(userId: string, excludeCodes: string[]): Promise<ClubEvent[]>
+  /** The best club-round score in each of these finished events, by code — from the summaries. */
+  topScores(codes: string[]): Promise<Record<string, { name: string; points: number }>>
   /** An image kept in the bucket; the old one let go. */
   putImage(path: string, bytes: Uint8Array): Promise<void>
   removeImage(path: string): Promise<void>
@@ -147,6 +155,13 @@ export type ClubBody = {
   /** The members home (D159): every event under the club, and this account's entries among them. */
   events?: ClubEvent[]
   entries?: string[]
+  /** The name on the club's list, for the greeting. */
+  me?: { name: string }
+  /** Stage (f): the account's own rounds this year (D143), with their courses. */
+  season?: SeasonRow[]
+  courses?: Record<string, string>
+  outside?: ClubEvent[]
+  tops?: Record<string, { name: string; points: number }>
 }
 
 export type ClubOutcome =
@@ -238,8 +253,21 @@ export async function runClub(
     const mineRow = (await store.rows(club.id)).find(r => r.userId === user.id && !r.removedAt)
     if (!mineRow) return fail(403, 'You’re not on this club’s list.')
     const events = await store.clubEvents(club.id)
-    const entries = events.length ? await store.entries(user.id, events.map(e => e.code)) : []
-    return { status: 200, body: { ok: true, club: summary(club, mineRow.role), events, entries } }
+    const today = irishToday(now)
+    const past = events.filter(e => clubEventWhen(e, today) === 'past').map(e => e.code)
+    const [entries, season, outside, tops] = await Promise.all([
+      events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
+      store.seasonRows(user.id, Number(today.slice(0, 4))),
+      store.outsideEvents(user.id, events.map(e => e.code)),
+      past.length ? store.topScores(past) : Promise.resolve({}),
+    ])
+    return {
+      status: 200,
+      body: {
+        ok: true, club: summary(club, mineRow.role), events, entries, me: { name: mineRow.name },
+        season: season.rows, courses: season.courses, outside, tops,
+      },
+    }
   }
 
   // ─── Everything below is one club's, its owners' and admins' ───

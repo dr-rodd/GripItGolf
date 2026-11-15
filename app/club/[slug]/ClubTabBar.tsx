@@ -4,15 +4,15 @@ import { IconChartBar, IconHome, IconSettings, IconTrophy, IconUsers } from '@/a
 
 export type ClubTab = 'home' | 'comps' | 'board' | 'stats' | 'club'
 
-/** On once a golfer's rounds are summarised (stage (f), migration 088). */
-const STATS_READY = false
+/** On since a golfer's rounds are summarised (stage (f), migration 088). */
+const STATS_READY = true
 
 /**
  * The members' tab bar (D127): Home · Comps · Board · Stats · Club, the lit
  * tab in the club's colour (D125) and every other tab as the trip bar draws
- * them. Stats is left out until a golfer's rounds are summarised (stage (f)),
- * when Board takes the centre again; a tab with nothing behind it is never
- * shown. The tabs switch the page in place: the members home is one page.
+ * them. Board holds the centre; it is left out only while the club has no
+ * events at all — a tab with nothing behind it is never shown. The tabs
+ * switch the page in place: the members area is one page.
  */
 export default function ClubTabBar({ active, onChoose, hasBoard }: {
   active: ClubTab

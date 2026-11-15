@@ -5,6 +5,7 @@ import { RESET_KEEP_HOURS } from "@/lib/pinReset"
 import { ACCOUNT_ATTEMPT_KEEP_HOURS } from "@/lib/account"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
+import { fillSummaries } from "@/app/api/stats/store"
 import {
   cardsToClose, deadScoreKeys, activityKey,
   type LiveCard, type CardLock, type ScoreActivity,
@@ -231,6 +232,21 @@ export async function GET(req: NextRequest) {
     console.error("pin resets cleanup failed:", e)
   }
 
+  // ── 4c. Signed cards still without a summary row (stage (f), 088) ──
+  // The backstop for a phone that committed a card and lost its signal
+  // before asking for the summary. A handful a night, against a deadline;
+  // the backfill on /admin does the rest. Its own try: before 088 there is
+  // no table, and it answers "not ready".
+  let cardSummaries: { filled: number; remaining: number } | 'not ready' | null = null
+  if (!dryRun) {
+    try {
+      const r = await fillSummaries({ limit: 40, deadline: Date.now() + 20_000 }, supabaseAdmin)
+      cardSummaries = 'notReady' in r ? 'not ready' : r
+    } catch (e) {
+      console.error("card summary backstop failed:", e)
+    }
+  }
+
   // ── 5. Anonymous phones nobody will miss ──
   // The rule is migration 069's, lightened by 081: `anonymous_phones_to_
   // forget()`. Weekly, on Sunday (UTC), not nightly — a free-tier database
@@ -268,6 +284,7 @@ export async function GET(req: NextRequest) {
     staleAttempts,
     staleAccountAttempts,
     staleResets,
+    cardSummaries,
     anonymousPhones,
     closedEmpty,
     closedAbandoned,

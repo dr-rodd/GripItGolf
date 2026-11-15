@@ -6,6 +6,7 @@ import { Resend } from 'resend'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
 import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
+import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser } from '../account/store'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
@@ -231,6 +232,58 @@ export function clubStore(db: Db): ClubStore {
       const ids = new Map((trips as { id: string; trip_code: string }[]).map(t => [t.id, t.trip_code]))
       const { data: linked } = await db.from('account_players').select('trip_id').eq('user_id', userId).in('trip_id', [...ids.keys()])
       return ((linked ?? []) as { trip_id: string }[]).map(r => ids.get(r.trip_id)!).filter(Boolean)
+    },
+    async seasonRows(userId, year) {
+      const empty = { rows: [], courses: {} }
+      const linked = await db.from('account_players').select('player_id').eq('user_id', userId)
+      if (linked.error || !linked.data?.length) return empty
+      const { data, error } = await db.from('card_summaries')
+        .select('round_id, trip_id, played_on, holes, gross, par, points, origin, club_id, course_id')
+        .in('player_id', (linked.data as { player_id: string }[]).map(r => r.player_id))
+        .gte('played_on', `${year}-01-01`).lte('played_on', `${year}-12-31`)
+        .order('played_on', { ascending: false })
+      // Before migration 088 there are no summaries: no season yet.
+      if (error) return empty
+      const rows = (data ?? []) as SeasonRow[]
+      const ids = [...new Set(rows.map(r => r.course_id).filter(Boolean))] as string[]
+      const { data: courses } = ids.length ? await db.from('courses').select('id, name').in('id', ids) : { data: [] }
+      return { rows, courses: Object.fromEntries(((courses ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name])) }
+    },
+    async outsideEvents(userId, excludeCodes) {
+      const [linked, entered] = await Promise.all([
+        db.from('account_players').select('trip_id').eq('user_id', userId),
+        db.from('trip_members').select('trip_id').eq('user_id', userId),
+      ])
+      const ids = [...new Set([...(linked.data ?? []), ...(entered.data ?? [])].map(r => (r as { trip_id: string }).trip_id))]
+      if (ids.length === 0) return []
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(new Date())
+      const { data, error } = await db.from('trips').select('trip_code, name, kind, start_date, end_date')
+        .in('id', ids).or(`end_date.gte.${today},end_date.is.null`).order('start_date', { ascending: true }).limit(20)
+      if (error) return []
+      return ((data ?? []) as { trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
+        .filter(t => !excludeCodes.includes(t.trip_code))
+        .map(t => ({
+          code: t.trip_code, name: t.name, kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
+          startDate: t.start_date, endDate: t.end_date, access: null,
+        }))
+    },
+    async topScores(codes) {
+      const { data: trips } = await db.from('trips').select('id, trip_code').in('trip_code', codes)
+      const codeOf = new Map(((trips ?? []) as { id: string; trip_code: string }[]).map(t => [t.id, t.trip_code]))
+      if (codeOf.size === 0) return {}
+      const { data, error } = await db.from('card_summaries').select('trip_id, player_id, points, holes')
+        .in('trip_id', [...codeOf.keys()]).eq('origin', 'club').gte('holes', 18)
+      if (error || !data?.length) return {}
+      const best = new Map<string, { player_id: string; points: number }>()
+      for (const r of data as { trip_id: string; player_id: string; points: number }[]) {
+        const b = best.get(r.trip_id)
+        if (!b || r.points > b.points) best.set(r.trip_id, { player_id: r.player_id, points: r.points })
+      }
+      const { data: players } = await db.from('players').select('id, name').in('id', [...best.values()].map(b => b.player_id))
+      const nameOf = new Map(((players ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+      const out: Record<string, { name: string; points: number }> = {}
+      for (const [tripId, b] of best) out[codeOf.get(tripId)!] = { name: nameOf.get(b.player_id) ?? '', points: b.points }
+      return out
     },
     async putImage(path, bytes) {
       const { error } = await db.storage.from('club-assets').upload(path, bytes, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })

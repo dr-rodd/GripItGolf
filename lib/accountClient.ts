@@ -26,6 +26,7 @@
 // Never throws: every function resolves to an answer the screen can say.
 
 import type { ClubEvent } from './clubs'
+import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
@@ -424,6 +425,11 @@ export interface ClubAnswer {
   sentTo?: string
   events?: ClubEvent[]
   entries?: string[]
+  me?: { name: string }
+  season?: SeasonRow[]
+  courses?: Record<string, string>
+  outside?: ClubEvent[]
+  tops?: Record<string, { name: string; points: number }>
 }
 
 /**

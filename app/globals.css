@@ -320,41 +320,54 @@ html.dark [data-club] {
   --gd-club-tint: color-mix(in srgb, var(--gd-club-d, var(--gd-bark)) 14%, transparent);
 }
 
-/* The club's art behind its pages (D123, D124, D155). By day it multiplies
-   into the cream; at night the same image is darkened in CSS — brightness
-   .62, saturate .75, sepia .15 — unless the club gave a dark one of its own.
-   The home: about 60%, fading into the page by the first card. Every other
-   members page: about 20%, behind the title only. Never behind a board, a
-   scorecard or score entry — only club pages draw it. The grain stays above
-   it (D124): by day the multiply lets the page's own grain through the art;
-   at night the art covers it, so the grain is laid back on over the art,
-   fading with it. */
+/* The club's art behind its pages (D123, D124, D155; the Pints hand-off,
+   15 Nov 2026). An <img> at the top of the page, cropped to cover from just
+   above its middle, and faded into the page from 42% of its height down.
+   The members home: 540px, .62 by day and .50 at night. Every other club
+   page: 380px, .20 and .18, behind the title only. By day it multiplies into
+   the cream; at night the same image is darkened — brightness .62, saturate
+   .75, sepia .15 — unless the club gave a night image of its own. Never
+   behind a board, a scorecard or score entry: only club pages draw it, and
+   it never moves. The grain stays above it (D124): by day the multiply lets
+   the page's own grain through; at night the art would cover it, so the
+   grain is laid back on over the art, fading with it. */
 .club-art, .club-grain {
   position: absolute;
-  inset: 0 0 auto 0;
-  height: 26rem;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 380px;
   z-index: 0;
   pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, black 45%, transparent);
-  mask-image: linear-gradient(to bottom, black 45%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, black 42%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, black 42%, transparent 100%);
 }
 .club-art {
-  background-image: var(--club-art);
-  background-size: cover;
-  background-position: center top;
-  opacity: .6;
+  object-fit: cover;
+  object-position: 50% 38%;
+  opacity: .2;
   mix-blend-mode: multiply;
 }
-.club-art-title, .club-grain-title { height: 12rem; }
-.club-art-title { opacity: .2; }
+.club-art-home, .club-grain-home { height: 540px; }
+.club-art-home { opacity: .62; }
 html.dark .club-art {
-  background-image: var(--club-art-dark, var(--club-art));
+  opacity: .18;
   mix-blend-mode: normal;
   filter: brightness(.62) saturate(.75) sepia(.15);
 }
-html.dark .club-art.club-art-own-dark { filter: none; }
+html.dark .club-art-home { opacity: .5; }
+.club-art-night { display: none; }
+html.dark .club-art-day { display: none; }
+html.dark .club-art.club-art-night { display: block; filter: none; }
 .club-grain { display: none; background-image: var(--gd-grain); }
 html.dark .club-grain { display: block; }
+
+/* The club's frosted surfaces: the header card over the art. */
+.club-frost {
+  background-color: color-mix(in srgb, var(--color-surface) 72%, transparent);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+}
 
 html {
   background-color: var(--color-cream);

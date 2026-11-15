@@ -908,6 +908,30 @@ naming the club. **D160**: `/admin` (Trips) shows the day's email count from
 Resend (`lib/emailCount.ts`), the line saying to move to the paid plan past
 50 — it needs a Resend key allowed to read, not only send.
 
+### Stage (f) as built — the card summary row (15 Nov 2026; D121, D122, D152)
+
+**Migration 088** (paste before the deploy): `card_summaries`, one row per
+player per signed round, as drawn under "Detail kept", with `origin`
+`club` | `self_claimed`, server only. **The rule** is `lib/cardSummary.ts` on
+`lib/holeStats.ts` — the stats hub's own rules (an NR keeps only its tee
+shot, an impossible putt count is dropped, a par 3 has no fairway); a gross
+only for a card with every hole finished; points are the stored Stableford
+points, off the full handicap. **Written** after a commit (the phone asks
+`/api/stats/card` and never waits), after a void (the dashboard, `/admin`), a
+card check's re-score, and **re-told** (origin only) when an event moves into
+or out of a club or its club is verified or not. A missed one is filled by
+the nightly job (40 a night) and the **backfill** on `/admin` → Trips → Fill
+card summaries (as many as fit in fifty seconds a tap; North West 26
+included, read only from its scores). Decided while building: **a casual
+round's card is summarised** (kept off the boards, but still golf signed);
+**the backfill finds signed rounds by their finalised cards** (`live_rounds`),
+so a round played before cards were finalised there would be missed — none
+is known. **Read** by the club area alone so far: Your season's three tiles
+(rounds, average and best Stableford over full rounds) with the self-claimed
+line, the Stats tab's rounds this year, and Competitions' results' top
+club-round score ("Top score", from the summaries — not the event's own board,
+which may rank by another format). The personal page (g) reads the same rows.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:

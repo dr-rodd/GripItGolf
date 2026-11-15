@@ -159,6 +159,13 @@ export const IconPencil = (p: IconProps) => (
   </Svg>
 )
 
+export const IconUser = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M8 7a4 4 0 1 0 8 0a4 4 0 0 0 -8 0" />
+    <path d="M6 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2" />
+  </Svg>
+)
+
 export const IconUsers = (p: IconProps) => (
   <Svg {...p}>
     <path d="M9 7m-4 0a4 4 0 1 0 8 0a4 4 0 1 0 -8 0" />

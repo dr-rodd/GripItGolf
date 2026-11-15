@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { requireAdmin } from '../adminGate'
+import { retagSummaries } from '@/app/api/stats/retag'
 
 /**
  * Approving or refusing a club (stage (c), question H). Only a verified
@@ -21,6 +22,10 @@ export async function setClubVerified(clubId: string, verified: boolean): Promis
     console.error('setClubVerified failed:', error)
     return { error: 'Could not save — try again.' }
   }
+  // Its events' signed cards are club rounds only while it is verified (D122).
+  const { data: events } = await createAdminClient().from('trip_private').select('trip_id').eq('club_id', clubId)
+  await retagSummaries(createAdminClient(), ((events ?? []) as { trip_id: string }[]).map(e => e.trip_id))
+    .catch(e => console.error('summary retag failed:', e))
   revalidatePath('/admin/clubs')
   return { error: null }
 }

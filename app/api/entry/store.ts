@@ -3,6 +3,7 @@
 // `entry_attempts` and its retry limit through `checkPin`.
 
 import { parseClubAccess } from '@/lib/clubs'
+import { retagSummaries } from '../stats/retag'
 import type { NextRequest } from 'next/server'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { fieldOpenEnded, type AttemptWindow, type Membership } from '@/lib/membership'
@@ -156,6 +157,8 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       const { error } = await db.from('trip_private')
         .upsert({ trip_id: tripId, club_id: clubId, club_access: access, updated_at: now }, { onConflict: 'trip_id' })
       if (error) throw error
+      // Its signed cards told whether they are club rounds now (D122).
+      await retagSummaries(db, [tripId]).catch(e => console.error('summary retag failed:', e))
     },
     async tripColumns(tripId, columns) {
       const { data, error } = await db.from('trips').select(columns.join(', ')).eq('id', tripId).maybeSingle()

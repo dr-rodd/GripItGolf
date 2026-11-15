@@ -16,7 +16,7 @@ import { scoreOutbox, refusal } from "./outbox"
 import { unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS } from "@/lib/scoreOutbox"
 import { useAfterDelay } from "@/app/components/useAfterDelay"
 import { IconSignalWeak } from "@/app/components/icons"
-import { recoverEvents } from "@/lib/entryClient"
+import { recoverEvents, summariseCard } from "@/lib/entryClient"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./activeLiveRound"
@@ -1119,6 +1119,9 @@ export default function LiveScoringFlow({
       // harm: every queued row carries `committed: false`, so one arriving
       // after step 5 would quietly un-commit a signed card.
       outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
+      // The signed card summed up for the players' own stats (stage (f)) —
+      // asked and not waited for; the nightly job fills anything missed.
+      summariseCard(tripCode, roundId)
       onBack()
     } catch (e: any) {
       // Refused rather than lost (stage 8): sign back in, enter the event,
