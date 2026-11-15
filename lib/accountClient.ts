@@ -25,6 +25,7 @@
 //
 // Never throws: every function resolves to an answer the screen can say.
 
+import type { ClubEvent } from './clubs'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
@@ -405,7 +406,10 @@ export async function deleteAccount(): Promise<Answer> {
 // ─── Clubs (stage (c)) ─────────────────────────────────────────
 
 export type ClubRoleWord = 'owner' | 'admin' | 'member'
-export interface ClubSummary { id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'; role: ClubRoleWord }
+export interface ClubSummary {
+  id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'; role: ClubRoleWord
+  colour: string | null; crestUrl: string | null; artUrl: string | null; artDarkUrl: string | null
+}
 export interface ClubListEntry {
   id: string; name: string; memberNumber: string | null; guiNumber: string | null; email: string | null
   role: ClubRoleWord; linked: boolean; removed: boolean; onBoards: boolean
@@ -418,6 +422,8 @@ export interface ClubAnswer {
   updated?: number
   skipped?: { name: string; why: string }[]
   sentTo?: string
+  events?: ClubEvent[]
+  entries?: string[]
 }
 
 /**
@@ -432,4 +438,27 @@ export async function askClub(action: string, body: Record<string, unknown> = {}
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, ...(r.body as ClubAnswer) }
+}
+
+/**
+ * A club's crest, art or dark art, sent whole to the server, which checks,
+ * resizes and keeps it (D156) — or, with `file: null`, takes it off.
+ */
+export async function uploadClubImage(clubId: string, kind: 'crest' | 'art' | 'art_dark', file: File | null): Promise<({ ok: true } & ClubAnswer) | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const form = new FormData()
+  form.set('clubId', clubId)
+  form.set('kind', kind)
+  if (file) form.set('file', file)
+  else form.set('remove', '1')
+  try {
+    const res = await fetch('/api/club/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, credentials: 'same-origin' })
+    const body = await res.json().catch(() => ({})) as Record<string, unknown>
+    if (res.status === 413) return { ok: false, error: 'Keep the image under 4 MB.' }
+    if (res.status !== 200) return { ok: false, error: typeof body.error === 'string' ? body.error : ACCOUNT_WORDS.noReach }
+    return { ok: true, ...(body as ClubAnswer) }
+  } catch {
+    return { ok: false, error: ACCOUNT_WORDS.noReach }
+  }
 }

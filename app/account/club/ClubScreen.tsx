@@ -9,6 +9,7 @@ import {
   parseMemberList, roleWord, type ClubRole,
 } from '@/lib/clubs'
 import { askClub, type ClubListEntry, type ClubSummary } from '@/lib/accountClient'
+import ClubLook from './ClubLook'
 
 type State =
   | { kind: 'loading' }
@@ -118,6 +119,13 @@ export default function ClubScreen() {
       <p className="text-ink/65 text-sm mt-1">
         {CLUB_STATUS_WORDS[club.status]}{club.status === 'pending' ? '. You can build the list meanwhile.' : '.'}
       </p>
+      {club.status === 'verified' && (
+        <a href={`/club/${club.slug}`} className="t-cap text-accent-deep underline underline-offset-2 mt-2 inline-block">
+          See the club’s page
+        </a>
+      )}
+
+      <ClubLook club={club} onChange={c => setState({ kind: 'ready', club: c, list })} />
 
       <section className="mt-8">
         <h2 className="t-h2 text-ink">Add to the list</h2>

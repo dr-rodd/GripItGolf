@@ -302,3 +302,24 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D152 | The card summary row and its backfill (stage (f)) come before or with the personal page | Proposed; plan (f) before (g) |
 
 **For the next design session**: the club page's look (D118, D123–D127 — the Pints mockup), handed back as a hand-off spec, is what stage (e1) waits on; the personal page and the members card on the front page (D143, D147, D149) follow.
+
+**The club skin** (Ross, 14–15 Nov 2026 — the Pints mockup; full text, previously only in the Claude.ai list):
+
+| # | Decision | Status |
+|---|---|---|
+| D123 | Art behind every members page: the home about 60%, fading into the cream by the first card; every other page about 20%, behind the title only. Never behind a board, a scorecard or score entry | Built (e1): `.club-art`, `.club-art-title` |
+| D124 | Light: the art multiplies into the cream. Dark: the filter in D155. The grain sits above the art | Built (e1) |
+| D125 | The club colour is for identity only: the crest's ring, "Members", the lit tab, the "Members only" pill, your own row. Emerald stays the action and Live; gold the winner | Built (e1): `lib/clubColour.ts`, `test:clubs` |
+| D126 | Art at least 1170px wide, landscape, soft and light, sky at the top | Built (e1): refused on upload otherwise |
+| D127 | The club tab bar: Home · Comps · Board (centre) · Stats · Club | Built (e1) without Stats until (f) |
+
+| # | Decision | Status |
+|---|---|---|
+| D153 | A club's owner or admin making an event from the club area is asked "the club's" (default, Club admins only) or "just mine"; any other club member makes their own. The club area lists the club's events to everyone on its list and a member's own to them alone | Agreed; plan (h) |
+| D154 | The phone's sign-in hint holds a kind and a slug, never a name. The pre-paint script reads it on "/" alone (never a code path or a query). `/home` finding it stale clears it and shows the front page, not sign-in | Agreed; plan (g) |
+| D155 | One art image per club; dark mode derives it in CSS (brightness .62, saturate .75, sepia .15). An optional dark override is kept, never required | Built (e1): `clubs.art_path`, `art_dark_path` (087) |
+| D156 | sharp is a real dependency; images are resized on the server (art 1600 wide, crest 512, WebP), never on the phone | Built (e1) |
+| D157 | `/club/[slug]` is one address, two views: a signed-in member on that verified club's list sees the members home, anyone else the public face; an unverified or unknown slug is "not found" | Built (e1) |
+| D158 | The public face: art, crest, name, the verified tick, "<club> members: sign in", and the club's guests-welcome events ("Anyone in the event") with their links. Never the list, the calendar or members-only boards | Built (e1) |
+| D159 | Comps lists the club's events — Upcoming, My entries, Results — each opening its event; no booking until (d) | Built (e1) |
+| D160 | Resend stays on its free plan until a day passes 50 emails (D111); the day's count is on /admin | Built (e1): `lib/emailCount.ts`, /admin Trips |

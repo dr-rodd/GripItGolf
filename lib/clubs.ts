@@ -377,3 +377,109 @@ export const CLUB_ACCESS_WORDS: Record<ClubAccess, { label: string; line: string
 export function parseClubAccess(v: unknown): ClubAccess | null {
   return v === 'admins' || v === 'pin' || v === 'anyone' ? v : null
 }
+
+// ─── One club per account (D145, D150) ─────────────────────────
+
+/** Why an account already on a club's list may not join or set up another. */
+export function oneClubIssue(clubName: string): string {
+  return `Your account is on ${clubName}’s list. One club per account for now.`
+}
+
+// ─── A club's crest and art (D118, D123–D126, D155, D156) ─────
+
+export type ClubImageKind = 'crest' | 'art' | 'art_dark'
+export const CLUB_IMAGE_KINDS: readonly ClubImageKind[] = ['crest', 'art', 'art_dark']
+/** What each image is kept at: resized on the server, WebP (D156). */
+export const ART_WIDTH = 1600
+export const CREST_SIZE = 512
+/** D126: art at least this wide, landscape. */
+export const ART_MIN_WIDTH = 1170
+export const CREST_MIN = 128
+/** Vercel takes a request up to 4.5 MB; a little under, said plainly. */
+export const MAX_UPLOAD_BYTES = 4 * 1024 * 1024
+export const UPLOAD_FORMATS = ['jpeg', 'png', 'webp'] as const
+
+/** The column each image is kept in (migration 086 for the crest, 087 for the art). */
+export const IMAGE_COLUMN: Record<ClubImageKind, 'crest_path' | 'art_path' | 'art_dark_path'> = {
+  crest: 'crest_path', art: 'art_path', art_dark: 'art_dark_path',
+}
+
+/** Why an uploaded image will not do — null when it will. Width and height as the photo stands, turned upright. */
+export function clubImageIssue(kind: ClubImageKind, img: { format: string | null; width: number; height: number; bytes: number }): string | null {
+  if (img.bytes > MAX_UPLOAD_BYTES) return 'Keep the image under 4 MB.'
+  if (!img.format || !(UPLOAD_FORMATS as readonly string[]).includes(img.format)) return 'Use a JPEG, PNG or WebP image.'
+  if (kind === 'crest') {
+    if (Math.min(img.width, img.height) < CREST_MIN) return `The crest needs to be at least ${CREST_MIN} pixels across.`
+    return null
+  }
+  if (img.width <= img.height) return 'The art needs to be landscape — wider than it is tall.'
+  if (img.width < ART_MIN_WIDTH) return `The art needs to be at least ${ART_MIN_WIDTH} pixels wide.`
+  return null
+}
+
+/** Where a stored image is read from: the public bucket on Supabase (migration 087). */
+export function clubAssetUrl(supabaseUrl: string | undefined, path: string | null): string | null {
+  if (!path || !supabaseUrl || !/^[a-z0-9-]+\/[a-z_]+-[a-z0-9]+\.webp$/.test(path)) return null
+  return `${supabaseUrl.replace(/\/+$/, '')}/storage/v1/object/public/club-assets/${path}`
+}
+
+// ─── A club's events, as its pages list them (D158, D159) ──────
+
+export interface ClubEvent {
+  code: string
+  name: string
+  kind: 'trip' | 'tournament' | 'run'
+  startDate: string | null
+  endDate: string | null
+  /** D140: who changes it. 'anyone' is a guests-welcome event, the only kind the public face shows. */
+  access: ClubAccess | null
+}
+
+export type ClubEventWhen = 'now' | 'upcoming' | 'past'
+
+/** Whether an event is on now, still to come, or done — by its dates against today (an Irish date). */
+export function clubEventWhen(e: Pick<ClubEvent, 'startDate' | 'endDate'>, today: string): ClubEventWhen {
+  const start = e.startDate ?? e.endDate
+  const end = e.endDate ?? e.startDate
+  if (end && end < today) return 'past'
+  if (start && start > today) return 'upcoming'
+  if (!start && !end) return 'upcoming'
+  return 'now'
+}
+
+/** Today's date in Ireland, `YYYY-MM-DD` — the club pages' one clock. */
+export function irishToday(now: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin', year: 'numeric', month: '2-digit', day: '2-digit' }).format(now)
+}
+
+/**
+ * A club's events in the members area's order (D159): on now, then upcoming
+ * soonest first, then results newest first.
+ */
+export function groupClubEvents(events: readonly ClubEvent[], today: string): Record<ClubEventWhen, ClubEvent[]> {
+  const out: Record<ClubEventWhen, ClubEvent[]> = { now: [], upcoming: [], past: [] }
+  for (const e of events) out[clubEventWhen(e, today)].push(e)
+  const by = (k: 'startDate' | 'endDate', dir: 1 | -1) => (a: ClubEvent, b: ClubEvent) =>
+    dir * ((a[k] ?? '9999') < (b[k] ?? '9999') ? -1 : (a[k] ?? '9999') > (b[k] ?? '9999') ? 1 : a.name.localeCompare(b.name))
+  out.now.sort(by('startDate', 1))
+  out.upcoming.sort(by('startDate', 1))
+  out.past.sort(by('endDate', -1))
+  return out
+}
+
+/** The public face's events (D158): guests welcome only — never the club's own calendar. */
+export function publicClubEvents(events: readonly ClubEvent[], today: string): ClubEvent[] {
+  return events.filter(e => e.access === 'anyone' && clubEventWhen(e, today) !== 'past')
+}
+
+/** An event's dates as a line: "Sat 15 Nov", "15–17 Nov", or nothing. */
+export function clubEventDates(start: string | null, end: string | null): string {
+  const d = (s: string) => new Date(`${s}T12:00:00Z`)
+  const day = (s: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat('en-IE', { timeZone: 'UTC', ...o }).format(d(s))
+  const a = start ?? end
+  const b = end ?? start
+  if (!a || !b) return ''
+  if (a === b) return day(a, { weekday: 'short', day: 'numeric', month: 'short' })
+  if (a.slice(0, 7) === b.slice(0, 7)) return `${day(a, { day: 'numeric' })}–${day(b, { day: 'numeric', month: 'short' })}`
+  return `${day(a, { day: 'numeric', month: 'short' })} – ${day(b, { day: 'numeric', month: 'short' })}`
+}

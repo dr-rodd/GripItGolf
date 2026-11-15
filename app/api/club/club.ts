@@ -23,15 +23,24 @@
 
 import { createHash } from 'crypto'
 import { isAccount, type AuthUser } from '@/lib/account'
+import { cleanHex } from '@/lib/clubColour'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
 import {
   INVITE_DAYS, INVITE_RESEND_MINUTES, INVITE_TRY_LIMIT, MAX_CLUBS_MADE, MAX_LIST_ROWS,
   clubNameIssue, clubSlug, clubStatus, cleanRow, inviteCodeFrom, inviteCodeIssue, inviteEmail,
   lastOwnerIssue, listRowIssue, maskNumber, mayAdminister, mayChangeRoles, nextSlug, normaliseClubName,
-  normaliseInviteCode, planList, type ClubRole, type ClubStatus, type ListRow,
+  normaliseInviteCode, planList, oneClubIssue, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
+  type ClubEvent, type ClubImageKind, type ClubRole, type ClubStatus, type ListRow,
 } from '@/lib/clubs'
 
-export interface ClubRecord { id: string; slug: string; name: string; verifiedAt: string | null; refusedAt: string | null }
+export interface ClubRecord {
+  id: string; slug: string; name: string; verifiedAt: string | null; refusedAt: string | null
+  /** The look (086's colour and crest, 087's art) — absent before 087, or unset. */
+  colour?: string | null
+  crestPath?: string | null
+  artPath?: string | null
+  artDarkPath?: string | null
+}
 
 export interface MemberRecord {
   id: string
@@ -82,9 +91,37 @@ export interface ClubStore {
   randomBytes(n: number): Uint8Array
   /** greendot.live, or the preview's own address. */
   siteOrigin(): string
+
+  // Stage (e1) — the club's page and its look (migration 087).
+  /** Where stored images are read from: the Supabase project's address. */
+  assetBase(): string | undefined
+  clubBySlug(slug: string): Promise<ClubRecord | null>
+  /** The club's look changed: its colour, or an image's stored path. */
+  updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null }>): Promise<void>
+  /** Every event under the club, with who changes it. */
+  clubEvents(clubId: string): Promise<ClubEvent[]>
+  /** Of those events, the ones this account is linked to a player in (D134). */
+  entries(userId: string, codes: string[]): Promise<string[]>
+  /** An image kept in the bucket; the old one let go. */
+  putImage(path: string, bytes: Uint8Array): Promise<void>
+  removeImage(path: string): Promise<void>
 }
 
-export interface ClubSummary { id: string; slug: string; name: string; status: ClubStatus; role: ClubRole }
+/** Reading and resizing an uploaded image (sharp, on the server — D156), handed in so tests need no images. */
+export interface ImageWork {
+  /** Format and size as the photo stands, turned upright. Null when it is not an image at all. */
+  inspect(bytes: Uint8Array): Promise<{ format: string | null; width: number; height: number } | null>
+  /** Resized and turned to WebP: art 1600 wide, a crest 512 across. */
+  prepare(kind: ClubImageKind, bytes: Uint8Array): Promise<Uint8Array>
+}
+
+export interface ClubSummary {
+  id: string; slug: string; name: string; status: ClubStatus; role: ClubRole
+  colour: string | null
+  crestUrl: string | null
+  artUrl: string | null
+  artDarkUrl: string | null
+}
 
 export interface ListEntry {
   id: string
@@ -107,6 +144,9 @@ export type ClubBody = {
   updated?: number
   skipped?: { name: string; why: string }[]
   sentTo?: string
+  /** The members home (D159): every event under the club, and this account's entries among them. */
+  events?: ClubEvent[]
+  entries?: string[]
 }
 
 export type ClubOutcome =
@@ -129,8 +169,15 @@ export function inviteTryKey(address: string): string {
   return `club-code:${createHash('sha256').update(`club|code|${address}`, 'utf8').digest('hex')}`
 }
 
+let assetBase: string | undefined
 function summary(club: ClubRecord, role: ClubRole): ClubSummary {
-  return { id: club.id, slug: club.slug, name: club.name, status: clubStatus(club), role }
+  return {
+    id: club.id, slug: club.slug, name: club.name, status: clubStatus(club), role,
+    colour: cleanHex(club.colour),
+    crestUrl: clubAssetUrl(assetBase, club.crestPath ?? null),
+    artUrl: clubAssetUrl(assetBase, club.artPath ?? null),
+    artDarkUrl: clubAssetUrl(assetBase, club.artDarkPath ?? null),
+  }
 }
 
 function entry(r: MemberRecord): ListEntry {
@@ -157,6 +204,7 @@ export async function runClub(
   if (!input.token) return fail(401, 'Sign in first.')
   const user = await store.userFromToken(input.token)
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
+  assetBase = store.assetBase()
 
   if (input.action === 'mine') {
     const mine = await store.clubsOf(user.id)
@@ -168,6 +216,9 @@ export async function runClub(
     if (issue) return fail(400, issue)
     const yourName = normaliseClubName(str(input.yourName))
     if (!yourName) return fail(400, 'Type your own name, as it goes on the club’s list.')
+    // D145, D150: one club per account, said by name.
+    const onList = (await store.clubsOf(user.id))[0]
+    if (onList) return fail(409, oneClubIssue(onList.club.name))
     if ((await store.clubsMadeBy(user.id)) >= MAX_CLUBS_MADE) return fail(409, `One account sets up at most ${MAX_CLUBS_MADE} clubs.`)
     const name = normaliseClubName(str(input.name))
     const base = clubSlug(name)
@@ -177,6 +228,19 @@ export async function runClub(
   }
 
   if (input.action === 'link') return runLink(input, user, store, now)
+
+  // The members home (D157, D159): only for somebody on a verified club's
+  // list, linked and not removed. Anybody else is answered "not on the
+  // list", and their page stays the public face.
+  if (input.action === 'home') {
+    const club = await store.clubBySlug(str(input.slug))
+    if (!club || !club.verifiedAt) return fail(404, 'No such club.')
+    const mineRow = (await store.rows(club.id)).find(r => r.userId === user.id && !r.removedAt)
+    if (!mineRow) return fail(403, 'You’re not on this club’s list.')
+    const events = await store.clubEvents(club.id)
+    const entries = events.length ? await store.entries(user.id, events.map(e => e.code)) : []
+    return { status: 200, body: { ok: true, club: summary(club, mineRow.role), events, entries } }
+  }
 
   // ─── Everything below is one club's, its owners' and admins' ───
   const clubId = str(input.clubId)
@@ -195,6 +259,14 @@ export async function runClub(
   const listed = (): ClubOutcome => ({ status: 200, body: { ok: true, club: summary(club, mine.role), list: rows.map(entry) } })
 
   if (input.action === 'members') return listed()
+
+  if (input.action === 'colour') {
+    const colour = input.colour === null || input.colour === '' ? null : cleanHex(input.colour)
+    if (input.colour && !colour) return fail(400, 'Choose a colour.')
+    await store.updateClub(clubId, { colour })
+    const after = await store.club(clubId)
+    return { status: 200, body: { ok: true, club: summary(after ?? club, mine.role) } }
+  }
 
   if (input.action === 'add') {
     const incoming = asRows(input.rows)
@@ -317,6 +389,9 @@ async function runLink(input: Record<string, unknown> & { address?: string }, us
 
   const sameClub = (await store.clubsOf(user.id)).find(x => x.club.id === club.id)
   if (sameClub) return fail(409, `Your account is already on ${club.name}’s list. Ask the club if this is a second place for you.`)
+  // D145, D150: one club per account, said by name. The tables could hold more.
+  const elsewhere = (await store.clubsOf(user.id))[0]
+  if (elsewhere) return fail(409, oneClubIssue(elsewhere.club.name))
   // One GUI number to one account (Ross, 14 Nov 2026): a clash is never
   // quietly moved — the club sorts it out.
   if (row.guiNumber) {
@@ -330,4 +405,50 @@ async function runLink(input: Record<string, unknown> & { address?: string }, us
     return fail(409, `Your account is already on ${club.name}’s list.`)
   }
   return { status: 200, body: { ok: true, club: summary(club, row.role) } }
+}
+
+/**
+ * An image for the club's look — its crest, its art, or the optional dark
+ * art — from one of its owners or admins. Checked (D126: art landscape and
+ * at least 1170 wide), resized and turned to WebP on the server (D156), kept
+ * under a fresh name so no phone shows a stale copy, and the old one let go.
+ * `bytes: null` takes the image off.
+ */
+export async function runUpload(
+  input: { token: string | null; clubId: unknown; kind: unknown; bytes: Uint8Array | null },
+  store: ClubStore,
+  images: ImageWork,
+): Promise<ClubOutcome> {
+  if (!input.token) return fail(401, 'Sign in first.')
+  const user = await store.userFromToken(input.token)
+  if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
+  assetBase = store.assetBase()
+  const kind = CLUB_IMAGE_KINDS.find(k => k === input.kind)
+  if (!kind) return fail(400, 'Which image?')
+  const clubId = str(input.clubId)
+  const club = clubId ? await store.club(clubId) : null
+  if (!club) return fail(404, 'No such club.')
+  const mine = (await store.rows(club.id)).find(r => r.userId === user.id && !r.removedAt)
+  if (!mine || !mayAdminister(mine.role)) return fail(403, 'Only the club’s owners and admins change its look.')
+  const column = IMAGE_COLUMN[kind]
+  const old = kind === 'crest' ? club.crestPath : kind === 'art' ? club.artPath : club.artDarkPath
+
+  if (input.bytes === null) {
+    await store.updateClub(club.id, { [column]: null })
+    if (old) await store.removeImage(old).catch(() => undefined)
+    const after = await store.club(club.id)
+    return { status: 200, body: { ok: true, club: summary(after ?? club, mine.role) } }
+  }
+
+  const seen = await images.inspect(input.bytes)
+  const issue = clubImageIssue(kind, { format: seen?.format ?? null, width: seen?.width ?? 0, height: seen?.height ?? 0, bytes: input.bytes.length })
+  if (issue) return fail(400, issue)
+  const webp = await images.prepare(kind, input.bytes)
+  const tag = [...store.randomBytes(6)].map(b => (b % 36).toString(36)).join('')
+  const path = `${club.id}/${kind}-${tag}.webp`
+  await store.putImage(path, webp)
+  await store.updateClub(club.id, { [column]: path })
+  if (old && old !== path) await store.removeImage(old).catch(() => undefined)
+  const after = await store.club(club.id)
+  return { status: 200, body: { ok: true, club: summary(after ?? club, mine.role) } }
 }

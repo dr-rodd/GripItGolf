@@ -1,3 +1,5 @@
+import { Suspense } from 'react'
+import EmailCount from '../EmailCount'
 import Link from 'next/link'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { readAllLeadEmails } from '@/lib/leadEmail'
@@ -94,6 +96,9 @@ export default async function AdminTripsPage({
 
   return (
     <AdminShell active="trips" subtitle={`${allTrips.length} trips · ${withEmail} with an email`}>
+      <div className="mb-4">
+        <Suspense fallback={null}><EmailCount /></Suspense>
+      </div>
       {error && (
         <p className="text-rust-deep text-sm mb-4">
           Could not load trips — refresh to try again.

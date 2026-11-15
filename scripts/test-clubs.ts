@@ -12,11 +12,14 @@ import {
   INVITE_LENGTH, cleanRow, clubNameIssue, clubSlug, formatInviteCode, inviteCodeFrom, inviteCodeIssue, inviteEmail,
   lastOwnerIssue, listRowIssue, maskNumber, mayAdminister, mayChangeRoles, nextSlug, normaliseInviteCode,
   parseClubAccess, parseMemberList, planList, roleWord, type ClubRole, type ListRow,
+  clubAssetUrl, clubEventWhen, clubImageIssue, groupClubEvents, irishToday, oneClubIssue, publicClubEvents, type ClubEvent,
 } from '../lib/clubs'
 import { FEATURES, mayUseFeature } from '../lib/tiers'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
-import { inviteHash, runClub, type ClubRecord, type ClubStore, type MemberRecord, type RowPatch } from '../app/api/club/club'
+import { inviteHash, runClub, runUpload, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
+import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
+import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { withOwner, type EntryTrip } from '../app/api/entry/entry'
 import { runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { verifyPin } from '../lib/pinHash'
@@ -207,6 +210,26 @@ class Stand implements ClubStore {
   bytes = 0
   randomBytes(n: number) { this.bytes++; return new Uint8Array(Array.from({ length: n }, (_, i) => (i * 7 + this.bytes * 13) % 256)) }
   siteOrigin() { return 'https://greendot.live' }
+  // Stage (e1)
+  events = new Map<string, ClubEvent[]>()
+  linked = new Map<string, string[]>()
+  stored = new Map<string, Uint8Array>()
+  assetBase() { return 'https://ref.supabase.co' }
+  async clubBySlug(slug: string) { return [...this.clubs.values()].find(c => c.slug === slug) ?? null }
+  async updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null }>) {
+    const c = this.clubs.get(clubId)!
+    this.clubs.set(clubId, {
+      ...c,
+      ...('colour' in patch ? { colour: patch.colour } : {}),
+      ...('crest_path' in patch ? { crestPath: patch.crest_path } : {}),
+      ...('art_path' in patch ? { artPath: patch.art_path } : {}),
+      ...('art_dark_path' in patch ? { artDarkPath: patch.art_dark_path } : {}),
+    })
+  }
+  async clubEvents(clubId: string) { return this.events.get(clubId) ?? [] }
+  async entries(userId: string, codes: string[]) { return (this.linked.get(userId) ?? []).filter(c => codes.includes(c)) }
+  async putImage(path: string, bytes: Uint8Array) { this.stored.set(path, bytes) }
+  async removeImage(path: string) { this.stored.delete(path) }
 }
 
 const member = (id: string, email: string): AuthUser => ({ id, isAnonymous: false, email, emailConfirmed: true })
@@ -217,7 +240,8 @@ const codeIn = (text: string) => /([A-Z2-9]{4}-[A-Z2-9]{4})/.exec(text)?.[1] ?? 
 async function routeTests() {
   const s = new Stand()
   const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie'), ann = member('ann', 'ann@x.ie')
-  ;[ross, dave, ann].forEach(u => s.add(u))
+  const eve = member('eve', 'eve@x.ie'), fay = member('fay', 'fay@x.ie')
+  ;[ross, dave, ann, eve, fay].forEach(u => s.add(u))
   s.users.set('tok-phone', { id: 'phone', isAnonymous: true, email: null, emailConfirmed: false })
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}, address = 'addr-1') =>
     runClub({ token: tok, action, address, ...body }, s, s.clock)
@@ -232,7 +256,7 @@ async function routeTests() {
   ok(made.status === 200 && made.body.ok && made.body.club?.status === 'pending' && made.body.club.role === 'owner',
     'made unverified, its maker the first owner')
   const clubId = made.status === 200 ? made.body.club!.id : ''
-  const again = await ask('tok-dave', 'create', { name: 'Lahinch Golf Club', yourName: 'Dave' })
+  const again = await ask('tok-eve', 'create', { name: 'Lahinch Golf Club', yourName: 'Eve' })
   ok(again.status === 200 && again.body.club?.slug === 'lahinch-golf-club-2', 'a second club of the same name gets its own address')
 
   section('The list is its owners’ and admins’')
@@ -270,14 +294,24 @@ async function routeTests() {
   const annRow = list.find(r => r.name === 'Ann Lee')!
   // Ann's row gets Dave's GUI number by mistake: Ann's code must not link a number Dave holds.
   s.list.set(annRow.id, { ...s.list.get(annRow.id)!, guiNumber: '3110002X' })
-  const other = await ask('tok-dave', 'create', { name: 'Ballybunion', yourName: 'Dave' })
+  const other = await ask('tok-fay', 'create', { name: 'Ballybunion', yourName: 'Fay' })
   const otherId = other.status === 200 ? other.body.club!.id : ''
-  await ask('tok-dave', 'add', { clubId: otherId, rows: [{ name: 'Ann Lee', guiNumber: '3110002', email: 'ann@x.ie' }] })
+  await ask('tok-fay', 'add', { clubId: otherId, rows: [{ name: 'Ann Lee', guiNumber: '3110002', email: 'ann@x.ie' }, { name: 'Dave Byrne', email: 'dave@x.ie' }] })
   const annOther = (await s.rows(otherId)).find(r => r.name === 'Ann Lee')!
-  await ask('tok-dave', 'invite', { clubId: otherId, memberId: annOther.id })
+  await ask('tok-fay', 'invite', { clubId: otherId, memberId: annOther.id })
   const annCode = codeIn(s.sent.at(-1)!.text)
   eq((await ask('tok-ann', 'link', { code: annCode })).status, 409, 'a GUI number already linked to another account is held for the club')
   ok(!s.list.get(annOther.id)!.userId, '…never quietly moved')
+
+  section('One club per account (D145, D150)')
+  const daveOther = (await s.rows(otherId)).find(r => r.name === 'Dave Byrne')!
+  await ask('tok-fay', 'invite', { clubId: otherId, memberId: daveOther.id })
+  const second = await ask('tok-dave', 'link', { code: codeIn(s.sent.at(-1)!.text) })
+  eq(second.status, 409, 'linking a second club is refused')
+  ok(second.status === 409 && /Lahinch Golf Club’s list/.test(second.body.error), '…naming the club the account is on')
+  ok(!s.list.get(daveOther.id)!.userId, '…and nothing is linked')
+  const setUp = await ask('tok-dave', 'create', { name: 'Doonbeg', yourName: 'Dave' })
+  ok(setUp.status === 409 && /Lahinch Golf Club’s list/.test(setUp.body.error), 'setting up a second club is refused the same way')
 
   section('Taking somebody off the list severs, never deletes')
   const removed = await ask('tok-ross', 'remove', { clubId, memberId: daveRow.id })
@@ -383,6 +417,153 @@ async function eventTests() {
   ok(!!members.get('dave')?.organiserUntil, '…and stay its organiser for twelve hours to set a new PIN')
 }
 
+
+// ─── Stage (e1): the club page, its look, one club per account ─
+
+function lookTests() {
+  section('A club’s colour, readable by day and at night (D118, D125)')
+  const css = read('app/globals.css')
+  const light = css.slice(css.indexOf(':root {'), css.indexOf('}', css.indexOf(':root {')))
+  const dark = css.slice(css.indexOf('html.dark {'), css.indexOf('}', css.indexOf('html.dark {')))
+  const hex = (block: string, name: string) => block.match(new RegExp(`--gd-${name}:\\s*(#[0-9A-Fa-f]{6})`))?.[1]?.toUpperCase()
+  eq([hex(light, 'cream'), hex(light, 'surface'), hex(light, 'accent'), hex(light, 'accent-deep')],
+    [CLUB_GROUNDS.light.page, CLUB_GROUNDS.light.card, CLUB_GROUNDS.light.accent, CLUB_GROUNDS.light.accentDeep], 'the rule reads the stylesheet’s own day values')
+  eq([hex(dark, 'cream'), hex(dark, 'surface'), hex(dark, 'accent'), hex(dark, 'accent-deep'), hex(dark, 'ink')],
+    [CLUB_GROUNDS.dark.page, CLUB_GROUNDS.dark.card, CLUB_GROUNDS.dark.accent, CLUB_GROUNDS.dark.accentDeep, CLUB_GROUNDS.dark.text], '…and its night ones')
+  const awkward = {
+    white: '#FFFFFF', black: '#000000', yellow: '#FFE100', 'near-emerald': '#0A9D56', 'club green': '#1F7A3D',
+    'near-gold': '#D4A02A', 'red beside side-a': '#C62F3A', 'pale mint': '#88C9A1', navy: '#1B2A4A', claret: '#7A1F2B',
+  }
+  for (const [what, h] of Object.entries(awkward)) {
+    const c = clubColours(h)!
+    for (const mode of ['light', 'dark'] as const) {
+      const g = CLUB_GROUNDS[mode], v = c[mode]
+      ok(contrast(v.club, g.page) >= 3 && contrast(v.club, g.card) >= 3, `${what}, ${mode}: the mark clears 3:1 on the page and a card`)
+      ok(contrast(v.deep, g.page) >= 4.5 && contrast(v.deep, g.card) >= 4.5, `${what}, ${mode}: its words clear 4.5:1`)
+      ok(contrast(v.on, v.club) >= 4.5, `${what}, ${mode}: words on it clear 4.5:1`)
+      ok(deltaE(v.club, g.accent) >= 20 && deltaE(v.club, g.accentDeep) >= 20, `${what}, ${mode}: never passes for the emerald`)
+    }
+  }
+  const navy = clubColours('#1B2A4A')!
+  eq(navy.light.club, '#1B2A4A', 'a colour that already clears is kept as chosen')
+  ok(clubColours('#FFE100')!.adjusted, '…one that does not is adjusted, and says so')
+  eq(clubColours('not a colour'), null, 'no colour: the house look')
+  eq(cleanHex('1f7a3d'), '#1F7A3D', 'typed without its #, or in lower case')
+  const style = clubStyle(clubColours('#1F7A3D'))
+  ok(Object.keys(style).every(k => /^--gd-(club|club-deep|on-club)-[ld]$/.test(k)) && Object.values(style).every(v => /^#[0-9A-F]{6}$/.test(v)),
+    'the wrapper’s style carries only checked hex, only to the club’s own tokens')
+
+  section('The club’s tokens stay in club space (D125)')
+  const code = css.replace(/\/\*[\s\S]*?\*\//g, '')
+  const blocks = [...code.matchAll(/(?:^|\n)\s*(?:html\.dark )?\[data-club\] \{([^}]*)\}/g)].map(m => m[1])
+  ok(blocks.length === 3, 'a [data-club] block for day, for night and for paper')
+  ok(blocks.every(b => b.split(';').map(d => d.trim()).filter(Boolean).every(d => /^--gd-(club|club-deep|on-club|club-tint):/.test(d))),
+    '…each declaring only the club’s own tokens')
+  const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d => {
+    const p = path.join(dir, d.name)
+    return d.isDirectory() ? (d.name === 'node_modules' || d.name.startsWith('.') ? [] : files(p)) : /\.(ts|tsx)$/.test(d.name) ? [p] : []
+  })
+  const users = [...files('app'), ...files('lib')].filter(f => /\b(text|bg|ring|border|fill|stroke)-(club|on-club|club-deep|club-tint)\b/.test(read(f)))
+  eq(users.sort(), ['app/club/[slug]/ClubTabBar.tsx', 'app/club/[slug]/ClubView.tsx'], 'the club colour is used only on a club’s own pages')
+  for (const f of ['lib/resultTone.ts', 'lib/matchSides.ts', 'lib/teamColors.ts', 'app/components/ui.tsx']) {
+    ok(!/club/i.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), `${f} never speaks the club colour — it is no result, side, team, button or pill of the kit`)
+  }
+
+  section('A club’s crest and art (D126, D155, D156)')
+  const img = (w: number, h: number, format = 'jpeg', bytes = 1000) => ({ width: w, height: h, format, bytes })
+  eq(clubImageIssue('art', img(1600, 900)), null, 'landscape art 1600 wide will do')
+  ok(clubImageIssue('art', img(1000, 600)) !== null, 'art narrower than 1170 is refused')
+  ok(clubImageIssue('art', img(1200, 1600)) !== null, 'portrait art is refused')
+  ok(clubImageIssue('crest', img(64, 64)) !== null, 'a tiny crest is refused')
+  eq(clubImageIssue('crest', img(600, 600, 'png')), null, 'a square PNG crest will do')
+  ok(clubImageIssue('art', img(1600, 900, 'heif')) !== null, 'a format the server cannot read is refused in words')
+  ok(clubImageIssue('art', img(1600, 900, 'jpeg', 5 * 1024 * 1024)) !== null, 'over 4 MB is refused before it is read')
+  eq(clubAssetUrl('https://ref.supabase.co', 'abc-123/art-x9z.webp'), 'https://ref.supabase.co/storage/v1/object/public/club-assets/abc-123/art-x9z.webp', 'an image is read from the public bucket')
+  eq(clubAssetUrl('https://ref.supabase.co', '../secret.png'), null, '…and only by a path the server made')
+  ok(read('package.json').includes('"sharp": "0.34.5"'), 'sharp is a real dependency (D156)')
+  ok(/runtime = 'nodejs'/.test(read('app/api/club/upload/route.ts')), 'uploads resize on the server')
+
+  section('The public face shows guests-welcome events only (D158)')
+  const ev = (code: string, access: ClubEvent['access'], startDate: string | null, endDate = startDate): ClubEvent =>
+    ({ code, name: code, kind: 'tournament', startDate, endDate, access })
+  const today = '2026-11-15'
+  const all = [ev('OPEN01', 'anyone', '2026-11-20'), ev('CLOSE1', 'admins', '2026-11-20'), ev('PINNED', 'pin', '2026-11-16'), ev('OLDONE', 'anyone', '2026-10-01')]
+  eq(publicClubEvents(all, today).map(e => e.code), ['OPEN01'], 'only an "Anyone in the event" event still to come — never the calendar')
+  eq(clubEventWhen(ev('X', null, '2026-11-14', '2026-11-16'), today), 'now', 'a multi-day event spanning today is on now')
+  const groups = groupClubEvents(all, today)
+  eq([groups.now.length, groups.upcoming.map(e => e.code), groups.past.map(e => e.code)], [0, ['PINNED', 'CLOSE1', 'OPEN01'], ['OLDONE']], 'Comps: upcoming soonest first, results apart')
+  eq(irishToday(new Date('2026-06-30T23:30:00Z')), '2026-07-01', 'the club pages’ clock is Irish (summer time)')
+  ok(/publicClubEvents\(events, irishToday/.test(read('app/club/[slug]/page.tsx')) && !/events,\s*$|events: events/m.test(read('app/club/[slug]/page.tsx')),
+    'the page’s HTML is handed the public events alone')
+  ok(/if \(!club \|\| !club\.verifiedAt\) return null/.test(read('app/club/[slug]/page.tsx')) && /notFound\(\)/.test(read('app/club/[slug]/page.tsx')),
+    'an unverified or unknown club is not found')
+
+  section('One club per account, said by name (D150)')
+  eq(oneClubIssue('Lahinch'), 'Your account is on Lahinch’s list. One club per account for now.', 'the refusal names the club')
+  ok(read('supabase/migrations/20260101000086_clubs.sql').includes('uq_club_members_user   ON club_members(club_id, user_id)'),
+    'the tables still hold one row per account per club — more clubs need no migration')
+
+  section('Today’s emails on /admin (D160)')
+  const since = irishMidnight(new Date('2026-11-15T15:00:00Z'))
+  eq(since, '2026-11-15T00:00:00.000Z', 'today began at midnight in Ireland (winter: UTC)')
+  eq(irishMidnight(new Date('2026-07-01T10:00:00Z')), '2026-06-30T23:00:00.000Z', '…an hour earlier in summer')
+  eq(countSince(['2026-11-15T14:00:00Z', '2026-11-15T01:00:00Z', '2026-11-14T23:00:00Z', '2026-11-14T22:00:00Z'], since), { today: 2, reachedPast: true }, 'counted up to midnight, then stopped')
+  ok(/time for Resend’s paid plan/.test(emailCountLine(EMAIL_PAID_LINE + 1)) && !/paid/.test(emailCountLine(EMAIL_PAID_LINE)), 'past 50 a day it says to move to the paid plan (D111)')
+  ok(/<EmailCount \/>/.test(read('app/admin/trips/page.tsx')), '…on /admin’s landing section')
+}
+
+async function pageRouteTests() {
+  const s = new Stand()
+  const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie'), ann = member('ann', 'ann@x.ie')
+  ;[ross, dave, ann].forEach(u => s.add(u))
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, NOW)
+  const made = await ask('tok-ross', 'create', { name: 'Portmarnock', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Dave', email: 'dave@x.ie' }] })
+  const daveRow = (await s.rows(clubId)).find(r => r.name === 'Dave')!
+  s.list.set(daveRow.id, { ...daveRow, userId: 'dave' })
+  s.events.set(clubId, [
+    { code: 'OPEN01', name: 'Open day', kind: 'tournament', startDate: '2026-11-20', endDate: '2026-11-20', access: 'anyone' },
+    { code: 'MEDAL1', name: 'Monthly medal', kind: 'tournament', startDate: '2026-11-22', endDate: '2026-11-22', access: 'admins' },
+  ])
+  s.linked.set('dave', ['MEDAL1'])
+
+  section('The members home: only for somebody on a verified club’s list (D157)')
+  eq((await ask('tok-dave', 'home', { slug: 'portmarnock' })).status, 404, 'an unverified club has no page')
+  s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
+  const home = await ask('tok-dave', 'home', { slug: 'portmarnock' })
+  ok(home.status === 200 && home.body.events?.length === 2 && home.body.club?.role === 'member', 'a member on the list sees every club event')
+  eq(home.status === 200 ? home.body.entries : null, ['MEDAL1'], '…and their own entries among them')
+  eq((await ask('tok-ann', 'home', { slug: 'portmarnock' })).status, 403, 'anybody else is not on the list — their page stays the public face')
+  eq((await ask('tok-ross', 'home', { slug: 'nowhere' })).status, 404, 'an unknown club: not found')
+  s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: NOW.toISOString(), userId: null })
+  eq((await ask('tok-dave', 'home', { slug: 'portmarnock' })).status, 403, 'taken off the list, the members home closes on the next ask')
+
+  section('The club’s look is its owners’ and admins’')
+  s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: null, userId: 'dave' })
+  eq((await ask('tok-dave', 'colour', { clubId, colour: '#1F7A3D' })).status, 403, 'a member cannot change the colour')
+  const coloured = await ask('tok-ross', 'colour', { clubId, colour: '1f7a3d' })
+  ok(coloured.status === 200 && coloured.body.club?.colour === '#1F7A3D', 'an owner sets it, tidied')
+  eq((await ask('tok-ross', 'colour', { clubId, colour: 'green' })).status, 400, 'a colour that is not one is refused')
+
+  const work: ImageWork = {
+    async inspect(b) { return b[0] === 1 ? { format: 'jpeg', width: 1600, height: 900 } : b[0] === 2 ? { format: 'jpeg', width: 900, height: 1600 } : null },
+    async prepare(_k, b) { return new Uint8Array([9, ...b]) },
+  }
+  const up = (tok: string, kind: string, bytes: Uint8Array | null) => runUpload({ token: tok, clubId, kind, bytes }, s, work)
+  eq((await up('tok-dave', 'art', new Uint8Array([1]))).status, 403, 'a member cannot upload')
+  eq((await up('tok-ross', 'art', new Uint8Array([2]))).status, 400, 'portrait art is refused, in words')
+  eq((await up('tok-ross', 'art', new Uint8Array([3]))).status, 400, 'something that is not an image is refused')
+  const first = await up('tok-ross', 'art', new Uint8Array([1]))
+  const firstPath = s.clubs.get(clubId)!.artPath!
+  ok(first.status === 200 && /^c\d+\/art-[a-z0-9]+\.webp$/.test(firstPath) && s.stored.get(firstPath)?.[0] === 9, 'art is resized, kept as WebP under a fresh name')
+  ok(first.status === 200 && first.body.club?.artUrl === `https://ref.supabase.co/storage/v1/object/public/club-assets/${firstPath}`, '…and read from the public bucket')
+  await up('tok-ross', 'art', new Uint8Array([1, 1]))
+  ok(!s.stored.has(firstPath) && s.clubs.get(clubId)!.artPath !== firstPath, 'a new one replaces it and the old is let go')
+  await up('tok-ross', 'art', null)
+  eq(s.clubs.get(clubId)!.artPath, null, 'taken off: back to the club’s name and colour')
+}
+
 // ─── The SQL and the wiring ────────────────────────────────────
 
 function walk(dir: string): string[] {
@@ -419,7 +600,8 @@ function wiringTests() {
     eq(hits, [], `${dir} never asks the pro tier or the club route`)
   }
   ok(!/clubAdminIds/.test(read('lib/membership.ts')), 'the membership rules are unchanged: a club admin is an owner, OR-ed in')
-  const askers = files.filter(f => /['"`]\/api\/club['"`]/.test(read(f)))
+  const code = (f: string) => read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+  const askers = files.filter(f => /['"`]\/api\/club['"`]/.test(code(f)))
   eq(askers.sort(), ['lib/accountClient.ts'], 'one browser file asks /api/club')
   const eventCard = read('app/components/ClubEventCard.tsx')
   ok(!/@\/lib\/accountClient/.test(eventCard), 'the event’s club card talks through entryClient, like every event page')
@@ -448,6 +630,8 @@ async function main() {
   ruleTests()
   await routeTests()
   await eventTests()
+  lookTests()
+  await pageRouteTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

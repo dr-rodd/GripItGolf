@@ -5,24 +5,39 @@ import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
-import type { ClubRole, ListRow } from '@/lib/clubs'
+import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser } from '../account/store'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
 
 type Db = ReturnType<typeof createAdminClient>
 
-const CLUB_COLS = 'id, slug, name, verified_at, refused_at'
+const CLUB_COLS = 'id, slug, name, verified_at, refused_at, colour, crest_path'
 const ROW_COLS = 'id, club_id, name, member_number, gui_number, email, role, user_id, removed_at, on_boards'
 const SEND_TIMEOUT_MS = 8000
 
-type ClubRow = { id: string; slug: string; name: string; verified_at: string | null; refused_at: string | null }
+type ClubRow = { id: string; slug: string; name: string; verified_at: string | null; refused_at: string | null; colour?: string | null; crest_path?: string | null }
 type RowRow = {
   id: string; club_id: string; name: string; member_number: string | null; gui_number: string | null
   email: string | null; role: ClubRole; user_id: string | null; removed_at: string | null; on_boards: boolean
 }
 
-const asClub = (c: ClubRow): ClubRecord => ({ id: c.id, slug: c.slug, name: c.name, verifiedAt: c.verified_at, refusedAt: c.refused_at })
+const asClub = (c: ClubRow): ClubRecord => ({
+  id: c.id, slug: c.slug, name: c.name, verifiedAt: c.verified_at, refusedAt: c.refused_at,
+  colour: c.colour ?? null, crestPath: c.crest_path ?? null,
+})
+
+/**
+ * The art paths (migration 087) laid onto clubs read without them, in a
+ * query of their own: before 087 there are none, and nothing else changes.
+ */
+async function withArt(db: Db, clubs: ClubRecord[]): Promise<ClubRecord[]> {
+  if (clubs.length === 0) return clubs
+  const { data, error } = await db.from('clubs').select('id, art_path, art_dark_path').in('id', clubs.map(c => c.id))
+  if (error) return clubs
+  const art = new Map(((data ?? []) as { id: string; art_path: string | null; art_dark_path: string | null }[]).map(r => [r.id, r]))
+  return clubs.map(c => ({ ...c, artPath: art.get(c.id)?.art_path ?? null, artDarkPath: art.get(c.id)?.art_dark_path ?? null }))
+}
 const asRow = (r: RowRow): MemberRecord => ({
   id: r.id, clubId: r.club_id, name: r.name, memberNumber: r.member_number, guiNumber: r.gui_number,
   email: r.email, role: r.role, userId: r.user_id, removedAt: r.removed_at, onBoards: r.on_boards,
@@ -32,6 +47,24 @@ const asRow = (r: RowRow): MemberRecord => ({
 export function siteOrigin(): string {
   const preview = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
   return preview ? `https://${process.env.VERCEL_URL}` : 'https://greendot.live'
+}
+
+/**
+ * Every event under a club (086's `trip_private.club_id`), with who changes
+ * it. The club page and the members home both read through this.
+ */
+export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[]> {
+  const { data: priv, error } = await db.from('trip_private').select('trip_id, club_access').eq('club_id', clubId)
+  if (error || !priv?.length) return []
+  const access = new Map((priv as { trip_id: string; club_access: string | null }[]).map(p => [p.trip_id, parseClubAccess(p.club_access)]))
+  const { data: trips, error: e } = await db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', [...access.keys()])
+  if (e) throw e
+  return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
+    .map(t => ({
+      code: t.trip_code, name: t.name,
+      kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
+      startDate: t.start_date, endDate: t.end_date, access: access.get(t.id) ?? null,
+    }))
 }
 
 export function clubStore(db: Db): ClubStore {
@@ -47,7 +80,7 @@ export function clubStore(db: Db): ClubStore {
       if (rows.length === 0) return []
       const { data: clubs, error: e } = await db.from('clubs').select(CLUB_COLS).in('id', rows.map(r => r.club_id))
       if (e) throw e
-      const byId = new Map(((clubs ?? []) as ClubRow[]).map(c => [c.id, asClub(c)]))
+      const byId = new Map((await withArt(db, ((clubs ?? []) as ClubRow[]).map(asClub))).map(c => [c.id, c]))
       return rows.filter(r => byId.has(r.club_id)).map(r => ({ club: byId.get(r.club_id)!, row: asRow(r) }))
         .sort((a, b) => a.club.name.localeCompare(b.club.name))
     },
@@ -81,7 +114,7 @@ export function clubStore(db: Db): ClubStore {
         if (error.code === '22P02') return null // not a uuid
         throw error
       }
-      return data ? asClub(data as ClubRow) : null
+      return data ? (await withArt(db, [asClub(data as ClubRow)]))[0] : null
     },
     async rows(clubId) {
       // A club's list can pass Supabase's 1,000-row page: read in pages.
@@ -179,5 +212,33 @@ export function clubStore(db: Db): ClubStore {
     },
     randomBytes: n => new Uint8Array(randomBytes(n)),
     siteOrigin,
+
+    assetBase: () => process.env.NEXT_PUBLIC_SUPABASE_URL,
+    async clubBySlug(slug) {
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 48) return null
+      const { data, error } = await db.from('clubs').select(CLUB_COLS).eq('slug', slug).maybeSingle()
+      if (error) throw error
+      return data ? (await withArt(db, [asClub(data as ClubRow)]))[0] : null
+    },
+    async updateClub(clubId, patch) {
+      const { error } = await db.from('clubs').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', clubId)
+      if (error) throw error
+    },
+    clubEvents: clubId => readClubEvents(db, clubId),
+    async entries(userId, codes) {
+      const { data: trips, error } = await db.from('trips').select('id, trip_code').in('trip_code', codes)
+      if (error || !trips?.length) return []
+      const ids = new Map((trips as { id: string; trip_code: string }[]).map(t => [t.id, t.trip_code]))
+      const { data: linked } = await db.from('account_players').select('trip_id').eq('user_id', userId).in('trip_id', [...ids.keys()])
+      return ((linked ?? []) as { trip_id: string }[]).map(r => ids.get(r.trip_id)!).filter(Boolean)
+    },
+    async putImage(path, bytes) {
+      const { error } = await db.storage.from('club-assets').upload(path, bytes, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })
+      if (error) throw error
+    },
+    async removeImage(path) {
+      await db.storage.from('club-assets').remove([path])
+    },
   }
 }
+

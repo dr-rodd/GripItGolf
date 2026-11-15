@@ -51,6 +51,16 @@
   --color-side-b:  var(--gd-side-b);
   --color-on-side: var(--gd-on-side);
 
+  /* A club's own colour (D118, D125): identity only — the crest's ring,
+     "Members", the lit tab, the "Members only" pill, your own row. Never a
+     result, a side, a button or Live. Bark until a club page sets it, so a
+     club with no colour looks like Green Dot. Set only inside a
+     [data-club] wrapper, from hex lib/clubColour.ts has checked. */
+  --color-club:      var(--gd-club);
+  --color-club-deep: var(--gd-club-deep);   /* club-coloured words */
+  --color-on-club:   var(--gd-on-club);     /* words on a club fill */
+  --color-club-tint: var(--gd-club-tint);
+
   /* ── Type ──
      Three families, one job each, never mixed.
      Schibsted Grotesk (titles) and Archivo (every other word) are
@@ -146,6 +156,12 @@
   --gd-side-a:  #C62F3A;
   --gd-side-b:  #2563B8;
   --gd-on-side: #FFFFFF;
+
+  /* A club's colour: bark until a [data-club] wrapper says otherwise. */
+  --gd-club:      var(--gd-bark);
+  --gd-club-deep: var(--gd-bark);
+  --gd-on-club:   var(--gd-cream);
+  --gd-club-tint: color-mix(in srgb, var(--gd-bark) 10%, transparent);
 
   /* The named mixes, worked out from the palette on the element where the
      palette is declared — so under html.dark they read the night values
@@ -273,9 +289,72 @@ html.dark {
     --gd-disabled-bg: color-mix(in srgb, var(--gd-bark) 10%, transparent);
     --gd-accent-tint: color-mix(in srgb, var(--gd-accent) 14%, transparent);
   }
+  /* A club's day values on paper too. */
+  html.dark [data-club] {
+    --gd-club:      var(--gd-club-l, var(--gd-bark));
+    --gd-club-deep: var(--gd-club-deep-l, var(--gd-bark));
+    --gd-on-club:   var(--gd-on-club-l, var(--gd-cream));
+    --gd-club-tint: color-mix(in srgb, var(--gd-club-l, var(--gd-bark)) 12%, transparent);
+  }
+  .club-art, .club-grain { display: none; }
   /* No grain on paper — it prints as a grey wash. */
   body { background-image: none; }
 }
+
+/* ── A club's area (stage (e1), D118, D123–D125, D155) ──
+   A club page's wrapper carries the club's checked values for both modes
+   at once (lib/clubColour.ts `clubStyle`), and these pick by the theme, so
+   the switch works live. This block declares only the club's own tokens —
+   nothing a club chooses can reach any other. The tint is mixed here, not
+   on :root, because a custom property is worked out where it is declared. */
+[data-club] {
+  --gd-club:      var(--gd-club-l, var(--gd-bark));
+  --gd-club-deep: var(--gd-club-deep-l, var(--gd-bark));
+  --gd-on-club:   var(--gd-on-club-l, var(--gd-cream));
+  --gd-club-tint: color-mix(in srgb, var(--gd-club-l, var(--gd-bark)) 12%, transparent);
+}
+html.dark [data-club] {
+  --gd-club:      var(--gd-club-d, var(--gd-bark));
+  --gd-club-deep: var(--gd-club-deep-d, var(--gd-bark));
+  --gd-on-club:   var(--gd-on-club-d, var(--gd-cream));
+  --gd-club-tint: color-mix(in srgb, var(--gd-club-d, var(--gd-bark)) 14%, transparent);
+}
+
+/* The club's art behind its pages (D123, D124, D155). By day it multiplies
+   into the cream; at night the same image is darkened in CSS — brightness
+   .62, saturate .75, sepia .15 — unless the club gave a dark one of its own.
+   The home: about 60%, fading into the page by the first card. Every other
+   members page: about 20%, behind the title only. Never behind a board, a
+   scorecard or score entry — only club pages draw it. The grain stays above
+   it (D124): by day the multiply lets the page's own grain through the art;
+   at night the art covers it, so the grain is laid back on over the art,
+   fading with it. */
+.club-art, .club-grain {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 26rem;
+  z-index: 0;
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, black 45%, transparent);
+  mask-image: linear-gradient(to bottom, black 45%, transparent);
+}
+.club-art {
+  background-image: var(--club-art);
+  background-size: cover;
+  background-position: center top;
+  opacity: .6;
+  mix-blend-mode: multiply;
+}
+.club-art-title, .club-grain-title { height: 12rem; }
+.club-art-title { opacity: .2; }
+html.dark .club-art {
+  background-image: var(--club-art-dark, var(--club-art));
+  mix-blend-mode: normal;
+  filter: brightness(.62) saturate(.75) sepia(.15);
+}
+html.dark .club-art.club-art-own-dark { filter: none; }
+.club-grain { display: none; background-image: var(--gd-grain); }
+html.dark .club-grain { display: block; }
 
 html {
   background-color: var(--color-cream);

@@ -139,8 +139,14 @@ section('The old identity is gone')
   // one.
   {
     const rules = css.split('}').filter(r => /linear-gradient|radial-gradient/.test(r))
-    const strays = rules.filter(r => !r.includes('.scroll-shade')).map(r => r.trim().split('{')[0].trim())
-    eq(strays, [], 'the stylesheet has no gradient but the scroll shade')
+    // The second exception (D123, Ross, 15 Nov 2026): a club's art fades
+    // into the page by the first card. It is a mask — what is drawn is the
+    // club's own picture, and the gradient only says where it stops — never
+    // a colour wash, and nothing outside a club page draws it.
+    const clubMask = (r: string) => /\.club-art, \.club-grain\s*\{/.test(r) && !/background(-image)?:[^;]*gradient/.test(r)
+    const strays = rules.filter(r => !r.includes('.scroll-shade') && !clubMask(r))
+      .map(r => r.trim().split('{')[0].trim())
+    eq(strays, [], 'the stylesheet has no gradient but the scroll shade, and the mask that fades a club\'s art')
 
     // One per pinned column. Read by exact rule name, not by prefix: the two
     // differ only in which way they fade, and a `split('.scroll-shade')`
@@ -462,7 +468,9 @@ section('Depth, texture and the named mixes are tokens')
   // The body, and `paper` — the same surface for whatever stands in for
   // the page and would otherwise paint flat cream over the grain: a
   // screen's wrapper, a sticky bar, a sheet. Nothing else names the grain.
-  eq((code.match(/var\(--gd-grain\)/g) ?? []).length, 2, '  …named by the body and by paper, nothing else')
+  eq((code.match(/var\(--gd-grain\)/g) ?? []).length, 3, '  …named by the body, by paper, and over a club\'s art at night (D124) — nothing else')
+  ok(/\.club-grain \{ display: none; background-image: var\(--gd-grain\); \}/.test(code) && /html\.dark \.club-grain \{ display: block; \}/.test(code),
+    '  …the club\'s grain only at night, where the art would otherwise cover the page\'s own')
   ok(/@utility paper \{[^}]*background-color: var\(--color-cream\);[^}]*background-image: var\(--gd-grain\)/.test(code),
     '  …paper is cream with the grain')
   const pages = uiFiles().filter(f => /className="[^"]*min-h-dvh[^"]*"/.test(read(f)))

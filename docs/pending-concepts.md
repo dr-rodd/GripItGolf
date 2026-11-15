@@ -868,6 +868,46 @@ data (the club and its upcoming events), about 60 seconds old, built the
     visit.
 - **(d):** as drawn under (d) above.
 
+### Stage (e1) as built — the club page (15 Nov 2026; D123–D127, D150, D155–D160)
+
+**Migration 087** (paste before the deploy): the `club-assets` bucket
+(public read, WebP only, 2 MB, no phone policy — the server writes on the
+service role) and `clubs.art_path` / `art_dark_path` (D155; 086's
+`header_path` is left unused — the art is the header). **`/club/[slug]`**
+(D157): the server draws the public face from `clubs` and the club's
+guests-welcome events only (`publicClubEvents` — the HTML never carries a
+members-only event), regenerated at most once a minute (`revalidate = 60`,
+Next's own cache, in place of the shared server copy proposed under Q5: a
+public page is the one place it serves better); a phone signed in to a
+Green Dot account then asks `/api/club` `home`, and a member on the list
+(verified club, linked, not removed) gets the members home in place — Home
+(On now, Coming up), Comps (Upcoming, My entries, Results, D159), Board (the
+live event, else the latest, else the next — a link to its leaderboard), Club
+(their role; for admins the list and the look). Stats is held back until (f)
+(`STATS_READY` in `ClubTabBar`), so the bar is four for now and Board is not
+yet in the centre. **The flash:** a member's phone sees the public face for
+a moment before the members home — the server cannot see the sign-in; D154's
+hint in (g) removes it. **The colour** (`lib/clubColour.ts`): the stored hex,
+stepped in lightness only until a mark clears 3:1 and words 4.5:1 on the page
+and a card in each mode, words on a fill 4.5:1, and ΔE ≥ 20 from the emerald
+and its deep; the wrapper `[data-club]` carries both modes' values and
+`globals.css` picks them, the tokens `club`, `club-deep`, `on-club`,
+`club-tint` used only on club pages (`test:clubs`). **The art**: one image,
+multiplied by day, darkened by CSS at night unless the club gave a night
+image, about 60% on the home and 20% behind the title elsewhere, faded by a
+mask (`test:branding`'s second gradient exception), the grain laid back over
+it at night (the third place `--gd-grain` is named). **Uploads**
+(`/api/club/upload`, `runUpload`): the club's owners and admins, JPEG, PNG or
+WebP under 4 MB (Vercel's request ceiling), art landscape and at least 1170
+wide (D126), resized with sharp (D156, `app/api/club/images.ts`), kept under
+a fresh name with a year's cache, the old one deleted. **The look** is set in
+`/account/club` (`ClubLook`): the colour with a day and a night preview and
+a line when it was adjusted, the crest, the art, the optional night art.
+**D150**: `create` and `link` refuse an account already on a club's list,
+naming the club. **D160**: `/admin` (Trips) shows the day's email count from
+Resend (`lib/emailCount.ts`), the line saying to move to the paid plan past
+50 — it needs a Resend key allowed to read, not only send.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:

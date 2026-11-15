@@ -503,8 +503,8 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/dashboard/create/MemberGate.tsx'],
-    'only the account pages import it, and the gate in front of making an event (D135)')
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/dashboard/create/MemberGate.tsx'],
+    'only the account pages import it, the gate in front of making an event (D135), and a club page asking whether this phone is on its list (D157)')
   ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
     '  …which only asks whether this phone is signed in')
   ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/account/events/MyEventsScreen.tsx'), '  …the account screen and My events')
