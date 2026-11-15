@@ -59,6 +59,7 @@ export default function AccountScreen() {
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
+  const [emailTaken, setEmailTaken] = useState(false)
 
   // Where to go once signed in (`?next=`, D135 — the create wizard that sent
   // this phone here), and whether to open on Join. Read after mount: the
@@ -113,7 +114,7 @@ export default function AccountScreen() {
     return () => window.clearTimeout(t)
   }, [username, view, renaming])
 
-  const go = (next: View) => { setError(''); setReauth(false); setPassword(''); setAgain(''); setCode(''); setView(next) }
+  const go = (next: View) => { setError(''); setEmailTaken(false); setReauth(false); setPassword(''); setAgain(''); setCode(''); setView(next) }
 
   async function submitSignIn(e: React.FormEvent) {
     e.preventDefault()
@@ -139,6 +140,21 @@ export default function AccountScreen() {
     setView({ kind: 'code', pending: r.pending })
   }
 
+  // Joining: the email and a password typed twice first, then the code
+  // that confirms the email (Ross, 15 Nov 2026). The password waits in this
+  // screen's memory — never stored — and is saved the moment the code is right.
+  async function submitJoin(e: React.FormEvent) {
+    e.preventDefault()
+    const issue = emailIssue(email) ?? passwordIssue(password) ?? passwordConfirmIssue(password, again)
+    if (issue) { setError(issue); return }
+    setBusy(true); setError(''); setEmailTaken(false)
+    const r = await sendCode(email)
+    setBusy(false)
+    if (!r.ok) { setError(r.error); setEmailTaken(r.exists === true); return }
+    setCode('')
+    setView({ kind: 'code', pending: r.pending })
+  }
+
   async function submitCode(e: React.FormEvent) {
     e.preventDefault()
     if (view.kind !== 'code') return
@@ -149,6 +165,12 @@ export default function AccountScreen() {
     setBusy(false)
     if (!r.ok) { setError(r.error); return }
     setCode('')
+    // The password chosen when joining is saved now the email is confirmed;
+    // if the page was reloaded meanwhile it is simply asked for again.
+    if (view.pending.purpose === 'join' && view.pending.mode === 'upgrade' && password && !passwordIssue(password)) {
+      await savePassword(password)
+    }
+    setPassword(''); setAgain('')
     await refresh()
   }
 
@@ -275,12 +297,50 @@ export default function AccountScreen() {
           </form>
         )}
 
-        {(view.kind === 'join' || view.kind === 'forgot') && (
+        {view.kind === 'join' && (
+          <form onSubmit={submitJoin} className="mt-6">
+            <p className="text-ink/80 text-[15px] leading-relaxed mb-6">
+              {ACCOUNT_WORDS.why} Choose a password, then we email you a code to confirm your email address.
+            </p>
+            <label htmlFor="account-email" className={FIELD_LABEL}>Email</label>
+            <input
+              id="account-email"
+              type="email"
+              inputMode="email"
+              autoComplete="email"
+              autoCapitalize="none"
+              spellCheck={false}
+              value={email}
+              onChange={e => { setEmail(e.target.value); setError(''); setEmailTaken(false) }}
+              className={FIELD}
+            />
+            <PasswordField id="account-join-password" label="Password" value={password} autoComplete="new-password"
+              onChange={v => { setPassword(v); setError('') }} />
+            <p className="t-cap text-ink/65 mt-2">At least {PASSWORD_MIN} characters.</p>
+            <PasswordField id="account-join-confirm" label="Confirm password" value={again} autoComplete="new-password"
+              onChange={v => { setAgain(v); setError('') }} />
+            {errorLine}
+            {emailTaken && (
+              <div className="flex flex-wrap gap-x-4 mt-2">
+                <button type="button" onClick={() => go({ kind: 'forgot' })} className={buttonClass('secondary', false)}>
+                  Forgot password?
+                </button>
+                <button type="button" onClick={() => { setIdentifier(email.trim()); go({ kind: 'signIn' }) }}
+                  className={buttonClass('quiet', false)}>
+                  Sign in
+                </button>
+              </div>
+            )}
+            <button type="submit" disabled={busy || !email.trim() || !password || !again} className={`${buttonClass('primary')} mt-6`}>
+              {busy ? 'Sending…' : 'Send me a code'}
+            </button>
+          </form>
+        )}
+
+        {view.kind === 'forgot' && (
           <form onSubmit={askForCode} className="mt-6">
             <p className="text-ink/80 text-[15px] leading-relaxed mb-6">
-              {view.kind === 'join'
-                ? `${ACCOUNT_WORDS.why} We email you a code, then you choose a username and a password.`
-                : 'We email you a code, then you choose a new password.'}
+              We email you a code, then you choose a new password.
             </p>
             <label htmlFor="account-email" className={FIELD_LABEL}>Email</label>
             <input
@@ -298,17 +358,18 @@ export default function AccountScreen() {
             <button type="submit" disabled={busy || !email.trim()} className={`${buttonClass('primary')} mt-6`}>
               {busy ? 'Sending…' : 'Send me a code'}
             </button>
-            {view.kind === 'forgot' && (
-              <button type="button" onClick={() => go({ kind: 'signIn' })} className={`${buttonClass('quiet', false)} mt-2`}>
-                Back to sign in
-              </button>
-            )}
+            <button type="button" onClick={() => go({ kind: 'signIn' })} className={`${buttonClass('quiet', false)} mt-2`}>
+              Back to sign in
+            </button>
           </form>
         )}
 
         {view.kind === 'code' && (
           <form onSubmit={submitCode} className="mt-8">
-            <p className="text-ink/80 text-[15px] leading-relaxed mb-6">{ACCOUNT_WORDS.sent(view.pending.email)}</p>
+            <p className="text-ink/80 text-[15px] leading-relaxed mb-6">
+              {ACCOUNT_WORDS.sent(view.pending.email)}
+              {view.pending.purpose === 'join' && ' Typing it confirms your email, then you choose a username.'}
+            </p>
             <label htmlFor="account-code" className={FIELD_LABEL}>Code</label>
             <input
               id="account-code"

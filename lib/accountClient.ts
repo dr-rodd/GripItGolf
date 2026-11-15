@@ -121,8 +121,12 @@ async function askServer(token: string, body: Record<string, unknown>): Promise<
   }
 }
 
-/** Send a code to this email — by adding it to this phone, or to the account it already belongs to. */
-export async function sendCode(raw: string): Promise<{ ok: true; pending: Pending } | { ok: false; error: string }> {
+/**
+ * Send a code to confirm this email on this phone, joining Green Dot. An
+ * email that already has an account is refused with `exists`, never sent a
+ * sign-in code.
+ */
+export async function sendCode(raw: string): Promise<{ ok: true; pending: Pending } | { ok: false; error: string; exists?: true }> {
   const email = normaliseEmail(raw)
   if (!inBrowser()) return { ok: false, error: ACCOUNT_WORDS.noReach }
   const phone = await phoneIdentity()
@@ -141,8 +145,10 @@ export async function sendCode(raw: string): Promise<{ ok: true; pending: Pendin
     if (rateLimited(upgrade.error)) return { ok: false, error: ACCOUNT_WORDS.tooMany }
     if (!alreadyExists(upgrade.error)) return { ok: false, error: ACCOUNT_WORDS.failed }
 
-    // A second phone: take the proof of this one before anything changes.
-    return await codeForExisting(email, phone.token, 'join', false)
+    // An email that already has an account is not joined again (Ross, 15 Nov
+    // 2026): the screen says so and offers Forgot password, which is the one
+    // way a second phone reaches an account it forgot the password of.
+    return { ok: false, error: ACCOUNT_WORDS.emailTaken, exists: true }
   } catch {
     return { ok: false, error: ACCOUNT_WORDS.noReach }
   }

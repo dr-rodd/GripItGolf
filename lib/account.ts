@@ -286,6 +286,7 @@ export const ACCOUNT_WORDS = {
   why: 'Green Dot members keep their events with them when they change phone.',
   signInFailed: SIGN_IN_FAILED,
   reauth: 'To set a password, sign in once more with a code — tap Forgot password.',
+  emailTaken: 'That email is already linked to a Green Dot account. Sign in, or tap Forgot password if you can’t remember it.',
   sent: (email: string) => `We sent a ${CODE_LENGTH}-digit code to ${email}.`,
   wrongCode: 'That code isn’t right or has run out — check it, or send a new one.',
   tooMany: 'Too many codes asked for — wait a minute and try again.',

@@ -647,6 +647,16 @@ of them is what the entries below and above say.
   — Club admins only / Club admins and anyone with the PIN / Anyone in the
   event.
 
+**Joining, reordered (Ross, 15 Nov 2026):** the Join tab asks the email and a
+password typed twice first; the emailed 6-digit code then confirms the email
+(a code, not a link — a link opens outside a home-screen app and read as an
+address when put in a template), the password is saved the moment the code is
+right, and only the username is asked after. **An email that already has an
+account is never sent a sign-in code**: the screen says it is already linked
+to a Green Dot account and offers Forgot password and Sign in. *Cost:* the
+screen now tells anyone who types an address whether it has an account;
+Supabase's own rate limits are the only brake on guessing.
+
 ### Stage (a2) as built — Green Dot members sign in (D128–D133)
 
 - **The rules** are `lib/account.ts`, pure, held by `test:account`:

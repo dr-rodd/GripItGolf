@@ -111,8 +111,25 @@ function ruleTests() {
   const screenSrc = read('app/account/AccountScreen.tsx')
   ok(/passwordConfirmIssue\(password, again\)/.test(screenSrc), 'the setup screen checks them against each other before saving')
   ok(screenSrc.includes('id="account-confirm-password"'), '…with a Confirm password box')
-  const signInForm = screenSrc.slice(screenSrc.indexOf("view.kind === 'signIn' && ("), screenSrc.indexOf("(view.kind === 'join'"))
+  const signInForm = screenSrc.slice(screenSrc.indexOf("view.kind === 'signIn' && ("), screenSrc.indexOf("view.kind === 'join' && ("))
   ok(!signInForm.includes('Confirm password'), 'signing in still asks once')
+
+  section('Joining: email and password first, then the code (Ross, 15 Nov 2026)')
+  const joinForm = screenSrc.slice(screenSrc.indexOf("view.kind === 'join' && ("), screenSrc.indexOf("view.kind === 'forgot' && ("))
+  ok(joinForm.includes('id="account-email"') && joinForm.includes('id="account-join-password"') && joinForm.includes('id="account-join-confirm"'),
+    'the join form asks the email, the password and the password again')
+  ok(/emailIssue\(email\) \?\? passwordIssue\(password\) \?\? passwordConfirmIssue\(password, again\)/.test(screenSrc),
+    '…and checks all three before any email is sent')
+  ok(/savePassword\(password\)/.test(screenSrc.slice(screenSrc.indexOf('async function submitCode'))),
+    'the password is saved the moment the emailed code is right')
+  const clientSrc = read('lib/accountClient.ts')
+  const sendCodeSrc = clientSrc.slice(clientSrc.indexOf('export async function sendCode'), clientSrc.indexOf('async function codeForExisting'))
+  ok(!/codeForExisting/.test(sendCodeSrc.replace(/\/\*[\s\S]*?\*\//g, '')), 'joining with an email that has an account never sends it a sign-in code')
+  ok(/exists: true/.test(sendCodeSrc) && /ACCOUNT_WORDS\.emailTaken/.test(sendCodeSrc), '…it says the email is already linked to an account')
+  ok(/already linked to a Green Dot account/.test(ACCOUNT_WORDS.emailTaken) && /Forgot password/.test(ACCOUNT_WORDS.emailTaken),
+    '…and points at Forgot password')
+  ok(/emailTaken &&/.test(joinForm) && /Forgot password\?/.test(joinForm), '…the screen then offers Forgot password and Sign in')
+  ok(/passwordIssue\(password\)/.test(screenSrc) && !/localStorage/.test(clientSrc.slice(clientSrc.indexOf('savePassword'))), 'the password is never kept in storage')
 
   section('Signing in: one field, an @ means email (D132)')
   eq(signInRoute('Ross@Example.ie '), { kind: 'email', email: 'ross@example.ie' }, 'an @ is an email')

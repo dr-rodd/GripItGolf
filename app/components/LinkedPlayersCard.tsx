@@ -42,7 +42,7 @@ export default function LinkedPlayersCard({ tripCode, pinSet, isTrip }: {
   if (!organiser || linked.length === 0) return null
 
   return (
-    <section className="mt-8">
+    <section className={isTrip ? 'mt-8 mb-4' : 'mt-8 mb-10'}>
       <h2 className="t-h2 text-ink">Green Dot members</h2>
       <p className="text-ink/65 text-sm mt-1">
         These players are linked to a Green Dot member’s account, so the {isTrip ? 'trip' : 'event'} shows in their own list.
