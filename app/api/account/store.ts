@@ -10,6 +10,8 @@ import { handicapStore } from '../handicaps/store'
 import type { AccountStore } from './account'
 import { serviceStore } from '../entry/store'
 import { readSeason } from '../stats/season'
+import { asRow, rowCols, withTicks, type RowRow } from '../club/rows'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -70,17 +72,17 @@ const asMembership = (r: { role: Membership['role']; player_id: string | null; o
  */
 async function clubEvents(db: Db, userId: string): Promise<Map<string, { name: string; admin: boolean }>> {
   const out = new Map<string, { name: string; admin: boolean }>()
-  const rows = await db.from('club_members').select('club_id, role').eq('user_id', userId).is('removed_at', null)
+  const rows = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('user_id', userId).is('removed_at', null))
   if (rows.error || !rows.data?.length) return out
-  const roles = new Map((rows.data as { club_id: string; role: string }[]).map(r => [r.club_id, r.role]))
-  const clubs = await db.from('clubs').select('id, name').in('id', [...roles.keys()]).not('verified_at', 'is', null)
+  // Whether the account runs them: Officer (lib/clubMay.ts).
+  const runs = new Map((rows.data as unknown as RowRow[]).map(r => [r.club_id, clubMay('run_events', { row: credentialsOf(asRow(r)) })]))
+  const clubs = await db.from('clubs').select('id, name').in('id', [...runs.keys()]).not('verified_at', 'is', null)
   if (clubs.error || !clubs.data?.length) return out
   const names = new Map((clubs.data as { id: string; name: string }[]).map(c => [c.id, c.name]))
   const events = await db.from('trip_private').select('trip_id, club_id').in('club_id', [...names.keys()])
   if (events.error) return out
   for (const e of (events.data ?? []) as { trip_id: string; club_id: string }[]) {
-    const role = roles.get(e.club_id)
-    out.set(e.trip_id, { name: names.get(e.club_id) ?? '', admin: role === 'owner' || role === 'admin' })
+    out.set(e.trip_id, { name: names.get(e.club_id) ?? '', admin: runs.get(e.club_id) ?? false })
   }
   return out
 }
@@ -134,14 +136,13 @@ export function accountStore(db: Db): AccountStore {
       for (const r of (owners.data ?? []) as { club_id: string }[]) count.set(r.club_id, (count.get(r.club_id) ?? 0) + 1)
       return ((clubs.data ?? []) as { id: string; name: string }[]).filter(c => (count.get(c.id) ?? 0) <= 1).map(c => c.name)
     },
-    async homeClub(userId) {
+    async homeClubs(userId) {
       const rows = await db.from('club_members').select('club_id').eq('user_id', userId).is('removed_at', null)
       // Before migration 086 there are no clubs: a Dot member.
-      if (rows.error || !rows.data?.length) return null
-      const { data } = await db.from('clubs').select('slug, name, verified_at')
-        .in('id', (rows.data as { club_id: string }[]).map(r => r.club_id)).not('verified_at', 'is', null).limit(1)
-      const c = (data ?? [])[0] as { slug: string; name: string } | undefined
-      return c ? { slug: c.slug, name: c.name } : null
+      if (rows.error || !rows.data?.length) return []
+      const { data } = await db.from('clubs').select('slug, name')
+        .in('id', (rows.data as { club_id: string }[]).map(r => r.club_id)).not('verified_at', 'is', null).order('name')
+      return ((data ?? []) as { slug: string; name: string }[]).map(c => ({ slug: c.slug, name: c.name }))
     },
     handicaps: handicapStore(db),
     async seasonFor(userId, year) {

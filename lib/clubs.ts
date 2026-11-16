@@ -80,31 +80,10 @@ export const CLUB_STATUS_WORDS: Record<ClubStatus, string> = {
 
 // ─── Who may do what ───────────────────────────────────────────
 
-/** Owners and admins keep the list and run the club's events (D139). */
-export function mayAdminister(role: ClubRole | null | undefined): boolean {
-  return role === 'owner' || role === 'admin'
-}
-
-/** Only an owner makes owners and admins, or takes the role away. */
-export function mayChangeRoles(role: ClubRole | null | undefined): boolean {
-  return role === 'owner'
-}
-
-/**
- * Why a change would leave the club with no owner on its list — or null.
- * `owners` counts the rows that are owners and not removed, before the change.
- */
-export function lastOwnerIssue(target: { role: ClubRole; removed: boolean }, change: { role?: ClubRole; remove?: boolean }, owners: number): string | null {
-  const isOwnerNow = target.role === 'owner' && !target.removed
-  const staysOwner = !change.remove && (change.role ?? target.role) === 'owner'
-  if (isOwnerNow && !staysOwner && owners <= 1) return 'A club always has an owner. Make somebody else an owner first.'
-  return null
-}
-
-/** The role as a screen says it — never a bare "member" (D133). */
-export function roleWord(role: ClubRole, clubName: string): string {
-  return role === 'owner' ? 'Owner' : role === 'admin' ? 'Admin' : `${clubName} member`
-}
+// Who may do what at a club — Officer, Clubhouse, Owner, Plays here — is
+// lib/clubMay.ts, the only copy (stage (k0)). `role` is stored beside the
+// ticks: `owner` means owner, and `admin` mirrors "Officer and Clubhouse"
+// for the code before migration 092.
 
 /** The club's people, as a screen says them (D133). */
 export function clubMembersWord(clubName: string): string {
@@ -376,20 +355,13 @@ export type ClubAccess = 'admins' | 'pin' | 'anyone'
 export const CLUB_ACCESS: readonly ClubAccess[] = ['admins', 'pin', 'anyone']
 
 export const CLUB_ACCESS_WORDS: Record<ClubAccess, { label: string; line: string }> = {
-  admins: { label: 'Club admins only', line: 'The club’s owners and admins, signed in. No PIN to keep.' },
-  pin: { label: 'Club admins and anyone with the PIN', line: 'Lend a PIN to helpers for the day.' },
+  admins: { label: 'Club Officers only', line: 'The club’s Officers, signed in. No PIN to keep.' },
+  pin: { label: 'Club Officers and anyone with the PIN', line: 'Lend a PIN to helpers for the day.' },
   anyone: { label: 'Anyone in the event', line: 'Everybody with the code can change it.' },
 }
 
 export function parseClubAccess(v: unknown): ClubAccess | null {
   return v === 'admins' || v === 'pin' || v === 'anyone' ? v : null
-}
-
-// ─── One club per account (D145, D150) ─────────────────────────
-
-/** Why an account already on a club's list may not join or set up another. */
-export function oneClubIssue(clubName: string): string {
-  return `Your account is on ${clubName}’s list. One club per account for now.`
 }
 
 // ─── A club's crest and art (D118, D123–D126, D155, D156) ─────

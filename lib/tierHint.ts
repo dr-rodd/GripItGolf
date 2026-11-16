@@ -3,7 +3,9 @@
 // The sign-in lives in the phone's own storage (supabase-js keeps it in
 // localStorage), so the server never knows who is signed in when it sends
 // greendot.live. A phone signed in to a Green Dot account keeps a **hint**
-// here — `dot`, or `club:<slug>` for somebody on a verified club's list —
+// here — `dot`, or `club:<slug>` for somebody on a verified club's list,
+// with the account's other clubs after it (`club:pints|lahinch`, D218, D223:
+// the first is the club last used, where the phone opens) —
 // and the root layout's head script reads it before the first paint: on `/`
 // alone, it goes on to that home, so a member never sees the front page
 // blink first.
@@ -19,19 +21,36 @@
 
 export const TIER_KEY = 'gd.tier.v1'
 
-/** The two hints there are. A Club member's names their club's address, nothing more. */
-export type TierHint = { kind: 'dot' } | { kind: 'club'; slug: string }
+/**
+ * The two hints there are. A Club member's names their clubs' addresses,
+ * nothing more: the one last used, then the others (`others`, absent on a
+ * hint kept before an account could be on more than one).
+ */
+export type TierHint = { kind: 'dot' } | { kind: 'club'; slug: string; others?: string[] }
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/
+/** At most this many clubs ride in a hint — far more than anybody is on. */
+export const MAX_HINT_CLUBS = 20
 
 export function parseTierHint(raw: string | null | undefined): TierHint | null {
   if (raw === 'dot') return { kind: 'dot' }
   const m = /^club:(.+)$/.exec(raw ?? '')
-  return m && SLUG.test(m[1]) ? { kind: 'club', slug: m[1] } : null
+  if (!m) return null
+  const slugs = m[1].split('|')
+  if (slugs.length > MAX_HINT_CLUBS || !slugs.every(s => SLUG.test(s))) return null
+  const [slug, ...others] = slugs
+  return others.length ? { kind: 'club', slug, others } : { kind: 'club', slug }
 }
 
 export function serialiseTierHint(h: TierHint): string {
-  return h.kind === 'dot' ? 'dot' : `club:${h.slug}`
+  if (h.kind === 'dot') return 'dot'
+  const others = (h.others ?? []).filter(s => s !== h.slug)
+  return `club:${[h.slug, ...new Set(others)].slice(0, MAX_HINT_CLUBS).join('|')}`
+}
+
+/** Every club a hint names, the last used first. */
+export function hintClubs(h: TierHint | null): string[] {
+  return h?.kind === 'club' ? [h.slug, ...(h.others ?? []).filter(s => s !== h.slug)] : []
 }
 
 /** Where a hint sends a phone: a Club member to their club's area (D148, until (h) moves it under /home). */
@@ -54,11 +73,12 @@ export const TIER_BOOT_SCRIPT =
   `o=p==='/home'&&!location.search,ls=localStorage,h=ls.getItem('${TIER_KEY}');` +
   // D197: at the club this phone is hinted to, the members home's stand-in
   // shows from the first paint, never the public face.
-  `var c=/^\\/club\\/([a-z0-9-]{1,60})\\/?$/.exec(p);` +
-  `if(c){if(h==='club:'+c[1])document.documentElement.setAttribute('data-club-member','');return}` +
+  // D223: at any club the hint names — an account may be on several.
+  `var c=/^\\/club\\/([a-z0-9-]{1,60})\\/?$/.exec(p),` +
+  `m=/^club:([a-z0-9-]{1,60}(?:\\|[a-z0-9-]{1,60}){0,${MAX_HINT_CLUBS - 1}})$/.exec(h||''),l=m?m[1].split('|'):[];` +
+  `if(c){if(l.indexOf(c[1])>=0)document.documentElement.setAttribute('data-club-member','');return}` +
   `if(!f&&!o)return;` +
-  `var m=/^club:([a-z0-9-]{1,60})$/.exec(h||'');` +
-  `if(m){location.replace('/club/'+m[1]);return}` +
+  `if(m){location.replace('/club/'+l[0]);return}` +
   // D192: no hint, but a Green Dot account's sign-in kept on this phone —
   // decided here, before the front page paints, as storedAccountSession does.
   `if(f&&!h){for(var i=0;i<(ls.length||0);i++){var k=ls.key(i)||'';if(!/^sb-.+-auth-token$/.test(k))continue;` +
@@ -72,8 +92,15 @@ export function readTierHint(): TierHint | null {
   try { return parseTierHint(window.localStorage.getItem(TIER_KEY)) } catch { return null }
 }
 
+/**
+ * Kept for the next open. A club hint handed in without its others keeps the
+ * ones already known — this club is now the last used, the rest stay.
+ */
 export function rememberTier(h: TierHint) {
-  try { window.localStorage.setItem(TIER_KEY, serialiseTierHint(h)) } catch { /* refused — the front page shows, nothing lost */ }
+  try {
+    const kept = h.kind === 'club' && h.others === undefined ? { ...h, others: hintClubs(readTierHint()) } : h
+    window.localStorage.setItem(TIER_KEY, serialiseTierHint(kept))
+  } catch { /* refused — the front page shows, nothing lost */ }
 }
 
 export function forgetTier() {

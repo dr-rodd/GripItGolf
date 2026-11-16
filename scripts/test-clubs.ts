@@ -11,21 +11,25 @@ import * as copy from '../lib/clubHomeCopy'
 import path from 'path'
 import {
   INVITE_LENGTH, cleanRow, clubNameIssue, clubSlug, formatInviteCode, inviteCodeFrom, inviteCodeIssue, inviteEmail,
-  lastOwnerIssue, listRowIssue, maskNumber, mayAdminister, mayChangeRoles, nextSlug, normaliseInviteCode,
-  parseClubAccess, parseMemberList, planList, roleWord, type ClubRole, type ListRow,
-  clubAssetUrl, clubEventWhen, clubImageIssue, groupClubEvents, irishToday, oneClubIssue, publicClubEvents, type ClubEvent,
+  listRowIssue, maskNumber, nextSlug, normaliseInviteCode,
+  parseClubAccess, parseMemberList, planList, type ClubRole, type ListRow,
+  clubAssetUrl, clubEventWhen, clubImageIssue, groupClubEvents, irishToday, publicClubEvents, type ClubEvent,
 } from '../lib/clubs'
+import {
+  LAST_OWNER, clubMay, credentialChangeIssue, credentialLine, credentialsOf, removeIssue, storedRole, withChange,
+  type Credentials,
+} from '../lib/clubMay'
 import { FEATURES, mayUseFeature } from '../lib/tiers'
 import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
-import { inviteHash, runClub, runUpload, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
+import { inviteHash, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
-import { barOf, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
+import { barOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm, withdrawIssue, type CompForm } from '../lib/clubComp'
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
@@ -71,14 +75,43 @@ function ruleTests() {
   eq(clubSlug("Seán's Golf Club"), 'seans-golf-club', '…accents and apostrophes forgiven')
   eq(nextSlug('lahinch', ['lahinch', 'lahinch-2']), 'lahinch-3', 'a name already taken gets a number')
 
-  section('Who runs a club')
-  ok(mayAdminister('owner') && mayAdminister('admin') && !mayAdminister('member') && !mayAdminister(null), 'owners and admins keep the list')
-  ok(mayChangeRoles('owner') && !mayChangeRoles('admin'), 'only an owner changes roles')
-  ok(lastOwnerIssue({ role: 'owner', removed: false }, { remove: true }, 1) !== null, 'the last owner cannot be taken off')
-  ok(lastOwnerIssue({ role: 'owner', removed: false }, { role: 'admin' }, 1) !== null, '…or made an admin')
-  eq(lastOwnerIssue({ role: 'owner', removed: false }, { remove: true }, 2), null, '…but one of two can')
-  eq(lastOwnerIssue({ role: 'member', removed: false }, { remove: true }, 1), null, 'a member comes off whatever')
-  eq(roleWord('member', 'Lahinch'), 'Lahinch member', 'never a bare "member" on screen (D133)')
+  section('Credentials as ticks: lib/clubMay.ts (D208, D219, D220)')
+  const C = (o: Partial<Credentials> = {}): Credentials => ({ owner: false, playsHere: true, officer: false, clubhouse: false, ...o })
+  const owner = C({ owner: true, officer: true, clubhouse: true }), office = C({ clubhouse: true, playsHere: false })
+  const officer = C({ officer: true }), both = C({ officer: true, clubhouse: true }), plain0 = C()
+  eq(credentialsOf({ role: 'owner' }), owner, 'before 092: an owner holds everything but is never forced to play… (plays here by default)')
+  eq(credentialsOf({ role: 'admin' }), both, '…today’s admins are Officer and Clubhouse')
+  eq(credentialsOf({ role: 'member' }), plain0, '…and members Plays here alone')
+  eq(credentialsOf({ role: 'owner', officer: false, clubhouse: false, playsHere: false }), C({ owner: true, officer: true, clubhouse: true, playsHere: false }),
+    'an owner holds Officer and Clubhouse whatever is stored — Plays here is theirs to have or not')
+  eq(credentialsOf({ role: 'member', officer: true, clubhouse: false, playsHere: false }), C({ officer: true, playsHere: false }), 'after 092 the ticks are read as stored')
+  eq([storedRole(owner), storedRole(both), storedRole(officer), storedRole(office), storedRole(plain0)], ['owner', 'admin', 'member', 'member', 'member'] as ClubRole[],
+    'the role kept beside the ticks: admin only with both, so a rollback fails safe')
+  eq(withChange(plain0, { owner: true }), C({ owner: true, officer: true, clubhouse: true }), 'Owner brings Officer and Clubhouse with it')
+  ok(clubMay('run_events', { row: officer }) && clubMay('run_events', { row: owner }) && !clubMay('run_events', { row: office }) && !clubMay('run_events', { row: plain0 }),
+    'Officers (owners too) run the club’s events on the phone; Clubhouse alone does not')
+  ok(clubMay('keep_list', { row: office }) && clubMay('open_clubhouse', { row: both }) && !clubMay('keep_list', { row: officer }),
+    'Clubhouse keeps the list and opens the office, with or without Officer; Officer alone does not')
+  ok(clubMay('grant_officer', { row: office }) && clubMay('grant_plays_here', { row: office }) && !clubMay('grant_clubhouse', { row: office }),
+    'Clubhouse gives Plays here and Officer — never Clubhouse')
+  ok(clubMay('grant_clubhouse', { row: owner }) && clubMay('grant_owner', { row: owner }), 'an owner gives Clubhouse and makes owners')
+  ok(clubMay('grant_clubhouse', { row: null, staff: true }) && clubMay('keep_list', { row: null, staff: true }) && !clubMay('run_events', { row: null, staff: true }),
+    'Green Dot staff do what Clubhouse and Owner do, at any club — never an Officer’s on-the-day work')
+  ok(!clubMay('play', { row: office }) && clubMay('play', { row: plain0 }) && !clubMay('see_members_home', { row: null }), 'no Plays here: in no field (D209)')
+  const t = (c: Credentials, removed = false) => ({ credentials: c, removed })
+  eq(credentialChangeIssue({ row: office }, t(plain0), { officer: true }, 1), null, 'the office makes an Officer')
+  ok(/Only an owner or Green Dot/.test(credentialChangeIssue({ row: office }, t(plain0), { clubhouse: true }, 1) ?? ''), '…but cannot give Clubhouse')
+  ok(/Only someone with Clubhouse/.test(credentialChangeIssue({ row: officer }, t(plain0), { playsHere: false }, 1) ?? ''), 'an Officer gives no ticks')
+  eq(credentialChangeIssue({ row: owner }, t(owner), { owner: false }, 1), LAST_OWNER, 'the last owner keeps Owner')
+  eq(credentialChangeIssue({ row: owner }, t(owner), { owner: false }, 2), null, '…one of two may give it up')
+  ok(/Take Owner off first/.test(credentialChangeIssue({ row: owner }, t(owner), { clubhouse: false }, 2) ?? ''), 'an owner’s Clubhouse is held')
+  eq(credentialChangeIssue({ row: owner }, t(owner), { playsHere: false }, 1), null, '…but whether they play is free')
+  eq(removeIssue({ row: office }, t(plain0), 1), null, 'the office takes a member off')
+  ok(removeIssue({ row: office }, t(both), 1) !== null && removeIssue({ row: office }, t(owner), 2) !== null, '…never somebody with Clubhouse, or an owner')
+  eq(removeIssue({ row: owner }, t(owner), 1), LAST_OWNER, 'the last owner cannot be taken off')
+  eq(credentialLine(plain0, 'Lahinch'), 'Lahinch member', 'never a bare "member" on screen (D133)')
+  eq([credentialLine(owner, 'L'), credentialLine(both, 'L'), credentialLine(office, 'L')], ['Owner', 'Clubhouse · Officer', 'Clubhouse · Doesn’t play here'],
+    'what a row holds, said short')
 
   section('Reading a pasted list')
   const plain = parseMemberList('Ross O’Grady, 1042, 3110012345, Ross@Example.com\nDave Byrne\t1043\t\t')
@@ -160,7 +193,7 @@ class Stand implements ClubStore {
   async userFromToken(t: string) { return this.users.get(t) ?? null }
   async clubsOf(userId: string) {
     return [...this.list.values()].filter(r => r.userId === userId && !r.removedAt)
-      .map(row => ({ club: this.clubs.get(row.clubId)!, row }))
+      .map(row => ({ club: this.clubs.get(row.clubId)!, row })).sort((a, b) => a.club.name.localeCompare(b.club.name))
   }
   async clubsMadeBy(userId: string) { return [...this.clubs.values()].filter(c => c.createdBy === userId).length }
   async slugsLike(base: string) { return [...this.clubs.values()].map(c => c.slug).filter(s => s.startsWith(base)) }
@@ -192,6 +225,9 @@ class Stand implements ClubStore {
       ...(p.user_id !== undefined ? { userId: p.user_id } : {}),
       ...(p.removed_at !== undefined ? { removedAt: p.removed_at } : {}),
       ...(p.on_boards !== undefined ? { onBoards: p.on_boards } : {}),
+      ...(p.plays_here !== undefined ? { playsHere: p.plays_here } : {}),
+      ...(p.officer !== undefined ? { officer: p.officer } : {}),
+      ...(p.clubhouse !== undefined ? { clubhouse: p.clubhouse } : {}),
     }
     const others = [...this.list.values()].filter(o => o.clubId === r.clubId && o.id !== id)
     if ((next.memberNumber && others.some(o => o.memberNumber === next.memberNumber))
@@ -255,6 +291,8 @@ class Stand implements ClubStore {
   async topScores(codes: string[]): Promise<Record<string, { name: string; points: number }>> { return codes.includes('OLDMED') ? { OLDMED: { name: 'Ann Lee', points: 39 } } : {} }
   async putImage(path: string, bytes: Uint8Array) { this.stored.set(path, bytes) }
   async removeImage(path: string) { this.stored.delete(path) }
+  activity: ActivityEntry[] = []
+  async logActivity(entries: ActivityEntry[]) { this.activity.push(...entries) }
 }
 
 const member = (id: string, email: string): AuthUser => ({ id, isAnonymous: false, email, emailConfirmed: true })
@@ -278,13 +316,13 @@ async function routeTests() {
   section('Setting up a club')
   eq((await ask('tok-ross', 'create', { name: 'Lahinch Golf Club' })).status, 400, 'your own name is asked for')
   const made = await ask('tok-ross', 'create', { name: 'Lahinch Golf Club', yourName: 'Ross O’Grady' })
-  ok(made.status === 200 && made.body.ok && made.body.club?.status === 'pending' && made.body.club.role === 'owner',
+  ok(made.status === 200 && made.body.ok && made.body.club?.status === 'pending' && made.body.club.credentials.owner,
     'made unverified, its maker the first owner')
   const clubId = made.status === 200 ? made.body.club!.id : ''
   const again = await ask('tok-eve', 'create', { name: 'Lahinch Golf Club', yourName: 'Eve' })
   ok(again.status === 200 && again.body.club?.slug === 'lahinch-golf-club-2', 'a second club of the same name gets its own address')
 
-  section('The list is its owners’ and admins’')
+  section('The list is its Clubhouse holders’')
   eq((await ask('tok-dave', 'members', { clubId })).status, 403, 'somebody not on the list sees nothing')
   const added = await ask('tok-ross', 'add', { clubId, rows: [
     { name: 'Dave Byrne', memberNumber: '2', guiNumber: '3110002', email: 'dave@x.ie' },
@@ -312,7 +350,8 @@ async function routeTests() {
   ok(linked.status === 200 && linked.body.club?.name === 'Lahinch Golf Club', 'the right code links the account, typed any way')
   eq((await ask('tok-ann', 'link', { code: daveCode })).status, 409, 'a code works once')
   const mine = await ask('tok-dave', 'mine')
-  ok(mine.status === 200 && mine.body.clubs?.find(c => c.id === clubId)?.role === 'member', 'the club is in Dave’s list, as a member')
+  const daveHere = mine.status === 200 ? mine.body.clubs?.find(c => c.id === clubId)?.credentials : undefined
+  ok(!!daveHere && daveHere.playsHere && !daveHere.officer && !daveHere.clubhouse && !daveHere.owner, 'the club is in Dave’s list: plays here, nothing more')
   eq((await ask('tok-dave', 'members', { clubId })).status, 403, 'a member does not see the list')
 
   section('One GUI number to one account')
@@ -328,15 +367,18 @@ async function routeTests() {
   eq((await ask('tok-ann', 'link', { code: annCode })).status, 409, 'a GUI number already linked to another account is held for the club')
   ok(!s.list.get(annOther.id)!.userId, '…never quietly moved')
 
-  section('One club per account (D145, D150)')
+  section('Many clubs per account (D218, D223; D145 and D150 retired)')
   const daveOther = (await s.rows(otherId)).find(r => r.name === 'Dave Byrne')!
   await ask('tok-fay', 'invite', { clubId: otherId, memberId: daveOther.id })
   const second = await ask('tok-dave', 'link', { code: codeIn(s.sent.at(-1)!.text) })
-  eq(second.status, 409, 'linking a second club is refused')
-  ok(second.status === 409 && /Lahinch Golf Club’s list/.test(second.body.error), '…naming the club the account is on')
-  ok(!s.list.get(daveOther.id)!.userId, '…and nothing is linked')
+  ok(second.status === 200 && s.list.get(daveOther.id)!.userId === 'dave', 'a second club links')
+  const both2 = await ask('tok-dave', 'mine')
+  eq(both2.status === 200 ? both2.body.clubs?.map(c => c.name) : null, ['Ballybunion', 'Lahinch Golf Club'], '…and both are the account’s, by name')
   const setUp = await ask('tok-dave', 'create', { name: 'Doonbeg', yourName: 'Dave' })
-  ok(setUp.status === 409 && /Lahinch Golf Club’s list/.test(setUp.body.error), 'setting up a second club is refused the same way')
+  ok(setUp.status === 200 && !!setUp.body.club?.credentials.owner, 'setting up another club is allowed too')
+  // Undo the extra clubs for the sections that follow.
+  s.list.set(daveOther.id, { ...s.list.get(daveOther.id)!, userId: null })
+  for (const [id, r] of s.list) if (r.userId === 'dave' && r.clubId !== clubId) s.list.delete(id)
 
   section('Taking somebody off the list severs, never deletes')
   const removed = await ask('tok-ross', 'remove', { clubId, memberId: daveRow.id })
@@ -350,15 +392,33 @@ async function routeTests() {
   await ask('tok-ross', 'restore', { clubId, memberId: daveRow.id })
   eq(s.list.get(daveRow.id)!.removedAt, null, 'put back on the list — to be linked again by a fresh code')
 
-  section('A club always has an owner')
+  section('A club always has an owner; ticks given by whoever clubMay says')
   const rossRow = [...s.list.values()].find(r => r.clubId === clubId && r.userId === 'ross')!
   eq((await ask('tok-ross', 'remove', { clubId, memberId: rossRow.id })).status, 409, 'the only owner cannot be taken off')
-  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, role: 'member' })).status, 409, '…or demoted')
-  await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, role: 'admin' })
-  eq(s.list.get(daveRow.id)!.role, 'admin' as ClubRole, 'an owner makes an admin')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, owner: false })).status, 409, '…or give up Owner')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, clubhouse: false })).status, 409, '…or Clubhouse while an owner')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, playsHere: false })).status, 200, 'an owner who does not play says so')
+  eq(credentialsOf(s.list.get(rossRow.id)!).playsHere, false, '…and is out of the fields')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, officer: 'yes' })).status, 400, 'a tick is on or off')
+  await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, clubhouse: true })
+  eq([s.list.get(daveRow.id)!.clubhouse, s.list.get(daveRow.id)!.role], [true, 'member' as ClubRole], 'an owner gives Clubhouse — the role stays member until Officer joins it')
+  await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, officer: true })
+  eq(s.list.get(daveRow.id)!.role, 'admin' as ClubRole, '…both held: the role mirrors admin')
+  ok(s.activity.some(a => a.action === 'credentials' && a.memberId === daveRow.id && JSON.stringify(a.changes.clubhouse) === '[false,true]' && a.byUser === 'ross'),
+    'every change of ticks is logged: who, which row, before and after (D210)')
   s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, userId: 'dave' })
-  eq((await ask('tok-dave', 'update', { clubId, memberId: rossRow.id, role: 'member' })).status, 403, 'an admin cannot change roles')
+  eq((await ask('tok-dave', 'update', { clubId, memberId: rossRow.id, owner: false })).status, 403, 'Clubhouse cannot touch an owner')
   eq((await ask('tok-dave', 'remove', { clubId, memberId: rossRow.id })).status, 403, '…or take an owner off')
+  const annL = [...s.list.values()].find(r => r.clubId === clubId && r.name === 'Ann Lee')!
+  eq((await ask('tok-dave', 'update', { clubId, memberId: annL.id, officer: true })).status, 200, 'Clubhouse makes an Officer')
+  eq((await ask('tok-dave', 'update', { clubId, memberId: annL.id, clubhouse: true })).status, 403, '…but never gives Clubhouse')
+  await ask('tok-dave', 'update', { clubId, memberId: annL.id, officer: false })
+  await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, officer: false, clubhouse: false })
+  eq(s.list.get(daveRow.id)!.role, 'member' as ClubRole, 'ticks taken away: plain again')
+  const listed = await ask('tok-ross', 'members', { clubId, whole: true })
+  ok(listed.status === 200 && JSON.stringify(listed.body.list).includes('3110002'), 'the Clubhouse sees the numbers in full, asked for by name')
+  const dl = await ask('tok-dave', 'members', { clubId, whole: true })
+  eq(dl.status, 403, '…and nobody without Clubhouse sees the list at all')
 
   section('Wrong codes are limited, as PINs are')
   for (let i = 0; i < 10; i++) await ask('tok-ann', 'link', { code: 'ZZZZ-ZZZZ' }, 'addr-9')
@@ -523,10 +583,10 @@ function lookTests() {
   ok(/if \(!club \|\| !club\.verifiedAt\) return null/.test(read('app/club/[slug]/face.ts')) && /notFound\(\)/.test(read('app/club/[slug]/page.tsx')),
     'an unverified or unknown club is not found')
 
-  section('One club per account, said by name (D150)')
-  eq(oneClubIssue('Lahinch'), 'Your account is on Lahinch’s list. One club per account for now.', 'the refusal names the club')
+  section('Many clubs per account needed no migration (D223)')
   ok(read('supabase/migrations/20260101000086_clubs.sql').includes('uq_club_members_user   ON club_members(club_id, user_id)'),
-    'the tables still hold one row per account per club — more clubs need no migration')
+    'the tables hold one row per account per club — any number of clubs')
+  ok(!/oneClubIssue|One club per account/.test(read('lib/clubs.ts') + read('app/api/club/club.ts')), 'the one-club refusal is gone')
 
   section('Today’s emails on /admin (D160)')
   const since = irishMidnight(new Date('2026-11-15T15:00:00Z'))
@@ -557,7 +617,7 @@ async function pageRouteTests() {
   eq((await ask('tok-dave', 'home', { slug: 'portmarnock' })).status, 404, 'an unverified club has no page')
   s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
   const home = await ask('tok-dave', 'home', { slug: 'portmarnock' })
-  ok(home.status === 200 && home.body.events?.length === 2 && home.body.club?.role === 'member', 'a member on the list sees every club event')
+  ok(home.status === 200 && home.body.events?.length === 2 && home.body.club?.credentials.playsHere === true && !home.body.club.credentials.officer, 'a member on the list sees every club event')
   eq(home.status === 200 ? home.body.entries : null, ['MEDAL1'], '…and their own entries among them')
   ok(home.status === 200 && home.body.me?.name === 'Dave', '…greeted by the name on the club’s list')
   ok(home.status === 200 && home.body.outside?.[0]?.code === 'TRIP01', '…with their events outside the club')
@@ -676,8 +736,8 @@ function wiringTests() {
 
   section('Stage (h): the club area, and the club’s events made from it (D144, D153)')
   const gate = read('app/dashboard/create/MemberGate.tsx')
-  ok(/Whose event is this\?/.test(gate) && /status === 'verified' && mayAdminister\(k\.role\)/.test(gate),
-    'the gate asks "Whose event is this?" of a verified club’s owners and admins only')
+  ok(/Whose event is this\?/.test(gate) && /status === 'verified' && clubMay\('run_events', \{ row: k\.credentials \}\)/.test(gate),
+    'the gate asks "Whose event is this?" of a verified club’s Officers only — one answer each club they run (D218)')
   ok(/EventClubContext\.Provider value=\{whose\.club\}/.test(gate), '  …and hands the answer to the wizard behind it')
   for (const f of ['CreateTripForm', 'CreateLeagueForm', 'CreateKnockoutForm', 'CreateRunForm'].map(n => `app/dashboard/create/${n}.tsx`)) {
     const form = read(f)
@@ -688,12 +748,65 @@ function wiringTests() {
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<CodeBox \/>/.test(view) && /href="\/create"/.test(view), 'the club area’s Home has the code box and Make an event')
   ok(/href=\{`\/club\/\$\{face\.slug\}\/list`\}/.test(view) && /href="\/home\?tab=events"/.test(view),
-    'its Club tab holds the list (owners and admins) and Your events')
+    'its Club tab holds the list (Clubhouse) and Your events')
   ok(fs.existsSync('app/club/[slug]/list/page.tsx') && /notFound\(\)/.test(read('app/club/[slug]/list/page.tsx')),
     'the list lives under the club, a verified club only')
   ok(/window\.location\.replace\(state\.list \? `\/club\/\$\{state\.club\.slug\}\/list`/.test(read('app/account/club/ClubScreen.tsx')),
     '  …and the old address goes on there for a verified club')
   ok(/owner_id', userId/.test(read('app/api/club/store.ts')), 'a member’s own events include the ones they made (D144)')
+
+  section('Stage (k0): one rule for what a club’s people may do (lib/clubMay.ts)')
+  const serverFiles = [...walk('app/api'), ...walk('app/club'), ...walk('app/account'), ...walk('app/dashboard'), ...walk('app/clubhouse'), ...walk('app/home')]
+  const inline = serverFiles.filter(f => /mayAdminister|mayChangeRoles|role === 'admin'|\.in\('role', \['owner', 'admin'\]\)|role IN \('owner', 'admin'\)/.test(code(f)))
+  eq(inline, [], 'nothing checks a role inline: clubMay answers, and the stores’ pre-092 fallback reads LEGACY_RUNNING_ROLES')
+  for (const f of ['app/api/club/competition.ts', 'app/api/club/booking.ts', 'app/api/card/sign.ts', 'app/api/card/certify.ts']) {
+    ok(/clubMay\('run_events'/.test(read(f)), `${f}: Officers run competitions`)
+  }
+  const es = read('app/api/entry/store.ts')
+  ok((es.match(/q\.eq\('officer', true\) : q\.in\('role', LEGACY_RUNNING_ROLES\)/g) ?? []).length === 2, 'a club event’s organisers, and the clubs an account runs, are its Officers (092; the old roles before it)')
+  ok(/withTicks\(t => \{[\s\S]{0,200}q\.eq\('plays_here', true\)/.test(read('app/api/club/bookingStore.ts')), 'the partner search offers only those who play here')
+  const rowsTs = read('app/api/club/rows.ts')
+  ok(/e\.code === '42703' \|\| e\.code === 'PGRST204'/.test(rowsTs) && /ticksMissingAt = Date\.now\(\)/.test(rowsTs), 'before 092 the ticks are read off the role, and asked for again a minute later')
+  ok(/seasonHere = season\.rows\.filter\(r => !r\.club_id \|\| r\.club_id === clubId\)/.test(read('app/api/club/club.ts')), 'season stats are per club: this club’s rounds and the account’s own (D223)')
+
+  section('Stage (k0): many clubs, the header moves between them (D218, D223)')
+  eq(clubSwitch([{ slug: 'pints', name: 'Pints', toSign: 0 }], 'pints'), null, 'one club: nothing changes')
+  const three = [{ slug: 'a', name: 'A', toSign: 0 }, { slug: 'b', name: 'B', toSign: 2 }, { slug: 'c', name: 'C', toSign: 0 }]
+  const sw = clubSwitch(three, 'c')
+  ok(sw?.position === 3 && sw.count === 3 && sw.next.slug === 'a' && sw.dot, 'the third of three: next is the first, and a dot for a card waiting at another')
+  eq(clubSwitch(three, 'b')?.dot, false, '…no dot for this club’s own cards — they lead its Home')
+  const view0 = read('app/club/[slug]/ClubView.tsx')
+  ok(/Members\{switcher && <span className="t-cap font-normal text-ink\/65"> · \{switcher\.position\} of \{switcher\.count\}/.test(view0), '"Members · 1 of 3" (t-cap)')
+  ok(/w-2 h-2 rounded-full bg-accent ring-2 ring-accent-tint/.test(view0), 'the dot: 8px emerald on an emerald-tint ring, on the crest')
+  ok(/if \(!doc\.startViewTransition \|\| reducedMotion\(\)\) \{ go\(\); return \}/.test(view0), 'Reduce Motion, or no view transitions: an immediate swap')
+  const cssK = read('app/globals.css')
+  ok(/\.club-header:has\(\.club-switch:active\) \{ transform: scale\(0\.97\); \}/.test(cssK) && /view-transition-new\(root\) \{ animation-duration: 200ms; animation-timing-function: ease-out; \}/.test(cssK),
+    'the header presses to 97%, the page cross-fades in 200ms ease-out')
+  ok(/rememberTier\(\{ kind: 'club', slug, others: all\.filter/.test(view0), 'the hint moves first, so the next club opens as a member’s (D197)')
+
+  section('Stage (k0): the Clubhouse, its own tree (D212)')
+  ok(fs.existsSync('app/clubhouse/page.tsx') && fs.existsSync('app/clubhouse/[slug]/page.tsx'), 'greendot.live/clubhouse and /clubhouse/<club> (Ross, 16 Nov 2026: one address for every sport)')
+  const lean = [...walk('app/club'), ...walk('app/home'), 'app/account/club/ClubScreen.tsx'].filter(f => /from ['"](@\/app\/clubhouse|\.\.?\/[^'"]*clubhouse)/.test(read(f)))
+  eq(lean, [], 'nothing in the members app imports the Clubhouse — members’ pages get no heavier')
+  const door = read('app/clubhouse/Door.tsx'), room = read('app/clubhouse/[slug]/ClubhouseRoom.tsx'), none = read('app/clubhouse/NoAccess.tsx')
+  ok(/accountLink\('\/clubhouse'\)/.test(door) && /accountLink\(`\/clubhouse\/\$\{slug\}`\)/.test(room), 'signed out: the site’s own sign-in, and back — no second password')
+  ok(/You haven’t been given access to the Clubhouse\./.test(none) && /Your club’s office can grant it\./.test(none) && /variant="secondary"/.test(none),
+    'without it: one card, the way back secondary — no emerald')
+  ok(/clubMay\('open_clubhouse'/.test(read('app/clubhouse/clubhouseClient.ts')) && /<ClubScreen clubId=\{clubId\} whole /.test(room),
+    'with it: the club’s list, numbers in full')
+  ok(!/isTripRoot|app\/golf/.test(door + room), 'not under /golf: the trip tree is untouched')
+
+  section('Migration 092')
+  const m92 = read('supabase/migrations/20260101000092_club_credentials.sql')
+  const b92 = m92.split('\n').filter(l => !l.trim().startsWith('--')).join('\n')
+  ok(/plays_here boolean NOT NULL DEFAULT true/.test(b92) && /officer\s+boolean NOT NULL DEFAULT false/.test(b92) && /clubhouse\s+boolean NOT NULL DEFAULT false/.test(b92),
+    'three ticks: everyone plays here, nobody else ticked by default')
+  ok(/UPDATE club_members SET officer = true, clubhouse = true WHERE role IN \('owner', 'admin'\)/.test(b92), 'today’s owners and admins: Officer and Clubhouse')
+  ok(/IF NEW\.role = 'owner' THEN\s+NEW\.officer := true;\s+NEW\.clubhouse := true;/.test(b92) && !/NEW\.plays_here/.test(b92), 'an owner always holds Officer and Clubhouse — never forced to play')
+  const fn92 = b92.slice(b92.indexOf('CREATE OR REPLACE FUNCTION public.account_trips()'))
+  ok(/AND cm\.officer/.test(fn92) && !/role IN/.test(fn92.slice(0, fn92.indexOf('$$;'))), 'a club’s Officers organise its events')
+  ok(/ALTER TABLE club_activity ENABLE ROW LEVEL SECURITY/.test(b92) && /REVOKE ALL ON public\.club_activity FROM anon, authenticated/.test(b92), 'the activity log: server only')
+  ok(/-- ─── Undo/.test(m92) && /-- ─── Did it land\?/.test(m92) && /PASTE THIS AFTER THE DEPLOY/.test(m92), 'with its undo, its check, and when to paste it')
 
   section('Words (D133)')
   const screens = ['app/account/clubs/ClubsScreen.tsx', 'app/account/club/ClubScreen.tsx', 'app/components/ClubEventCard.tsx'].map(read).join('\n')
@@ -935,7 +1048,9 @@ async function competitionD2Tests() {
   section('Booking from the club\'s list (/api/club/booking)')
   const listRow = (id: string, name: string, userId: string | null, role: 'owner' | 'admin' | 'member' = 'member') =>
     ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role, userId, removedAt: null, onBoards: true })
-  const rows = [listRow('r-ross', 'Ross', 'ross'), listRow('r-dave', 'Dave', 'dave'), listRow('r-ann', 'Ann', null), listRow('r-adm', 'Admin', 'adm', 'admin')]
+  const rows = [listRow('r-ross', 'Ross', 'ross'), listRow('r-dave', 'Dave', 'dave'), listRow('r-ann', 'Ann', null), listRow('r-adm', 'Admin', 'adm', 'admin'),
+    { ...listRow('r-off', 'Office', 'off'), playsHere: false, clubhouse: true, officer: false },
+    { ...listRow('r-ofc', 'Officer', 'ofc'), playsHere: true, clubhouse: false, officer: true }]
   let ps: CompPlayer[] = []
   let bs: Booked[] = []
   const links: string[] = []
@@ -968,6 +1083,8 @@ async function competitionD2Tests() {
   ok(links.includes('ross:p-r-ross'), '…Ross\'s account linked to his own player (D134)')
   const ann = await book('tok-ross', { slot: 1, memberIds: ['r-ann'] })
   ok(ann.status === 409 && !ann.body.ok && /needs a Green Dot account/.test(ann.body.error), 'Ann has no account: every player needs their own (D94, amended)')
+  const office = await book('tok-ross', { slot: 1, memberIds: ['r-off'] })
+  ok(office.status === 409 && !office.body.ok && /isn’t ticked as playing/.test(office.body.error), 'somebody who does not play here is in no field (D209)')
   eq((await book('tok-dave', { slot: 1, memberIds: ['r-dave'] })).status, 409, 'Dave has a time already: refused')
   eq((await book('tok-ross', { slot: 0, memberIds: ['r-adm'] }, new Date(t8 + 60_000))).status, 409, 'after the time has gone: refused')
   const names = await runBooking({ token: 'tok-ross', action: 'names', code: 'COMP01', q: 'an' }, bstore, open)
@@ -975,6 +1092,10 @@ async function competitionD2Tests() {
   eq((await runBooking({ token: 'tok-adm', action: 'withdraw', code: 'COMP01', memberId: 'r-dave' }, bstore, open)).status, 200, 'an admin takes anybody off')
   ok(!bs.some(b => b.playerId === 'p-r-dave') && !ps.some(p => p.id === 'p-r-dave'), '…the booking and its unplayed player gone')
   eq((await runBooking({ token: 'tok-dave', action: 'withdraw', code: 'COMP01', memberId: 'r-ross' }, bstore, open)).status, 403, 'Dave may not take Ross off — not his booking')
+  const offState = await runBooking({ token: 'tok-off', action: 'state', code: 'COMP01' }, bstore, open)
+  const ofcState = await runBooking({ token: 'tok-ofc', action: 'state', code: 'COMP01' }, bstore, open)
+  ok(offState.status === 200 && offState.body.ok && offState.body.admin === false && ofcState.status === 200 && ofcState.body.ok && ofcState.body.admin === true,
+    'an Officer runs the competition on the phone; Clubhouse alone does not (D219)')
   const idx = await runBooking({ token: 'tok-ross', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '13.9' }, bstore, open)
   ok(idx.status === 200 && indexSets[0] === 'r-ross:13.9:ross', 'the start sheet changes the one index, by the member starting the card (D179)')
 
@@ -1398,9 +1519,11 @@ function snappyTests() {
   eq((read('lib/accountClient.ts').match(/forgetAllClubHomes\(\)/g) ?? []).length, 2, '…on signing out and on deleting')
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<div className="club-public-face"><PublicFace face=\{face\} \/><\/div>/.test(view) && /<MembersWait \/>/.test(view), 'the public face and the stand-in are both in the HTML, the mark choosing')
-  ok(/setMembers\(m => m \?\? readClubHome\(face\.slug\)\)/.test(view), 'a hinted phone draws its copy before the first paint of the page')
+  ok(/setMembers\(m => \(m && m\.slug === face\.slug \? m : readClubHome\(face\.slug\)\)\)/.test(view), 'a hinted phone draws its copy before the first paint of the page — never another club’s (D223)')
   ok(/!m\.fromCopy && g\.now\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
-  ok(/forgetClubHome\(face\.slug\)\s*\n\s*notClubMember\(\)/.test(view), 'taken off the list: the copy goes and the public face shows')
+  ok(/forgetClubHome\(face\.slug\)\s*\n\s*if \(clubs\.includes\(face\.slug\)\)/.test(view) && /router\.replace\(`\/club\/\$\{rest\[0\]\}`\)/.test(view)
+    && /window\.location\.replace\('\/home'\)/.test(view) && /return\n\s*\}\n\s*notClubMember\(\)/.test(view),
+    'taken off the list: the copy goes, and the phone moves to its next club, else the personal page; a visitor sees the public face (D223)')
   ok(/if \(storedAccountSession\(\)\) \{ setLost\(true\); return \}/.test(view) && /Could not reach Green Dot — try again\./.test(view), 'a lost signal keeps what is on screen, with Try again')
   const sheet = read('app/globals.css')
   ok(/html\[data-club-member\] \.club-public-face \{ display: none; \}/.test(sheet), 'the public face is never drawn for a hinted phone (D197)')

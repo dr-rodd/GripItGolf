@@ -13,7 +13,8 @@
 
 import { isAccount, type AuthUser } from '@/lib/account'
 import { compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm } from '@/lib/clubComp'
-import { irishToday, mayAdminister } from '@/lib/clubs'
+import { irishToday } from '@/lib/clubs'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { NO_FORMATS } from '@/lib/formats'
 import { toItemRow } from '@/lib/itinerarySync'
 import { unheldPin } from '@/lib/pinHash'
@@ -47,8 +48,8 @@ export async function runNewCompetition(
   const user = await store.userFromToken(input.token)
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
   const mine = (await store.clubsOf(user.id)).find(x => x.club.id === input.clubId)
-  if (!mine || !mine.club.verifiedAt || !mayAdminister(mine.row.role)) {
-    return fail(403, 'Only a verified club’s owners and admins make its competitions.')
+  if (!mine || !mine.club.verifiedAt || !clubMay('run_events', { row: credentialsOf(mine.row) })) {
+    return fail(403, 'Only a verified club’s Officers make its competitions.')
   }
   const form = readCompForm(input.form)
   if (!form) return fail(400, 'Fill in the competition.')

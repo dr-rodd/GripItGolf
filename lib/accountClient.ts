@@ -26,11 +26,12 @@
 // Never throws: every function resolves to an answer the screen can say.
 
 import type { ClubEvent } from './clubs'
+import type { Credentials } from './clubMay'
 import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
-import { forgetTier, readTierHint, rememberTier, storedAccountSession } from './tierHint'
+import { forgetTier, hintClubs, readTierHint, rememberTier, storedAccountSession } from './tierHint'
 import { forgetAllClubHomes } from './clubHomeCopy'
 
 export type Mode = 'upgrade' | 'existing'
@@ -359,8 +360,10 @@ export async function myEvents(): Promise<{ ok: true; events: MyEvent[] } | { ok
 export interface HomeData {
   username: string | null
   events: MyEvent[]
-  /** The verified club this account is on the list of — the phone goes on to it (D148). */
+  /** The club the phone goes on to (D148): the one last used, else the first (D223). */
   club: { slug: string; name: string } | null
+  /** Every verified club this account is on, by name (D218, D223). */
+  clubs: { slug: string; name: string }[]
   season: SeasonRow[]
   courses: Record<string, string>
   /** D179: the account's handicap index, shown and changed on Me. */
@@ -383,8 +386,12 @@ export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: f
   if (r?.status === 401 || r?.status === 403) return { ok: false, signedOut: true, error: ACCOUNT_WORDS.noReach }
   if (r?.status !== 200 || !Array.isArray(r.body.events)) return { ok: false, error: 'Could not load your page — try again.' }
   const b = r.body as Record<string, unknown>
-  const club = b.club && typeof b.club === 'object' ? b.club as HomeData['club'] : null
-  if (club) rememberTier({ kind: 'club', slug: club.slug })
+  const clubs = Array.isArray(b.clubs) ? b.clubs as HomeData['clubs']
+    : b.club && typeof b.club === 'object' ? [b.club as { slug: string; name: string }] : []
+  // D223: the club last used, if the account is still on it; else the first.
+  const last = hintClubs(readTierHint())[0]
+  const club = clubs.find(c => c.slug === last) ?? clubs[0] ?? null
+  if (club) rememberTier({ kind: 'club', slug: club.slug, others: clubs.map(c => c.slug).filter(s => s !== club.slug) })
   else if (readTierHint()?.kind !== 'dot') rememberTier({ kind: 'dot' })
   return {
     ok: true,
@@ -392,6 +399,7 @@ export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: f
       username: typeof b.username === 'string' ? b.username : null,
       events: b.events as MyEvent[],
       club,
+      clubs,
       season: Array.isArray(b.season) ? b.season as SeasonRow[] : [],
       courses: b.courses && typeof b.courses === 'object' ? b.courses as Record<string, string> : {},
       handicapIndex: typeof b.handicapIndex === 'number' ? b.handicapIndex : null,
@@ -480,16 +488,17 @@ export async function deleteAccount(): Promise<Answer> {
 
 // ─── Clubs (stage (c)) ─────────────────────────────────────────
 
-export type ClubRoleWord = 'owner' | 'admin' | 'member'
 export interface ClubSummary {
-  id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'; role: ClubRoleWord
+  id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'
+  /** This account's ticks at the club — lib/clubMay.ts reads them. */
+  credentials: Credentials
   colour: string | null; crestUrl: string | null; artUrl: string | null; artDarkUrl: string | null
   /** D161: the club's home course, or null. */
   homeCourseId?: string | null
 }
 export interface ClubListEntry {
   id: string; name: string; memberNumber: string | null; guiNumber: string | null; email: string | null
-  role: ClubRoleWord; linked: boolean; removed: boolean; onBoards: boolean
+  credentials: Credentials; linked: boolean; removed: boolean; onBoards: boolean
   /** D179: the one index — a linked row's account's, an unlinked row's own. */
   handicapIndex?: number | null
 }
@@ -512,6 +521,8 @@ export interface ClubAnswer {
   toSign?: { code: string; name: string; count: number }[]
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
+  /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
+  myClubs?: { slug: string; name: string; toSign: number }[]
 }
 
 /**

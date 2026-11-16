@@ -4,7 +4,7 @@ import { parseTeeRules } from '@/lib/teeSheet'
 import { handicapStore } from '../handicaps/store'
 import { setIndex } from '../handicaps/handicaps'
 import { serviceStore } from '../entry/store'
-import { ROW_COLS, asRow, clubStore, type RowRow } from './store'
+import { asRow, clubStore, rowCols, withTicks, type RowRow } from './store'
 import type { BookingStore, CompRecord } from './booking'
 import { readRoundLock, readSignatures } from '../card/signatures'
 import { signedOff } from '../card/sign'
@@ -45,20 +45,23 @@ export function bookingStore(db: Db): BookingStore {
     userFromToken: t => clubs.userFromToken(t),
     competition: code => readCompetition(db, code),
     async myRow(clubId, userId) {
-      const { data } = await db.from('club_members').select(ROW_COLS).eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1)
-      const row = ((data ?? []) as RowRow[])[0]
+      const { data } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1))
+      const row = ((data ?? []) as unknown as RowRow[])[0]
       return row ? asRow(row) : null
     },
     async rowsByIds(clubId, ids) {
       if (ids.length === 0) return []
-      const { data, error } = await db.from('club_members').select(ROW_COLS).eq('club_id', clubId).in('id', ids).is('removed_at', null)
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).in('id', ids).is('removed_at', null))
       if (error) throw error
-      return ((data ?? []) as RowRow[]).map(asRow)
+      return ((data ?? []) as unknown as RowRow[]).map(asRow)
     },
     async searchRows(clubId, q, limit) {
       const like = `%${q.replace(/[%_\\]/g, m => `\\${m}`)}%`
-      const { data, error } = await db.from('club_members').select('id, name, user_id').eq('club_id', clubId).is('removed_at', null)
-        .ilike('name', like).order('name').limit(limit)
+      // D209: only those who play here are offered for a field (092; before it, everyone).
+      const { data, error } = await withTicks(t => {
+        const q = db.from('club_members').select('id, name, user_id').eq('club_id', clubId).is('removed_at', null)
+        return (t ? q.eq('plays_here', true) : q).ilike('name', like).order('name').limit(limit)
+      })
       return error ? [] : ((data ?? []) as { id: string; name: string; user_id: string | null }[]).map(r => ({ id: r.id, name: r.name, linked: !!r.user_id }))
     },
     async indexOf(row) {

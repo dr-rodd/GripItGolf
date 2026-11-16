@@ -66,7 +66,7 @@ export default function ClubEventCard({ tripCode, pinSet, isTrip }: {
       <section className={isTrip ? 'mt-8 mb-4' : 'mb-10'}>
         <h2 className="t-h2 text-ink">Run by a club</h2>
         <p className="text-ink/65 text-sm mt-1 leading-snug">
-          Put this {word} under your club: its owners and admins run it on any phone they’re signed in on, and it shows in its
+          Put this {word} under your club: its Officers run it on any phone they’re signed in on, and it shows in its
           people’s lists of events. Nobody else can change it unless you lend them a PIN.
         </p>
         {view.clubs.length > 1 && (
@@ -130,7 +130,7 @@ export default function ClubEventCard({ tripCode, pinSet, isTrip }: {
         </>
       ) : (
         <p className="text-ink/65 text-sm mt-1 leading-snug">
-          {club}’s owners and admins run it and choose who else can change it.
+          {club}’s Officers run it and choose who else can change it.
         </p>
       )}
       {view.mayTakeOut && (

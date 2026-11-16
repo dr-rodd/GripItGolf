@@ -55,6 +55,13 @@ async function main() {
     ok(exists('app/golf/[root]/[tripCode]/layout.tsx') && exists('app/golf/[root]/[tripCode]/page.tsx') && !exists('app/trip'),
       'both golf addresses are one set of pages under app/golf/[root]/[tripCode]')
     ok(exists('app/golf/page.tsx'), '  …beside the golf doorway at /golf, unchanged')
+    // Stage (k0): the Clubhouse is greendot.live/clubhouse, every sport's —
+    // its own tree beside the trips', never under /golf.
+    ok(exists('app/clubhouse/page.tsx') && exists('app/clubhouse/[slug]/page.tsx') && !exists('app/golf/clubhouse'),
+      'the Clubhouse lives at /clubhouse, its own tree, nothing under /golf')
+    eq(isTripRoot('clubhouse'), false, '  …and is never a trip root')
+    ok(/if \(!\/\^\[A-Za-z0-9\]\{6\}\$\/\.test\(code\)\) notFound\(\)/.test(read('app/[code]/page.tsx')),
+      '  …which the short link could never take: it answers six-character codes only, and a named page always wins')
     ok(!exists('proxy.ts') && !exists('middleware.ts') && !exists('src/proxy.ts') && !exists('src/middleware.ts'),
       'no proxy or middleware — one took greendot.live down on 8 Nov 2026')
     const cfg = nextConfig as { rewrites?: unknown; redirects?: () => Promise<{ source: string; destination: string; permanent: boolean }[]> }

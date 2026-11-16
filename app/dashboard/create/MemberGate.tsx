@@ -6,20 +6,20 @@ import LegalLinks from '@/app/components/LegalLinks'
 import { ButtonLink, optionClass } from '@/app/components/ui'
 import { CREATE_NEEDS_ACCOUNT, accountLink } from '@/lib/account'
 import { askClub, readAccount, watchAccount } from '@/lib/accountClient'
-import { mayAdminister } from '@/lib/clubs'
+import { clubMay } from '@/lib/clubMay'
 import { EventClubContext, type EventClub } from './EventClub'
 
 type Gate = 'checking' | 'signedIn' | 'phone'
 
-/** Whose event: not asked yet, being asked (the club this account runs), or answered. */
-type Whose = { kind: 'unknown' } | { kind: 'ask'; club: EventClub } | { kind: 'answered'; club: EventClub | null }
+/** Whose event: not asked yet, being asked (the clubs this account runs), or answered. */
+type Whose = { kind: 'unknown' } | { kind: 'ask'; clubs: EventClub[] } | { kind: 'answered'; club: EventClub | null }
 
-/** The verified club this account runs, if any — one club per account (D150). Fail-soft: none. */
-async function clubRun(): Promise<EventClub | null> {
+/** The verified clubs this account is an Officer of (D218, D219), by name. Fail-soft: none. */
+async function clubsRun(): Promise<EventClub[]> {
   const r = await askClub('mine')
-  if (!r.ok) return null
-  const c = (r.clubs ?? []).find(k => k.status === 'verified' && mayAdminister(k.role))
-  return c ? { id: c.id, name: c.name } : null
+  if (!r.ok) return []
+  return (r.clubs ?? []).filter(k => k.status === 'verified' && clubMay('run_events', { row: k.credentials }))
+    .map(c => ({ id: c.id, name: c.name }))
 }
 
 /**
@@ -46,11 +46,12 @@ export default function MemberGate({ children }: { children: React.ReactNode }) 
       readAccount().then(async a => {
         if (!live) return
         if (!a) { setGate('phone'); return }
-        // Q3, D153: a verified club's owner or admin is asked whose event
-        // this is, once, before the wizard; everybody else goes straight in.
-        const club = await clubRun()
+        // Q3, D153: a verified club's Officer is asked whose event this is,
+        // once, before the wizard — one answer a club they run, and their
+        // own; everybody else goes straight in.
+        const clubs = await clubsRun()
         if (!live) return
-        setWhose(w => (w.kind === 'unknown' ? (club ? { kind: 'ask', club } : { kind: 'answered', club: null }) : w))
+        setWhose(w => (w.kind === 'unknown' ? (clubs.length ? { kind: 'ask', clubs } : { kind: 'answered', club: null }) : w))
         setGate('signedIn')
       })
     }
@@ -66,21 +67,25 @@ export default function MemberGate({ children }: { children: React.ReactNode }) 
   if (gate === 'signedIn' && !CREATE_NEEDS_ACCOUNT) return <>{children}</>
 
   if (gate === 'signedIn' && whose.kind === 'ask') {
-    const { club } = whose
+    const { clubs } = whose
     return (
       <main className="min-h-dvh paper">
         <TripHeader backTo="/create" />
         <div className="flex flex-col items-center px-6 py-12 page-enter">
           <div className="w-full max-w-sm">
             <h1 className="t-h1 text-ink mb-2">Whose event is this?</h1>
-            <p className="text-ink/80 text-[15px] leading-relaxed">You run {club.name}. Make it the club’s, or your own.</p>
+            <p className="text-ink/80 text-[15px] leading-relaxed">
+              {clubs.length === 1 ? `You run ${clubs[0].name}. Make it the club’s, or your own.` : 'Make it one of your clubs’, or your own.'}
+            </p>
             <div className="flex flex-col gap-3 mt-8">
-              <button type="button" onClick={() => setWhose({ kind: 'answered', club })} className={optionClass(false)}>
-                <span className="block text-[17px] font-semibold text-ink">{club.name}’s</span>
-                <span className="block t-cap text-ink/65 mt-0.5">
-                  On the club’s calendar. The club’s owners and admins run it; a PIN for helpers is optional.
-                </span>
-              </button>
+              {clubs.map(club => (
+                <button key={club.id} type="button" onClick={() => setWhose({ kind: 'answered', club })} className={optionClass(false)}>
+                  <span className="block text-[17px] font-semibold text-ink">{club.name}’s</span>
+                  <span className="block t-cap text-ink/65 mt-0.5">
+                    On the club’s calendar. The club’s Officers run it; a PIN for helpers is optional.
+                  </span>
+                </button>
+              ))}
               <button type="button" onClick={() => setWhose({ kind: 'answered', club: null })} className={optionClass(false)}>
                 <span className="block text-[17px] font-semibold text-ink">Just mine</span>
                 <span className="block t-cap text-ink/65 mt-0.5">Yours alone, with a PIN of your own, as any event.</span>

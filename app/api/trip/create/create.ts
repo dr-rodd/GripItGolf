@@ -109,7 +109,7 @@ export async function runCreate(
   if (input.clubId !== undefined && input.clubId !== null) {
     if (typeof input.clubId !== 'string' || !store.adminClubs || !store.setEventClub) return fail(400, 'Not a club this event can go under.')
     club = (await store.adminClubs(userId)).find(k => k.id === input.clubId) ?? null
-    if (!club) return fail(403, 'Only a verified club’s owners and admins make its events.')
+    if (!club) return fail(403, 'Only a verified club’s Officers make its events.')
   }
   const access: ClubAccess | null = club ? (adminPin ? 'pin' : 'admins') : null
 

@@ -15,19 +15,16 @@ import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
 import { readSeason } from '../stats/season'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
+import { TicksNotReady, asRow, isMissingColumn, rowCols, withTicks, type RowRow } from './rows'
+
+export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow }
 
 type Db = ReturnType<typeof createAdminClient>
 
 const CLUB_COLS = 'id, slug, name, verified_at, refused_at, colour, crest_path'
-export const ROW_COLS = 'id, club_id, name, member_number, gui_number, email, role, user_id, removed_at, on_boards'
 const SEND_TIMEOUT_MS = 8000
 
 type ClubRow = { id: string; slug: string; name: string; verified_at: string | null; refused_at: string | null; colour?: string | null; crest_path?: string | null }
-export type RowRow = {
-  id: string; club_id: string; name: string; member_number: string | null; gui_number: string | null
-  email: string | null; role: ClubRole; user_id: string | null; removed_at: string | null; on_boards: boolean
-}
-
 const asClub = (c: ClubRow): ClubRecord => ({
   id: c.id, slug: c.slug, name: c.name, verifiedAt: c.verified_at, refusedAt: c.refused_at,
   colour: c.colour ?? null, crestPath: c.crest_path ?? null,
@@ -44,11 +41,6 @@ async function withArt(db: Db, clubs: ClubRecord[]): Promise<ClubRecord[]> {
   const art = new Map(((data ?? []) as { id: string; art_path: string | null; art_dark_path: string | null }[]).map(r => [r.id, r]))
   return clubs.map(c => ({ ...c, artPath: art.get(c.id)?.art_path ?? null, artDarkPath: art.get(c.id)?.art_dark_path ?? null }))
 }
-export const asRow = (r: RowRow): MemberRecord => ({
-  id: r.id, clubId: r.club_id, name: r.name, memberNumber: r.member_number, guiNumber: r.gui_number,
-  email: r.email, role: r.role, userId: r.user_id, removedAt: r.removed_at, onBoards: r.on_boards,
-})
-
 /** Where a code's email points people: greendot.live, or the preview's own. */
 export function siteOrigin(): string {
   const preview = process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
@@ -155,7 +147,7 @@ export function clubStore(db: Db): ClubStore {
       // there yet) and the caller reads one by one as before.
       const [c, r, p] = await Promise.all([
         db.from('clubs').select(`${CLUB_COLS}, art_path, art_dark_path, home_course_id`).eq('slug', slug).maybeSingle(),
-        db.from('club_members').select(`${ROW_COLS}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1),
+        withTicks(t => db.from('club_members').select(`${rowCols(t)}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1)),
         db.from('trip_private')
           .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash)')
           .eq('clubs.slug', slug),
@@ -163,7 +155,7 @@ export function clubStore(db: Db): ClubStore {
       if (c.error || r.error || p.error) return null
       const cr = c.data as (ClubRow & { art_path: string | null; art_dark_path: string | null; home_course_id: string | null }) | null
       const club = cr ? { ...asClub(cr), artPath: cr.art_path, artDarkPath: cr.art_dark_path, homeCourseId: cr.home_course_id } : null
-      const row = ((r.data ?? []) as RowRow[])[0]
+      const row = ((r.data ?? []) as unknown as RowRow[])[0]
       type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null }
       const privs = (p.data ?? []) as unknown as { club_access: string | null; trips: Trip | Trip[] | null }[]
       const trips = privs.flatMap(x => {
@@ -184,9 +176,9 @@ export function clubStore(db: Db): ClubStore {
       return new Map(comps.flatMap(c => (byTrip.has(c.tripId) ? [[c.code, byTrip.get(c.tripId)!] as [string, CompPhase]] : [])))
     },
     async clubsOf(userId) {
-      const { data, error } = await db.from('club_members').select(ROW_COLS).eq('user_id', userId).is('removed_at', null)
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('user_id', userId).is('removed_at', null))
       if (error) throw error
-      const rows = (data ?? []) as RowRow[]
+      const rows = (data ?? []) as unknown as RowRow[]
       if (rows.length === 0) return []
       const { data: clubs, error: e } = await db.from('clubs').select(CLUB_COLS).in('id', rows.map(r => r.club_id))
       if (e) throw e
@@ -234,10 +226,10 @@ export function clubStore(db: Db): ClubStore {
       // A club's list can pass Supabase's 1,000-row page: read in pages.
       const out: MemberRecord[] = []
       for (let from = 0; ; from += 1000) {
-        const { data, error } = await db.from('club_members').select(ROW_COLS)
-          .eq('club_id', clubId).order('name').order('id').range(from, from + 999)
+        const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t))
+          .eq('club_id', clubId).order('name').order('id').range(from, from + 999))
         if (error) throw error
-        const page = (data ?? []) as RowRow[]
+        const page = (data ?? []) as unknown as RowRow[]
         out.push(...page.map(asRow))
         if (page.length < 1000) break
       }
@@ -258,8 +250,20 @@ export function clubStore(db: Db): ClubStore {
     async updateRow(id, patch) {
       const { error } = await db.from('club_members').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
       if (error?.code === '23505') return 'clash'
+      if (isMissingColumn(error) && ('plays_here' in patch || 'officer' in patch || 'clubhouse' in patch)) throw new TicksNotReady()
       if (error) throw error
       return 'ok'
+    },
+    async logActivity(entries) {
+      if (entries.length === 0) return
+      for (let i = 0; i < entries.length; i += 500) {
+        const { error } = await db.from('club_activity').insert(entries.slice(i, i + 500).map(e => ({
+          club_id: e.clubId, by_user: e.byUser, by_name: e.byName, by_staff: e.byStaff, action: e.action,
+          member_id: e.memberId, member_name: e.memberName, changes: e.changes, batch_id: e.batchId,
+        })))
+        // Before migration 092 there is no log: nothing is lost but the entry.
+        if (error) { if (!isMissingColumn(error) && error.code !== '42P01' && error.code !== 'PGRST205') console.error('club activity not logged:', error); return }
+      }
     },
     async lastInviteAt(memberId) {
       const { data, error } = await db.from('club_invites').select('created_at').eq('member_id', memberId)
@@ -294,9 +298,9 @@ export function clubStore(db: Db): ClubStore {
       return (data ?? []).length === 1
     },
     async row(memberId) {
-      const { data, error } = await db.from('club_members').select(ROW_COLS).eq('id', memberId).maybeSingle()
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('id', memberId).maybeSingle())
       if (error) throw error
-      return data ? asRow(data as RowRow) : null
+      return data ? asRow(data as unknown as RowRow) : null
     },
     async guiHolders(gui) {
       const { data, error } = await db.from('club_members').select('user_id').eq('gui_number', gui)

@@ -230,7 +230,7 @@ function MeTab({ home }: { home: HomeData | null }) {
       {home?.username && <p className="text-ink/80 text-[15px] mt-2">Signed in as {home.username}.</p>}
       {home && <HandicapIndexCard initial={home.handicapIndex} className="mt-6" />}
       <ListGroup className="mt-6">
-        {home?.club && <ListRow href={`/club/${home.club.slug}`} label={home.club.name} hint="Your club’s area" />}
+        {(home?.clubs ?? []).map(c => <ListRow key={c.slug} href={`/club/${c.slug}`} label={c.name} hint="Your club’s area" />)}
         <ListRow href="/account" label="Your account" hint="Username, password, sign out, delete" />
         <ListRow href="/account/clubs" label="Clubs" hint="Join your club with its code, or set one up" />
         <ListRow href="/privacy" label="Privacy" hint="What Green Dot keeps, and for how long" />

@@ -28,7 +28,7 @@
 
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cardScoreRows, type CommitHole, type CommitScoreRow } from '@/lib/cardCommit'
-import { mayAdminister } from '@/lib/clubs'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { anyScored, mergeSaved, type SavedScore } from '@/lib/liveScores'
 import type { MemberRecord } from '../club/club'
 import type { Booked, CompPlayer, CompRecord } from '../club/booking'
@@ -145,7 +145,7 @@ export async function runSign(
   if (!comp) return fail(404, 'No such competition.')
   const me = await store.myRow(comp.clubId, user.id)
   if (!me) return fail(403, 'This competition is for the club’s members. Sign in with the account on its list.')
-  const admin = mayAdminister(me.role)
+  const admin = clubMay('run_events', { row: credentialsOf(me) })
   const at = now.toISOString()
 
   const [players, open, lock] = await Promise.all([

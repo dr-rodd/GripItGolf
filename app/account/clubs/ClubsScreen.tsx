@@ -5,7 +5,8 @@ import { useRouter } from 'next/navigation'
 import BackButton from '@/app/components/BackButton'
 import { ButtonLink, EmptyState, FIELD, FIELD_LABEL, ListGroup, ListRow, Pill, buttonClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
-import { CLUB_STATUS_WORDS, INVITE_LENGTH, clubNameIssue, inviteCodeIssue, roleWord } from '@/lib/clubs'
+import { CLUB_STATUS_WORDS, INVITE_LENGTH, clubNameIssue, inviteCodeIssue } from '@/lib/clubs'
+import { credentialLine } from '@/lib/clubMay'
 import { askClub, readAccount, type ClubSummary } from '@/lib/accountClient'
 
 type State =
@@ -92,7 +93,7 @@ export default function ClubsScreen() {
                     key={c.id}
                     href={`/account/club?id=${encodeURIComponent(c.id)}`}
                     label={c.name}
-                    hint={`${roleWord(c.role, c.name)} · ${CLUB_STATUS_WORDS[c.status]}`}
+                    hint={`${credentialLine(c.credentials, c.name)} · ${CLUB_STATUS_WORDS[c.status]}`}
                     trailing={c.status === 'verified' ? <Pill tone="win">Verified</Pill> : undefined}
                   />
                 ))}
@@ -121,7 +122,7 @@ export default function ClubsScreen() {
             <section className="mt-10">
               <h2 className="t-h2 text-ink">Set up your club</h2>
               <p className="text-ink/65 text-sm mt-1">
-                For a club’s owners and admins. Green Dot checks each club before it’s verified; you can build its list meanwhile.
+                For the people who run a club. Green Dot checks each club before it’s verified; you can build its list meanwhile.
               </p>
               <form onSubmit={make} className="mt-4">
                 <label htmlFor="club-name" className={FIELD_LABEL}>Club name</label>

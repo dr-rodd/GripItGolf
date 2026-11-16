@@ -3,6 +3,8 @@
 // `entry_attempts` and its retry limit through `checkPin`.
 
 import { parseClubAccess } from '@/lib/clubs'
+import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
+import { withTicks } from '../club/rows'
 import { retagSummaries } from '../stats/retag'
 import type { NextRequest } from 'next/server'
 import type { createAdminClient } from '@/lib/supabase-admin'
@@ -23,8 +25,12 @@ export async function eventClub(db: ReturnType<typeof createAdminClient>, tripId
   if (!p?.club_id) return none
   const [club, admins] = await Promise.all([
     db.from('clubs').select('name, verified_at').eq('id', p.club_id).maybeSingle(),
-    db.from('club_members').select('user_id').eq('club_id', p.club_id).in('role', ['owner', 'admin'])
-      .is('removed_at', null).not('user_id', 'is', null),
+    // The club's Officers (092, lib/clubMay.ts) are its events' organisers;
+    // before 092, the roles that meant it.
+    withTicks(t => {
+      const q = db.from('club_members').select('user_id').eq('club_id', p.club_id).is('removed_at', null).not('user_id', 'is', null)
+      return t ? q.eq('officer', true) : q.in('role', LEGACY_RUNNING_ROLES)
+    }),
   ])
   const c = (club.error ? null : club.data) as { name?: string; verified_at?: string | null } | null
   return {
@@ -157,8 +163,11 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
   return {
     ...serviceStore(db),
     async adminClubs(userId) {
-      const rows = await db.from('club_members').select('club_id').eq('user_id', userId)
-        .in('role', ['owner', 'admin']).is('removed_at', null)
+      // The clubs whose events this account runs: its Officer rows (092; the old roles before it).
+      const rows = await withTicks(t => {
+        const q = db.from('club_members').select('club_id').eq('user_id', userId).is('removed_at', null)
+        return t ? q.eq('officer', true) : q.in('role', LEGACY_RUNNING_ROLES)
+      })
       // Before migration 086 nobody runs a club.
       if (rows.error || !rows.data?.length) return []
       const { data, error } = await db.from('clubs').select('id, name')

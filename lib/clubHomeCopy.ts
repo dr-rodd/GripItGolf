@@ -41,7 +41,7 @@ export function readClubHome(slug: string): ClubMembers | null {
   try {
     const m = JSON.parse(window.localStorage.getItem(keyOf(userId, slug)) ?? 'null') as ClubMembers | null
     if (!m || typeof m !== 'object' || typeof m.clubId !== 'string' || !Array.isArray(m.events)) return null
-    return { ...m, toSign: [], fromCopy: true }
+    return { ...m, slug, toSign: [], fromCopy: true }
   } catch {
     return null
   }

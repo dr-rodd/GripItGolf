@@ -29,7 +29,7 @@ import { legacyPinHash } from '../lib/pinHash'
 import type { MyEvent } from '../lib/account'
 import type { AttemptStore } from '../app/api/entry/entry'
 import vm from 'vm'
-import { TIER_BOOT_SCRIPT, TIER_KEY, homeOf, parseTierHint, serialiseTierHint } from '../lib/tierHint'
+import { MAX_HINT_CLUBS, TIER_BOOT_SCRIPT, TIER_KEY, hintClubs, homeOf, parseTierHint, serialiseTierHint } from '../lib/tierHint'
 import { sealJson } from '../lib/signedState'
 import type { Membership } from '../lib/membership'
 
@@ -505,8 +505,8 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/NewCompetition.tsx', 'app/club/[slug]/comp/[code]/CompAdmin.tsx', 'app/club/[slug]/comp/[code]/CompAhead.tsx', 'app/club/[slug]/comp/[code]/CompDoor.tsx', 'app/club/[slug]/comp/[code]/CompManage.tsx', 'app/club/[slug]/comp/[code]/CompSigning.tsx', 'app/club/[slug]/comp/[code]/CompSummaryAction.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
-    'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), a club competition\'s door, booking and New competition (stage (d2)), and a member\'s home (D148)')
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/NewCompetition.tsx', 'app/club/[slug]/comp/[code]/CompAdmin.tsx', 'app/club/[slug]/comp/[code]/CompAhead.tsx', 'app/club/[slug]/comp/[code]/CompDoor.tsx', 'app/club/[slug]/comp/[code]/CompManage.tsx', 'app/club/[slug]/comp/[code]/CompSigning.tsx', 'app/club/[slug]/comp/[code]/CompSummaryAction.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx', 'app/clubhouse/[slug]/ClubhouseRoom.tsx', 'app/clubhouse/clubhouseClient.ts', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
+    'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), a club competition\'s door, booking and New competition (stage (d2)), a member\'s home (D148), and the Clubhouse\'s door (stage (k0))')
   ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
     '  …which only asks whether this phone is signed in')
   ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/home/EventsTab.tsx'), '  …the account screen and the Events tab (was My events)')
@@ -607,6 +607,17 @@ async function tierTests() {
   eq([bootAt('/club/lahinch/comp/AB12CD', 'club:lahinch'), [...marked]], [null, []], '…nor on a competition page, which has no public face')
   eq([bootAt('/club/lahinch', 'dot'), [...marked]], [null, []], '…nor without the club’s hint')
 
+  section('An account on several clubs (D218, D223): the hint names them all, the last used first')
+  eq(parseTierHint('club:pints|lahinch'), { kind: 'club', slug: 'pints', others: ['lahinch'] }, 'read: the club last used, then the others')
+  eq(serialiseTierHint({ kind: 'club', slug: 'lahinch', others: ['pints', 'lahinch', 'pints'] }), 'club:lahinch|pints', 'kept once each, the last used first')
+  eq(hintClubs(parseTierHint('club:pints|lahinch')), ['pints', 'lahinch'], 'every club it names')
+  eq(parseTierHint('club:pints|Ross O’Grady'), null, 'one name that is not an address spoils the hint')
+  eq(parseTierHint(`club:${Array.from({ length: 21 }, (_, i) => `c${i}`).join('|')}`), null, `at most ${MAX_HINT_CLUBS} clubs`)
+  eq(bootAt('/', 'club:pints|lahinch'), '/club/pints', 'the front page opens the club last used')
+  eq(bootAt('/home', 'club:pints|lahinch'), '/club/pints', '…as does /home alone')
+  eq([bootAt('/club/lahinch', 'club:pints|lahinch'), [...marked]], [null, ['data-club-member']], 'any club it names is drawn as a member’s from the first paint')
+  eq([bootAt('/club/ballybunion', 'club:pints|lahinch'), [...marked]], [null, []], '…never another')
+
   section('The personal page’s one ask (Q5)')
   const now = new Date('2026-11-14T12:00:00Z')
   const s = new Stand()
@@ -621,11 +632,15 @@ async function tierTests() {
     'a Dot member: who, the events, no club')
   eq(plain.status === 200 && plain.body.season, [], '…and no season where the store has none')
   const withClub: AccountStore = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
-    homeClub: async () => ({ slug: 'lahinch', name: 'Lahinch' }),
+    homeClubs: async () => [{ slug: 'lahinch', name: 'Lahinch' }, { slug: 'pints', name: 'Pints' }],
     seasonFor: async (_u: string, year: number) => ({ rows: year === 2026 ? [{ round_id: 'r', trip_id: 't', played_on: '2026-05-01', holes: 18, gross: 80, par: 72, points: 34, origin: 'club', club_id: 'c', course_id: 'c1' }] : [], courses: { c1: 'Lahinch -- Old' } }),
   })
   const club = await runAccount({ token: 'ta', action: 'home' }, withClub, now)
   ok(club.status === 200 && club.body.club?.slug === 'lahinch', 'a Club member is told their club, and the phone goes on to it (D148)')
+  eq(club.status === 200 ? club.body.clubs?.map(c => c.slug) : null, ['lahinch', 'pints'], '…every club, by name — the phone opens the one it last used (D223)')
+  const client0 = read('lib/accountClient.ts')
+  ok(/const last = hintClubs\(readTierHint\(\)\)\[0\]/.test(client0) && /clubs\.find\(c => c\.slug === last\) \?\? clubs\[0\]/.test(client0),
+    '  …the last used if the account is still on it, else the first')
   ok(club.status === 200 && club.body.season?.length === 1 && club.body.courses?.c1 === 'Lahinch -- Old', '…the season read for this year in Ireland')
 
   section('…answered first, tidied after (D195)')
@@ -656,7 +671,7 @@ async function tierTests() {
     '  …never on reading no sign-in (D192): a failed read is not a sign-out')
   ok(/storedAccountSession\(\) \? \{ ok: false, error: ACCOUNT_WORDS\.noReach \} : \{ ok: false, signedOut: true/.test(client),
     '  …the home page sends a phone to the front only when no sign-in is kept at all, or the server says so')
-  ok(/rememberTier\(\{ kind: 'club', slug: face\.slug \}\)/.test(read('app/club/[slug]/ClubView.tsx')), 'the club page notes a Club member')
+  ok(/rememberTier\(\{ kind: 'club', slug: face\.slug, others: r\.myClubs/.test(read('app/club/[slug]/ClubView.tsx')), 'the club page notes a Club member, this club now the last used')
   const landing = read('app/Landing.tsx')
   ok(/!readTierHint\(\) && storedAccountSession\(\)/.test(landing), 'a phone signed in before the hint existed is noticed on the front page, once')
   ok(!/@\/lib\/accountClient/.test(landing), '…without loading the account code there')

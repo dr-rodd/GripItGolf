@@ -6,9 +6,9 @@ import Toggle from '@/app/components/Toggle'
 import HandicapField from '@/app/components/HandicapField'
 import { FIELD, FIELD_LABEL, ListGroup, Pill, buttonClass } from '@/app/components/ui'
 import {
-  CLUB_STATUS_WORDS, MAX_LIST_ROWS, clubMembersWord, listRowIssue, cleanRow, mayAdminister, mayChangeRoles,
-  parseMemberList, roleWord, type ClubRole,
+  CLUB_STATUS_WORDS, MAX_LIST_ROWS, clubMembersWord, listRowIssue, cleanRow, parseMemberList,
 } from '@/lib/clubs'
+import { CREDENTIAL_WORDS, clubMay, credentialLine, type ClubAct, type CredentialKey } from '@/lib/clubMay'
 import { indexLabel } from '@/lib/handicapIndex'
 import { askClub, type ClubListEntry, type ClubSummary } from '@/lib/accountClient'
 import ClubLook from './ClubLook'
@@ -24,19 +24,27 @@ const SHOWN = 60
 
 const blankRow = { name: '', memberNumber: '', guiNumber: '', email: '' }
 
+/** Which grant each tick needs (lib/clubMay.ts), for drawing it greyed with why. */
+const GRANT_FOR: Record<CredentialKey, ClubAct> = {
+  playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner',
+}
+
 /**
- * One club's page. Its owners and admins keep the list here: add one
+ * One club's page. Whoever holds Clubhouse keeps the list here: add one
  * person, paste a whole list (matched by GUI number, then member number,
  * then email — nobody is taken off by being missing), change a row, send its
  * code, take it off the list (the row is kept, the link cut, their account
- * and golf untouched) or put it back. Numbers are only ever shown partly
- * hidden; typing one replaces it. Anybody else on the list sees that they
- * are on it.
+ * and golf untouched) or put it back, and tick each row's credentials. On
+ * the phone numbers are shown partly hidden and typing one replaces it; in
+ * the Clubhouse (`whole`) they are shown in full. Anybody else on the list
+ * sees that they are on it.
  */
-export default function ClubScreen({ clubId: given, back }: {
+export default function ClubScreen({ clubId: given, back, whole = false }: {
   /** Stage (h): drawn under the club's own address, `/club/[slug]/list`, which knows the club. */
   clubId?: string
   back?: { href: string; label: string }
+  /** Stage (k0): the Clubhouse's numbers in full (Ross, 16 Nov 2026), on a wider page. */
+  whole?: boolean
 } = {}) {
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [id, setId] = useState('')
@@ -51,10 +59,10 @@ export default function ClubScreen({ clubId: given, back }: {
   const load = useCallback(async (clubId: string) => {
     const r = await askClub('club', { clubId })
     if (!r.ok || !r.club) { setState({ kind: 'failed', error: r.ok ? 'No such club.' : r.error }); return }
-    if (!mayAdminister(r.club.role)) { setState({ kind: 'ready', club: r.club, list: null }); return }
-    const m = await askClub('members', { clubId })
+    if (!clubMay('keep_list', { row: r.club.credentials })) { setState({ kind: 'ready', club: r.club, list: null }); return }
+    const m = await askClub('members', { clubId, whole })
     setState(m.ok && m.club ? { kind: 'ready', club: m.club, list: m.list ?? [] } : { kind: 'failed', error: m.ok ? 'Could not read the list.' : m.error })
-  }, [])
+  }, [whole])
 
   useEffect(() => {
     const clubId = given ?? new URLSearchParams(window.location.search).get('id') ?? ''
@@ -75,7 +83,7 @@ export default function ClubScreen({ clubId: given, back }: {
 
   async function act(action: string, body: Record<string, unknown>, done?: string) {
     setBusy(true); setNote(null)
-    const r = await askClub(action, { clubId: id, ...body })
+    const r = await askClub(action, { clubId: id, whole, ...body })
     setBusy(false)
     if (!r.ok) { setNote({ tone: 'error', text: r.error }); return false }
     if (r.list && r.club) setState({ kind: 'ready', club: r.club, list: r.list })
@@ -102,7 +110,7 @@ export default function ClubScreen({ clubId: given, back }: {
 
   if (state.kind !== 'ready') {
     return (
-      <Frame back={back}>
+      <Frame back={back} wide={whole}>
         <h1 className="t-h1 text-ink">Your club</h1>
         {state.kind === 'failed' && <p className="t-cap text-rust-deep mt-6" role="alert">{state.error}</p>}
       </Frame>
@@ -114,7 +122,7 @@ export default function ClubScreen({ clubId: given, back }: {
 
   if (!list) {
     return (
-      <Frame back={back}>
+      <Frame back={back} wide={whole}>
         <h1 className="t-h1 text-ink">{club.name}</h1>
         <p className="text-ink/80 text-[15px] leading-relaxed mt-4">
           You’re on {club.name}’s list.{' '}
@@ -129,7 +137,7 @@ export default function ClubScreen({ clubId: given, back }: {
   const current = list.filter(r => !r.removed).length
 
   return (
-    <Frame back={back}>
+    <Frame back={back} wide={whole}>
       <h1 className="t-h1 text-ink">{club.name}</h1>
       <p className="text-ink/65 text-sm mt-1">
         {CLUB_STATUS_WORDS[club.status]}{club.status === 'pending' ? '. You can build the list meanwhile.' : '.'}
@@ -227,7 +235,7 @@ export default function ClubScreen({ clubId: given, back }: {
                 <span className="flex-1 min-w-0">
                   <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}</span>
                   <span className="block t-cap text-ink/65 mt-0.5">
-                    {[r.role !== 'member' ? roleWord(r.role, club.name) : null, r.memberNumber ? `No. ${r.memberNumber}` : null,
+                    {[r.credentials.owner || r.credentials.officer || r.credentials.clubhouse || !r.credentials.playsHere ? credentialLine(r.credentials, club.name) : null, r.memberNumber ? `No. ${r.memberNumber}` : null,
                       r.guiNumber ? `GUI ${r.guiNumber}` : null,
                       r.handicapIndex !== null && r.handicapIndex !== undefined ? `Index ${indexLabel(r.handicapIndex)}` : null,
                       r.removed ? 'Taken off the list' : null].filter(Boolean).join(' · ') || (r.email ?? 'No email')}
@@ -236,7 +244,7 @@ export default function ClubScreen({ clubId: given, back }: {
                 {r.linked && <Pill tone="win">Linked</Pill>}
               </button>
               {open === r.id && (
-                <RowEditor key={r.id} row={r} club={club} busy={busy}
+                <RowEditor key={r.id} row={r} club={club} busy={busy} whole={whole}
                   onAct={(action, body, done) => act(action, { memberId: r.id, ...body }, done)} />
               )}
             </div>
@@ -250,29 +258,32 @@ export default function ClubScreen({ clubId: given, back }: {
   )
 }
 
-function Frame({ children, back }: { children: React.ReactNode; back?: { href: string; label: string } }) {
+function Frame({ children, back, wide }: { children: React.ReactNode; back?: { href: string; label: string }; wide?: boolean }) {
+  const width = wide ? 'max-w-2xl' : 'max-w-md'
   return (
     <main className="min-h-dvh paper flex flex-col">
-      <div className="w-full max-w-md mx-auto px-4 pt-2">
+      <div className={`w-full ${width} mx-auto px-4 pt-2`}>
         <BackButton href={back?.href ?? '/account/clubs'} label={back?.label ?? 'Clubs'} />
       </div>
-      <div className="flex-1 w-full max-w-md mx-auto px-4 pt-4 pb-10">{children}</div>
+      <div className={`flex-1 w-full ${width} mx-auto px-4 pt-4 pb-10`}>{children}</div>
     </main>
   )
 }
 
 /** One row opened: change it, send its code, take it off or put it back. */
-function RowEditor({ row, club, busy, onAct }: {
+function RowEditor({ row, club, busy, whole, onAct }: {
   row: ClubListEntry
   club: ClubSummary
   busy: boolean
+  whole: boolean
   onAct: (action: string, body: Record<string, unknown>, done?: string) => Promise<boolean>
 }) {
   const [name, setName] = useState(row.name)
-  const [memberNumber, setMemberNumber] = useState('')
-  const [guiNumber, setGuiNumber] = useState('')
+  // In the Clubhouse the numbers arrive whole and are changed in place;
+  // on the phone they arrive partly hidden and a typed one replaces them.
+  const [memberNumber, setMemberNumber] = useState(whole ? row.memberNumber ?? '' : '')
+  const [guiNumber, setGuiNumber] = useState(whole ? row.guiNumber ?? '' : '')
   const [email, setEmail] = useState(row.email ?? '')
-  const [role, setRole] = useState<ClubRole>(row.role)
   const shownIndex = row.handicapIndex === null || row.handicapIndex === undefined ? '' : indexLabel(row.handicapIndex)
   const [index, setIndex] = useState(shownIndex)
   const [confirmRemove, setConfirmRemove] = useState(false)
@@ -280,12 +291,11 @@ function RowEditor({ row, club, busy, onAct }: {
   function save() {
     const body: Record<string, unknown> = {}
     if (name.trim() !== row.name) body.name = name
-    if (memberNumber.trim()) body.memberNumber = memberNumber
-    if (guiNumber.trim()) body.guiNumber = guiNumber
+    if (whole ? memberNumber.trim() !== (row.memberNumber ?? '') : memberNumber.trim()) body.memberNumber = memberNumber
+    if (whole ? guiNumber.trim() !== (row.guiNumber ?? '') : guiNumber.trim()) body.guiNumber = guiNumber
     if (email.trim().toLowerCase() !== (row.email ?? '')) body.email = email
-    if (role !== row.role) body.role = role
     if (index.trim() !== shownIndex) body.handicapIndex = index.trim()
-    void onAct('update', body, 'Saved.').then(ok => { if (ok) { setMemberNumber(''); setGuiNumber('') } })
+    void onAct('update', body, 'Saved.').then(ok => { if (ok && !whole) { setMemberNumber(''); setGuiNumber('') } })
   }
 
   return (
@@ -306,7 +316,7 @@ function RowEditor({ row, club, busy, onAct }: {
             onChange={e => setGuiNumber(e.target.value)} className={FIELD} />
         </div>
       </div>
-      <p className="t-cap text-ink/65 -mt-2">Numbers are shown partly hidden. Type one to replace it.</p>
+      {!whole && <p className="t-cap text-ink/65 -mt-2">Numbers are shown partly hidden. Type one to replace it.</p>}
       <div>
         <label htmlFor={`row-index-${row.id}`} className={FIELD_LABEL}>Handicap index</label>
         <HandicapField id={`row-index-${row.id}`} value={index} onChange={setIndex} placeholder="Not set" className={FIELD} />
@@ -320,15 +330,7 @@ function RowEditor({ row, club, busy, onAct }: {
         <label htmlFor={`row-email-${row.id}`} className={FIELD_LABEL}>Email</label>
         <input id={`row-email-${row.id}`} type="email" autoCapitalize="none" value={email} onChange={e => setEmail(e.target.value)} className={FIELD} />
       </div>
-      {mayChangeRoles(club.role) && (
-        <div>
-          <label htmlFor={`row-role-${row.id}`} className={FIELD_LABEL}>Role</label>
-          <select id={`row-role-${row.id}`} value={role} onChange={e => setRole(e.target.value as ClubRole)} className={FIELD}>
-            {(['member', 'admin', 'owner'] as ClubRole[]).map(r => <option key={r} value={r}>{roleWord(r, club.name)}</option>)}
-          </select>
-          <p className="t-cap text-ink/65 mt-2">Owners and admins keep this list and run the club’s events.</p>
-        </div>
-      )}
+      <Credentials row={row} club={club} busy={busy} onAct={onAct} />
       <div className="flex flex-wrap gap-3">
         <button type="button" disabled={busy} onClick={save} className={buttonClass('secondary', false)}>Save</button>
         {!row.linked && !row.removed && row.email && (
@@ -369,6 +371,43 @@ function RowEditor({ row, club, busy, onAct }: {
       ) : (
         <button type="button" onClick={() => setConfirmRemove(true)} className={buttonClass('quiet', false)}>Take off the list</button>
       )}
+    </div>
+  )
+}
+
+/**
+ * The ticks (D219, D220): each saved on the spot, each given only by whoever
+ * lib/clubMay.ts says — greyed with why for anybody else. Owner is shown
+ * only to those who make owners; an owner's Officer and Clubhouse are held.
+ */
+function Credentials({ row, club, busy, onAct }: {
+  row: ClubListEntry
+  club: ClubSummary
+  busy: boolean
+  onAct: (action: string, body: Record<string, unknown>, done?: string) => Promise<boolean>
+}) {
+  const asker = { row: club.credentials }
+  const c = row.credentials
+  return (
+    <div className="space-y-3">
+      <p className={FIELD_LABEL}>Credentials</p>
+      {CREDENTIAL_WORDS.filter(w => w.key !== 'owner' || c.owner || clubMay('grant_owner', asker)).map(w => {
+        const allowed = clubMay(GRANT_FOR[w.key], asker)
+        const held = c.owner && (w.key === 'officer' || w.key === 'clubhouse')
+        const why = !allowed
+          ? (w.key === 'clubhouse' || w.key === 'owner' ? 'Only an owner or Green Dot gives this.' : 'Only someone with Clubhouse gives this.')
+          : held ? 'An owner always holds this.' : null
+        return (
+          <div key={w.key} className="flex items-start gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="t-label text-ink">{w.label}</p>
+              <p className="t-cap text-ink/65 leading-snug">{why ?? w.line}</p>
+            </div>
+            <Toggle checked={c[w.key]} disabled={busy || !allowed || held} label={w.label}
+              onChange={v => void onAct('update', { [w.key]: v }, 'Saved.')} />
+          </div>
+        )
+      })}
     </div>
   )
 }

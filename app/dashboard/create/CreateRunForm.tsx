@@ -298,7 +298,7 @@ export default function CreateRunForm() {
                 area, and Forgot PIN? emails a link to choose a new one to the address
                 this challenge was made with.
               </> : <>
-                {club?.name ?? 'The club'}’s owners and admins run this challenge on any phone they sign in on.
+                {club?.name ?? 'The club'}’s Officers run this challenge on any phone they sign in on.
                 Lend helpers a PIN any time from the organiser area.
               </>}
             </p>

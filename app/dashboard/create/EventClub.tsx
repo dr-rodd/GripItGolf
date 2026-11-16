@@ -37,7 +37,7 @@ export function ClubPinNote({ club }: { club: EventClub }) {
     <div className={`px-4 py-4 ${cardClass()}`}>
       <p className="text-ink text-sm font-medium">{club.name}’s event</p>
       <p className="text-ink/65 text-[13px] mt-0.5 leading-snug">
-        Its owners and admins run it on any phone they sign in on. Lend a PIN to helpers? It’s optional:
+        Its Officers run it on any phone they sign in on. Lend a PIN to helpers? It’s optional:
         leave it blank and the settings stay with the club’s admins.
       </p>
     </div>

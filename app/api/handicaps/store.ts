@@ -31,9 +31,16 @@ export function handicapStore(db: Db): HandicapStore {
       return error || !data ? null : num((data as { handicap_index: unknown }).handicap_index)
     },
     async rowIndexesOf(clubId) {
-      const { data, error } = await db.from('club_members').select('id, handicap_index').eq('club_id', clubId).not('handicap_index', 'is', null)
-      if (error || !data) return new Map()
-      return new Map((data as { id: string; handicap_index: unknown }[]).map(r => [r.id, Number(r.handicap_index)]))
+      // Past Supabase's 1,000-row page: a big club's list kept its index
+      // blank past the thousandth row before this read in pages.
+      const out = new Map<string, number>()
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await db.from('club_members').select('id, handicap_index').eq('club_id', clubId)
+          .not('handicap_index', 'is', null).order('id').range(from, from + 999)
+        if (error || !data) return out
+        for (const r of data as { id: string; handicap_index: unknown }[]) out.set(r.id, Number(r.handicap_index))
+        if (data.length < 1000) return out
+      }
     },
     async setRowIndex(memberId, value) {
       const { error } = await db.from('club_members').update({ handicap_index: value }).eq('id', memberId)

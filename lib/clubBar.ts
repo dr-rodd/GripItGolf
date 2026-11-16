@@ -72,3 +72,24 @@ export function barOf(pathname: string, slug: string): BarState {
   const section = SECTION_ORDER.find(s => SECTION_PATH[s] === m[2])
   return section ? { set: 'comp', code, active: section } : null
 }
+
+/** Where this club sits among the account's clubs: which of how many, the next, and whether a card waits at another. */
+export interface ClubSwitch {
+  position: number
+  count: number
+  next: { slug: string; name: string }
+  dot: boolean
+  all: string[]
+}
+
+/** The header's switch (D223), from the account's clubs in name order — none for one club. */
+export function clubSwitch(clubs: { slug: string; name: string; toSign: number }[] | undefined, here: string): ClubSwitch | null {
+  if (!clubs || clubs.length < 2) return null
+  const i = clubs.findIndex(c => c.slug === here)
+  if (i < 0) return null
+  const next = clubs[(i + 1) % clubs.length]
+  return {
+    position: i + 1, count: clubs.length, next: { slug: next.slug, name: next.name },
+    dot: clubs.some(c => c.slug !== here && c.toSign > 0), all: clubs.map(c => c.slug),
+  }
+}

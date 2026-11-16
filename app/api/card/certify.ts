@@ -22,7 +22,7 @@
 // is the service-role store.
 
 import { isAccount, type AuthUser } from '@/lib/account'
-import { mayAdminister } from '@/lib/clubs'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { irishInstant } from '@/lib/irishTime'
 import type { MemberRecord } from '../club/club'
 import type { Booked, CompRecord } from '../club/booking'
@@ -152,7 +152,7 @@ export async function runCertify(
   const comp = await store.competition(str(input.code).trim().toUpperCase())
   if (!comp) return fail(404, 'No such competition.')
   const me = await store.myRow(comp.clubId, user.id)
-  if (!me || !mayAdminister(me.role)) return fail(403, 'Only the club’s owners and admins certify a competition.')
+  if (!me || !clubMay('run_events', { row: credentialsOf(me) })) return fail(403, 'Only the club’s Officers certify a competition.')
   const at = now.toISOString()
 
   const [lock, players, bookings, cards, sigs] = await Promise.all([

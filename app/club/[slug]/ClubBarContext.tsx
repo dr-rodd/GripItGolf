@@ -2,17 +2,23 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { usePathname } from 'next/navigation'
-import type { ClubEvent, ClubRole } from '@/lib/clubs'
+import type { ClubEvent } from '@/lib/clubs'
+import type { Credentials } from '@/lib/clubMay'
 import type { SeasonRow } from '@/lib/cardSummary'
 
 export type ClubTab = 'home' | 'comps' | 'board' | 'stats' | 'club'
 
 /** What the members home holds once the club has said this phone is on its list. */
 export interface ClubMembers {
+  /** The club's address, so a home is never drawn under another club's face (D223). */
+  slug?: string
   clubId: string
-  /** D161: the club's home course, for New competition (owners and admins). */
+  /** D161: the club's home course, for New competition (Officers). */
   homeCourseId: string | null
-  role: ClubRole
+  /** This account's ticks here (lib/clubMay.ts). A copy kept before stage (k0) has none: read as nothing held. */
+  credentials?: Credentials
+  /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
+  myClubs?: { slug: string; name: string; toSign: number }[]
   name: string
   events: ClubEvent[]
   entries: string[]

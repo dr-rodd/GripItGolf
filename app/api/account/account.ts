@@ -87,8 +87,8 @@ export interface AccountStore {
   soleOwnerOf?(userId: string): Promise<string[]>
 
   // Stage (g) — the personal page (D143, D148).
-  /** The verified club this account is on the list of, linked and not taken off — its address and name. */
-  homeClub?(userId: string): Promise<{ slug: string; name: string } | null>
+  /** The verified clubs this account is on the list of, linked and not taken off — address and name, by name (D218, D223). */
+  homeClubs?(userId: string): Promise<{ slug: string; name: string }[]>
   /** This account's own players' signed cards this year (migration 088), and the courses' names. */
   seasonFor?(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
 
@@ -106,7 +106,10 @@ export type AccountBody = {
   error?: string
   session?: { access_token: string; refresh_token: string }
   events?: MyEvent[]
+  /** The first of `clubs`, for a page from before an account could be on several. */
   club?: { slug: string; name: string } | null
+  /** Every verified club this account is on (D218, D223); the phone opens the one it last used. */
+  clubs?: { slug: string; name: string }[]
   season?: SeasonRow[]
   courses?: Record<string, string>
   /** D179: this account's handicap index — one value, shown and changed on Me. */
@@ -252,16 +255,16 @@ export async function runAccount(
       await store.syncLinks(user.id)
     }
     const year = Number(irishToday(now).slice(0, 4))
-    const [username, events, club, season, handicapIndex] = await Promise.all([
+    const [username, events, clubs, season, handicapIndex] = await Promise.all([
       store.usernameOf(user.id),
       store.eventsFor(user.id),
-      store.homeClub ? store.homeClub(user.id) : Promise.resolve(null),
+      store.homeClubs ? store.homeClubs(user.id) : Promise.resolve([]),
       store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [], courses: {} }),
       store.handicaps ? store.handicaps.accountIndex(user.id) : Promise.resolve(null),
     ])
     return {
       status: 200,
-      body: { ok: true, username, events: sortMyEvents(events), club, season: season.rows, courses: season.courses, handicapIndex },
+      body: { ok: true, username, events: sortMyEvents(events), club: clubs[0] ?? null, clubs, season: season.rows, courses: season.courses, handicapIndex },
       after: tidy,
     }
   }

@@ -694,7 +694,7 @@ export default function CreateTripForm({ matchPlay = false, onExit }: {
             <div className={`mb-4 px-4 py-3 ${cardClass('flat')}`}>
               <p className="text-ink/80 text-[13px] leading-snug">
                 {club && !passcode
-                  ? `${club.name}’s owners and admins run this ${isTournament ? 'event' : 'trip'} on any phone they sign in on. Lend helpers a PIN any time from its settings.`
+                  ? `${club.name}’s Officers run this ${isTournament ? 'event' : 'trip'} on any phone they sign in on. Lend helpers a PIN any time from its settings.`
                   : isTournament
                   ? 'Your organiser PIN is set. Keep it safe — you can change it in the organiser area, and Forgot PIN? emails a link to choose a new one to the address this event was made with.'
                   : 'Settings are locked. Keep your passcode safe — you can change it in Trip Setup, and Forgot passcode? emails a link to choose a new one to the address this trip was made with.'}

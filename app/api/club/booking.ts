@@ -18,7 +18,7 @@
 
 import { isAccount, type AuthUser } from '@/lib/account'
 import { bookingIssue, withdrawIssue } from '@/lib/clubComp'
-import { mayAdminister } from '@/lib/clubs'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { readIndex } from '@/lib/handicapIndex'
 import { teeClocks, type TeeRules } from '@/lib/teeSheet'
 import type { MemberRecord } from './club'
@@ -101,7 +101,8 @@ export async function runBooking(
   if (!comp) return fail(404, 'No such competition.')
   const me = await store.myRow(comp.clubId, user.id)
   if (!me) return fail(403, 'This competition is for the club’s members. Sign in with the account on its list.')
-  const admin = mayAdminister(me.role)
+  // Officers run the competition (D219): book anyone, change or withdraw any time.
+  const admin = clubMay('run_events', { row: credentialsOf(me) })
   const tokenValue = store.doorToken(comp)
   const door = tokenValue ? { code: comp.code, value: tokenValue } : null
 
@@ -136,6 +137,9 @@ export async function runBooking(
     const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken, adding: rows.length, admin, now: now.getTime() })
     if (issue) return fail(409, issue)
     // Every player needs their own account (D94's exception, amended).
+    // D209: somebody who does not play here is in no field.
+    const notPlaying = rows.find(r => !clubMay('play', { row: credentialsOf(r) }))
+    if (notPlaying) return fail(409, `${notPlaying.name} isn’t ticked as playing at the club.`)
     const noAccount = rows.find(r => !r.userId)
     if (noAccount) return fail(409, `${noAccount.name} needs a Green Dot account linked to the club’s list to play.`)
     const already = rows.find(r => bookings.some(b => b.playerId === playerOfRow.get(r.id)))

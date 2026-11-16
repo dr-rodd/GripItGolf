@@ -379,6 +379,21 @@ html.dark .club-grain { display: block; }
   backdrop-filter: blur(14px);
 }
 
+/* D223: an account on several clubs taps the header for the next. The
+   header presses to 97% (the kit's press, 120ms ease-out); the page then
+   cross-fades to the next club's art and colour in 200ms ease-out while the
+   header holds its place (a view transition of its own name). Reduce
+   Motion, or a browser without view transitions: an immediate swap. */
+.club-header { transition: transform 120ms ease-out; view-transition-name: club-header; }
+.club-header:has(.club-switch:active) { transform: scale(0.97); }
+.club-switch:focus-visible { outline: 2px solid var(--color-accent-deep); outline-offset: 2px; }
+html.club-switch-fade::view-transition-old(root),
+html.club-switch-fade::view-transition-new(root) { animation-duration: 200ms; animation-timing-function: ease-out; }
+html.club-switch-fade::view-transition-group(club-header) { animation-duration: 0s; }
+@media (prefers-reduced-motion: reduce) {
+  .club-header:has(.club-switch:active) { transform: none; }
+}
+
 /* ── The club footer and a competition's set (D180 amended, D188) ──
    One bar, drawn by the club's layout (`ClubTabBar`), so opening a
    competition from Comps changes its set in place: Board, Stats and Club

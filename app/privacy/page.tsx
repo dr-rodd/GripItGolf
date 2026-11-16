@@ -142,14 +142,17 @@ export default function PrivacyPage() {
         <p>
           A golf club on Green Dot can keep its list of members here: each person&apos;s <B>name</B>, the
           club&apos;s own <B>member number</B>, their national <B>(GUI) membership number</B> if they have
-          one, their <B>email address</B>, and whether they are an owner, admin or member. The club&apos;s
-          owners and admins add, change and remove those details, and are responsible for them being
+          one, their <B>email address</B>, and what they may do for the club: whether they play there, run
+          its competitions (an Officer) or work in its office, the Clubhouse. The club&apos;s
+          Clubhouse staff and owners add, change and remove those details, and are responsible for them being
           accurate; Green Dot holds them for the club, so members can link their own account and see
           the club&apos;s events and results. A member links their account themselves, with a code the
           club emails to the address on its list (the code is kept only in a scrambled form, and works
-          once, for {INVITE_DAYS} days). Only the club&apos;s owners and admins see the list, and
-          membership numbers are shown partly hidden. One GUI number links to one account. Green Dot
-          checks each club before it is verified.
+          once, for {INVITE_DAYS} days). Only the club&apos;s Clubhouse staff and owners see the list:
+          on a phone membership numbers are shown partly hidden, and in the Clubhouse, the club&apos;s
+          office on a computer, in full. Every change to the list is recorded — who made it, when, and
+          what it was — so the club can see its own history. One GUI number links to one account, and an
+          account may be on several clubs&apos; lists. Green Dot checks each club before it is verified.
         </p>
         <p className="mt-3">
           <B>Your handicap index</B> is kept on your Green Dot account, one value: you set it on Me,

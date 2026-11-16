@@ -299,7 +299,7 @@ export async function runEventClub(
     if (!trip.clubId) return view(null, null, null)
     // The club's own, or the event's owner — never a helper lent the PIN.
     if (!clubs.some(k => k.id === trip.clubId) && trip.ownerId !== c.userId) {
-      return fail(403, `Only ${trip.clubName ?? 'the club'}’s owners and admins, or the event’s owner, take it out of the club.`)
+      return fail(403, `Only ${trip.clubName ?? 'the club'}’s Officers, or the event’s owner, take it out of the club.`)
     }
     await store.setEventClub(trip.id, null, null)
     const m = mergeGrant(await store.readMembership(c.userId, trip.id), { organiser: true }, now)
@@ -326,7 +326,7 @@ export async function runEventClub(
 
   // Who edits a club event: the club's own say.
   if (!trip.clubId) return fail(400, 'This event isn’t a club’s.')
-  if (!clubs.some(k => k.id === trip.clubId)) return fail(403, `Only ${trip.clubName ?? 'the club'}’s owners and admins change who edits its events.`)
+  if (!clubs.some(k => k.id === trip.clubId)) return fail(403, `Only ${trip.clubName ?? 'the club'}’s Officers change who edits its events.`)
   const access = parseClubAccess(input.access)
   if (!access) return fail(400, 'Choose who can edit.')
   if (access === 'admins') await lockToAdmins()

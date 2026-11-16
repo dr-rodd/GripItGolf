@@ -1,7 +1,7 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { voidScorecard } from '@/lib/scorecardVoid'
 import { why } from '@/lib/writeFailure'
-import { ROW_COLS, asRow, type RowRow } from '../club/store'
+import { asRow, rowCols, withTicks, type RowRow } from '../club/store'
 import { summaryDeps } from '../stats/store'
 import { writeRoundSummaries } from '../stats/summaries'
 import { signStore } from './store'
@@ -27,8 +27,8 @@ export function certifyStore(db: Db): CertifyStore {
     signatures: r => s.signatures(r),
     async rowsByAccounts(clubId, userIds) {
       if (userIds.length === 0) return []
-      const { data, error } = await db.from('club_members').select(ROW_COLS).eq('club_id', clubId).in('user_id', userIds)
-      return error ? [] : ((data ?? []) as RowRow[]).map(asRow)
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).in('user_id', userIds))
+      return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow)
     },
     async liveCards(roundId) {
       const { data: live } = await db.from('live_rounds').select('id, round_id, status').eq('round_id', roundId)
