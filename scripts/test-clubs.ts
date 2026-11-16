@@ -23,6 +23,8 @@ import { FEATURES, mayUseFeature } from '../lib/tiers'
 import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
+import type { ListQuery } from '../app/api/club/clubhouse'
+import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { inviteHash, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
@@ -293,6 +295,45 @@ class Stand implements ClubStore {
   async removeImage(path: string) { this.stored.delete(path) }
   activity: ActivityEntry[] = []
   async logActivity(entries: ActivityEntry[]) { this.activity.push(...entries) }
+  // Stage (k1), the Clubhouse
+  staff = new Set<string>()
+  invitedAt = new Map<string, string>()
+  async rowOf(clubId: string, userId: string) { return [...this.list.values()].find(r => r.clubId === clubId && r.userId === userId && !r.removedAt) ?? null }
+  async isStaff(userId: string) { return this.staff.has(userId) }
+  async searchClubs(q: string) { return [...this.clubs.values()].filter(c => c.verifiedAt && c.name.toLowerCase().includes(q.toLowerCase())) }
+  async markInvited(id: string, at: string) { this.invitedAt.set(id, at) }
+  async listPage(clubId: string, o: ListQuery) {
+    const q = o.q.toLowerCase()
+    const all = [...this.list.values()].filter(r => r.clubId === clubId)
+      .filter(r => !q || [r.name, r.email, r.memberNumber, r.guiNumber].some(v => (v ?? '').toLowerCase().includes(q)))
+      .filter(r => {
+        const c = credentialsOf(r), live = !r.removedAt, inv = this.invitedAt.has(r.id)
+        switch (o.filter) {
+          case 'off': return !live
+          case 'joined': return live && !!r.userId
+          case 'invited': return live && !r.userId && inv
+          case 'not_invited': return live && !r.userId && !inv
+          case 'plays': return live && c.playsHere
+          case 'not_playing': return live && !c.playsHere
+          case 'officer': return live && c.officer
+          case 'clubhouse': return live && c.clubhouse
+          default: return live
+        }
+      })
+      .sort((a, b) => String(a[o.sort] ?? '').localeCompare(String(b[o.sort] ?? '')) * (o.desc ? -1 : 1))
+    return { rows: all.slice(o.page * o.size, o.page * o.size + o.size).map(r => ({ ...r, invitedAt: this.invitedAt.get(r.id) ?? null, ownIndex: null })), total: all.length }
+  }
+  async listCounts(clubId: string): Promise<ListCounts> {
+    const rows = [...this.list.values()].filter(r => r.clubId === clubId)
+    const live = rows.filter(r => !r.removedAt)
+    const joined = live.filter(r => r.userId).length
+    return {
+      onList: live.length, joined, invited: live.filter(r => !r.userId && this.invitedAt.has(r.id)).length, notJoined: live.length - joined,
+      off: rows.length - live.length, playsHere: live.filter(r => credentialsOf(r).playsHere).length,
+      officer: live.filter(r => credentialsOf(r).officer).length, clubhouse: live.filter(r => credentialsOf(r).clubhouse).length,
+      noEmail: live.filter(r => !r.userId && !r.email).length,
+    }
+  }
 }
 
 const member = (id: string, email: string): AuthUser => ({ id, isAnonymous: false, email, emailConfirmed: true })
@@ -1532,8 +1573,93 @@ function snappyTests() {
     'the fade is 160ms ease-out, and none under Reduce Motion')
 }
 
+async function clubhouseTests() {
+  section('Stage (k1): the Clubhouse’s rules (lib/clubhouse.ts)')
+  eq([standingOf({ linked: true, removed: false, invitedAt: null }), standingOf({ linked: false, removed: false, invitedAt: 'x' }),
+    standingOf({ linked: false, removed: false, invitedAt: null }), standingOf({ linked: true, removed: true, invitedAt: null })],
+    ['joined', 'invited', 'not_invited', 'off'], 'Joined, Invited, Not invited, Taken off')
+  eq(cleanSearch('  O’Neill, (Seán)%_ '), 'O’Neill Seán', 'a search loses what the database reads as its own')
+  eq([pageLine(0, 0), pageLine(0, 12), pageLine(1, 312)], ['Nobody', '12 people', '51–100 of 312'], 'where the page stands')
+  eq(PAGE_SIZE, 50, '50 rows a page (D207)')
+  eq(LIST_FILTERS.map(f => f.key).length, 9, 'nine ways to narrow the list')
+  eq([clubhouseHref('pints'), clubhouseHref('pints', 'members'), sectionAt('/clubhouse/pints/members', 'pints'), sectionAt('/clubhouse/pints', 'pints')],
+    ['/clubhouse/pints', '/clubhouse/pints/members', 'members', 'overview'], 'the sections’ addresses')
+  const csv = listCsv([{ id: '1', name: '=HYPERLINK("x")', email: 'a@b.ie', memberNumber: '12', guiNumber: '3110002', handicapIndex: -1.5,
+    credentials: { owner: false, playsHere: true, officer: true, clubhouse: false }, linked: true, removed: false, invitedAt: null, onBoards: true }])
+  ok(csv.startsWith('Name,Email,Member number,GUI number,Handicap index,Standing,Plays here,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
+    'the download: headed for pasting back, numbers whole, a plus index as +, a formula defused')
+  const pasted = parseMemberList(csv)
+  ok(pasted.rows.length === 1 && pasted.rows[0].guiNumber === '3110002' && pasted.rows[0].email === 'a@b.ie', '…and pasting it back reads it')
+  const counts: ListCounts = { onList: 10, joined: 4, invited: 2, notJoined: 6, off: 1, playsHere: 9, officer: 2, clubhouse: 1, noEmail: 1 }
+  const needs = needsYou({ base: '/clubhouse/p', counts, phases: [{ code: 'AB12CD', name: 'Medal', phase: 'awaiting' }], clubSlug: 'p', officer: true })
+  eq(needs.map(n => n.key), ['certify-AB12CD', 'not-invited', 'no-email'], 'Needs you: a competition to certify, people never sent a code, people with no email')
+  ok(/3 people have an email and no code yet/.test(needs[1].line), '…counted: six not joined, two invited, one with no email')
+  eq(needsYou({ base: '/c', counts: { ...counts, notJoined: 0, noEmail: 0 }, phases: [], clubSlug: 'p', officer: false }), [], '…and nothing when nothing needs the office')
+
+  section('Stage (k1): the Clubhouse on the server (/api/club)')
+  const s = new Stand()
+  const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie'), gd = member('gd', 'staff@greendot.live'), eve = member('eve', 'eve@x.ie')
+  ;[ross, dave, gd, eve].forEach(u => s.add(u))
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
+  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
+  await ask('tok-ross', 'add', { clubId, rows: Array.from({ length: 60 }, (_, i) => ({ name: `Player ${String(i).padStart(2, '0')}`, guiNumber: `31100${String(i).padStart(2, '0')}`, email: i % 10 === 0 ? '' : `p${i}@x.ie` })) })
+  const daveRow = [...s.list.values()].find(r => r.name === 'Player 01')!
+  s.list.set(daveRow.id, { ...daveRow, userId: 'dave' })
+  const door = await ask('tok-ross', 'clubhouse', { slug: 'pints-golf-club' })
+  ok(door.status === 200 && door.body.club?.credentials.clubhouse === true && door.body.club.staff === false, 'the owner opens the Clubhouse')
+  eq((await ask('tok-dave', 'clubhouse', { slug: 'pints-golf-club' })).status, 403, 'a plain member is told they have no access')
+  eq((await ask('tok-gd', 'clubhouse', { slug: 'pints-golf-club' })).status, 403, '…as is anybody not staff')
+  s.staff.add('gd')
+  const staffDoor = await ask('tok-gd', 'clubhouse', { slug: 'pints-golf-club' })
+  ok(staffDoor.status === 200 && staffDoor.body.club?.staff === true && staffDoor.body.me?.name === STAFF_NAME, 'Green Dot staff open any club (D222)')
+  ok(s.activity.some(a => a.action === 'staff.open' && a.byStaff && a.byName === STAFF_NAME), '…and the club’s log says "Green Dot staff" was in')
+  const found = await ask('tok-gd', 'find', { q: 'pints' })
+  ok(found.status === 200 && found.body.clubs?.[0]?.slug === 'pints-golf-club', '…finding it by search')
+  eq((await ask('tok-ross', 'find', { q: 'pints' })).status, 403, 'only staff search for clubs')
+  const p0 = await ask('tok-ross', 'page', { clubId })
+  ok(p0.status === 200 && p0.body.grid?.length === 50 && p0.body.total === 61, '50 a page, the total beside them')
+  ok(p0.status === 200 && !!p0.body.grid?.some(r => r.guiNumber === '3110002'), '…numbers whole in the Clubhouse')
+  eq((await ask('tok-dave', 'export', { clubId })).status, 403, 'nobody without Clubhouse downloads the list')
+  eq((await ask('tok-dave', 'page', { clubId })).status, 403, '…or reads a page of it')
+  const p1 = await ask('tok-ross', 'page', { clubId, page: 1 })
+  eq(p1.status === 200 ? p1.body.grid?.length : -1, 11, 'the second page holds the rest')
+  const found2 = await ask('tok-ross', 'page', { clubId, q: '3110045' })
+  eq(found2.status === 200 ? found2.body.grid?.map(r => r.name) : null, ['Player 45'], 'search reads the numbers too')
+  const joined = await ask('tok-ross', 'page', { clubId, filter: 'joined' })
+  eq(joined.status === 200 ? joined.body.grid?.map(r => r.name).sort() : null, ['Player 01', 'Ross'], 'filtered on the server: joined')
+  const desc = await ask('tok-ross', 'page', { clubId, sort: 'name', desc: true })
+  eq(desc.status === 200 ? desc.body.grid?.[0]?.name : null, 'Ross', 'ordered by a column, either way')
+  const ov = await ask('tok-ross', 'overview', { clubId })
+  ok(ov.status === 200 && ov.body.counts?.onList === 61 && ov.body.counts.joined === 2 && ov.body.counts.noEmail === 6, 'the Overview’s counts')
+  ok(ov.status === 200 && (ov.body.needs ?? []).some(n => n.key === 'not-invited'), '…and what needs the office')
+  const ids = (p0.status === 200 ? p0.body.grid ?? [] : []).filter(r => /Player 0[2-4]/.test(r.name)).map(r => r.id)
+  const officers = await ask('tok-ross', 'bulk', { clubId, memberIds: ids, op: 'tick', key: 'officer', value: true })
+  ok(officers.status === 200 && officers.body.done === 3 && ids.every(id => s.list.get(id)!.officer === true), 'ticked rows made Officers in one go')
+  ok(s.activity.filter(a => a.action === 'credentials' && a.batchId).length === 3, '…each logged, under one batch')
+  const noCh = await ask('tok-ross', 'bulk', { clubId, memberIds: ids, op: 'tick', key: 'clubhouse', value: true })
+  ok(noCh.status === 200 && noCh.body.done === 3, 'an owner gives Clubhouse in bulk')
+  const staffCh = await ask('tok-gd', 'bulk', { clubId, memberIds: [daveRow.id], op: 'tick', key: 'clubhouse', value: true })
+  ok(staffCh.status === 200 && staffCh.body.done === 1, 'staff give Clubhouse too')
+  ok(s.activity.some(a => a.memberId === daveRow.id && a.byStaff && a.byName === STAFF_NAME), '…shown to the club as Green Dot staff')
+  const p2 = ids[0]
+  s.list.set(p2, { ...s.list.get(p2)!, userId: 'eve' })
+  const office = await ask('tok-eve', 'bulk', { clubId, memberIds: [daveRow.id], op: 'tick', key: 'clubhouse', value: false })
+  ok(office.status === 200 && !!office.body.failed?.[0]?.why.startsWith('Only an owner'), 'Clubhouse cannot take Clubhouse away — said by name, the rest done')
+  const sent = await ask('tok-ross', 'bulk', { clubId, memberIds: ids.slice(1), op: 'invite' })
+  ok(sent.status === 200 && sent.body.done === 2 && ids.slice(1).every(id => s.invitedAt.has(id)), 'codes emailed to the ticked, each marked Invited (093)')
+  const csvOut = await ask('tok-ross', 'export', { clubId })
+  ok(csvOut.status === 200 && (csvOut.body.csv ?? '').split('\r\n').length === 63 && s.activity.some(a => a.action === 'list.download'), 'the download: every row, logged')
+  const slim = await ask('tok-ross', 'update', { clubId, memberId: ids[2], name: 'Seán Byrne', slim: true })
+  ok(slim.status === 200 && !slim.body.list && s.list.get(ids[2])!.name === 'Seán Byrne', 'a cell changed in place answers without the whole list')
+  const staffEdit = await ask('tok-gd', 'update', { clubId, memberId: ids[2], email: 'sean@x.ie', slim: true })
+  ok(staffEdit.status === 200 && s.list.get(ids[2])!.email === 'sean@x.ie', 'staff change a row at a club not theirs')
+}
+
 async function main() {
   ruleTests()
+  await clubhouseTests()
   await routeTests()
   await eventTests()
   lookTests()

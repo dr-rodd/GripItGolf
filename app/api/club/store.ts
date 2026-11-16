@@ -15,7 +15,10 @@ import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
 import { readSeason } from '../stats/season'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
-import { TicksNotReady, asRow, isMissingColumn, rowCols, withTicks, type RowRow } from './rows'
+import type { ListQuery, PageRecord } from './clubhouse'
+import { SORT_COLUMN, type ListCounts } from '@/lib/clubhouse'
+import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
+import { TicksNotReady, asRow, isMissingColumn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
 
 export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow }
 
@@ -130,6 +133,82 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
     }, now))
   }
   return out
+}
+
+/** Whether migration 093's column is in: tried, and not again for a minute after it is found missing. */
+let invitedMissingAt = 0
+const invitedOn = () => Date.now() - invitedMissingAt > 60_000
+
+/**
+ * A page of the Clubhouse's grid (D207): searched, filtered and ordered by
+ * the database, 50 rows (or 1,000 for the download) and the count of all
+ * that match — one round trip — then each row's own index and when its code
+ * went, for those rows alone. Every part fail-soft before 092 and 093.
+ */
+export async function readListPage(db: Db, clubId: string, o: ListQuery): Promise<{ rows: PageRecord[]; total: number }> {
+  const run = (ticks: boolean, invited: boolean) => {
+    let q = db.from('club_members').select(`${rowCols(ticks)}${invited ? ', invited_at' : ''}`, { count: 'exact' }).eq('club_id', clubId)
+    if (o.q) {
+      const like = `%${o.q}%`
+      q = q.or(`name.ilike.${like},email.ilike.${like},member_number.ilike.${like},gui_number.ilike.${like}`)
+    }
+    const live = () => q.is('removed_at', null)
+    switch (o.filter) {
+      case 'off': q = q.not('removed_at', 'is', null); break
+      case 'joined': q = live().not('user_id', 'is', null); break
+      case 'invited': q = invited ? live().is('user_id', null).not('invited_at', 'is', null) : live().is('user_id', null); break
+      case 'not_invited': q = invited ? live().is('user_id', null).is('invited_at', null) : live().is('user_id', null); break
+      case 'plays': q = ticks ? live().eq('plays_here', true) : live(); break
+      case 'not_playing': q = ticks ? live().eq('plays_here', false) : live().eq('id', '00000000-0000-0000-0000-000000000000'); break
+      case 'officer': q = ticks ? live().eq('officer', true) : live().in('role', LEGACY_RUNNING_ROLES); break
+      case 'clubhouse': q = ticks ? live().eq('clubhouse', true) : live().in('role', LEGACY_RUNNING_ROLES); break
+      default: q = live()
+    }
+    return q.order(SORT_COLUMN[o.sort], { ascending: !o.desc, nullsFirst: false }).order('id').range(o.page * o.size, o.page * o.size + o.size - 1)
+  }
+  // Two columns may be missing (092's ticks, 093's invited_at): the error says which.
+  let ticks = ticksOn(), invited = invitedOn()
+  let r = await run(ticks, invited)
+  for (let i = 0; i < 2 && r.error && isMissingColumn(r.error); i++) {
+    if (invited && /invited_at/.test((r.error as { message?: string }).message ?? '')) { invited = false; invitedMissingAt = Date.now() }
+    else if (ticks) { ticks = false; ticksMissing() }
+    else break
+    r = await run(ticks, invited)
+  }
+  if (r.error) throw r.error
+  const raw = (r.data ?? []) as unknown as (RowRow & { invited_at?: string | null })[]
+  const ids = raw.map(x => x.id)
+  // The unlinked rows' own index (089), for these rows alone.
+  const own = ids.length ? await db.from('club_members').select('id, handicap_index').in('id', ids).not('handicap_index', 'is', null) : { data: [], error: null }
+  const ownOf = new Map((own.error ? [] : (own.data ?? []) as { id: string; handicap_index: unknown }[]).map(x => [x.id, Number(x.handicap_index)]))
+  return {
+    rows: raw.map(x => ({ ...asRow(x), invitedAt: x.invited_at ?? null, ownIndex: ownOf.get(x.id) ?? null })),
+    total: r.count ?? raw.length,
+  }
+}
+
+/** The list's counts for the Overview and the filters, all at once — head counts, no rows read. */
+export async function readListCounts(db: Db, clubId: string): Promise<ListCounts> {
+  const base = () => db.from('club_members').select('id', { count: 'exact', head: true }).eq('club_id', clubId)
+  const live = () => base().is('removed_at', null)
+  const n = async (q: PromiseLike<{ count: number | null; error: { code?: string } | null }>): Promise<number | null> => {
+    const r = await q
+    return r.error ? null : r.count ?? 0
+  }
+  const [onList, joined, invited, off, playsHere, officer, clubhouse, noEmail] = await Promise.all([
+    n(live()), n(live().not('user_id', 'is', null)),
+    n(live().is('user_id', null).not('invited_at', 'is', null)),
+    n(base().not('removed_at', 'is', null)),
+    n(live().eq('plays_here', true)), n(live().eq('officer', true)), n(live().eq('clubhouse', true)),
+    n(live().is('user_id', null).is('email', null)),
+  ])
+  // Before 092 the ticks are read off the role.
+  const [legacyRun] = officer === null ? await Promise.all([n(live().in('role', LEGACY_RUNNING_ROLES))]) : [null]
+  const on = onList ?? 0, j = joined ?? 0
+  return {
+    onList: on, joined: j, invited, notJoined: Math.max(0, on - j), off: off ?? 0,
+    playsHere: playsHere ?? on, officer: officer ?? legacyRun ?? 0, clubhouse: clubhouse ?? legacyRun ?? 0, noEmail: noEmail ?? 0,
+  }
 }
 
 export function clubStore(db: Db): ClubStore {
@@ -436,6 +515,38 @@ export function clubStore(db: Db): ClubStore {
       for (const [tripId, b] of best) out[codeOf.get(tripId)!] = { name: nameOf.get(b.player_id) ?? '', points: b.points }
       return out
     },
+    // ─── Stage (k1), the Clubhouse ───────────────────────────────
+    async rowOf(clubId, userId) {
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t))
+        .eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1))
+      if (error) throw error
+      const row = ((data ?? []) as unknown as RowRow[])[0]
+      return row ? asRow(row) : null
+    },
+    async isStaff(userId) {
+      // Before migration 093 nobody is.
+      const { data, error } = await db.from('green_dot_staff').select('user_id').eq('user_id', userId).maybeSingle()
+      return !error && !!data
+    },
+    async searchClubs(q) {
+      const words = q.split(' ').filter(Boolean)
+      let query = db.from('clubs').select(CLUB_COLS).not('verified_at', 'is', null)
+      for (const w of words) query = query.ilike('name', `%${w}%`)
+      const { data, error } = await query.order('name').limit(20)
+      if (error) throw error
+      return withArt(db, ((data ?? []) as ClubRow[]).map(asClub))
+    },
+    async listPage(clubId, o) {
+      return readListPage(db, clubId, o)
+    },
+    async listCounts(clubId) {
+      return readListCounts(db, clubId)
+    },
+    async markInvited(memberId, at) {
+      // Before 093 there is no column: the standing simply says Not joined.
+      await db.from('club_members').update({ invited_at: at }).eq('id', memberId)
+    },
+
     async putImage(path, bytes) {
       const { error } = await db.storage.from('club-assets').upload(path, bytes, { contentType: 'image/webp', upsert: false, cacheControl: '31536000' })
       if (error) throw error

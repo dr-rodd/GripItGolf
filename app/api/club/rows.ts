@@ -30,11 +30,19 @@ export function isMissingColumn(e: { code?: string } | null | undefined): boolea
 export function rowCols(ticks: boolean): string {
   return ticks ? `${BASE_ROW_COLS}, ${TICK_COLS}` : BASE_ROW_COLS
 }
+/** Whether to name the tick columns now. */
+export function ticksOn(): boolean {
+  return Date.now() - ticksMissingAt > 60_000
+}
+/** The tick columns were found missing: read off the role for a minute. */
+export function ticksMissing() {
+  ticksMissingAt = Date.now()
+}
 export async function withTicks<R extends { error: { code?: string } | null }>(run: (ticks: boolean) => PromiseLike<R>): Promise<R> {
-  const on = Date.now() - ticksMissingAt > 60_000
+  const on = ticksOn()
   const r = await run(on)
   if (on && isMissingColumn(r.error)) {
-    ticksMissingAt = Date.now()
+    ticksMissing()
     return run(false)
   }
   return r

@@ -23,12 +23,14 @@
 //   row. One GUI number to one account: a clash is held for the club. An
 //   account may be on many clubs' lists (D218, D223).
 
-import { createHash } from 'crypto'
 import { readIndex } from '@/lib/handicapIndex'
 import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../handicaps/handicaps'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cleanHex } from '@/lib/clubColour'
 import type { SeasonRow } from '@/lib/cardSummary'
+import type { ListCounts, GridRow, Need } from '@/lib/clubhouse'
+import { STAFF_NAME } from '@/lib/clubhouse'
+import { isClubhouseAction, runClubhouse, type ClubhouseStore } from './clubhouse'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
 import {
   clubMay, credentialChangeIssue, credentialsOf, removeIssue, storedRole, withChange,
@@ -38,7 +40,7 @@ import {
   INVITE_DAYS, INVITE_RESEND_MINUTES, INVITE_TRY_LIMIT, MAX_CLUBS_MADE, MAX_LIST_ROWS,
   clubNameIssue, clubSlug, clubStatus, cleanRow, inviteCodeFrom, inviteCodeIssue, inviteEmail,
   listRowIssue, maskNumber, nextSlug, normaliseClubName,
-  normaliseInviteCode, planList, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
+  planList, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
   clubEventWhen, irishToday,
   type ClubEvent, type ClubImageKind, type ClubRole, type ClubStatus, type ListRow,
 } from '@/lib/clubs'
@@ -100,7 +102,7 @@ export interface ClubHomeFirst {
   comps: { tripId: string; code: string }[]
 }
 
-export interface ClubStore {
+export interface ClubStore extends ClubhouseStore {
   userFromToken(token: string): Promise<AuthUser | null>
   /** The read-only home's token check, local where the project's keys allow (D195). */
   readerFromToken?(token: string): Promise<AuthUser | null>
@@ -185,6 +187,8 @@ export interface ClubSummary {
   id: string; slug: string; name: string; status: ClubStatus
   /** This account's ticks at the club (lib/clubMay.ts) — what a screen draws from. */
   credentials: Credentials
+  /** Stage (k1), D222: the asker is Green Dot staff, in the Clubhouse. */
+  staff?: boolean
   colour: string | null
   /** D161: the club's home course, or null. */
   homeCourseId: string | null
@@ -235,6 +239,15 @@ export type ClubBody = {
    * header's next club and its dot. Only asked for an account on more than one.
    */
   myClubs?: { slug: string; name: string; toSign: number }[]
+  /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, Needs you, a bulk change's outcome, the file. */
+  grid?: GridRow[]
+  total?: number
+  counts?: ListCounts
+  byPhase?: Record<string, number>
+  needs?: Need[]
+  done?: number
+  failed?: { name: string; why: string }[]
+  csv?: string
 }
 
 export type ClubOutcome =
@@ -249,15 +262,8 @@ const NOT_ON = 'Only someone with Clubhouse keeps the club’s list.'
 const NOT_LOOK = 'Only someone with Clubhouse changes the club’s look.'
 const TICKS_LATER = 'The ticks aren’t set up yet — try again later.'
 
-/** An invite code as kept: only ever hashed. */
-export function inviteHash(code: string): string {
-  return createHash('sha256').update(`club-invite|${normaliseInviteCode(code)}`, 'utf8').digest('hex')
-}
-
-/** The count of wrong codes from one address, the address only ever hashed. */
-export function inviteTryKey(address: string): string {
-  return `club-code:${createHash('sha256').update(`club|code|${address}`, 'utf8').digest('hex')}`
-}
+export { inviteHash, inviteTryKey } from './invites'
+import { inviteHash, inviteTryKey } from './invites'
 
 let assetBase: string | undefined
 function summary(club: ClubRecord, row: MemberRecord | Credentials): ClubSummary {
@@ -293,10 +299,13 @@ async function listOf(store: ClubStore, rows: MemberRecord[], whole = false): Pr
   return rows.map(r => entry(r, indexes.get(r.id) ?? null, whole))
 }
 
-/** Who is asking, as clubMay reads them: their row's ticks (not taken off), and whether Green Dot staff (stage (k1)). */
+/** Who is asking, as clubMay reads them: their row's ticks (not taken off). Staff are asked for where they may act (stage (k1)). */
 function askerOf(row: MemberRecord | null | undefined): Asker {
   return { row: row && !row.removedAt ? credentialsOf(row) : null, staff: false }
 }
+
+/** What somebody holds who is on no row here — Green Dot staff, at a club not theirs. */
+const NO_CREDENTIALS: Credentials = { owner: false, playsHere: false, officer: false, clubhouse: false }
 
 const may = (act: ClubAct, row: MemberRecord | null | undefined) => clubMay(act, askerOf(row))
 
@@ -438,28 +447,35 @@ export async function runClub(
     }
   }
 
-  // ─── Everything below is one club's, its owners' and admins' ───
+  // Stage (k1): the Clubhouse's own reads and bulk changes.
+  if (isClubhouseAction(input.action)) return runClubhouse(input, user, store, now, summary)
+
+  // ─── Everything below is one club's, its Clubhouse holders' and Green Dot staff's ───
   const clubId = str(input.clubId)
   if (!clubId) return fail(400, 'Which club?')
   const club = await store.club(clubId)
   if (!club) return fail(404, 'No such club.')
   const rows = await store.rows(clubId)
   const mine = rows.find(r => r.userId === user.id && !r.removedAt) ?? null
-  if (!mine) return fail(403, 'You’re not on this club’s list.')
+  // D222: Green Dot staff reach any club's list from the Clubhouse.
+  const staff = !mine && store.isStaff ? await store.isStaff(user.id).catch(() => false) : false
+  if (!mine && !staff) return fail(403, 'You’re not on this club’s list.')
+  const held = mine ?? NO_CREDENTIALS
 
   if (input.action === 'club') {
-    return { status: 200, body: { ok: true, club: summary(club, mine) } }
+    return { status: 200, body: { ok: true, club: { ...summary(club, held), ...(staff ? { staff } : {}) } } }
   }
-  const asker = askerOf(mine)
+  const asker: Asker = { row: mine ? credentialsOf(mine) : null, staff }
   const look = input.action === 'home-course' || input.action === 'colour'
   if (!clubMay(look ? 'set_look' : 'keep_list', asker)) return fail(403, look ? NOT_LOOK : NOT_ON)
   const owners = rows.filter(r => credentialsOf(r).owner && !r.removedAt).length
   // Whole numbers for the Clubhouse (Ross, 16 Nov 2026) — asked for by name, its holders only.
   const whole = input.whole === true && clubMay('open_clubhouse', asker)
-  const me = summary(club, mine)
+  const me = { ...summary(club, held), ...(staff ? { staff } : {}) }
+  const slim = input.slim === true
   const fresh = async (): Promise<ClubOutcome> => ({ status: 200, body: { ok: true, club: me, list: await listOf(store, await store.rows(clubId), whole) } })
   const line = (action: string, target: MemberRecord | null, changes: Record<string, [unknown, unknown]>, batchId: string | null = null): ActivityEntry => ({
-    clubId, byUser: user.id, byName: mine.name, byStaff: !!asker.staff, action,
+    clubId, byUser: user.id, byName: mine?.name ?? STAFF_NAME, byStaff: !mine, action,
     memberId: target?.id ?? null, memberName: target?.name ?? null, changes, batchId,
   })
 
@@ -476,7 +492,7 @@ export async function runClub(
       return fail(503, 'Could not save the home course — try again.')
     }
     await logged(store, [line('home_course', null, { homeCourseId: [club.homeCourseId ?? null, courseId] })])
-    return { status: 200, body: { ok: true, club: summary({ ...club, homeCourseId: courseId }, mine) } }
+    return { status: 200, body: { ok: true, club: { ...summary({ ...club, homeCourseId: courseId }, held), ...(staff ? { staff } : {}) } } }
   }
 
   if (input.action === 'colour') {
@@ -485,7 +501,7 @@ export async function runClub(
     await store.updateClub(clubId, { colour })
     await logged(store, [line('look', null, { colour: [club.colour ?? null, colour] })])
     const after = await store.club(clubId)
-    return { status: 200, body: { ok: true, club: summary(after ?? club, mine) } }
+    return { status: 200, body: { ok: true, club: { ...summary(after ?? club, held), ...(staff ? { staff } : {}) } } }
   }
 
   if (input.action === 'add') {
@@ -527,6 +543,7 @@ export async function runClub(
       lines.push(line('row.add', made ?? null, diff({}, { name: r.name, memberNumber: maskNumber(r.memberNumber), guiNumber: maskNumber(r.guiNumber), email: r.email }), batchId))
     }
     await logged(store, lines)
+    if (slim) return { status: 200, body: { ok: true, club: me, added, updated, skipped } }
     return { status: 200, body: { ok: true, club: me, list: await listOf(store, after, whole), added, updated, skipped } }
   }
 
@@ -596,6 +613,7 @@ export async function runClub(
     }
     const changes = diff(loggable(target), loggable(after))
     if (Object.keys(changes).length) await logged(store, [line(patch.role !== undefined ? 'credentials' : 'row.update', target, changes)])
+    if (slim) return { status: 200, body: { ok: true, club: me } }
     return await fresh()
   }
 
@@ -608,6 +626,7 @@ export async function runClub(
     if (target.userId && store.handicaps) await severIndex(store.handicaps, target.userId, target.id, user.id).catch(e => console.error('index copy failed:', e))
     await store.updateRow(target.id, { removed_at: now.toISOString(), user_id: null, linked_at: null })
     await logged(store, [line('row.remove', target, { removed: [false, true], linked: [!!target.userId, false] })])
+    if (slim) return { status: 200, body: { ok: true, club: me } }
     return await fresh()
   }
 
@@ -619,6 +638,7 @@ export async function runClub(
     }
     await store.updateRow(target.id, { removed_at: null })
     await logged(store, [line('row.restore', target, { removed: [true, false] })])
+    if (slim) return { status: 200, body: { ok: true, club: me } }
     return await fresh()
   }
 
@@ -635,6 +655,7 @@ export async function runClub(
       memberId: target.id, email: target.email, codeHash: inviteHash(code),
       expiresAt: new Date(now.getTime() + INVITE_DAYS * 86_400_000).toISOString(),
     })
+    if (store.markInvited) await store.markInvited(target.id, now.toISOString()).catch(() => undefined)
     const mail = inviteEmail({ clubName: club.name, name: target.name, code, site: store.siteOrigin() })
     const sent = await store.sendEmail(target.email, mail.subject, mail.html, mail.text).catch(() => false)
     if (!sent) return fail(503, 'Could not send the email — try again.')
