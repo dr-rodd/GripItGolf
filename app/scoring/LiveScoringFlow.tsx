@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
+import IndexConfirm from "./IndexConfirm"
 import { type QuotaScale } from "@/lib/quota"
 import { exactCourseHandicap, courseHandicap, teesForPlayer, type TeeRating } from "@/lib/courseHandicap"
 import {
@@ -133,6 +134,8 @@ interface PlayerSetup {
 }
 
 interface Props {
+  /** A club competition (stage (d2), D179): the start sheet confirms each player's index. */
+  competition?: boolean
   players: Player[]
   rounds: Round[]
   holes: Hole[]
@@ -481,6 +484,7 @@ async function generateCompositeScores(
 // ─── Main component ───────────────────────────────────────
 
 export default function LiveScoringFlow({
+  competition = false,
   players, rounds, holes, tees, roundHandicaps,
   activeLiveRound, onBack, onLiveRoundChange,
   showLeaderboard, onLeaderboardChange,
@@ -1404,6 +1408,9 @@ export default function LiveScoringFlow({
                   <div className="overflow-hidden min-h-0">
                     {isSelected && (
                       <div className="px-4 pb-4 flex flex-col gap-3">
+                        {competition && tripCode && (
+                          <IndexConfirm tripCode={tripCode} playerId={player.id} index={hcpIndex} />
+                        )}
                         {playerCourseTees.length === 0 ? (
                           <p className="t-cap text-ink/65">No tees for this course yet.</p>
                         ) : (

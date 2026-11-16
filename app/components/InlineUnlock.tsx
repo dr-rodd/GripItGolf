@@ -6,6 +6,7 @@ import { FIELD, buttonClass } from './ui'
 import { unlockWithPin } from '@/lib/entryClient'
 import { unlockError } from './OrganiserLock'
 import ForgotPin, { ForgotPinLink } from './ForgotPin'
+import { competitionLockLine, useCompetitionClub } from './useCompetitionClub'
 
 /**
  * The organiser PIN, asked in place rather than as a wall.
@@ -32,6 +33,8 @@ export default function InlineUnlock({
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [forgot, setForgot] = useState(false)
+  // A club competition never draws a PIN box (D164).
+  const competition = useCompetitionClub(tripCode)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -46,6 +49,8 @@ export default function InlineUnlock({
     }
     setBusy(false)
   }
+
+  if (competition) return <p className="t-cap text-ink/65">{competitionLockLine(competition)}</p>
 
   if (!open) {
     return (

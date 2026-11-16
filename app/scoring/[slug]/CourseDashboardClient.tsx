@@ -61,6 +61,8 @@ interface RoundHandicap {
 }
 
 interface Props {
+  /** A club competition (stage (d2)): its start sheet confirms each index. */
+  competition?: boolean
   courseName: string
   courseId: string
   players: Player[]
@@ -151,6 +153,7 @@ type View = "dashboard" | "scoring" | "live-board" | "settings"
 // ─── Component ────────────────────────────────────────────
 
 export default function CourseDashboardClient({
+  competition = false,
   courseName, courseId, players, rounds, holes, tees, roundHandicaps,
   backHref = "/scoring", roundId, stickyTop = 0,
   allowances = [FULL_ALLOWANCE], allowanceStart = 0, quotaScale = null,
@@ -1027,6 +1030,7 @@ export default function CourseDashboardClient({
       {/* ── Scoring ── */}
       {view === "scoring" && (
         <LiveScoringFlow
+          competition={competition}
           players={nonComposite}
           rounds={courseRoundsForFlow}
           holes={courseHoles}

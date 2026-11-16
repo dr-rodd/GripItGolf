@@ -90,6 +90,11 @@ export interface Grant {
   organiser?: boolean
   /** This phone's claimed player in this event, checked to belong to it. */
   playerId?: string | null
+  /**
+   * Watches only — a club competition's guest who is not on its club's list
+   * (D184, stage (d2)). Lifts an absent row to spectator, never lowers one.
+   */
+  watchOnly?: boolean
 }
 
 // ─── Merging an entry into what the phone already had ──────────
@@ -106,10 +111,10 @@ const isFieldRole = (r: unknown): r is FieldRole =>
  */
 export function mergeGrant(existing: Membership | null, grant: Grant, now: Date): Membership {
   const before: FieldRole = existing && isFieldRole(existing.role) ? existing.role : 'spectator'
-  const asked: FieldRole = grant.playerId ? 'player' : 'guest'
+  const asked: FieldRole = grant.watchOnly ? 'spectator' : grant.playerId ? 'player' : 'guest'
   const role = FIELD_RANK[asked] > FIELD_RANK[before] ? asked : before
 
-  const playerId = grant.playerId ?? existing?.playerId ?? null
+  const playerId = (grant.watchOnly ? null : grant.playerId) ?? existing?.playerId ?? null
 
   const was = existing?.organiserUntil ? Date.parse(existing.organiserUntil) : NaN
   const fresh = grant.organiser ? now.getTime() + ORGANISER_MS : NaN

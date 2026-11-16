@@ -1,4 +1,6 @@
 import { cache } from 'react'
+import { redirect } from 'next/navigation'
+import { fetchIsCompetition } from './kind'
 import CardStateLine from '@/app/components/CardStateLine'
 import { CARD_COUNTS, blockersByCourse } from '@/lib/courseCard'
 import OrganiserLock from '@/app/components/OrganiserLock'
@@ -154,7 +156,11 @@ export default async function TripPage({ params, searchParams }: {
   // Where this lives — /trip/X or, for an event, /event/X (lib/tripPaths.ts).
   const tripHome = tripHomeAt(root, tripCode)
 
-  const trip = await fetchTrip(tripCode)
+  // A club competition's home is inside its club's area (stage (d2)): the
+  // event's own home goes on there; its other pages — the card, the
+  // organiser area — stay where they are.
+  const [trip, competition] = await Promise.all([fetchTrip(tripCode), fetchIsCompetition(tripCode)])
+  if (trip && competition) redirect(`/club/comp/${tripCode.toUpperCase()}`)
 
   if (!trip) {
     return (

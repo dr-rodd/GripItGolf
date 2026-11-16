@@ -50,6 +50,18 @@ function rememberOwner(code: string) {
 }
 
 const READY_KEY = 'gd.entry.ready.v1'
+const compKey = (code: string) => `gd.comp.${code.toUpperCase()}.v1`
+
+/**
+ * The club running this event when it is a club competition — its padlock
+ * and every in-place PIN ask then say so and draw no PIN box (D164: its
+ * door is the club's list, its admins open it by being signed in). Learnt
+ * from the server's answer on entering; null for every other event.
+ */
+export function competitionClub(code: string): string | null {
+  if (!inBrowser() || !code) return null
+  return readLocal(compKey(code))
+}
 const stampKey = (code: string) => `gd.entry.${code}.v1`
 
 const inBrowser = () => typeof window !== 'undefined'
@@ -188,6 +200,9 @@ async function post(code: string, extras: EntryExtras): Promise<EntryResult | nu
     // entry's twelve hours, as the server counts them.
     if (body.organiserBy === 'account') rememberOwner(code)
     else if (extras.adminPin) rememberUnlock(code, body.organiserUntil)
+    // A club competition (stage (d2)): its padlock never asks for a PIN.
+    const competitionOf = (body as unknown as { competitionOf?: unknown }).competitionOf
+    if (typeof competitionOf === 'string') writeLocal(compKey(code), competitionOf)
     return { tripId: body.tripId, role: body.role, organiserUntil: body.organiserUntil, readOnly: body.readOnly, organiserBy: body.organiserBy ?? null }
   } catch {
     return null
@@ -542,5 +557,21 @@ export async function setAdminPin(tripCode: string, currentPin: string | null, p
   if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.' }
   rememberUnlock(code, isoOrNull(r.body.organiserUntil))
+  return { ok: true }
+}
+
+// ─── A club competition's card start sheet (stage (d2), D179) ──
+
+/**
+ * The index a competition's player plays off, confirmed or changed on the
+ * card start sheet — the one value, changed everywhere and logged, by the
+ * member starting the card (this phone's own sign-in). The scoring screens
+ * never name an account; the server checks this phone is on the club's list.
+ */
+export async function confirmCompetitionIndex(code: string, playerId: string, index: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!inBrowser()) return { ok: false, error: 'Could not save the index — try again.' }
+  const r = await ask('/api/club/booking', { action: 'index', code: code.trim().toUpperCase(), playerId, index })
+  if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not save the index — try again.' }
   return { ok: true }
 }

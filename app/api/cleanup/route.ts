@@ -109,7 +109,29 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  const cards: LiveCard[] = (cardsRes.data ?? []).map(c => ({
+  // A club competition's cards wait for their marker and their admins
+  // (stage (d2)): nothing on its rounds is closed or deleted here until it
+  // is certified (d4). Read fail-soft — before migration 089 nothing is a
+  // competition; a failed read holds nothing back from a competition that
+  // may exist, so it refuses instead, as a partial read does above.
+  const comps = await supabaseAdmin.from("trips").select("id").eq("competition", "club")
+  const compMissing = comps.error && (comps.error.code === "42703" || comps.error.code === "PGRST204")
+  if (comps.error && !compMissing) {
+    console.error("cleanup competition read failed:", comps.error)
+    return NextResponse.json({ error: "Could not read the competitions — nothing was changed." }, { status: 500 })
+  }
+  const compTripIds = (comps.data ?? []).map(t => (t as { id: string }).id)
+  const held = new Set<string>()
+  if (compTripIds.length > 0) {
+    const { data, error } = await supabaseAdmin.from("rounds").select("id").in("trip_id", compTripIds)
+    if (error) {
+      console.error("cleanup competition rounds failed:", error)
+      return NextResponse.json({ error: "Could not read the competitions — nothing was changed." }, { status: 500 })
+    }
+    for (const r of data ?? []) held.add((r as { id: string }).id)
+  }
+
+  const cards: LiveCard[] = (cardsRes.data ?? []).filter(c => !held.has(c.round_id)).map(c => ({
     id: c.id,
     roundId: c.round_id,
     status: c.status,
@@ -119,7 +141,7 @@ export async function GET(req: NextRequest) {
     liveRoundId: l.live_round_id,
     playerId: l.player_id,
   }))
-  const activity: ScoreActivity[] = (activityRes.data ?? []).map(a => ({
+  const activity: ScoreActivity[] = (activityRes.data ?? []).filter(a => !held.has(a.round_id)).map(a => ({
     playerId: a.player_id,
     roundId: a.round_id,
     submittedAt: a.submitted_at,

@@ -440,6 +440,12 @@ export interface ClubEvent {
   endDate: string | null
   /** D140: who changes it. 'anyone' is a guests-welcome event, the only kind the public face shows. */
   access: ClubAccess | null
+  /**
+   * A club competition (stage (d2)): where it stands (D169), and whether it
+   * is for members only (D164) — watching told apart from editing for
+   * competitions only (D184). Absent on every other event.
+   */
+  competition?: { phase: import('./compPhase').CompPhase; membersOnly: boolean }
 }
 
 export type ClubEventWhen = 'now' | 'upcoming' | 'past'
@@ -476,7 +482,15 @@ export function groupClubEvents<E extends Pick<ClubEvent, 'startDate' | 'endDate
 
 /** The public face's events (D158): guests welcome only — never the club's own calendar. */
 export function publicClubEvents(events: readonly ClubEvent[], today: string): ClubEvent[] {
-  return events.filter(e => e.access === 'anyone' && clubEventWhen(e, today) !== 'past')
+  // A competition is watched by its door, not its editing (D184): guests
+  // may watch one that is not members only.
+  const welcome = (e: ClubEvent) => (e.competition ? !e.competition.membersOnly : e.access === 'anyone')
+  return events.filter(e => welcome(e) && clubEventWhen(e, today) !== 'past')
+}
+
+/** Where a club event opens: a competition inside the club area, anything else by its short link. */
+export function clubEventHref(e: Pick<ClubEvent, 'code' | 'competition'>, slug: string): string {
+  return e.competition ? `/club/${slug}/comp/${e.code}` : `/${e.code}`
 }
 
 /** An event's dates as a line: "Sat 15 Nov", "15–17 Nov", or nothing. */

@@ -7,6 +7,7 @@ import { IconLock, IconLockOpen } from './icons'
 import { FIELD, buttonClass, cardClass } from './ui'
 import { lockShut, unlockWithPin } from '@/lib/entryClient'
 import ForgotPin, { ForgotPinLink } from './ForgotPin'
+import { competitionLockLine, useCompetitionClub } from './useCompetitionClub'
 
 /**
  * The organiser's lock, at the header's right edge on every page that has
@@ -31,6 +32,8 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
   isTrip?: boolean
 }) {
   const [unlocked] = useUnlocked(tripCode)
+  // A club competition never draws a PIN box (D164): its admins open it signed in.
+  const competition = useCompetitionClub(tripCode)
   const [open, setOpen] = useState(false)
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
@@ -120,13 +123,19 @@ export default function OrganiserLock({ tripCode, pinSet, isTrip = false }: {
         </div>
       )}
 
-      {open && !unlocked && forgot && (
+      {open && !unlocked && competition && (
+        <div className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`} role="status">
+          <p className="t-cap text-ink/80">{competitionLockLine(competition)}</p>
+        </div>
+      )}
+
+      {open && !unlocked && !competition && forgot && (
         <div className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`}>
           <ForgotPin tripCode={tripCode} isTrip={isTrip} onBack={() => setForgot(false)} />
         </div>
       )}
 
-      {open && !unlocked && !forgot && (
+      {open && !unlocked && !competition && !forgot && (
         <form
           onSubmit={submit}
           className={`absolute right-0 top-full mt-1 w-64 p-3 ${cardClass('floating')}`}

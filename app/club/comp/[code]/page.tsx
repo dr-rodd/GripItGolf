@@ -16,8 +16,12 @@ import { createAdminClient } from '@/lib/supabase-admin'
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
-export default async function CompetitionByCode({ params }: { params: Promise<{ code: string }> }) {
+export default async function CompetitionByCode({ params, searchParams }: {
+  params: Promise<{ code: string }>
+  searchParams: Promise<{ view?: string }>
+}) {
   const code = (await params).code.trim().toUpperCase()
+  const { view } = await searchParams
   if (!/^[A-Z0-9]{4,12}$/.test(code)) notFound()
   const db = createAdminClient()
   // Before 089 there is no competition column: nothing is one.
@@ -30,5 +34,7 @@ export default async function CompetitionByCode({ params }: { params: Promise<{ 
   const { data: club } = await db.from('clubs').select('slug, verified_at').eq('id', clubId).maybeSingle()
   const c = club as { slug: string; verified_at: string | null } | null
   if (!c?.verified_at) notFound()
-  redirect(`/club/${c.slug}/comp/${code}`)
+  // A section asked for comes along (the card's way back is to Scoring).
+  const section = view === 'tee' || view === 'scoring' || view === 'board' ? `?view=${view}` : ''
+  redirect(`/club/${c.slug}/comp/${code}${section}`)
 }

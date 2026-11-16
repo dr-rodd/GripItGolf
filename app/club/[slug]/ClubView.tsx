@@ -7,19 +7,21 @@ import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
-import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, cardClass } from '@/app/components/ui'
+import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
-  clubEventDates, groupClubEvents, irishToday, mayAdminister, roleWord,
+  clubEventDates, clubEventHref, groupClubEvents, irishToday, mayAdminister, roleWord,
   type ClubEvent, type ClubRole,
 } from '@/lib/clubs'
 import { seasonOf, selfClaimedLine, type SeasonRow } from '@/lib/cardSummary'
 import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
+import { PHASE_WORDS } from '@/lib/compPhase'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { readTierHint, rememberTier } from '@/lib/tierHint'
 import ClubTabBar, { type ClubTab } from './ClubTabBar'
+import NewCompetition from './NewCompetition'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
 export interface ClubFace {
@@ -34,6 +36,8 @@ export interface ClubFace {
 
 interface Members {
   clubId: string
+  /** D161: the club's home course, for New competition (owners and admins). */
+  homeCourseId: string | null
   role: ClubRole
   name: string
   events: ClubEvent[]
@@ -73,7 +77,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
       }
       rememberTier({ kind: 'club', slug: face.slug })
       setMembers({
-        clubId: r.club.id, role: r.club.role, name: r.me?.name ?? '',
+        clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, role: r.club.role, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
         courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {},
       })
@@ -100,8 +104,8 @@ export default function ClubView({ face }: { face: ClubFace }) {
           <ClubHeader face={face} members={!!members} />
           {!members && <PublicFace face={face} />}
           {members && tab === 'home' && <MembersHome face={face} m={members} />}
-          {members && tab === 'comps' && <Comps m={members} />}
-          {members && tab === 'board' && <Board m={members} />}
+          {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
+          {members && tab === 'board' && <Board m={members} slug={face.slug} />}
           {members && tab === 'stats' && <Stats face={face} m={members} />}
           {members && tab === 'club' && <ClubTabPage face={face} m={members} />}
         </div>
@@ -112,7 +116,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
 }
 
 /** D123–D124: the art behind the page — the home's tall and strong, every other page's short and faint. */
-function Art({ face, home }: { face: ClubFace; home: boolean }) {
+export function Art({ face, home }: { face: ClubFace; home: boolean }) {
   if (!face.artUrl) return null
   const size = home ? 'club-art-home' : ''
   return (
@@ -130,7 +134,7 @@ function Art({ face, home }: { face: ClubFace; home: boolean }) {
 }
 
 /** The frosted header: crest in the club's ring, the name, "Members", and the account button. */
-function ClubHeader({ face, members }: { face: ClubFace; members: boolean }) {
+export function ClubHeader({ face, members }: { face: ClubFace; members: boolean }) {
   return (
     <header className="club-frost rounded-card p-2 flex items-center gap-3">
       {face.crestUrl ? (
@@ -166,7 +170,7 @@ function PublicFace({ face }: { face: ClubFace }) {
         {face.events.length > 0 ? (
           <>
             <p className="text-ink/65 text-sm mt-1">Open to anybody with the code — tap one to follow it live.</p>
-            <EventRows events={face.events} />
+            <EventRows events={face.events} slug={face.slug} />
           </>
         ) : (
           <p className="text-ink/65 text-[15px] mt-2">No public events right now.</p>
@@ -177,17 +181,17 @@ function PublicFace({ face }: { face: ClubFace }) {
   )
 }
 
-function EventRows({ events, entries = [], tops = {} }: { events: ClubEvent[]; entries?: string[]; tops?: Members['tops'] }) {
+function EventRows({ events, slug, entries = [], tops = {} }: { events: ClubEvent[]; slug: string; entries?: string[]; tops?: Members['tops'] }) {
   return (
     <ListGroup className="mt-4">
       {events.map(e => (
         <ListRow
           key={e.code}
-          href={`/${e.code}`}
+          href={clubEventHref(e, slug)}
           label={e.name}
           hint={
             <>
-              {[clubEventDates(e.startDate, e.endDate), KIND[e.kind]].filter(Boolean).join(' · ')}
+              {[clubEventDates(e.startDate, e.endDate), e.competition ? PHASE_WORDS[e.competition.phase] : KIND[e.kind]].filter(Boolean).join(' · ')}
               {entries.includes(e.code) && <span className="text-club-deep font-semibold"> · You’re in</span>}
               {tops[e.code] && (
                 <span className="block text-gold-deep font-semibold">
@@ -196,11 +200,21 @@ function EventRows({ events, entries = [], tops = {} }: { events: ClubEvent[]; e
               )}
             </>
           }
-          trailing={e.access !== 'anyone' && e.access !== null ? <MembersOnly /> : undefined}
+          trailing={membersOnly(e) ? <MembersOnly /> : undefined}
         />
       ))}
     </ListGroup>
   )
+}
+
+/** Members only (D164, D184): a competition by its door, any other event by who edits it. */
+function membersOnly(e: ClubEvent): boolean {
+  return e.competition ? e.competition.membersOnly : e.access !== 'anyone' && e.access !== null
+}
+
+/** An event's board: a competition's inside the club area, any other event's own. */
+function boardHref(e: ClubEvent, slug: string): string {
+  return e.competition ? `${clubEventHref(e, slug)}?view=board` : `${tripBase(e.code, e.kind)}/leaderboard`
 }
 
 /** D125: the one pill in the club's colour. */
@@ -237,7 +251,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
           <div className="mt-3 space-y-3">
             {g.now.map(e => (
-              <Link key={e.code} href={`${tripBase(e.code, e.kind)}/leaderboard`} className={`${cardClass('floating', true)} block p-4`}>
+              <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`}>
                 <p className="t-card text-ink">{e.name}</p>
                 <p className={`t-cap mt-1 ${m.entries.includes(e.code) ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>
                   {m.entries.includes(e.code) ? 'You’re playing · ' : ''}Open the leaderboard
@@ -252,7 +266,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         <section className="mt-6">
           <h2 className="t-h2 text-ink">Club calendar</h2>
           <ul className="mt-3 space-y-2">
-            {calendar.map(e => <CalendarRow key={e.code} e={e} mine={m.entries.includes(e.code)} />)}
+            {calendar.map(e => <CalendarRow key={e.code} e={e} slug={face.slug} mine={m.entries.includes(e.code)} />)}
           </ul>
         </section>
       )}
@@ -269,7 +283,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         <section className="mt-6">
           <h2 className="t-h2 text-ink">Outside the club</h2>
           <p className="t-cap text-ink/65 mt-1">These open in green dot.</p>
-          <EventRows events={m.outside} />
+          <EventRows events={m.outside} slug={face.slug} />
         </section>
       )}
 
@@ -283,11 +297,11 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
 }
 
 /** A date tile, 52×56, and the event beside it. */
-function CalendarRow({ e, mine }: { e: ClubEvent; mine: boolean }) {
+function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: boolean }) {
   const d = e.startDate ? new Date(`${e.startDate}T12:00:00Z`) : null
   return (
     <li>
-      <Link href={`/${e.code}`} className={`${cardClass('raised', true)} flex items-center gap-3 p-2 pr-3`}>
+      <Link href={clubEventHref(e, slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-2 pr-3`}>
         <span className="w-[52px] h-14 flex-shrink-0 rounded-tile bg-club-tint flex flex-col items-center justify-center">
           <span className="t-data text-[20px] leading-none text-ink">{d ? d.getUTCDate() : '–'}</span>
           <span className="text-[13px] leading-none text-ink/65 mt-1">
@@ -300,7 +314,7 @@ function CalendarRow({ e, mine }: { e: ClubEvent; mine: boolean }) {
             {KIND[e.kind]}{mine && <span className="text-club-deep font-semibold"> · You’re in</span>}
           </span>
         </span>
-        {e.access !== 'anyone' && e.access !== null ? <MembersOnly /> : <IconChevronRight size={20} className="text-ink/50" />}
+        {membersOnly(e) ? <MembersOnly /> : <IconChevronRight size={20} className="text-ink/50" />}
       </Link>
     </li>
   )
@@ -309,9 +323,11 @@ function CalendarRow({ e, mine }: { e: ClubEvent; mine: boolean }) {
 type CompsView = 'upcoming' | 'mine' | 'results'
 
 /** D159: Competitions — Upcoming, My entries, Results — a featured card and the rest in rows. No booking until (d). */
-function Comps({ m }: { m: Members }) {
+function Comps({ m, slug }: { m: Members; slug: string }) {
   const g = useGroups(m.events)
   const [view, setView] = useState<CompsView>('upcoming')
+  const [making, setMaking] = useState(false)
+  if (making) return <NewCompetition clubId={m.clubId} homeCourseId={m.homeCourseId} onCancel={() => setMaking(false)} />
   const lists: Record<CompsView, ClubEvent[]> = {
     upcoming: [...g.now, ...g.upcoming],
     mine: [...g.now, ...g.upcoming, ...g.past].filter(e => m.entries.includes(e.code)),
@@ -324,6 +340,9 @@ function Comps({ m }: { m: Members }) {
       <div className="h-6" aria-hidden="true" />
       <h1 className="t-h1 text-ink">Competitions</h1>
       <p className="text-ink/65 text-sm mt-1">The club’s events — tap one to open it.</p>
+      {mayAdminister(m.role) && (
+        <button type="button" onClick={() => setMaking(true)} className={`${buttonClass('secondary')} mt-4`}>New competition</button>
+      )}
       <Segmented className="mt-4" label="Which competitions" value={view} onChange={setView}
         options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' }, { value: 'results', label: 'Results' }] as const} />
       {!featured ? (
@@ -332,13 +351,13 @@ function Comps({ m }: { m: Members }) {
         </p>
       ) : (
         <>
-          <Link href={`/${featured.code}`} className={`${cardClass('floating', true)} block p-4 mt-5`}>
+          <Link href={clubEventHref(featured, slug)} className={`${cardClass('floating', true)} block p-4 mt-5`}>
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
                 <p className="t-cap text-ink/65">{clubEventDates(featured.startDate, featured.endDate) || KIND[featured.kind]}</p>
                 <p className="t-h2 text-ink mt-1 break-words">{featured.name}</p>
               </div>
-              {featured.access !== 'anyone' && featured.access !== null && <MembersOnly />}
+              {membersOnly(featured) && <MembersOnly />}
             </div>
             {m.entries.includes(featured.code) && <p className="t-cap text-club-deep font-semibold mt-2">You’re in</p>}
             {m.tops[featured.code] && (
@@ -350,7 +369,7 @@ function Comps({ m }: { m: Members }) {
           {rest.length > 0 && (
             <section className="mt-6">
               {view === 'results' && <h2 className="t-h2 text-ink">Recent results</h2>}
-              <EventRows events={rest} entries={m.entries} tops={view === 'results' ? m.tops : {}} />
+              <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} />
             </section>
           )}
         </>
@@ -360,7 +379,7 @@ function Comps({ m }: { m: Members }) {
 }
 
 /** The live event's board, else the latest one played — never empty (D149's rule, the club's own). */
-function Board({ m }: { m: Members }) {
+function Board({ m, slug }: { m: Members; slug: string }) {
   const g = useGroups(m.events)
   const e = g.now[0] ?? g.past[0] ?? g.upcoming[0]
   if (!e) return <p className="text-ink/65 text-[15px] mt-8">No club events yet.</p>
@@ -369,7 +388,7 @@ function Board({ m }: { m: Members }) {
       <h1 className="t-h1 text-ink">{g.now[0] ? 'Live now' : g.past[0] ? 'Latest result' : 'Next up'}</h1>
       <p className="text-ink/80 text-[15px] mt-2">{e.name}</p>
       <p className="t-cap text-ink/65 mt-0.5">{clubEventDates(e.startDate, e.endDate)}</p>
-      <ButtonLink href={`${tripBase(e.code, e.kind)}/leaderboard`} variant="secondary" className="mt-6">
+      <ButtonLink href={boardHref(e, slug)} variant="secondary" className="mt-6">
         Open the leaderboard
       </ButtonLink>
     </section>

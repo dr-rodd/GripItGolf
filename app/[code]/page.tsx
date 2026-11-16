@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { eventReader } from '@/lib/eventReader'
 import { isRunChallenge } from '@/lib/runChallenge'
 import { tripBase } from '@/lib/tripPaths'
-import { fetchTripKind } from '@/app/golf/[root]/[tripCode]/kind'
+import { fetchIsCompetition, fetchTripKind } from '@/app/golf/[root]/[tripCode]/kind'
 import BackButton from '@/app/components/BackButton'
 
 export const dynamic = 'force-dynamic'
@@ -34,7 +34,7 @@ export default async function ShortCodePage({ params }: {
 
   const tripCode = code.toUpperCase()
   const db = eventReader(tripCode)
-  const [{ data }, kind] = await Promise.all([
+  const [{ data }, kind, competition] = await Promise.all([
     db
       .from('trips')
       .select('trip_code')
@@ -43,8 +43,11 @@ export default async function ShortCodePage({ params }: {
     // Its own fail-soft read, as everywhere (kind.ts): where the code lives —
     // a run challenge under /run/, an event under /event/, a trip /trip/.
     fetchTripKind(tripCode),
+    // A club competition lives inside its club's area (stage (d2)).
+    fetchIsCompetition(tripCode),
   ])
 
+  if (data && competition) redirect(`/club/comp/${data.trip_code}`)
   if (data) redirect(isRunChallenge(kind) ? `/run/${data.trip_code}` : tripBase(data.trip_code, kind))
 
   // Code-shaped but nobody's: the same calm answer the join box gives,

@@ -24,6 +24,12 @@ import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../l
 import { withOwner, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { compPhase, sectionLive, sectionWaitLine, type CompFacts } from '../lib/compPhase'
+import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm, withdrawIssue, type CompForm } from '../lib/clubComp'
+import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
+import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
+import type { CreateStore } from '../app/api/trip/create/create'
+import { mergeGrant } from '../lib/membership'
+import { parseLeaderboards } from '../lib/leaderboards'
 import { RESERVED_CLUB_SLUGS } from '../lib/clubs'
 import { hashPin as hashPinForDoor, unheldPin, entryToken } from '../lib/pinHash'
 import { verifyPin } from '../lib/pinHash'
@@ -476,7 +482,7 @@ function lookTests() {
     return d.isDirectory() ? (d.name === 'node_modules' || d.name.startsWith('.') ? [] : files(p)) : /\.(ts|tsx)$/.test(d.name) ? [p] : []
   })
   const users = [...files('app'), ...files('lib')].filter(f => /\b(text|bg|ring|border|fill|stroke)-(club|on-club|club-deep|club-tint)\b/.test(read(f)))
-  eq(users.sort(), ['app/club/[slug]/ClubTabBar.tsx', 'app/club/[slug]/ClubView.tsx'], 'the club colour is used only on a club’s own pages')
+  ok(users.length > 0 && users.every(f => f.startsWith(`app${path.sep}club${path.sep}`) || f.startsWith('app/club/')), 'the club colour is used only on a club’s own pages (app/club/)')
   for (const f of ['lib/resultTone.ts', 'lib/matchSides.ts', 'lib/teamColors.ts', 'app/components/ui.tsx']) {
     ok(!/club/i.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), `${f} never speaks the club colour — it is no result, side, team, button or pill of the kit`)
   }
@@ -505,9 +511,9 @@ function lookTests() {
   const groups = groupClubEvents(all, today)
   eq([groups.now.length, groups.upcoming.map(e => e.code), groups.past.map(e => e.code)], [0, ['PINNED', 'CLOSE1', 'OPEN01'], ['OLDONE']], 'Comps: upcoming soonest first, results apart')
   eq(irishToday(new Date('2026-06-30T23:30:00Z')), '2026-07-01', 'the club pages’ clock is Irish (summer time)')
-  ok(/publicClubEvents\(events, irishToday/.test(read('app/club/[slug]/page.tsx')) && !/events,\s*$|events: events/m.test(read('app/club/[slug]/page.tsx')),
+  ok(/publicClubEvents\(events, irishToday/.test(read('app/club/[slug]/face.ts')) && !/events,\s*$|events: events/m.test(read('app/club/[slug]/face.ts')),
     'the page’s HTML is handed the public events alone')
-  ok(/if \(!club \|\| !club\.verifiedAt\) return null/.test(read('app/club/[slug]/page.tsx')) && /notFound\(\)/.test(read('app/club/[slug]/page.tsx')),
+  ok(/if \(!club \|\| !club\.verifiedAt\) return null/.test(read('app/club/[slug]/face.ts')) && /notFound\(\)/.test(read('app/club/[slug]/page.tsx')),
     'an unverified or unknown club is not found')
 
   section('One club per account, said by name (D150)')
@@ -786,7 +792,7 @@ async function competitionTests() {
     && enter.indexOf("trip.competition === 'club'") < enter.indexOf('<EntryGate'),
     'the event\'s own door sends a competition on before any PIN box is drawn')
   const byCode = read('app/club/comp/[code]/page.tsx')
-  ok(/t\.competition !== 'club'/.test(byCode) && /verified_at/.test(byCode) && /redirect\(`\/club\/\$\{c\.slug\}\/comp\/\$\{code\}`\)/.test(byCode),
+  ok(/t\.competition !== 'club'/.test(byCode) && /verified_at/.test(byCode) && /redirect\(`\/club\/\$\{c\.slug\}\/comp\/\$\{code\}\$\{section\}`\)/.test(byCode),
     '/club/comp/<code> finds a verified club\'s competition and goes on to it; anything else is not found')
   ok(RESERVED_CLUB_SLUGS.includes('comp'), 'no club may have the address "comp"')
   eq(nextSlug('comp', []), 'comp-2', '…a club named Comp gets comp-2')
@@ -807,6 +813,158 @@ async function competitionTests() {
   ok(/-- ─── Undo/.test(sql) && /DROP TABLE IF EXISTS handicap_changes/.test(sql), 'with its undo')
 }
 
+// ─── Stage (d2): the competition in the club area ──────────────
+
+async function competitionD2Tests() {
+  section('A competition from the short form (D162, lib/clubComp.ts)')
+  const form: CompForm = {
+    name: 'November Medal', date: '2026-11-22', courseId: 'course-1', scoring: 'stableford', allowance: 95, watch: 'members',
+    first: '08:00', interval: 10, perTime: 4, times: 20, opens: { daysBefore: 7, time: '20:00' },
+  }
+  eq(compFormIssue(form, '2026-11-16'), null, 'a whole form passes')
+  ok(!!compFormIssue({ ...form, name: '' }, '2026-11-16') && !!compFormIssue({ ...form, date: '2026-11-01' }, '2026-11-16')
+    && !!compFormIssue({ ...form, perTime: 5 }, '2026-11-16') && !!compFormIssue({ ...form, allowance: 40 }, '2026-11-16'),
+    'no name, a day gone, five a time, a 40% allowance: each refused in a sentence')
+  eq(compTeeRules(form), { batches: [{ start: '08:00', interval: 10, count: 20, ends: 'count' }], groupSize: 4, opens: { daysBefore: 7, time: '20:00' } },
+    'its tee sheet: one run of times, opening when asked')
+  eq(compBoard('r1', form), { id: 'lb-primary', audience: 'individual', competition: 'league', scoring: 'stableford', combine: 'total',
+    roundIds: ['r1'], tieBreak: 'countback', clubCompetition: true, handicapAllowance: 95 }, 'its one board: individual, its round, countback (D182)')
+  const parsed = parseLeaderboards([compBoard('r1', form)])[0]
+  ok(parsed.tieBreak === 'countback' && parsed.clubCompetition === true, 'the board keeps its countback when read back')
+  const older = parseLeaderboards([{ ...compBoard('r1', form), clubCompetition: undefined }])[0]
+  ok(older.tieBreak === undefined, '…and a totals board without the mark still drops a stored countback — no board read before changes')
+  ok(compPermissions().edit_handicaps === false && compPermissions().edit_tee_sheet === true, 'the handicap is the account\'s, never the event\'s (D179)')
+  eq(readCompForm({ name: '  A   B ', watch: 'guests' })?.name, 'A B', 'answers read and tidied')
+
+  section('Booking rules (D173)')
+  const rules = compTeeRules(form)
+  const t8 = Date.parse('2026-11-22T08:00:00Z')
+  const base = { rules, date: '2026-11-22', slot: 0, taken: 0, adding: 1, admin: false }
+  eq(bookingIssue({ ...base, now: t8 - 10 * 86_400_000 }), 'Booking is not open yet.', 'before the opening: refused')
+  eq(bookingIssue({ ...base, admin: true, now: t8 - 10 * 86_400_000 }), null, '…but the club\'s admins may place people early')
+  eq(bookingIssue({ ...base, now: t8 - 3_600_000 }), null, 'open: a booking goes in')
+  eq(bookingIssue({ ...base, taken: 3, adding: 2, now: t8 - 3_600_000 }), 'That tee time has one place left.', 'no more than the time holds')
+  eq(bookingIssue({ ...base, now: t8 + 60_000 }), 'That tee time has gone.', 'never after the time')
+  eq(withdrawIssue({ date: '2026-11-22', clock: '08:00', mine: false, bookedByMe: false, admin: false, now: t8 - 1 }) !== null, true, 'somebody else\'s booking: not yours to take off')
+  eq(withdrawIssue({ date: '2026-11-22', clock: '08:00', mine: true, bookedByMe: false, admin: false, now: t8 - 1 }), null, 'your own: yes, until the time')
+
+  section('Making the competition (/api/club/competition)')
+  const madeRows: Record<string, unknown>[] = []
+  const pins: { admin: unknown; public: unknown; clubId: unknown }[] = []
+  const created: Record<string, unknown>[] = []
+  const createStand: CreateStore = {
+    async userFromToken(t) { return t.slice(4) },
+    async isMember() { return true },
+    async insertTrip(row) { madeRows.push(row); return { id: 'trip-1' } },
+    async writeMembership() {},
+    async writeLeadEmail() {},
+    async deleteTrip() { madeRows.pop() },
+    async adminClubs(u) { return u === 'ross' ? [{ id: 'c1', name: 'Lahinch' }] : [] },
+    async setEventClub(_t, clubId, access) { pins.push({ admin: null, public: null, clubId: `${clubId}:${access}` }) },
+  }
+  const verified = { id: 'c1', slug: 'lahinch', name: 'Lahinch', verifiedAt: NOW.toISOString(), refusedAt: null }
+  const compStore = (role: 'owner' | 'admin' | 'member'): CompetitionStore => ({
+    async userFromToken(t) { return member(t.slice(4), `${t.slice(4)}@x.ie`) },
+    async clubsOf() { return [{ club: verified, row: { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role, userId: 'ross', removedAt: null, onBoards: true } }] },
+    create: createStand,
+    async insertItem(row) { created.push({ item: row }); return 'item-1' },
+    async insertRound(row) { created.push({ round: row }) },
+    async deleteTrip() {},
+    newCode: () => 'COMP01',
+    newId: () => 'round-1',
+  })
+  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form }, compStore('member'), NOW)).status, 403, 'a plain member cannot make one')
+  const ok1 = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form }, compStore('admin'), NOW)
+  ok(ok1.status === 200 && ok1.body.ok && ok1.body.code === 'COMP01' && ok1.body.slug === 'lahinch', 'an admin makes one')
+  const row = madeRows[0] as Record<string, unknown>
+  ok(row.competition === 'club' && row.kind === 'tournament' && row.start_date === '2026-11-22' && row.end_date === '2026-11-22',
+    '…a tournament of one day, marked a club competition')
+  ok(!('settings_passcode_hash' in row) || String(row.settings_passcode_hash).startsWith('s1$'), '…locked to the club\'s admins with a PIN nobody holds')
+  ok(String(row.public_passcode_hash ?? '').startsWith('s1$'), '…and members only: the door\'s PIN nobody holds (D164)')
+  eq(pins[0]?.clubId, 'c1:admins', '…under the club, Club admins only')
+  const round = (created.find(c => 'round' in c) as { round: Record<string, unknown> }).round
+  ok(round.start_format === 'tee_sheet' && round.scheduled_date === '2026-11-22' && JSON.stringify(round.tee_sheet) === JSON.stringify(rules),
+    '…its round on the tee sheet from the start, the rules written at once')
+  madeRows.length = 0
+  await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, watch: 'guests' } }, compStore('admin'), NOW)
+  ok(!madeRows[0]?.public_passcode_hash, 'guests can watch: no door (D184)')
+
+  section('Booking from the club\'s list (/api/club/booking)')
+  const listRow = (id: string, name: string, userId: string | null, role: 'owner' | 'admin' | 'member' = 'member') =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role, userId, removedAt: null, onBoards: true })
+  const rows = [listRow('r-ross', 'Ross', 'ross'), listRow('r-dave', 'Dave', 'dave'), listRow('r-ann', 'Ann', null), listRow('r-adm', 'Admin', 'adm', 'admin')]
+  let ps: CompPlayer[] = []
+  let bs: Booked[] = []
+  const links: string[] = []
+  const indexSets: string[] = []
+  const bstore: BookingStore = {
+    async userFromToken(t) { return member(t.slice(4), `${t.slice(4)}@x.ie`) },
+    async competition(c) { return c === 'COMP01' ? { tripId: 't1', code: 'COMP01', clubId: 'c1', roundId: 'rd', date: '2026-11-22', rules, publicHash: 's1$x$y$fp' } : null },
+    async myRow(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async rowsByIds(_c, ids) { return rows.filter(r => ids.includes(r.id)) },
+    async searchRows(_c, q) { return rows.filter(r => r.name.toLowerCase().includes(q.toLowerCase())).map(r => ({ id: r.id, name: r.name, linked: !!r.userId })) },
+    async indexOf(r) { return r.id === 'r-ross' ? 14.2 : null },
+    async players() { return ps },
+    async bookings() { return bs },
+    async insertPlayer(r) { const id = `p-${r.club_member_id}`; ps.push({ id, clubMemberId: r.club_member_id }); return id },
+    async insertBookings(rs) { if (rs.some(r => bs.some(b => b.playerId === r.player_id))) return 'clash'; bs.push(...rs.map(r => ({ playerId: r.player_id, slot: r.slot_index, bookedBy: r.booked_by }))); return 'ok' },
+    async deleteBookings(_r, ids) { bs = bs.filter(b => !ids.includes(b.playerId)) },
+    async deletePlayerIfUnplayed(id) { ps = ps.filter(p => p.id !== id) },
+    async linkAccount(u, _t, p) { links.push(`${u}:${p}`) },
+    doorToken: () => 'door-token',
+    async setIndexFromCard(r, v, by) { indexSets.push(`${r.id}:${v}:${by}`) },
+  }
+  const open = new Date(t8 - 3_600_000)
+  const book = (tok: string, body: Record<string, unknown>, now = open) => runBooking({ token: tok, action: 'book', code: 'COMP01', ...body }, bstore, now)
+  eq((await runBooking({ token: 'tok-eve', action: 'state', code: 'COMP01' }, bstore, open)).status, 403, 'somebody not on the list is refused')
+  const st = await runBooking({ token: 'tok-ross', action: 'state', code: 'COMP01' }, bstore, open)
+  ok(st.status === 200 && st.door?.value === 'door-token', 'a member on the list is handed the door\'s way through (D164)')
+  const mine = await book('tok-ross', { slot: 0, memberIds: ['r-ross', 'r-dave'] })
+  ok(mine.status === 200 && mine.body.ok && mine.body.myPlayerId === 'p-r-ross', 'Ross books himself and Dave in one go')
+  ok(ps.length === 2 && bs.every(b => b.slot === 0 && b.bookedBy === 'p-r-ross'), '…a player made for each list row, booked by Ross')
+  ok(links.includes('ross:p-r-ross'), '…Ross\'s account linked to his own player (D134)')
+  const ann = await book('tok-ross', { slot: 1, memberIds: ['r-ann'] })
+  ok(ann.status === 409 && !ann.body.ok && /needs a Green Dot account/.test(ann.body.error), 'Ann has no account: every player needs their own (D94, amended)')
+  eq((await book('tok-dave', { slot: 1, memberIds: ['r-dave'] })).status, 409, 'Dave has a time already: refused')
+  eq((await book('tok-ross', { slot: 0, memberIds: ['r-adm'] }, new Date(t8 + 60_000))).status, 409, 'after the time has gone: refused')
+  const names = await runBooking({ token: 'tok-ross', action: 'names', code: 'COMP01', q: 'an' }, bstore, open)
+  ok(names.status === 200 && names.body.names?.find(n => n.id === 'r-ann')?.linked === false, 'the partner search says who has no account')
+  eq((await runBooking({ token: 'tok-adm', action: 'withdraw', code: 'COMP01', memberId: 'r-dave' }, bstore, open)).status, 200, 'an admin takes anybody off')
+  ok(!bs.some(b => b.playerId === 'p-r-dave') && !ps.some(p => p.id === 'p-r-dave'), '…the booking and its unplayed player gone')
+  eq((await runBooking({ token: 'tok-dave', action: 'withdraw', code: 'COMP01', memberId: 'r-ross' }, bstore, open)).status, 403, 'Dave may not take Ross off — not his booking')
+  const idx = await runBooking({ token: 'tok-ross', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '13.9' }, bstore, open)
+  ok(idx.status === 200 && indexSets[0] === 'r-ross:13.9:ross', 'the start sheet changes the one index, by the member starting the card (D179)')
+
+  section('Guests can watch: everybody else a spectator (D184)')
+  eq(mergeGrant(null, { watchOnly: true, playerId: 'p1' }, NOW).role, 'spectator', 'a guest not on the list watches only, whatever they claim')
+  eq(mergeGrant({ role: 'player', playerId: 'p1', organiserUntil: null }, { watchOnly: true }, NOW).role, 'player', '…and nobody is lowered')
+  const entry = read('app/api/entry/entry.ts')
+  ok(/const watchOnly = !!trip\.competition/.test(entry) && /onClubList/.test(entry), 'the entry route makes a competition\'s non-members spectators')
+  ok(!/@\/app\/api\/club\//.test(entry) && !/@\/lib\/account/.test(entry), '…without naming the club route or an account (D94\'s guard)')
+
+  section('Never a PIN box on a competition; its addresses lead into the club')
+  for (const f of ['app/components/OrganiserLock.tsx', 'app/components/InlineUnlock.tsx']) {
+    ok(/useCompetitionClub\(tripCode\)/.test(read(f)) && /competitionLockLine\(competition\)/.test(read(f)), `${f}: a competition says who runs it, no PIN box`)
+  }
+  const lock = read('app/components/OrganiserLock.tsx')
+  ok(/open && !unlocked && !competition && !forgot && \(\s*<form/.test(lock), '…the padlock\'s PIN form is drawn only off a competition')
+  ok(/if \(competition\) return <p/.test(read('app/components/InlineUnlock.tsx')), '…and the in-place prompt draws none either')
+  ok(/if \(data && competition\) redirect\(`\/club\/comp\/\$\{data\.trip_code\}`\)/.test(read('app/[code]/page.tsx')), 'the short link goes into the club')
+  ok(/if \(trip && competition\) redirect\(`\/club\/comp\//.test(read('app/golf/[root]/[tripCode]/page.tsx')), 'the event\'s home goes into the club')
+  ok(/competitionBack/.test(read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')), 'the card\'s back arrow returns to the competition')
+  const cleanup = read('app/api/cleanup/route.ts')
+  ok(/eq\("competition", "club"\)/.test(cleanup) && /filter\(c => !held\.has\(c\.round_id\)\)/.test(cleanup) && /filter\(a => !held\.has\(a\.round_id\)\)/.test(cleanup),
+    'the nightly cleanup closes and deletes nothing on a competition')
+  ok(/competition && tripCode && \(\s*<IndexConfirm/.test(read('app/scoring/LiveScoringFlow.tsx')), 'the start sheet confirms each index on a competition only')
+  ok(!/@\/lib\/account/.test(read('app/scoring/IndexConfirm.tsx')), '…through the phone\'s own sign-in, never the account code')
+  ok(/placeClass\(row\.place, provisional\)/.test(read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'))
+    && /provisional=\{provisional\}/.test(read('app/club/[slug]/comp/[code]/CompBoard.tsx')), 'no gold before Certify (D171)')
+  const page = read('app/club/[slug]/comp/[code]/page.tsx')
+  ok(page.indexOf('entryAllowed(') < page.indexOf('readCompSheet(') && /return shell\(<CompDoor/.test(page),
+    'the competition page reads nothing of the competition without the door')
+  ok(/<CompBar slug=\{slug\} code=\{code\} active=\{section\} \/>/.test(page), '…and draws its bar on the server (D180)')
+}
+
 async function main() {
   ruleTests()
   await routeTests()
@@ -815,6 +973,7 @@ async function main() {
   await pageRouteTests()
   await handicapTests()
   await competitionTests()
+  await competitionD2Tests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

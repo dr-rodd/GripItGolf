@@ -7,6 +7,9 @@ import { handicapStore } from '../handicaps/store'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
 import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
+import { compPhase, type CompPhase } from '@/lib/compPhase'
+import { teeInstant } from '@/lib/clubComp'
+import { opensAt, parseTeeRules, teeClocks } from '@/lib/teeSheet'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser } from '../account/store'
@@ -16,11 +19,11 @@ import type { ClubRecord, ClubStore, MemberRecord } from './club'
 type Db = ReturnType<typeof createAdminClient>
 
 const CLUB_COLS = 'id, slug, name, verified_at, refused_at, colour, crest_path'
-const ROW_COLS = 'id, club_id, name, member_number, gui_number, email, role, user_id, removed_at, on_boards'
+export const ROW_COLS = 'id, club_id, name, member_number, gui_number, email, role, user_id, removed_at, on_boards'
 const SEND_TIMEOUT_MS = 8000
 
 type ClubRow = { id: string; slug: string; name: string; verified_at: string | null; refused_at: string | null; colour?: string | null; crest_path?: string | null }
-type RowRow = {
+export type RowRow = {
   id: string; club_id: string; name: string; member_number: string | null; gui_number: string | null
   email: string | null; role: ClubRole; user_id: string | null; removed_at: string | null; on_boards: boolean
 }
@@ -41,7 +44,7 @@ async function withArt(db: Db, clubs: ClubRecord[]): Promise<ClubRecord[]> {
   const art = new Map(((data ?? []) as { id: string; art_path: string | null; art_dark_path: string | null }[]).map(r => [r.id, r]))
   return clubs.map(c => ({ ...c, artPath: art.get(c.id)?.art_path ?? null, artDarkPath: art.get(c.id)?.art_dark_path ?? null }))
 }
-const asRow = (r: RowRow): MemberRecord => ({
+export const asRow = (r: RowRow): MemberRecord => ({
   id: r.id, clubId: r.club_id, name: r.name, memberNumber: r.member_number, guiNumber: r.gui_number,
   email: r.email, role: r.role, userId: r.user_id, removedAt: r.removed_at, onBoards: r.on_boards,
 })
@@ -60,14 +63,49 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
   const { data: priv, error } = await db.from('trip_private').select('trip_id, club_access').eq('club_id', clubId)
   if (error || !priv?.length) return []
   const access = new Map((priv as { trip_id: string; club_access: string | null }[]).map(p => [p.trip_id, parseClubAccess(p.club_access)]))
-  const { data: trips, error: e } = await db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', [...access.keys()])
+  const ids = [...access.keys()]
+  const [{ data: trips, error: e }, comps] = await Promise.all([
+    db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', ids),
+    // Stage (d2): which are competitions, and members only (089 — fail-soft).
+    db.from('trips').select('id, competition, public_passcode_hash').in('id', ids).eq('competition', 'club'),
+  ])
   if (e) throw e
+  const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null }[]
+  const phases = compRows.length ? await competitionPhases(db, compRows.map(c => c.id)) : new Map<string, CompPhase>()
+  const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash }]))
   return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
     .map(t => ({
       code: t.trip_code, name: t.name,
       kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
       startDate: t.start_date, endDate: t.end_date, access: access.get(t.id) ?? null,
+      ...(compOf.has(t.id) ? { competition: compOf.get(t.id)! } : {}),
     }))
+}
+
+/**
+ * Each competition's phase for Comps (D169): from its sheet's opening, its
+ * first tee time and whether a card has started — one read of the rounds,
+ * one of the cards. Who is booked and signed is the competition page's to
+ * count; certified arrives with (d4).
+ */
+async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string, CompPhase>> {
+  const { data: rounds } = await db.from('rounds').select('id, trip_id, scheduled_date, tee_sheet').in('trip_id', tripIds)
+  const rs = (rounds ?? []) as { id: string; trip_id: string; scheduled_date: string | null; tee_sheet?: unknown }[]
+  const { data: cards } = rs.length ? await db.from('live_rounds').select('round_id').in('round_id', rs.map(r => r.id)) : { data: [] }
+  const started = new Set(((cards ?? []) as { round_id: string }[]).map(c => c.round_id))
+  const now = Date.now()
+  const out = new Map<string, CompPhase>()
+  for (const r of rs) {
+    const rules = parseTeeRules(r.tee_sheet)
+    if (!rules || !r.scheduled_date) continue
+    const first = teeClocks(rules)[0]
+    out.set(r.trip_id, compPhase({
+      bookingOpensAt: opensAt(rules, r.scheduled_date)?.getTime() ?? null,
+      firstTeeAt: first ? teeInstant(r.scheduled_date, first) : null,
+      booked: 0, finished: 0, cardsStarted: started.has(r.id), certifiedAt: null,
+    }, now))
+  }
+  return out
 }
 
 export function clubStore(db: Db): ClubStore {

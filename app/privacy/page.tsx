@@ -159,6 +159,12 @@ export default function PrivacyPage() {
           see a change made on the day; the record is kept with the account, and goes when it does.
         </p>
         <p className="mt-3">
+          <B>Club competitions.</B> To book a club&apos;s competition together, people on its list can find
+          each other by name — the name only, never a number or an email — and see who is on each tee
+          time. Every player in a club competition needs their own Green Dot account. A competition is
+          for the club&apos;s members unless the club lets guests watch it, read-only, with its code.
+        </p>
+        <p className="mt-3">
           When a membership lapses, the golf played stays. When a club takes somebody off its list,
           their link to the club ends at once and the access it gave with it; their own account is
           never touched by a club, their names and scores stay with the events they played in, and

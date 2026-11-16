@@ -160,6 +160,15 @@ export type Leaderboard = {
   tieBreak?: TieBreak
 
   /**
+   * A club competition's board (D182, stage (d2)): one round, its ties
+   * broken on the cards — back 9, then 6, 3 and 2 — and then shared. The
+   * one totals board that keeps a tie rule; every other board's stays the
+   * prizes question it has always been (see `parseLeaderboards`), so no
+   * board stored before this reads any differently.
+   */
+  clubCompetition?: true
+
+  /**
    * Matchplay only — which round of golf each bracket round is played over,
    * and how a match on it is decided.
    *
@@ -1172,7 +1181,12 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // players share the place — so a countback stored on a totals board
       // (every one the form seeded before it learned this) is dropped here,
       // which is what retires it everywhere at once.
-      if (lb.combine === 'position') {
+      // A club competition's one-round board keeps its countback (D182) —
+      // marked so, so no older totals board's seeded countback comes back.
+      const competitionBoard = r.clubCompetition === true && lb.combine === 'total'
+        && roundIdList(r.roundIds).length === 1
+      if (competitionBoard) lb.clubCompetition = true
+      if (lb.combine === 'position' || competitionBoard) {
         const tieBreak = TIE_BREAKS.find(t => t.key === r.tieBreak)?.key
         if (tieBreak && tieBreak !== 'even_split') lb.tieBreak = tieBreak
         // Only countback has an overall question, and only one of its answers

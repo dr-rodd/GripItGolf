@@ -1,10 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { createAdminClient } from '@/lib/supabase-admin'
-import { clubColours, clubStyle } from '@/lib/clubColour'
-import { clubAssetUrl, irishToday, publicClubEvents } from '@/lib/clubs'
-import { clubStore, readClubEvents } from '@/app/api/club/store'
-import ClubView, { type ClubFace } from './ClubView'
+import ClubView from './ClubView'
+import { readFace } from './face'
 
 /**
  * A club's page (stage (e1), D157, D158): one address, two views. This
@@ -22,24 +19,6 @@ import ClubView, { type ClubFace } from './ClubView'
 
 export const revalidate = 60
 
-async function readFace(slug: string): Promise<ClubFace | null> {
-  const db = createAdminClient()
-  const club = await clubStore(db).clubBySlug(slug).catch(() => null)
-  if (!club || !club.verifiedAt) return null
-  const events = await readClubEvents(db, club.id).catch(() => [])
-  const base = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const colours = clubColours(club.colour)
-  return {
-    slug: club.slug,
-    name: club.name,
-    style: clubStyle(colours),
-    crestUrl: clubAssetUrl(base, club.crestPath ?? null),
-    artUrl: clubAssetUrl(base, club.artPath ?? null),
-    artDarkUrl: clubAssetUrl(base, club.artDarkPath ?? null),
-    events: publicClubEvents(events, irishToday(new Date())),
-  }
-}
-
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params
   const face = await readFace(slug)
@@ -48,7 +27,9 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 
 export default async function ClubPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const face = await readFace(slug)
-  if (!face) notFound()
+  const read = await readFace(slug)
+  if (!read) notFound()
+  // The club's id stays on the server; the page needs only its face.
+  const { id: _id, ...face } = read
   return <ClubView face={face} />
 }

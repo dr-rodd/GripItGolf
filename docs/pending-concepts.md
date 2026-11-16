@@ -1445,6 +1445,72 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
+### Stage (d2) as built — the competition in the club area (16 Nov 2026; D162–D184)
+
+**Ross's amendment, 16 Nov (before (d2) was finished):** *every member must
+have an account to be allowed to play.* A member who forgets their phone is
+scored on another device and co-signed by a selected member — but **every
+card is approved by the player on their own account at some stage**, so a
+card is finalised only by **the player's approval and a marker's**. This
+replaces D165's "a listed member with no account is booked and scored by a
+partner" and D178's "a no-account member's card is finalised by whoever
+scored it" — both gone. D94's exception now reads: *"…except a club's
+members-only competition, where the club's list is the door and every
+player needs their own Green Dot account. A member who forgets their phone
+is scored on another and approves their card on their own account later."*
+Built now: booking refuses a list row with no account linked (the partner
+search says so). The approval and the marker are (d3)'s, redrawn below.
+
+**Built:**
+- **New competition** on Comps for a verified club's owners and admins
+  (`NewCompetition`: name, day, course — the home course first — Stableford
+  or strokes and the allowance, members only or guests can watch, the tee
+  times and when booking opens; no email when it opens, D175) →
+  `/api/club/competition` (`runNewCompetition` on `runCreate`'s own checks,
+  `createStore` moved out of the create route to share them): the event
+  (`trips.competition = 'club'`, Club admins only, the door's PIN nobody
+  holds unless guests may watch), its golf item and its round on the tee
+  sheet with its rules — all in one request.
+- **The competition page** `/club/[slug]/comp/[code]`: the club's face, the
+  phase line, Manage competition (D183), the bar the server draws (D180;
+  the rise out of Comps waits for its spec), the three sections always in
+  it (D181). Without the door's cookie only `CompDoor` is drawn.
+- **Booking** (`CompTeeSheet`, `/api/club/booking`): yourself in one tap,
+  partners by a name search, withdraw until the time has gone; a player made
+  for a list row when first booked, its index the account's (D179); two
+  phones on one time — whoever went over takes theirs back. *Departure:* the
+  competition books on a sheet of its own rather than a mode of the event
+  tee sheet (1,288 lines) — the event's tee sheet is untouched and still
+  there for Manage.
+- **The board**: the event's own, from the D91 copy, **no gold until
+  Certify** (`placeClass(…, held)`), ties by countback then shared (D182;
+  `clubCompetition` on the board is what keeps the tie rule on a totals
+  board — no older board changes).
+- **Comps** rows wear their phase (Announced, Booking open, In play — who is
+  booked and signed is the page's to count; Awaiting sign-off and Certified
+  arrive with signing and Certify) and open inside the club; Board opens a
+  competition's board there; a guests-can-watch competition is on the
+  public face.
+- **The event side**: the short link and the event's home go into the club;
+  `/enter/<code>` never draws a PIN box; the padlock and in-place prompts say
+  "Run by <club>'s admins" (`competitionOf` from `/api/entry`); a
+  competition's non-members are **spectators** (D184); the card's back arrow
+  returns to the competition; the start sheet confirms each player's index
+  (D179); the nightly cleanup leaves a competition's rounds alone.
+
+**Known, not built:** a list carries no gender, so a woman booked from it
+starts as `M` (the players table's default) — her tees come from the men's
+card until her gender is set. Where gender lives for a club member is a
+question for Ross.
+
+**(d3), redrawn for the amendment:** signing on the server
+(`/api/card/sign`, the commit rule in `lib/`); a competition card final
+only with **the player's approval on their own account and a marker's** —
+the player approves whenever they can (on their phone after a round scored
+on somebody else's), the marker from the club's list, the two never the
+same account; Cards to sign for both; Send it back. Migration 090 as drawn,
+`card_signatures` gaining the player's approval beside the marker's.
+
 ### Stage (d1) as built — club competitions' groundwork (16 Nov 2026; D161, D163, D164, D179)
 
 **Migration 089** (paste before the deploy): `clubs.home_course_id`,

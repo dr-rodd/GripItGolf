@@ -47,6 +47,8 @@ export interface EntryTrip {
    * event outside a club, or a club not yet verified.
    */
   clubAdminIds?: string[]
+  /** A club competition (stage (d2), migration 089). */
+  competition?: boolean
 }
 
 /** What the rules need to know about an event, the one copy (entry, the event actions). */
@@ -76,6 +78,11 @@ export interface EntryStore {
   /** True only for a claimed player of this very event. */
   claimedPlayer(tripId: string, playerId: string): Promise<boolean>
   readMembership(userId: string, tripId: string): Promise<Membership | null>
+  /**
+   * D184: whether this account is on the club's list — linked, not taken
+   * off. A club competition's phone that is not watches only.
+   */
+  onClubList?(clubId: string, userId: string): Promise<boolean>
   writeMembership(userId: string, tripId: string, m: Membership): Promise<void>
   readAttempts(keys: string[]): Promise<Map<string, AttemptWindow>>
   writeAttempt(key: string, tripId: string, w: AttemptWindow): Promise<void>
@@ -106,7 +113,7 @@ export interface EntryInput {
 }
 
 export type EntryOutcome =
-  | { status: 200; body: { ok: true; tripId: string; role: Role | null; organiserUntil: string | null; readOnly: boolean; organiserBy: 'pin' | 'account' | null } }
+  | { status: 200; body: { ok: true; tripId: string; role: Role | null; organiserUntil: string | null; readOnly: boolean; organiserBy: 'pin' | 'account' | null; competitionOf?: string } }
   | { status: 400 | 401 | 403 | 404 | 429 | 503; body: { ok: false; error: string } }
 
 const fail = (status: 400 | 401 | 403 | 404 | 429 | 503, error: string): EntryOutcome =>
@@ -182,7 +189,7 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
       m = closeOrganiser(m)
       await store.writeMembership(userId, trip.id, m)
     }
-    return answer(trip.id, withOwner(m, trip, userId), facts, now)
+    return answer(trip, withOwner(m, trip, userId), facts, now)
   }
 
   const adminPin = str(input.adminPin)
@@ -219,22 +226,30 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
     ? asked.toLowerCase()
     : null
 
+  // A club competition (D184): anybody not on its club's list — and not one
+  // of its admins — watches only, whatever they claim. Members score as ever.
+  const watchOnly = !!trip.competition && !!trip.clubId && !organiser
+    && !(trip.clubAdminIds ?? []).includes(userId)
+    && !(store.onClubList ? await store.onClubList(trip.clubId, userId) : false)
+
   const existing = await store.readMembership(userId, trip.id)
-  const next = mergeGrant(existing, { organiser, playerId }, now)
+  const next = mergeGrant(existing, { organiser, playerId: watchOnly ? null : playerId, watchOnly }, now)
   await store.writeMembership(userId, trip.id, next)
-  if (playerId && store.linkPlayer) {
+  if (playerId && !watchOnly && store.linkPlayer) {
     try { await store.linkPlayer(userId, trip.id, playerId) } catch (e) { console.error('player link failed:', e) }
   }
-  return answer(trip.id, withOwner(next, trip, userId), facts, now)
+  return answer(trip, withOwner(next, trip, userId), facts, now)
 }
 
 /** What a phone is told: its role, and when the PIN's hours end — never anything about the PIN itself. */
-function answer(tripId: string, m: Membership | null, facts: EventFacts, now: Date): EntryOutcome {
+function answer(trip: EntryTrip, m: Membership | null, facts: EventFacts, now: Date): EntryOutcome {
   return {
     status: 200,
     body: {
       ok: true,
-      tripId,
+      tripId: trip.id,
+      // A club competition says whose it is, so its padlock never asks for a PIN.
+      ...(trip.competition ? { competitionOf: trip.clubName ?? 'the club' } : {}),
       role: roleOf(m, facts, now),
       organiserUntil: m?.organiserUntil ?? null,
       readOnly: !mayWrite(m, facts, now),

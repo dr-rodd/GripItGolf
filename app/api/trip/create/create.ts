@@ -31,6 +31,8 @@ export const CREATE_COLUMNS = [
   'name', 'slug', 'trip_code', 'status', 'start_date', 'end_date', 'description',
   'formats', 'leaderboards', 'kind', 'bracket_setup', 'event_permissions', 'run_setup',
   'track_stats', 'team_scoring', 'lead_email',
+  // A club competition (stage (d2), migration 089) — made only by /api/club/competition.
+  'competition',
 ] as const
 
 export interface CreateStore {

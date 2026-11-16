@@ -538,3 +538,40 @@ export async function uploadClubImage(clubId: string, kind: 'crest' | 'art' | 'a
     return { ok: false, error: ACCOUNT_WORDS.noReach }
   }
 }
+
+// ─── Club competitions (stage (d2)) ────────────────────────────
+
+/**
+ * D162: a verified club's owner or admin makes a competition. The server
+ * makes the event, its round and its tee sheet in one request, and sets
+ * this phone's way through a members-only door. Never throws.
+ */
+export async function makeCompetition(clubId: string, form: Record<string, unknown>): Promise<{ ok: true; code: string; slug: string } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { clubId, form }, '/api/club/competition')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, code: String(r.body.code), slug: String(r.body.slug) }
+}
+
+export interface BookingAnswer {
+  myPlayerId?: string | null
+  myRowId?: string
+  admin?: boolean
+  names?: { id: string; name: string; booked: boolean; linked: boolean }[]
+}
+
+/**
+ * A club competition's booking (D173): `state` (what this phone is in it,
+ * and the members-only door's way through), `names` (partners from the
+ * list), `book` and `withdraw`. Never throws.
+ */
+export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
+  const r = await askServer(token, { ...body, action }, '/api/club/booking')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as BookingAnswer) }
+}

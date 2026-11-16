@@ -66,4 +66,10 @@ export const TONE_TEXT: Record<ScoreTone, string> = {
 }
 
 /** A place on a board: the leader's in gold — winning — the rest quiet. */
-export const placeClass = (place: number) => (place === 1 ? 'text-gold-deep font-semibold' : 'text-ink/65')
+/**
+ * A place on a board. Gold is for winning alone — and a club competition has
+ * no winner until it is certified (D171): until then its leader's place is
+ * `held`, plain ink.
+ */
+export const placeClass = (place: number, held = false) =>
+  (place === 1 ? (held ? 'text-ink font-semibold' : 'text-gold-deep font-semibold') : 'text-ink/65')

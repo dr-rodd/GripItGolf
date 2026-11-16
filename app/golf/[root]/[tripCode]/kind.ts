@@ -81,3 +81,18 @@ export const fetchTabExtras = cache(async (tripCode: string): Promise<{ teeTimes
     orderOfPlay: !!overallOf(boards) && boards.some(b => b.competition === 'matches'),
   }
 })
+
+/**
+ * Whether the event is a club competition (stage (d2), migration 089) —
+ * its own address is then inside its club's area, `/club/comp/<code>`, and
+ * the short link and the event's home go on there. Its own fail-soft query:
+ * before 089 there is no column, and nothing is one.
+ */
+export const fetchIsCompetition = cache(async (tripCode: string): Promise<boolean> => {
+  const { data, error } = await eventReader(tripCode)
+    .from('trips')
+    .select('competition')
+    .eq('trip_code', tripCode)
+    .maybeSingle()
+  return !error && (data as { competition?: string | null } | null)?.competition === 'club'
+})

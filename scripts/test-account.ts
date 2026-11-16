@@ -505,8 +505,8 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
-    'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), and a member\'s home (D148)')
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/NewCompetition.tsx', 'app/club/[slug]/comp/[code]/CompDoor.tsx', 'app/club/[slug]/comp/[code]/CompManage.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
+    'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), a club competition\'s door, booking and New competition (stage (d2)), and a member\'s home (D148)')
   ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
     '  …which only asks whether this phone is signed in')
   ok(importers.includes('app/account/AccountScreen.tsx') && importers.includes('app/home/EventsTab.tsx'), '  …the account screen and the Events tab (was My events)')
@@ -526,7 +526,7 @@ function wiringTests() {
   const create = strip(read('app/api/trip/create/create.ts'))
   ok(/import \{ CREATE_NEEDS_ACCOUNT, CREATE_REFUSED \} from '@\/lib\/account'/.test(create), 'the create route reads the one switch')
   ok(/CREATE_NEEDS_ACCOUNT && !\(await store\.isMember\(userId\)\)/.test(create), '  …and refuses a phone without an account while it is on')
-  ok(/!u\.is_anonymous && !!u\.email && !!\(u\.email_confirmed_at \?\? u\.confirmed_at\)/.test(read('app/api/trip/create/route.ts')),
+  ok(/!u\.is_anonymous && !!u\.email && !!\(u\.email_confirmed_at \?\? u\.confirmed_at\)/.test(read('app/api/trip/create/store.ts')),
     '  …a member being a confirmed email, never an anonymous phone')
   ok(/<MemberGate><Doors \/><\/MemberGate>/.test(read('app/dashboard/create/CreateFlow.tsx')), 'every create wizard is behind the gate')
   ok(/never need an account/.test(read('app/dashboard/create/MemberGate.tsx')), '  …which says joining, playing, scoring and watching never need one')

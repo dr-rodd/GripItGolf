@@ -78,6 +78,8 @@ export type RoundHcp   = {
 type TeeRatingRow = { id: string; slope: number; course_rating: number; par: number }
 
 interface Props {
+  /** A club competition not yet certified (D171): its leader is not gold. */
+  provisional?: boolean
   tripCode: string
   /**
    * Everything this trip is playing for, each board carrying its own complete
@@ -1071,8 +1073,10 @@ function TeamName({ row, byPlayers, memberNames }: {
 }
 
 function Board({
-  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById, renderCard,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById, renderCard, provisional = false,
 }: {
+  /** A club competition not yet certified (D171): no gold. */
+  provisional?: boolean
   /**
    * The card drawn in place under a row — the site's rule (Ross, 10 Nov
    * 2026): one card to show opens as a slider below its row; several rounds
@@ -1351,7 +1355,7 @@ function Board({
                   {/* The place, not the row's index. Two level share one —
                       both are 1st and the next row is 3rd — which is what a
                       board that leaves ties standing is saying. */}
-                  <span className={`text-[15px] leading-[1.45] ${placeClass(row.place)} tabular-nums ${POS_W}`}>{row.place}</span>
+                  <span className={`text-[15px] leading-[1.45] ${placeClass(row.place, provisional)} tabular-nums ${POS_W}`}>{row.place}</span>
 
                   {/* The name, a size down from t-card, and shown in full by
                       moving rather than by truncating — the column fits a
@@ -1526,7 +1530,7 @@ export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
   tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, periods, periodRule, cardsOff, roundCards,
-  playerColours, sessionMatches,
+  playerColours, sessionMatches, provisional = false,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   const colourById = useMemo(() => new Map(Object.entries(playerColours ?? {})), [playerColours])
@@ -1995,6 +1999,7 @@ export default function TripLeaderboardClient({
 
   const board = (
     <Board
+      provisional={provisional}
       key={activeBoard.id}
       board={activeBoard}
       rows={currentRows}
@@ -2041,6 +2046,7 @@ export default function TripLeaderboardClient({
           ? <EmptyState message={sessionView.audience === 'team' ? 'No teams for this session yet — they are picked on the tee sheet.' : 'No scores yet.'} />
           : (
             <Board
+              provisional={provisional}
               key={sessionView.id}
               board={sessionView}
               rows={sessionRows}

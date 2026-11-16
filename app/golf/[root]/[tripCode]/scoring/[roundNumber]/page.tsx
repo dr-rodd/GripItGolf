@@ -145,6 +145,11 @@ export default async function TripCoursePage({
     } : {}),
   }))
 
+  // A club competition's card leads back to the competition, inside its
+  // club's area (stage (d2)); the card itself is unchanged.
+  const competitionBack = (trip as { competition?: string | null }).competition === 'club'
+    ? `/club/comp/${tripCode.toUpperCase()}?view=scoring` : null
+
   return (
     // The mark is the way back from a scorecard, and the bar is the way
     // anywhere else. Score entry used to be the one screen without it — the
@@ -154,8 +159,9 @@ export default async function TripCoursePage({
     // card's height instead. The Next button comes to rest just above the bar
     // rather than beneath it.
     <div className="min-h-dvh paper page-enter">
-      <TripHeader backTo={tripHome} title="scoring" />
+      <TripHeader backTo={competitionBack ?? tripHome} title="scoring" />
       <CourseDashboardClient
+        competition={competitionBack !== null}
         courseName={courseLabel((thisRound.courses as any).name)}
         courseId={courseId}
         players={players as any}
@@ -163,7 +169,7 @@ export default async function TripCoursePage({
         holes={(holesRes.data ?? []) as any}
         tees={tees as any}
         roundHandicaps={hcpsRes.data ?? []}
-        backHref={`${tripHome}/scoring`}
+        backHref={competitionBack ?? `${tripHome}/scoring`}
         roundId={thisRound.id}
         // For the card check on the pick-player screen: a correction re-scores
         // this trip's committed cards on this course, and nothing outside it.

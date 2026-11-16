@@ -285,10 +285,12 @@ export async function runClub(
       store.outsideEvents(user.id, events.map(e => e.code)),
       past.length ? store.topScores(past) : Promise.resolve({}),
     ])
+    // D161: the home course, for New competition's first answer (089).
+    const full = mayAdminister(mineRow.role) ? await store.club(club.id).catch(() => null) : null
     return {
       status: 200,
       body: {
-        ok: true, club: summary(club, mineRow.role), events, entries, me: { name: mineRow.name },
+        ok: true, club: summary(full ?? club, mineRow.role), events, entries, me: { name: mineRow.name },
         season: season.rows, courses: season.courses, outside, tops,
       },
     }

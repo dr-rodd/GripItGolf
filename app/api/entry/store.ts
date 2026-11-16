@@ -51,13 +51,15 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       const row = data as { id: string; end_date: string | null; settings_passcode_hash: string | null }
       // The owner and D107's answer (migration 085) in a query of their own
       // too: before 085 there is no owner, and nothing changes.
-      const [pub, shape, priv, club] = await Promise.all([
+      const [pub, shape, priv, club, comp] = await Promise.all([
         db.from('trips').select('public_passcode_hash').eq('id', row.id).maybeSingle(),
         db.from('trips').select('kind, bracket_setup, event_permissions').eq('id', row.id).maybeSingle(),
         db.from('trip_private').select('owner_id, settings_by').eq('trip_id', row.id).maybeSingle(),
         // The event's club (migration 086) in a query of its own: before
         // 086 there is no club, and nothing changes.
         eventClub(db, row.id),
+        // A club competition (089) in a query of its own: none before it.
+        db.from('trips').select('competition').eq('id', row.id).maybeSingle(),
       ])
       const p = (priv.error ? null : priv.data) as { owner_id?: string | null; settings_by?: string | null } | null
       const s = (shape.error ? null : shape.data) as { kind?: unknown; bracket_setup?: unknown; event_permissions?: unknown } | null
@@ -71,7 +73,12 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
         ownerId: p?.owner_id ?? null,
         settingsBy: p?.settings_by === 'owner' || p?.settings_by === 'anyone' ? p.settings_by : null,
         ...club,
+        competition: !comp.error && (comp.data as { competition?: string | null } | null)?.competition === 'club',
       }
+    },
+    async onClubList(clubId, userId) {
+      const { data, error } = await db.from('club_members').select('id').eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1)
+      return !error && (data ?? []).length > 0
     },
     async linkPlayer(userId, tripId, playerId) {
       // Only a Green Dot member — a confirmed email, never an anonymous phone.
