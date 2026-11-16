@@ -53,9 +53,13 @@ export const TIER_BOOT_SCRIPT =
   `var p=location.pathname,f=p==='/'&&!location.search&&!location.hash,` +
   `o=p==='/home'&&!location.search;` +
   `if(!f&&!o)return;` +
-  `var h=localStorage.getItem('${TIER_KEY}');` +
+  `var ls=localStorage,h=ls.getItem('${TIER_KEY}');` +
   `var m=/^club:([a-z0-9-]{1,60})$/.exec(h||'');` +
   `if(m){location.replace('/club/'+m[1]);return}` +
+  // D192: no hint, but a Green Dot account's sign-in kept on this phone —
+  // decided here, before the front page paints, as storedAccountSession does.
+  `if(f&&!h){for(var i=0;i<(ls.length||0);i++){var k=ls.key(i)||'';if(!/^sb-.+-auth-token$/.test(k))continue;` +
+  `try{var s=JSON.parse(ls.getItem(k)||'null');if(s&&s.user&&s.user.is_anonymous===false&&s.user.email){h='dot';break}}catch(e){}}}` +
   `if(f&&h==='dot')location.replace('/home');` +
   `}catch(e){}})()`
 

@@ -30,7 +30,7 @@ import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
-import { forgetTier, readTierHint, rememberTier } from './tierHint'
+import { forgetTier, readTierHint, rememberTier, storedAccountSession } from './tierHint'
 
 export type Mode = 'upgrade' | 'existing'
 
@@ -71,10 +71,11 @@ export async function readAccount(): Promise<{ email: string } | null> {
     const { data } = await (await client()).auth.getSession()
     const u = data.session?.user
     const signedIn = !!(u && !u.is_anonymous && u.email)
-    // Kept true on every read (D154): a phone signed in has a hint, one
-    // signed out has none. A club's hint is the club page's to set or drop.
-    if (!signedIn) forgetTier()
-    else if (!readTierHint()) rememberTier({ kind: 'dot' })
+    // A phone signed in has a hint (D154). One that reads no sign-in keeps
+    // its hint (D192): a read that failed — no signal while the sign-in
+    // renews — is not a sign-out. The hint goes only on signing out,
+    // deleting, or the server saying so (homeData, the club page).
+    if (signedIn && !readTierHint()) rememberTier({ kind: 'dot' })
     return signedIn ? { email: u!.email!.toLowerCase() } : null
   } catch {
     return null
@@ -370,7 +371,11 @@ export interface HomeData {
  * — the page then clears its hint and shows the front page (D154).
  */
 export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: false; signedOut?: true; error: string }> {
-  if (!(await readAccount())) return { ok: false, signedOut: true, error: ACCOUNT_WORDS.noReach }
+  // No sign-in kept on this phone at all is signed out; one kept but not
+  // read just now is a failed read, said as one and tried again (D192).
+  if (!(await readAccount())) {
+    return storedAccountSession() ? { ok: false, error: ACCOUNT_WORDS.noReach } : { ok: false, signedOut: true, error: ACCOUNT_WORDS.noReach }
+  }
   const token = await accountToken()
   if (!token) return { ok: false, error: ACCOUNT_WORDS.noReach }
   const r = await askServer(token, { action: 'home' })

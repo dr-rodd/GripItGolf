@@ -558,11 +558,16 @@ function wiringTests() {
 // ─── Stage (g): the tiers, and a member's home (D147–D149, D154) ─
 
 /** The head script run as a browser would, at an address with a hint stored. */
-function bootAt(href: string, hint: string | null, refuse = false): string | null {
+function bootAt(href: string, hint: string | null, refuse = false, session: object | null = null): string | null {
   const url = new URL(href, 'https://greendot.live')
   let went: string | null = null
   const location = { pathname: url.pathname, search: url.search, hash: url.hash, replace: (to: string) => { went = to } }
-  const localStorage = { getItem: (k: string) => { if (refuse) throw new Error('refused'); return k === TIER_KEY ? hint : null } }
+  const kept: Record<string, string> = { ...(hint === null ? {} : { [TIER_KEY]: hint }), ...(session ? { 'sb-abc-auth-token': JSON.stringify(session) } : {}) }
+  const localStorage = {
+    getItem: (k: string) => { if (refuse) throw new Error('refused'); return k in kept ? kept[k] : null },
+    key: (i: number) => Object.keys(kept)[i] ?? null,
+    get length() { return Object.keys(kept).length },
+  }
   vm.runInNewContext(TIER_BOOT_SCRIPT, { location, localStorage })
   return went
 }
@@ -589,6 +594,11 @@ async function tierTests() {
   eq(bootAt('/home?tab=events', 'club:lahinch'), null, '…but the personal page asked for by name stays, for a Club member too (stage (h))')
   eq(bootAt('/', 'club:"><script>'), null, 'a hint that is not an address goes nowhere')
   eq(bootAt('/', 'dot', true), null, 'storage refused: the front page shows')
+  const accountSession = { user: { is_anonymous: false, email: 'a@b.ie' } }
+  eq(bootAt('/', null, false, accountSession), '/home', 'D192: no hint but an account’s sign-in kept: on to /home before the front page paints')
+  eq(bootAt('/', null, false, { user: { is_anonymous: true, email: null } }), null, '…an anonymous phone’s is no account: the front page')
+  eq(bootAt('/?front', null, false, accountSession), null, '…and /?front is still the front page')
+  eq(bootAt('/', 'club:lahinch', false, accountSession), '/club/lahinch', '…a club hint still goes straight to the club')
 
   section('The personal page’s one ask (Q5)')
   const now = new Date('2026-11-14T12:00:00Z')
@@ -622,7 +632,11 @@ async function tierTests() {
   ok(/action: 'home'/.test(read('lib/accountClient.ts')) && /forgetTier\(\)[\s\S]{0,80}\n[\s\S]*signOut/.test(read('lib/accountClient.ts')),
     'the account’s own reads keep the hint true, and signing out clears it')
   const client = read('lib/accountClient.ts')
-  ok((client.match(/forgetTier\(\)/g) ?? []).length >= 3, '  …on reading no sign-in, signing out and deleting')
+  ok((client.match(/forgetTier\(\)/g) ?? []).length === 2, '  …on signing out and deleting')
+  ok(!/forgetTier/.test(client.slice(client.indexOf('export async function readAccount'), client.indexOf('export function watchAccount'))),
+    '  …never on reading no sign-in (D192): a failed read is not a sign-out')
+  ok(/storedAccountSession\(\) \? \{ ok: false, error: ACCOUNT_WORDS\.noReach \} : \{ ok: false, signedOut: true/.test(client),
+    '  …the home page sends a phone to the front only when no sign-in is kept at all, or the server says so')
   ok(/rememberTier\(\{ kind: 'club', slug: face\.slug \}\)/.test(read('app/club/[slug]/ClubView.tsx')), 'the club page notes a Club member')
   const landing = read('app/Landing.tsx')
   ok(/!readTierHint\(\) && storedAccountSession\(\)/.test(landing), 'a phone signed in before the hint existed is noticed on the front page, once')
