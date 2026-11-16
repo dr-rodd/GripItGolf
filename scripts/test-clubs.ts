@@ -23,7 +23,8 @@ import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
-import { compPhase, sectionLive, sectionWaitLine, type CompFacts } from '../lib/compPhase'
+import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
+import { barOf, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm, withdrawIssue, type CompForm } from '../lib/clubComp'
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
@@ -797,7 +798,7 @@ async function competitionTests() {
     && enter.indexOf("trip.competition === 'club'") < enter.indexOf('<EntryGate'),
     'the event\'s own door sends a competition on before any PIN box is drawn')
   const byCode = read('app/club/comp/[code]/page.tsx')
-  ok(/t\.competition !== 'club'/.test(byCode) && /verified_at/.test(byCode) && /redirect\(`\/club\/\$\{c\.slug\}\/comp\/\$\{code\}\$\{section\}`\)/.test(byCode),
+  ok(/t\.competition !== 'club'/.test(byCode) && /verified_at/.test(byCode) && /redirect\(section \? compSectionHref\(c\.slug, code, section\) : compHome\(c\.slug, code\)\)/.test(byCode),
     '/club/comp/<code> finds a verified club\'s competition and goes on to it; anything else is not found')
   ok(RESERVED_CLUB_SLUGS.includes('comp'), 'no club may have the address "comp"')
   eq(nextSlug('comp', []), 'comp-2', '…a club named Comp gets comp-2')
@@ -996,10 +997,13 @@ async function competitionD2Tests() {
   ok(!/@\/lib\/account/.test(read('app/scoring/IndexConfirm.tsx')), '…through the phone\'s own sign-in, never the account code')
   ok(/placeClass\(row\.place, provisional\)/.test(read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'))
     && /provisional=\{provisional\}/.test(read('app/club/[slug]/comp/[code]/CompBoard.tsx')), 'no gold before Certify (D171)')
-  const page = read('app/club/[slug]/comp/[code]/page.tsx')
-  ok(page.indexOf('entryAllowed(') < page.indexOf('readCompSheet(') && /return shell\(<CompDoor/.test(page),
-    'the competition page reads nothing of the competition without the door')
-  ok(/<CompBar slug=\{slug\} code=\{code\} active=\{section\} \/>/.test(page), '…and draws its bar on the server (D180)')
+  const compRead = read('app/club/[slug]/comp/[code]/read.ts')
+  ok(compRead.indexOf('entryAllowed(') < compRead.indexOf('readCompSheet(') && /return \{ \.\.\.base, door: true as const \}/.test(compRead)
+    && /page\.door \? \(/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')) && /<CompDoor /.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
+    'the competition pages read nothing of the competition without the door')
+  for (const f of ['page.tsx', 'tee-times/page.tsx', 'scoring/page.tsx', 'leaderboard/page.tsx', 'section.tsx']) {
+    ok(!/ClubTabBar|CompBar/.test(read(`app/club/[slug]/comp/[code]/${f}`)), `…and ${f} draws no bar of its own (D180 amended)`)
+  }
 }
 
 async function competitionD3Tests() {
@@ -1117,7 +1121,7 @@ async function competitionD3Tests() {
   ok(/t\.competition IS DISTINCT FROM 'club'/.test(m090) && (m090.match(/phone_score_rounds\(\)\)\)/g) ?? []).length >= 4,
     'phones keep writing scores everywhere but a club competition')
   ok(/PASTE THIS AFTER THE DEPLOY/.test(m090) && /-- ─── Undo/.test(m090) && /writable_rounds\(\)\)\);\n--   DROP POLICY|WITH CHECK \(round_id IN \(SELECT public\.writable_rounds\(\)\)\);/.test(m090), '…pasted after the deploy, with its undo back to 079')
-  const page = read('app/club/[slug]/comp/[code]/page.tsx')
+  const page = read('app/club/[slug]/comp/[code]/read.ts') + read('app/club/[slug]/comp/[code]/section.tsx')
   ok(/finished: new Set\(\[\.\.\.sheet\.final, \.\.\.sheet\.noReturns\]/.test(page), 'scoring closes once every booked card is final — approved and marked — or No return')
   ok(/<CompPlay code=\{code\}/.test(page) && /<CardsToSign code=\{code\} \/>/.test(page), 'the Scoring section: the card for the players on the sheet, and Cards to sign')
   ok(/m\.toSign\.length > 0/.test(read('app/club/[slug]/ClubView.tsx')), 'Cards to sign leads the club Home (D177)')
@@ -1239,11 +1243,74 @@ async function competitionD4Tests() {
     '…pasted after the deploy, its undo 079\'s function word for word')
   ok(/certifiedRounds\(supabaseAdmin/.test(read('app/api/card-check/apply/route.ts')), 'a card check never re-tells a certified round')
   ok(/certifiedRounds\(db, \[roundId\]\)/.test(read('app/admin/live/actions.ts')), '/admin never voids a card on a certified round')
-  const page = read('app/club/[slug]/comp/[code]/page.tsx')
+  const page = read('app/club/[slug]/comp/[code]/read.ts') + read('app/club/[slug]/comp/[code]/section.tsx')
   ok(/certifiedAt: sheet\.certifiedAt/.test(page) && /\.\.\.sheet\.noReturns/.test(page), 'the page\'s phase reads the certification and counts No returns as accounted for')
   ok(/phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results<\/h1>/.test(page) && /No return: /.test(page), 'certified, the board is the Results; No returns listed under it')
   ok(/<CompAdmin code=\{code\} \/>/.test(page), 'the Scoring section carries the admins\' Results card')
   ok(/round_no_returns/.test(read('app/api/club/store.ts')) && /certifiedAt: certifiedOf\.get/.test(read('app/api/club/store.ts')), 'Comps rows read Awaiting sign-off and Certified')
+}
+
+async function competitionBarTests() {
+  section('The competition bar and the Summary (D180 amended, D186–D190)')
+  eq(barOf('/club/lahinch', 'lahinch'), { set: 'club' }, 'the club page wears the club set')
+  eq(barOf('/club/lahinch/', 'lahinch'), { set: 'club' }, '…a trailing slash too')
+  eq(barOf('/club/lahinch/comp/ab12cd', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'summary' }, 'a competition\'s own address is its Summary (D186)')
+  eq(barOf('/club/lahinch/comp/AB12CD/tee-times', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'tee' }, '…tee-times lights Tee times')
+  eq(barOf('/club/lahinch/comp/AB12CD/scoring', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, '…scoring lights Scoring')
+  eq(barOf('/club/lahinch/comp/AB12CD/leaderboard', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'board' }, '…leaderboard lights Leaderboard')
+  eq(barOf('/club/lahinch/list', 'lahinch'), null, 'the list has no footer')
+  eq(barOf('/club/lahinch/comp/AB12CD/elsewhere', 'lahinch'), null, '…nor an address that is no section')
+  eq(barOf('/club/other/comp/AB12CD', 'lahinch'), null, '…nor another club\'s address')
+  eq(compSectionHref('lahinch', 'ab12cd', 'board'), '/club/lahinch/comp/AB12CD/leaderboard', 'a section\'s address')
+  eq(compHome('lahinch', 'ab12cd'), '/club/lahinch/comp/AB12CD', 'the Summary\'s')
+  eq(compsBack('lahinch'), '/club/lahinch?tab=comps', 'Comps from a competition goes back to the club\'s Comps (Ross, 16 Nov)')
+  eq([sectionOfView('tee'), sectionOfView('scoring'), sectionOfView('board'), sectionOfView('x'), sectionOfView(undefined)], ['tee', 'scoring', 'board', null, null],
+    'an old ?view= names its section')
+  eq(SECTION_ORDER.map(s => SECTION_LABEL[s]), ['Tee times', 'Scoring', 'Leaderboard'], 'the three, in Board, Stats and Club\'s slots (D180)')
+
+  const at = Date.UTC(2026, 10, 19, 19, 0)
+  eq(shortWhen(at), 'Thu 19 Nov, 7:00 pm', 'the Summary says when the short way, Irish time')
+  eq(summaryLine('announced', { bookingOpensAt: at, firstTee: null }), 'Booking opens Thu 19 Nov, 7:00 pm', 'announced: when booking opens, no button')
+  ok(/^Provisional/.test(summaryLine('awaiting', { bookingOpensAt: null, firstTee: null })), 'awaiting sign-off: provisional')
+  eq(['announced', 'booking', 'in_play', 'awaiting', 'certified'].map(p => showsTopThree(p as never)), [false, false, true, true, true], 'the top three while there are cards')
+
+  const layout = read('app/club/[slug]/layout.tsx')
+  ok(/<ClubBarProvider>/.test(layout) && /<ClubTabBar slug=\{slug\} \/>/.test(layout) && /data-club style=\{look/.test(layout),
+    'the club\'s layout draws the one footer, in the club\'s colour (D180 amended)')
+  ok(!/cookies\(\)|revalidate|force-dynamic/.test(layout), '…reading nothing that would make the club page per visit')
+  ok(!/ClubTabBar/.test(read('app/club/[slug]/ClubView.tsx').replace(/import[^\n]*\n/g, '')), 'the club page draws no bar of its own')
+  ok(!fs.existsSync('app/club/[slug]/comp/[code]/CompBar.tsx'), 'the four-slot bar is gone')
+  const bar = read('app/club/[slug]/ClubTabBar.tsx')
+  ok(/barOf\(pathname/.test(bar) && /usePathname\(\)/.test(bar), 'which set is the address\'s, so the server draws it for anybody')
+  ok(/data-set=\{comp \? 'comp' : 'club'\}/.test(bar) && /club-bar-kids/.test(bar) && /club-bar-own/.test(bar), 'one bar, both sets')
+  ok(/club-bar-tray bg-club-tint/.test(bar), 'the tray in the club\'s tint (D188)')
+  ok(/IconChevronLeft[^\n]*club-bar-icon-back/.test(bar), 'Comps wears a back chevron in a competition (D188)')
+  ok(/compSectionHref\(slug, live\.code, 'board'\)/.test(bar) && /phase === 'in_play'/.test(bar), 'Board opens an in-play competition\'s leaderboard (D189)')
+  ok(!/\b(bg|text|border|ring)-(accent|emerald)/.test(bar), 'no emerald in the bar')
+  const css = read('app/globals.css')
+  const inline = css.match(/@theme inline \{([^}]*)\}/)?.[1] ?? ''
+  ok(['club', 'club-deep', 'on-club', 'club-tint'].every(n => new RegExp(`--color-${n}:\\s*var\\(--gd-${n}\\)`).test(inline))
+    && !/--color-club/.test(css.replace(/@theme inline \{[^}]*\}/, '').replace(/\/\*[\s\S]*?\*\//g, '')),
+    'the club tokens are inline, so a class reads the wrapper\'s colour, not :root\'s bark')
+  ok(/\.club-bar\[data-set="comp"\] \.club-bar-kid \{[^}]*transition: transform 280ms var\(--gd-ease\) calc\(\(var\(--k\) - 1\) \* 40ms\)/.test(css),
+    'the three slide out on the putt curve, 280ms, 40ms apart')
+  ok(/\.club-bar-kids \{[^}]*overflow: hidden/.test(css) && !/\.club-bar-kid \{[^}]*opacity/.test(css.split('@media (prefers-reduced-motion')[0]),
+    '…from behind Comps, at full opacity (Ross, 16 Nov)')
+  ok(/\.club-bar\[data-set="comp"\] \.club-bar-own \{[^}]*transition: opacity 120ms ease-out/.test(css), 'Board, Stats and Club fade in 120ms')
+  ok(/\.club-bar-kid \{\s*transform: translateX\(calc\(var\(--k\) \* -100%\)\);[^}]*transition: transform 200ms ease-out/.test(css), 'leaving, the reverse in 200ms, no stagger')
+  ok(/prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.club-bar-kid \{\s*transform: none !important;/.test(css), 'Reduce Motion: a cross-fade, no travel')
+  ok(/body:has\(\[data-no-club-bar\]\) \.club-bar \{ display: none; \}/.test(css) && /<NoBar \/>/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
+    'the members-only door shows no footer, in the server\'s HTML')
+  const summary = read('app/club/[slug]/comp/[code]/page.tsx')
+  ok(/if \(asked\) redirect\(compSectionHref/.test(summary), 'an old ?view= on the Summary goes on to its section')
+  ok(/<CompManage code=\{code\} \/>/.test(summary), 'Manage competition on the Summary for owners and admins')
+  ok(/const gold = certified && r\.place === 1/.test(summary), 'gold only for the certified winner')
+  const action = read('app/club/[slug]/comp/[code]/CompSummaryAction.tsx')
+  ok(/Book a tee time/.test(action) && /Start your card/.test(action) && /Certify result/.test(action) && /See the results/.test(action),
+    'the phase\'s one action')
+  ok((action.match(/<ButtonLink /g) ?? []).length - (action.match(/variant="secondary"/g) ?? []).length === 3, '…one emerald button each, Change and See the results secondary')
+  ok(/\/club\/comp\/\$\{tripCode\.toUpperCase\(\)\}\?view=scoring/.test(read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')),
+    'the card\'s back arrow returns to Scoring (D190), through the code\'s door')
 }
 
 async function main() {
@@ -1257,6 +1324,7 @@ async function main() {
   await competitionD2Tests()
   await competitionD3Tests()
   await competitionD4Tests()
+  await competitionBarTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

@@ -72,3 +72,32 @@ export function sectionWaitLine(section: CompSection, at: number | null): string
   if (section === 'scoring') return when ? `Scoring opens with the first tee time, ${when}.` : 'Scoring opens with the first tee time.'
   return when ? `The leaderboard goes live with the first tee time, ${when}.` : 'The leaderboard goes live with the first tee time.'
 }
+
+/** "Thu 19 Nov, 7:00 pm", Irish time — the Summary's short way of saying when. */
+export function shortWhen(at: number): string {
+  const parts = new Intl.DateTimeFormat('en-IE', {
+    timeZone: 'Europe/Dublin', weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true,
+  }).formatToParts(new Date(at))
+  const part = (t: Intl.DateTimeFormatPartTypes) => parts.find(p => p.type === t)?.value ?? ''
+  return `${part('weekday')} ${part('day')} ${part('month')}, ${part('hour')}:${part('minute')} ${part('dayPeriod').toLowerCase()}`
+}
+
+/**
+ * The Summary's supporting line for a phase (D186), the same for everybody —
+ * what is personal (your tee time) the page adds once it knows who you are.
+ * `firstTee` is the first tee time as a clock ("9:00 am").
+ */
+export function summaryLine(phase: CompPhase, f: { bookingOpensAt: number | null; firstTee: string | null }): string {
+  switch (phase) {
+    case 'announced': return f.bookingOpensAt === null ? 'Booking opens soon' : `Booking opens ${shortWhen(f.bookingOpensAt)}`
+    case 'booking': return f.firstTee ? `Booking is open. First tee time ${f.firstTee}` : 'Booking is open'
+    case 'in_play': return 'Cards are out on the course'
+    case 'awaiting': return 'Provisional: every card is in, waiting for the club to certify'
+    case 'certified': return 'The result is final'
+  }
+}
+
+/** Whether the Summary shows the top three (D186): while there are cards to rank. */
+export function showsTopThree(phase: CompPhase): boolean {
+  return phase === 'in_play' || phase === 'awaiting' || phase === 'certified'
+}

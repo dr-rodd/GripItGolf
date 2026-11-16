@@ -1,184 +1,81 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
-import { cookies } from 'next/headers'
-import { notFound } from 'next/navigation'
-import { createAdminClient } from '@/lib/supabase-admin'
-import { entryCookie } from '@/lib/publicPin'
-import { entryAllowed } from '@/lib/pinHash'
-import { opensAt, teeClocks } from '@/lib/teeSheet'
-import { describeTime } from '@/lib/itinerary'
-import { compPhase, PHASE_WORDS, sectionLive, sectionWaitLine, type CompPhase, type CompSection } from '@/lib/compPhase'
-import { teeInstant } from '@/lib/clubComp'
-import { clubEventDates } from '@/lib/clubs'
-import { courseLabel } from '@/lib/courseDirectory'
-import { tripBase } from '@/lib/tripPaths'
+import { redirect } from 'next/navigation'
+import { showsTopThree, summaryLine } from '@/lib/compPhase'
+import { compSectionHref, sectionOfView } from '@/lib/clubBar'
 import { cardClass } from '@/app/components/ui'
-import { IconChevronLeft } from '@/app/components/icons'
-import TripHeader from '@/app/components/TripHeader'
-import Poller from '@/app/components/Poller'
-import { readCompSheet, readCompetition } from '@/app/api/club/bookingStore'
-import { Art, ClubHeader } from '../../ClubView'
-import { readFace } from '../../face'
-import CompBar from './CompBar'
-import CompDoor from './CompDoor'
+import CompShell, { PhaseLine, dayAndCourse } from './CompShell'
 import CompManage from './CompManage'
-import CompTeeSheet, { type CompSlot } from './CompTeeSheet'
-import CompBoard from './CompBoard'
-import { CardsToSign, CompPlay } from './CompSigning'
-import CompAdmin from './CompAdmin'
+import CompSummaryAction from './CompSummaryAction'
+import { readCompPage } from './read'
+import { summaryBoard } from './summaryBoard'
 
 /**
- * A club competition inside the club area (D167, D180–D181; stage (d2)):
- * the club's header and art, back to Comps, the competition's name, day and
- * one phase line, then one section — Tee sheet, Scoring or Leaderboard — and
- * the competition bar the server draws with the page, Home leading back to
- * the club. A section not yet live says when it starts.
+ * A club competition's Summary (D186; stage (d2), amended 16 Nov 2026) —
+ * the competition's own address, the first thing a tapped competition
+ * shows: its name, day, course and format, then one card with the phase,
+ * a line, and the phase's one action (Book a tee time, Start your card,
+ * Certify result for an admin), the top three while there are cards, and
+ * Manage competition for owners and admins. Its three sections are pages
+ * under it — `/tee-times`, `/scoring`, `/leaderboard` — and the club
+ * layout's footer carries them (D180 amended).
  *
- * **Members only** (D164) is the public PIN door with a PIN nobody holds:
- * without the door's cookie the page draws the club's face and the way in,
- * never the competition — the server cannot see who is signed in, so the
- * door (`CompDoor`) asks, and a member on the list comes back through it.
- * Guests can watch (D184) is no door: anybody with the address reads it.
+ * An old `?view=` (the four-slot bar's, a shared link) goes on to its
+ * section. Members only (D164): without the door's cookie only the door.
  */
 
 export const dynamic = 'force-dynamic'
 export const metadata: Metadata = { robots: { index: false, follow: false } }
 
-const SECTIONS: readonly CompSection[] = ['tee', 'scoring', 'board']
-
-/** Where the page opens when no section is asked for: the one the phase is about. */
-function firstSection(phase: CompPhase): CompSection {
-  return phase === 'announced' || phase === 'booking' ? 'tee' : phase === 'in_play' ? 'scoring' : 'board'
-}
-
-export default async function CompetitionPage({ params, searchParams }: {
+export default async function CompetitionSummary({ params, searchParams }: {
   params: Promise<{ slug: string; code: string }>
   searchParams: Promise<{ view?: string }>
 }) {
-  const [{ slug, code: rawCode }, { view }, jar] = await Promise.all([params, searchParams, cookies()])
-  const code = rawCode.trim().toUpperCase()
-  const db = createAdminClient()
-  const [face, comp] = await Promise.all([readFace(slug, { events: false }), readCompetition(db, code)])
-  if (!face || !comp || comp.clubId !== face.id) notFound()
-  const { id: _id, ...clubFace } = face
-  const here = `/club/${slug}/comp/${code}`
+  const [{ slug, code: rawCode }, { view }] = await Promise.all([params, searchParams])
+  const asked = sectionOfView(view)
+  if (asked) redirect(compSectionHref(slug, rawCode, asked))
 
-  const shell = (children: React.ReactNode, bar: React.ReactNode = null) => (
-    <main data-club style={clubFace.style as React.CSSProperties} className={`min-h-dvh paper relative isolate ${bar ? 'has-tabbar' : ''}`}>
-      <Art face={clubFace} home={false} />
-      <div className="relative z-10">
-        <TripHeader backTo={`/club/${slug}`} />
-        <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
-          <ClubHeader face={clubFace} members />
-          {children}
-        </div>
-      </div>
-      {bar}
-    </main>
-  )
+  const page = await readCompPage(slug, rawCode)
+  if (page.door) return <CompShell page={page} />
 
-  // The members-only door: nothing of the competition without it.
-  if (!entryAllowed(comp.publicHash, jar.get(entryCookie(code))?.value, code)) {
-    return shell(<CompDoor code={code} clubName={clubFace.name} here={here} />)
-  }
+  const { code, comp, phase, slots, bookingOpensAt, firstTee } = page
+  const certified = phase === 'certified'
+  const board = await summaryBoard(code, showsTopThree(phase))
 
-  const sheet = await readCompSheet(db, comp)
-  const clocks = teeClocks(comp.rules)
-  const now = Date.now()
-  const firstTeeAt = clocks[0] ? teeInstant(comp.date, clocks[0]) : null
-  const bookingOpensAt = opensAt(comp.rules, comp.date)?.getTime() ?? null
-  const booked = new Set(sheet.seats.map(s => s.playerId))
-  const phase = compPhase({
-    bookingOpensAt, firstTeeAt, booked: booked.size,
-    // Scoring closes when every booked player is accounted for: a card final —
-    // approved and marked (d3) — or a No return (d4).
-    finished: new Set([...sheet.final, ...sheet.noReturns].filter(id => booked.has(id))).size,
-    cardsStarted: sheet.onCourse.length + sheet.signed.length > 0,
-    certifiedAt: sheet.certifiedAt,
-  }, now)
-  const section: CompSection = SECTIONS.includes(view as CompSection) ? view as CompSection : firstSection(phase)
-  const live = sectionLive(section, phase)
+  return (
+    <CompShell page={page}>
+      <h1 className="t-h1 text-ink mt-6 break-words">{comp.name}</h1>
+      <p className="t-cap text-ink/65 mt-1">{dayAndCourse(page, [board.format])}</p>
 
-  const slots: CompSlot[] = clocks.map((clock, index) => {
-    const at = teeInstant(comp.date, clock)
-    return {
-      index, clock: describeTime(clock),
-      gone: at !== null && now >= at,
-      seats: sheet.seats.filter(s => s.slot === index)
-        .map(s => ({ rowId: s.rowId, playerId: s.playerId, name: s.name, handicap: s.handicap, bookedBy: s.bookedBy })),
-    }
-  })
+      <section className={`${cardClass('floating')} p-4 mt-6`}>
+        <PhaseLine phase={phase} />
+        <CompSummaryAction slug={slug} code={code} phase={phase}
+          line={summaryLine(phase, { bookingOpensAt, firstTee })}
+          slots={slots.map(s => ({ clock: s.clock, players: s.seats.map(x => ({ id: x.playerId, name: x.name })) }))} />
+      </section>
 
-  return shell(
-    <>
-      <Link href={`/club/${slug}?tab=comps`} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press">
-        <IconChevronLeft size={16} /> Competitions
-      </Link>
-      <h1 className="t-h1 text-ink mt-2 break-words">{comp.name}</h1>
-      <p className="t-cap text-ink/65 mt-1">
-        {[clubEventDates(comp.date, comp.date), sheet.courseName ? courseLabel(sheet.courseName) : null].filter(Boolean).join(' · ')}
-      </p>
-      <p className="t-label text-club-deep mt-1">{PHASE_WORDS[phase]}</p>
-      <CompManage code={code} />
-
-      {!live && (
-        <p className="text-ink/80 text-[15px] leading-relaxed mt-8">
-          {sectionWaitLine(section, section === 'tee' ? bookingOpensAt : firstTeeAt)}
-        </p>
-      )}
-      {live && section === 'tee' && (
-        <CompTeeSheet code={code} slots={slots} groupSize={comp.rules.groupSize}
-          bookingOpen={phase === 'booking'}
-          waitLine={phase === 'booking' ? null : phase === 'announced' ? sectionWaitLine('tee', bookingOpensAt) : 'The tee times have gone.'} />
-      )}
-      {!live && section === 'tee' && phase === 'announced' && (
-        // Before booking opens the club's admins may place people already.
-        <CompTeeSheet code={code} slots={slots} groupSize={comp.rules.groupSize} bookingOpen={false} waitLine={null} />
-      )}
-      {live && section === 'scoring' && (
+      {board.rows.length > 0 && (
         <section className="mt-6">
-          <Poller isActive={phase === 'in_play' || phase === 'awaiting'} />
-          <h1 className="t-h1 text-ink">Scoring</h1>
-          <CompPlay code={code} href={`${tripBase(code, 'tournament')}/scoring/1`} closed={phase === 'certified'} />
-          <CardsToSign code={code} />
-          <CompAdmin code={code} />
-          <ul className="mt-6 space-y-2">
-            {slots.filter(s => s.seats.length > 0).map(s => (
-              <li key={s.index} className={`${cardClass()} p-3 flex gap-3`}>
-                <span className="t-data text-[17px] text-ink w-14 flex-shrink-0">{s.clock}</span>
-                <span className="flex-1 min-w-0">
-                  {s.seats.map(x => (
-                    <span key={x.playerId} className="flex items-baseline justify-between gap-2">
-                      <span className="text-[15px] text-ink truncate">{x.name}</span>
-                      <span className="t-cap text-ink/65 whitespace-nowrap">
-                        {sheet.noReturns.includes(x.playerId) ? 'No return'
-                          : sheet.final.includes(x.playerId) ? 'Signed'
-                          : sheet.waiting.includes(x.playerId) ? 'To be signed'
-                          : sheet.onCourse.includes(x.playerId) ? 'On the course' : 'Not started'}
-                      </span>
-                    </span>
-                  ))}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <h2 className="t-h2 text-ink">{certified ? 'Results' : 'Top three'}</h2>
+          {!certified && <p className="t-cap text-ink/65 mt-1">Provisional until the club certifies the result.</p>}
+          <ol className={`${cardClass()} mt-3 divide-y divide-line`}>
+            {board.rows.map(r => {
+              // Gold is for winning only, and only once it is certified (D171).
+              const gold = certified && r.place === 1
+              return (
+                <li key={r.id} className="flex items-baseline gap-3 px-4 py-3">
+                  <span className={`t-data text-[17px] w-6 tabular-nums ${gold ? 'text-gold-deep' : 'text-ink/65'}`}>{r.place}</span>
+                  <span className={`t-data text-[17px] flex-1 min-w-0 truncate ${gold ? 'text-gold-deep' : 'text-ink'}`}>{r.name}</span>
+                  <span className={`t-data text-[17px] tabular-nums whitespace-nowrap ${gold ? 'text-gold-deep' : 'text-ink'}`}>
+                    {r.total}{board.unit && <span className="t-cap text-ink/65"> {board.unit}</span>}
+                  </span>
+                </li>
+              )
+            })}
+          </ol>
         </section>
       )}
-      {live && section === 'board' && (
-        <>
-          {/* Stage (d4): certified, the board is the Results — gold for the winner (D171). */}
-          {phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results</h1>}
-          <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
-            notes={Object.fromEntries(sheet.waiting.map(id => [id, 'To be signed']))} />
-          {sheet.noReturns.length > 0 && (
-            // A No return is off the board, listed under it, with no place.
-            <p className="t-cap text-ink/65 mt-3">
-              No return: {sheet.seats.filter(x => sheet.noReturns.includes(x.playerId)).map(x => x.name).join(', ')}
-            </p>
-          )}
-        </>
-      )}
-    </>,
-    <CompBar slug={slug} code={code} active={section} />,
+
+      <CompManage code={code} />
+    </CompShell>
   )
 }

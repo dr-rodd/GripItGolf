@@ -1445,6 +1445,213 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
+### Stage (d2), amended, as built — the competition bar and the Summary (16 Nov 2026, evening; D180 amended, D186–D190)
+
+**Built, 16 Nov 2026.** What landed, and where it differs from the plan below:
+- **One footer, drawn by the club's layout** (`app/club/[slug]/layout.tsx` → `ClubBarProvider` + `ClubTabBar`), its set from the address (`lib/clubBar.ts` `barOf`). `CompBar.tsx` is gone; `ClubView` draws no bar and keeps its members home and open tab in the layout's context (`ClubBarContext.tsx`), so coming back from a competition the club footer and page are there at once. The layout reads only the club's colour (`clubLook`, one cached row read shared with the page).
+- **The motion** is `.club-bar` in `globals.css`: the three **slide out from behind Comps at full opacity** (Ross's answer) — their strip starts at Comps' right edge and clips — 280ms on the putt curve, 40ms apart; Board, Stats and Club fade in 120ms; the tray fades in; out is the reverse in 200ms; Reduce Motion a 160ms cross-fade. The tray is the accent saying they are Comps' children.
+- **Comps from any competition page goes back to the club's Comps list, the footer back to normal** (Ross's answer 4, replacing "one level back"). A section reaches the Summary by **‹ Summary** above its title.
+- **The Summary** (`comp/[code]/page.tsx`): name, day · course · format (`boardFacts`), one floating card — the phase line (**In play**, Ross's answer 1, with the live dot), the line (`summaryLine`, `shortWhen`) and the action (`CompSummaryAction`, asked after paint: Book a tee time / your time and Change / Start your card / Certify result; **See the results secondary** — Ross to judge on the phone), the top three from the board's shared copy (`summaryBoard.ts`, gold only once certified), Manage competition. The sections are `tee-times/`, `scoring/`, `leaderboard/` over one body (`section.tsx`); the shared read is `read.ts` (`cache`), the frame `CompShell.tsx`. `?view=` on the Summary or the code's door goes on to the section.
+- **The members-only door draws no footer** — a `<NoBar />` mark read by `body:has([data-no-club-bar])`, so the server's HTML has none.
+- **Found on the way: club colours never reached a class** (`docs/gotchas-and-debt.md`, 16 Nov) — fixed with the four club tokens in `@theme inline`. Every club page now shows its club's colour.
+- `test:clubs` holds the bar, the Summary and the fix; `test:account` lists the Summary's action.
+
+*The plan as written before the build:* Ross's sketch replaces D180's four-slot bar
+(Tee sheet, Scoring, Leaderboard, Home over the club footer). His list
+numbered the new decisions D185–D189; D185 was already "every member
+watches, only the tee sheet plays", so they are recorded as **D186–D190**,
+in his order (`docs/design-brief.md` says which was which).
+
+**The decisions in one breath.** The competition's own address is its
+**Summary** (D186); its three sections are pages under it — `/tee-times`,
+`/scoring`, `/leaderboard`. On all four the footer is **the club footer**
+with Home and Comps where they are and **Tee times · Scoring · Leaderboard**
+in Board, Stats and Club's slots (D180), a **tray** in the club tint behind
+Comps and the three, and Comps wearing a **back chevron** (D188). Home and
+the header's dot go to the club Home; Comps goes back one level (D187).
+Board on the club footer opens a live competition's leaderboard (D189). The
+card stays full screen with no bar, its back arrow to `/scoring` (D190).
+All three sections always there, one not live a single line (D181).
+
+#### Question 1 — sliding out of Comps across a page change
+
+**Neither the View Transitions API nor an arrival-only animation: one bar
+that never leaves the screen.** The bar moves from the two pages into a
+layout, `app/club/[slug]/layout.tsx`, which covers `/club/[slug]` and every
+competition page under it. Next keeps a layout mounted across a soft
+navigation between its pages, so going from Comps to a competition is the
+same bar changing its set — an ordinary CSS transition on a component
+that is still there, with Board, Stats and Club and the three sections in
+the same five cells. **Nothing can play on a cold link or a refresh,**
+because a transition needs a change and a bar that has just mounted has
+had none — no flag, no `sessionStorage`, no "where did I come from". It is
+the trip layout's own lesson (CLAUDE.md: a bar drawn by a page "tears off
+the screen on every navigation").
+
+Why not the other two:
+- **View Transitions** for a Next soft navigation means React's
+  `<ViewTransition>`, which Next 16 still ships behind
+  `experimental.viewTransition` — a site-wide flag, on production, for one
+  footer (and CLAUDE.md asks a preview before anything that changes how
+  every page loads). The cross-document kind (`@view-transition`) never
+  fires on a soft navigation at all. It would also have to animate
+  elements that exist on only one side (the three sections leaving, the
+  club tabs returning) with hand-written `::view-transition-new` keyframes.
+- **Arrival only** would have the competition page draw ghost Board, Stats
+  and Club tabs to fade out, behind a flag written on the tap; and leaving
+  would need the club page to play the reverse — but the club footer only
+  appears once the page has asked who you are (`/api/club` `home`), after
+  paint, so the reverse would play late or not at all. The layout keeps
+  "this phone is a member here" from the club page it just left, so the
+  club set is back the moment you leave a competition.
+
+The motion as specified: in, Board/Stats/Club fade (120ms ease-out) while
+each section moves from the Comps slot to its own (`translateX` in whole
+columns — a transform's percentage is the cell's own width, one column —
+280ms on the putt curve, 40ms apart, done by 360ms) and the tray fades in;
+out, the reverse in 200ms ease-out, no stagger; between sections the lit
+state only (150ms, as today); Reduce Motion a 160ms cross-fade of the two
+sets. Durations and keyframes in the component's own `<style>` if
+`test:branding`'s ceilings refuse them in `globals.css` (the intro's
+precedent), else in `globals.css`.
+
+#### Question 2 — one bar component with both sets
+
+`ClubTabBar` gains a **second set and links**, and `CompBar.tsx` goes:
+
+- A tab may carry an `href` — drawn as a `Link`, otherwise the button it is
+  today calling `onChoose`. That is the whole change to a tab.
+- The bar draws five cells; each cell holds its club tab and, in columns
+  3–5, its competition tab on top, and `set: 'club' | 'comp'` says which
+  shows. Home and Comps are shared; in the competition set Comps is a link
+  (one level back) wearing the chevron, and the tray sits behind 2–5.
+- Which set: the layout's bar reads the address (`usePathname`) — any
+  `/club/[slug]/comp/[code]…` is the competition set, with the code and the
+  lit section from the address, so **it is server-drawn and needs nobody
+  signed in** (D180). On `/club/[slug]` itself the club set shows only once
+  the page says this phone is a member — through a small context the
+  layout provides (`ClubBarContext`: members yes/no, the tab, `hasBoard`,
+  the live competition for D189), which `ClubView` writes instead of
+  drawing the bar. `ClubView`'s `tab` state moves into that context, so
+  Comps on a Summary can set "comps" before it navigates and the club page
+  opens on Comps without a flash of Home (today `?tab=` is read after
+  mount).
+- No bar on `/club/[slug]/list`, on the public face, or on the members-only
+  door (`CompDoor` draws a one-line `<NoBar />` that tells the context so —
+  the layout cannot read the door's cookie without making the club page
+  dynamic and losing its `revalidate = 60`).
+
+#### Question 3 — a non-member watching a guests-can-watch competition
+
+The same bar, because the server cannot tell them apart and should not
+have to:
+- **Home** — `/club/[slug]`, which for them is the public face: art, crest,
+  "<club> members: sign in", the guests-welcome events. The competition
+  set fades away (no club set to return to). Correct: that *is* the club's
+  home for somebody outside it.
+- **Comps** — from a section, the Summary (as for anyone); from the Summary,
+  `/club/[slug]?tab=comps`, which the public face reads as its own page —
+  its guests-welcome list is a non-member's Comps. Nothing new to build.
+- **Scoring** — read-only: the tee times with each player's state ("On the
+  course", "To be signed", "Signed"). No Start your card (they are a
+  spectator, D184/D185), no Cards to sign, no admin card — each of those
+  already asks and draws nothing for them.
+- On the Summary, the action asks who this phone is and draws no button for
+  them (they cannot book); the phase line and top three are the same as
+  everyone's.
+
+#### What changes in (d2)
+
+1. **Routes.** `comp/[code]/page.tsx` becomes the Summary;
+   `comp/[code]/tee-times/`, `scoring/`, `leaderboard/` each a page. Their
+   shared read (face, competition, door, sheet, phase, slots) moves out of
+   today's page into `comp/[code]/read.ts`, wrapped in React `cache`; their
+   shared top (art, header, club header, name, date and course, phase line)
+   into `CompShell`. Each page is `force-dynamic` and reads its own phase —
+   never in the layout, which Next does not re-render between sections.
+   `?view=tee|scoring|board` on the Summary address redirects to the
+   section, so every link already out there keeps working.
+2. **The Summary (D186).** Name (`t-h1`, wrapping), date · course · format
+   (`t-cap`; format from the competition's board, `boardFacts`), then one
+   floating card: the phase line (13px semibold, `club-deep`; "Live" with
+   the live dot in accent while in play), one supporting line, the phase's
+   action. Announced: "Booking opens Thu 19 Nov, 7:00 pm", no button.
+   Booking open: **Book a tee time**, or once booked "You're out at 10:24
+   with …" and **Change** (secondary) — both to `/tee-times`. In play:
+   **Start your card** for a booked player (`CompPlay`'s rule), and the top
+   three under the card. Awaiting sign-off: "Provisional"; **Certify
+   result** for an owner or admin, to `/scoring`. Certified: the winner in
+   `gold-deep`, **See the results**. Manage competition as a row for owners
+   and admins (`CompManage`). Who "you" are is the phone's, so the action
+   and your tee time are a small client island asking `/api/club/booking`
+   `state` after paint, its height reserved so nothing jumps; the phase
+   line, supporting line and top three are the server's. The top three come
+   from the board's shared copy (`leaderboard/boardCopy.ts`) — no gold
+   until certified. The supporting lines are one helper beside
+   `sectionWaitLine` in `lib/compPhase.ts`.
+3. **The bar.** `app/club/[slug]/layout.tsx` with `ClubBarContext`;
+   `ClubTabBar` with both sets, links, the tray and the chevron (Q2) and
+   the motion (Q1); `CompBar.tsx` deleted; `ClubView` writes the context
+   and draws no bar; pages keep `has-tabbar`.
+4. **Ways back (D187, D190).** The in-page "‹ Competitions" link goes —
+   the Comps chevron is the way back now. `TripHeader backTo` stays
+   `/club/[slug]` (the dot). The card's back: the scoring page's
+   `competitionBack` becomes `/club/comp/<code>/scoring`, through a new
+   `app/club/comp/[code]/[section]/page.tsx` beside the code-only door,
+   which also maps an old `?view=`.
+5. **Board (D189).** While a club competition is in play
+   (`e.competition.phase === 'in_play'`, the first if several), the club
+   footer's Board is a link to its `/leaderboard`, and the bar slides into
+   the competition set with Leaderboard lit. Otherwise Board is the tab it
+   is today. `boardHref` in `ClubView` points at `/leaderboard`.
+6. **Tests.** `test:clubs`: one bar component holds both sets and no page
+   draws a bar; the layout draws it; the competition set comes from the
+   address alone; the section pages and the `?view=` redirects; the card's
+   back to `/scoring`; Board's live link; the Summary's action per phase
+   (the helper, pure). `test:branding`: the tray's `club-tint` and the
+   second tab set inside club space only; the bar's durations against the
+   ceilings. `test:account`'s list of files importing the account code
+   changes if the Summary island imports it.
+7. **Docs.** CLAUDE.md's routes table (the Summary and the three sections),
+   D127's line (the bar gains the competition set), and this section
+   rewritten as built.
+
+**Asks for Ross before building** — answered 16 Nov: In play; See the results to be judged on the phone; the three slide from behind Comps at full opacity, accented as its children; Comps goes back to the club's Comps and the footer returns:
+- **"Live" or "In play"?** The Summary's phase line says "Live" in the spec;
+  Comps' rows say "In play" from the one copy (`PHASE_WORDS`). One word
+  for both, or the Summary alone says Live?
+- **See the results** — an emerald button, or secondary? Emerald is for
+  action, and the phase is over.
+- **Do the sections fade in as they travel** out of Comps, or start fully
+  drawn behind Comps and emerge? The spec gives their travel, not their
+  opacity.
+- D187's Comps may become Home — one line in the bar if so.
+
+#### The phone check (after it is built)
+
+1. Club area → Comps → tap a competition: Board, Stats and Club fade, the
+   three sections slide out of Comps, the tray appears, Comps shows the
+   chevron, the Summary is on screen.
+2. Tap Tee times, Scoring, Leaderboard in turn: only the lit tab changes.
+3. Tap Comps from a section: the Summary. Tap Comps again: the Comps list,
+   the club tabs back (no flash of Home).
+4. From a section tap Home; separately tap the green dot: the club Home
+   with the club footer.
+5. Refresh on a section, and open a competition from a shared link: the bar
+   is just there — nothing moves.
+6. Start a card from Scoring: full screen, no bar; its back arrow lands on
+   Scoring.
+7. On a day a competition is in play, tap Board on the club footer: its
+   leaderboard, Leaderboard lit.
+8. Open a competition in each phase: the Summary's line and button match
+   (Announced none; Booking Book a tee time, then your time and Change; In
+   play Start your card and the top three; Awaiting Provisional, Certify
+   for an admin; Certified the winner in gold).
+9. Signed out, open a guests-can-watch competition: the same bar; Home the
+   public face; Scoring read-only; no button on the Summary.
+10. Reduce Motion on: a quick cross-fade between the two sets. Dark mode:
+    the tray in the club's night tint. 320px wide: "Leaderboard" fits.
+
 ### Stage (d4) as built — No return, void, Certify, Results, Reopen, the season (16 Nov 2026; D169–D172)
 
 **Migration 091** (paste **after** the deploy, with no competition card
