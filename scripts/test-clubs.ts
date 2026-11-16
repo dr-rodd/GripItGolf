@@ -566,6 +566,42 @@ async function pageRouteTests() {
   s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: NOW.toISOString(), userId: null })
   eq((await ask('tok-dave', 'home', { slug: 'portmarnock' })).status, 403, 'taken off the list, the members home closes on the next ask')
 
+  section('The members home in two waves (D195)')
+  s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: null, userId: 'dave' })
+  const before = await ask('tok-dave', 'home', { slug: 'portmarnock' })
+  const calls: string[] = []
+  const fast: ClubStore = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
+    readerFromToken: async (t: string) => { calls.push('reader'); return s.userFromToken(t) },
+    userFromToken: async (t: string) => { calls.push('auth'); return s.userFromToken(t) },
+    rows: async (id: string) => { calls.push('rows'); return s.rows(id) },
+    club: async (id: string) => { calls.push('club'); return s.club(id) },
+    clubEvents: async (id: string) => { calls.push('events'); return s.clubEvents(id) },
+    clubHome: async (slug: string, userId: string) => {
+      calls.push('first')
+      const club = await s.clubBySlug(slug)
+      const row = club ? (await s.rows(club.id)).find(r => r.userId === userId && !r.removedAt) ?? null : null
+      const events = club ? (await s.clubEvents(club.id)).map(e => (e.code === 'MEDAL1' ? { ...e, competition: { phase: 'announced' as const, membersOnly: true } } : e)) : []
+      return { club, row, events, comps: [{ tripId: 't-medal', code: 'MEDAL1' }] }
+    },
+    compPhases: async () => { calls.push('phases'); return new Map([['MEDAL1', 'booking' as const]]) },
+  })
+  const two = await runClub({ token: 'tok-dave', action: 'home', address: 'a', slug: 'portmarnock' }, fast, NOW)
+  ok(calls[0] === 'reader' && !calls.includes('auth'), 'the home’s token checked by the local reader, never a round trip to Auth')
+  ok(calls.includes('first') && !calls.includes('rows') && !calls.includes('club') && !calls.includes('events'),
+    'the club, this account’s row and the events in one first wave — never the whole list, never the club read twice')
+  ok(two.status === 200 && before.status === 200 && two.body.entries?.join() === before.body.entries?.join() && two.body.me?.name === before.body.me?.name
+    && two.body.events?.length === before.body.events?.length, '…answering what the reads one by one answered')
+  eq(two.status === 200 ? two.body.events?.find(e => e.code === 'MEDAL1')?.competition?.phase : null, 'booking', 'a competition’s phase arrives in the second wave')
+  const fellBack = await runClub({ token: 'tok-dave', action: 'home', address: 'a', slug: 'portmarnock' },
+    Object.assign(Object.create(Object.getPrototypeOf(s)), s, { clubHome: async () => null }), NOW)
+  ok(fellBack.status === 200 && fellBack.body.events?.length === 2, 'a first wave that could not be read whole falls back to the reads one by one')
+  calls.length = 0
+  await runClub({ token: 'tok-dave', action: 'colour', address: 'a', clubId, colour: '#1F7A3D' }, fast, NOW)
+  ok(calls[0] === 'auth' && !calls.includes('reader'), 'anything that changes a club still asks Auth')
+  ok(/readerFromToken: token => userFromClaims\(db, token\)/.test(read('app/api/club/store.ts')) && /getClaims\(token\)/.test(read('app/api/account/store.ts')),
+    'the local reader is supabase-js’s own signature check')
+  s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: NOW.toISOString(), userId: null })
+
   section('The club’s look is its owners’ and admins’')
   s.list.set(daveRow.id, { ...s.list.get(daveRow.id)!, removedAt: null, userId: 'dave' })
   eq((await ask('tok-dave', 'colour', { clubId, colour: '#1F7A3D' })).status, 403, 'a member cannot change the colour')

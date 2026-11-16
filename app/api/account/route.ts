@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { runAccount } from './account'
 import { accountStore } from './store'
@@ -29,6 +29,11 @@ export async function POST(req: NextRequest) {
       accountStore(createAdminClient()),
       new Date(),
     )
+    // D195: tidying that need not hold the answer up runs once it has gone.
+    if (out.status === 200 && out.after) {
+      const later = out.after
+      after(() => later().catch(e => console.error('account tidy failed:', e)))
+    }
     return NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
   } catch (e) {
     console.error('account failed:', e)

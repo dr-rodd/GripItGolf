@@ -44,6 +44,8 @@ import { setIndex, type HandicapStore } from '../handicaps/handicaps'
 
 export interface AccountStore {
   userFromToken(token: string): Promise<AuthUser | null>
+  /** The read-only home's token check, local where the project's keys allow (D195). */
+  readerFromToken?(token: string): Promise<AuthUser | null>
   userById(id: string): Promise<AuthUser | null>
   /** Every event a user has entered, with its row. */
   membershipsOf(userId: string): Promise<{ tripId: string; m: Membership }[]>
@@ -112,7 +114,8 @@ export type AccountBody = {
 }
 
 export type AccountOutcome =
-  | { status: 200; body: AccountBody }
+  /** `after`: work that need not hold the answer up, done once it has gone (D195). */
+  | { status: 200; body: AccountBody; after?: () => Promise<void> }
   | { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
 
 const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): AccountOutcome =>
@@ -179,7 +182,7 @@ export async function runAccount(
   if (input.action === 'sign-in') return runSignIn(input, store, now)
 
   if (!input.token) return fail(401, 'Not signed in on this phone — try again.')
-  const user = await store.userFromToken(input.token)
+  const user = await (input.action === 'home' && store.readerFromToken ? store.readerFromToken(input.token) : store.userFromToken(input.token))
   if (!user) return fail(401, 'Not signed in on this phone — try again.')
 
   if (input.action === 'ticket') {
@@ -240,8 +243,14 @@ export async function runAccount(
   // and the phone goes on to it (D148).
   if (input.action === 'home') {
     if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
-    await store.claimByEmail(user.id, user.email ?? '')
-    await store.syncLinks(user.id)
+    // D195: read and answer first. Claiming the events made with this email
+    // and linking the names claimed on its phones run after the answer has
+    // gone — what they change shows on the next visit (Events does them
+    // before it reads, as ever).
+    const tidy = async () => {
+      await store.claimByEmail(user.id, user.email ?? '')
+      await store.syncLinks(user.id)
+    }
     const year = Number(irishToday(now).slice(0, 4))
     const [username, events, club, season, handicapIndex] = await Promise.all([
       store.usernameOf(user.id),
@@ -253,6 +262,7 @@ export async function runAccount(
     return {
       status: 200,
       body: { ok: true, username, events: sortMyEvents(events), club, season: season.rows, courses: season.courses, handicapIndex },
+      after: tidy,
     }
   }
 

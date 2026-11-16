@@ -66,8 +66,24 @@ export type RowPatch = Partial<{
   role: ClubRole; user_id: string | null; linked_at: string | null; removed_at: string | null; on_boards: boolean
 }>
 
+/** The members home's first wave (D195): the club, this account's row, and its events — asked together. */
+export interface ClubHomeFirst {
+  club: ClubRecord | null
+  row: MemberRecord | null
+  /** The club's events, a competition's phase still to come (`compPhases`). */
+  events: ClubEvent[]
+  /** The competitions among them — kept on the server, never answered. */
+  comps: { tripId: string; code: string }[]
+}
+
 export interface ClubStore {
   userFromToken(token: string): Promise<AuthUser | null>
+  /** The read-only home's token check, local where the project's keys allow (D195). */
+  readerFromToken?(token: string): Promise<AuthUser | null>
+  /** The members home's first wave in one go — null to fall back to the reads one by one. */
+  clubHome?(slug: string, userId: string): Promise<ClubHomeFirst | null>
+  /** Each competition's phase, by code — in the second wave with everything else. */
+  compPhases?(comps: { tripId: string; code: string }[]): Promise<Map<string, import('@/lib/compPhase').CompPhase>>
   /** The rows this account is linked to and not removed from, with their clubs. */
   clubsOf(userId: string): Promise<{ club: ClubRecord; row: MemberRecord }[]>
   clubsMadeBy(userId: string): Promise<number>
@@ -122,7 +138,7 @@ export interface ClubStore {
    * Stage (d3): the club's competitions with a card waiting on this list
    * row — its own to approve, or one it was chosen to mark. Empty before 090.
    */
-  cardsToSign?(clubId: string, rowId: string): Promise<{ code: string; name: string; count: number }[]>
+  cardsToSign?(clubId: string, rowId: string, comps?: { tripId: string; code: string; name?: string }[]): Promise<{ code: string; name: string; count: number }[]>
 
   // Stage (d1) — the handicap index (D179) and the home course (D161), migration 089.
   handicaps?: HandicapStore
@@ -248,7 +264,8 @@ export async function runClub(
   now: Date,
 ): Promise<ClubOutcome> {
   if (!input.token) return fail(401, 'Sign in first.')
-  const user = await store.userFromToken(input.token)
+  // The members home only reads: its token may be checked locally (D195).
+  const user = await (input.action === 'home' && store.readerFromToken ? store.readerFromToken(input.token) : store.userFromToken(input.token))
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
   assetBase = store.assetBase()
 
@@ -279,27 +296,48 @@ export async function runClub(
   // list, linked and not removed. Anybody else is answered "not on the
   // list", and their page stays the public face.
   if (input.action === 'home') {
-    const club = await store.clubBySlug(str(input.slug))
+    // D195: the club, this account's row and the club's events in one wave
+    // (`clubHome`), then everything else — phases included — in a second.
+    // A store without it, or a first wave that could not be read whole,
+    // takes the reads one by one as before.
+    const slug = str(input.slug)
+    const first = store.clubHome ? await store.clubHome(slug, user.id).catch(() => null) : null
+    let club: ClubRecord | null, mineRow: MemberRecord | null | undefined, events: ClubEvent[]
+    if (first) {
+      ({ club, row: mineRow } = first)
+      events = first.events
+    } else {
+      club = await store.clubBySlug(slug)
+      if (!club || !club.verifiedAt) return fail(404, 'No such club.')
+      mineRow = (await store.rows(club.id)).find(r => r.userId === user.id && !r.removedAt)
+      events = mineRow ? await store.clubEvents(club.id) : []
+    }
     if (!club || !club.verifiedAt) return fail(404, 'No such club.')
-    const mineRow = (await store.rows(club.id)).find(r => r.userId === user.id && !r.removedAt)
     if (!mineRow) return fail(403, 'You’re not on this club’s list.')
-    const events = await store.clubEvents(club.id)
+    const row = mineRow
     const today = irishToday(now)
     const past = events.filter(e => clubEventWhen(e, today) === 'past').map(e => e.code)
     const comps = events.some(e => e.competition)
-    const [entries, season, outside, tops, toSign] = await Promise.all([
+    const compList = first?.comps.map(c => ({ ...c, name: events.find(e => e.code === c.code)?.name })) ?? undefined
+    const [entries, season, outside, tops, toSign, phases] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
       store.outsideEvents(user.id, events.map(e => e.code)),
       past.length ? store.topScores(past) : Promise.resolve({}),
-      comps && store.cardsToSign ? store.cardsToSign(club.id, mineRow.id).catch(() => []) : Promise.resolve([]),
+      comps && store.cardsToSign ? store.cardsToSign(club.id, row.id, compList).catch(() => []) : Promise.resolve([]),
+      first?.comps.length && store.compPhases ? store.compPhases(first.comps).catch(() => null) : Promise.resolve(null),
     ])
-    // D161: the home course, for New competition's first answer (089).
-    const full = mayAdminister(mineRow.role) ? await store.club(club.id).catch(() => null) : null
+    if (phases) {
+      events = events.map(e => (e.competition ? { ...e, competition: { ...e.competition, phase: phases.get(e.code) ?? e.competition.phase } } : e))
+    }
+    // D161: the home course, for New competition's first answer (089) — in
+    // the first wave's club already; read again only on the old path.
+    const full = first ? null : mayAdminister(row.role) ? await store.club(club.id).catch(() => null) : null
+    const mineRowName = row.name
     return {
       status: 200,
       body: {
-        ok: true, club: summary(full ?? club, mineRow.role), events, entries, me: { name: mineRow.name },
+        ok: true, club: summary(full ?? club, row.role), events, entries, me: { name: mineRowName },
         season: season.rows, courses: season.courses, outside, tops, toSign,
       },
     }

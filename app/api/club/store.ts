@@ -12,7 +12,7 @@ import { teeInstant } from '@/lib/clubComp'
 import { opensAt, parseTeeRules, teeClocks } from '@/lib/teeSheet'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
-import { asUser } from '../account/store'
+import { asUser, userFromClaims } from '../account/store'
 import { readSeason } from '../stats/season'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
 
@@ -145,6 +145,43 @@ export function clubStore(db: Db): ClubStore {
     async userFromToken(token) {
       const { data, error } = await db.auth.getUser(token)
       return error ? null : asUser(data.user)
+    },
+    readerFromToken: token => userFromClaims(db, token),
+    async clubHome(slug, userId) {
+      if (!/^[a-z0-9]+(-[a-z0-9]+)*$/.test(slug) || slug.length > 48) return { club: null, row: null, events: [], comps: [] }
+      // D195: three reads at once, each by the club's address — the club
+      // with its art and home course (087, 089), this account's row, and the
+      // club's events with their trips. Any of them refused (a column not
+      // there yet) and the caller reads one by one as before.
+      const [c, r, p] = await Promise.all([
+        db.from('clubs').select(`${CLUB_COLS}, art_path, art_dark_path, home_course_id`).eq('slug', slug).maybeSingle(),
+        db.from('club_members').select(`${ROW_COLS}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1),
+        db.from('trip_private')
+          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash)')
+          .eq('clubs.slug', slug),
+      ])
+      if (c.error || r.error || p.error) return null
+      const cr = c.data as (ClubRow & { art_path: string | null; art_dark_path: string | null; home_course_id: string | null }) | null
+      const club = cr ? { ...asClub(cr), artPath: cr.art_path, artDarkPath: cr.art_dark_path, homeCourseId: cr.home_course_id } : null
+      const row = ((r.data ?? []) as RowRow[])[0]
+      type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null }
+      const privs = (p.data ?? []) as unknown as { club_access: string | null; trips: Trip | Trip[] | null }[]
+      const trips = privs.flatMap(x => {
+        const t = Array.isArray(x.trips) ? x.trips[0] : x.trips
+        return t ? [{ t, access: parseClubAccess(x.club_access) }] : []
+      })
+      const events: ClubEvent[] = trips.map(({ t, access }) => ({
+        code: t.trip_code, name: t.name,
+        kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
+        startDate: t.start_date, endDate: t.end_date, access,
+        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash } } : {}),
+      }))
+      const comps = trips.filter(x => x.t.competition === 'club').map(x => ({ tripId: x.t.id, code: x.t.trip_code }))
+      return { club, row: row ? asRow(row) : null, events, comps }
+    },
+    async compPhases(comps) {
+      const byTrip = await competitionPhases(db, comps.map(c => c.tripId))
+      return new Map(comps.flatMap(c => (byTrip.has(c.tripId) ? [[c.code, byTrip.get(c.tripId)!] as [string, CompPhase]] : [])))
     },
     async clubsOf(userId) {
       const { data, error } = await db.from('club_members').select(ROW_COLS).eq('user_id', userId).is('removed_at', null)
@@ -307,12 +344,18 @@ export function clubStore(db: Db): ClubStore {
       if (error) throw error
     },
     clubEvents: clubId => readClubEvents(db, clubId),
-    async cardsToSign(clubId, rowId) {
-      const { data: priv } = await db.from('trip_private').select('trip_id').eq('club_id', clubId)
-      const ids = ((priv ?? []) as { trip_id: string }[]).map(p => p.trip_id)
-      if (!ids.length) return []
-      const { data: trips, error } = await db.from('trips').select('id, trip_code, name').in('id', ids).eq('competition', 'club')
-      const comps = (error ? [] : trips ?? []) as { id: string; trip_code: string; name: string }[]
+    async cardsToSign(clubId, rowId, known) {
+      // The club's competitions, known already on the members home's way (D195).
+      let comps: { id: string; trip_code: string; name: string }[]
+      if (known) {
+        comps = known.map(k => ({ id: k.tripId, trip_code: k.code, name: k.name ?? k.code }))
+      } else {
+        const { data: priv } = await db.from('trip_private').select('trip_id').eq('club_id', clubId)
+        const ids = ((priv ?? []) as { trip_id: string }[]).map(p => p.trip_id)
+        if (!ids.length) return []
+        const { data: trips, error } = await db.from('trips').select('id, trip_code, name').in('id', ids).eq('competition', 'club')
+        comps = (error ? [] : trips ?? []) as { id: string; trip_code: string; name: string }[]
+      }
       if (!comps.length) return []
       const compIds = comps.map(c => c.id)
       const [sigs, mine] = await Promise.all([

@@ -28,6 +28,38 @@ export function asUser(u: {
   }
 }
 
+/**
+ * A phone's token checked here, without a round trip to Supabase Auth
+ * (D195) — for the read-only home asks only. Where the project signs tokens
+ * with its asymmetric keys, supabase-js checks the signature against the
+ * project's published keys (fetched once, then kept by the server instance);
+ * on a project still on the shared secret it asks Auth as before.
+ *
+ * What it gives up: a token stays good until it runs out (an hour at most)
+ * even if that account signed out everywhere or was deleted meanwhile. Good
+ * enough to read a home; every ask that changes something still asks Auth
+ * (`userFromToken`). A confirmed email is read as an account's: Supabase
+ * keeps an anonymous phone anonymous until its email is confirmed.
+ */
+export async function userFromClaims(db: Db, token: string): Promise<AuthUser | null> {
+  try {
+    const { data, error } = await db.auth.getClaims(token)
+    if (error || !data?.claims?.sub) throw error ?? new Error('no claims')
+    const c = data.claims as { sub: string; email?: string; is_anonymous?: boolean; app_metadata?: Record<string, unknown> }
+    const anonymous = c.is_anonymous === true
+    return {
+      id: c.sub, isAnonymous: anonymous,
+      email: c.email ? c.email.toLowerCase() : null,
+      emailConfirmed: !anonymous && !!c.email,
+      junior: c.app_metadata?.junior === true,
+    }
+  } catch {
+    // The keys could not be read: Auth itself, as every other ask.
+    const { data, error } = await db.auth.getUser(token)
+    return error ? null : asUser(data.user)
+  }
+}
+
 const asMembership = (r: { role: Membership['role']; player_id: string | null; organiser_until: string | null }): Membership =>
   ({ role: r.role, playerId: r.player_id, organiserUntil: r.organiser_until })
 
@@ -55,6 +87,7 @@ async function clubEvents(db: Db, userId: string): Promise<Map<string, { name: s
 
 export function accountStore(db: Db): AccountStore {
   return {
+    readerFromToken: token => userFromClaims(db, token),
     async userFromToken(token) {
       const { data, error } = await db.auth.getUser(token)
       return error ? null : asUser(data.user)

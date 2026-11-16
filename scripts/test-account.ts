@@ -628,6 +628,18 @@ async function tierTests() {
   ok(club.status === 200 && club.body.club?.slug === 'lahinch', 'a Club member is told their club, and the phone goes on to it (D148)')
   ok(club.status === 200 && club.body.season?.length === 1 && club.body.courses?.c1 === 'Lahinch -- Old', '…the season read for this year in Ireland')
 
+  section('…answered first, tidied after (D195)')
+  let tidied = 0
+  const counting: AccountStore = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
+    claimByEmail: async () => { tidied++; return 0 },
+    syncLinks: async () => { tidied++ },
+  })
+  const first = await runAccount({ token: 'ta', action: 'home' }, counting, now)
+  ok(first.status === 200 && tidied === 0 && typeof first.after === 'function', 'the answer goes before any claiming or linking')
+  if (first.status === 200 && first.after) await first.after()
+  eq(tidied, 2, '…which run after it: the events made with the email, then the names claimed')
+  ok(/after\(\(\) => later\(\)\.catch/.test(read('app/api/account/route.ts')), '…through Next’s own after(), once the answer has gone')
+
   section('Where the tiers land')
   const screen = read('app/home/HomeScreen.tsx')
   ok(/if \(r\.signedOut\) \{ forgetTier\(\); window\.location\.replace\('\/'\)/.test(screen), 'a stale hint is cleared and the front page shown')
