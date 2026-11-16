@@ -787,9 +787,9 @@ The redrawn order:
      Stats · Club, in the club's skin.
    - Making an event from it, by Q3's rule.
    - The list page moves under Club for its admins.
-5. **(d) Club events and booking (D112, D113).** Migration **089** if
-   anything needs storing (`club_entries`). It gives Comps its booking and
-   members-only boards.
+5. **(d) Club events and booking (D112, D113).** *Replaced 16 Nov 2026 by
+   "Club competitions (D161–D175)" below — stages (d1), (d2), (d3), with
+   migrations 089 and 090.*
 
 Migration numbers are redrawn: 087 the club's art (was (d)'s), 088 the
 summary row (unchanged), 089 club events.
@@ -835,7 +835,7 @@ data (the club and its upcoming events), about 60 seconds old, built the
 - **(g):** move Resend to its paid plan before more sign-ins are invited
   (question E). Nothing to paste.
 - **(h):** nothing to paste. Choose what Comps shows before (d).
-- **(d):** paste 089 if it is needed.
+- **(d):** see "Club competitions (D161–D175)" below.
 
 #### Phone checks
 - **(e1):**
@@ -866,7 +866,7 @@ data (the club and its upcoming events), about 60 seconds old, built the
   - A plain member's own event is theirs alone.
   - Taken off the list, the person lands on the personal page on their next
     visit.
-- **(d):** as drawn under (d) above.
+- **(d):** see "Club competitions (D161–D175)" below.
 
 ### Stage (e1) as built — the club page (15 Nov 2026; D123–D127, D150, D155–D160)
 
@@ -979,6 +979,289 @@ they are until then. **Departure from the plan's table:** `/account` does
 not redirect to `/home/me` — Me links to it, so it stays the settings page,
 and the tabs are one page (`/home?tab=…`) rather than `/home/me` and
 `/home/events`.
+
+### Club competitions (D161–D175) — plan of 16 Nov 2026, replacing stage (d)
+
+*From Ross's notes of 16 Nov and the Claude.ai project doc
+club-competitions-flow-2026-11-16. Plan only. D161–D173 are below as handed
+over; **D174 and D175 were named but their text was not in the message**, so
+nothing here plans against them yet.*
+
+**Scope:** a verified club's standalone, single-round stroke play
+competition — Stableford or strokes, singles. Made in the club area from a
+short form, no PIN, no entered field, lived inside the club area as a child
+of Comps; the club header and `ClubTabBar` never change. **Every event
+outside a club behaves exactly as today**, and so does every club event that
+is not a competition (`trips.competition` null — below).
+
+**Phases** (`lib/compPhase.ts`, pure, the one copy): **Announced** (before
+the tee sheet opens) → **Booking open** (`TeeRules.opens` through
+`irishInstant`, until the first tee time) → **In play** (from the first tee
+time, or the first card started, until scoring closes) → **Awaiting sign-off**
+(scoring closed: every booked player has a signed card or a No return) →
+**Certified**. Inputs: the date, the sheet's opening and first time, the
+booked count, signed count, No returns, whether any card is open,
+`certified_at`. *Edge to note:* a competition with a card nobody signs stays
+In play, with "3 cards still open" for its admins, until they sign, void or
+mark No return — the rule as written.
+
+#### Answers
+
+**1. The shell — (a), a real route `/club/[slug]/comp/[code]`.**
+
+| | (a) its own route | (b) the event layout draws the club shell |
+|---|---|---|
+| Paints first | The club skin from the server (art, crest, colour — the face the club page already reads), the competition's name, date and phase, and one section | The club skin over the event's pages — but only after the layout has read the event's club: **+1–2 reads in the layout of every club event**, every page |
+| Reach | Competitions only | Every club event, competition or not; the organiser area, Trip Setup and the rest would need the event's own tabs, which `ClubTabBar` cannot carry |
+| A non-member, members-only competition | The public face and "<club> members: sign in" — no event data in the HTML (the door, below) | The same gate would have to live in the layout |
+| A non-member, guests welcome | The competition read-only in the club's skin, no tab bar, "Back to <club>" | The club's tab bar leading into members-only tabs |
+
+(b) changes the one layout every event goes through and adds reads to
+it; (a) adds a route and touches no event page's behaviour. **(a).**
+
+- **Sections:** a `Segmented` (Tee sheet / Scoring / Leaderboard), only the
+  phase's own (Announced: none, the details; Booking open: Tee sheet; In
+  play: all three; Awaiting sign-off and Certified: Scoring and
+  Leaderboard / Results). Each is `?view=`, rendered on the server, one
+  section's reads at a time — the `Segmented` is links, so each is
+  prefetched.
+- **Reuse:** the tee sheet page's body moves into a server component
+  (`teesheet/TeeSheetSection.tsx`) that the event's own page and the
+  competition both render — the event page's output byte for byte the
+  same, held by a test. **Leaderboard**: the D91 copy (`boardCopy`) and
+  `TripLeaderboardClient`, with a `provisional` switch (no gold until
+  Certified, D171). **Scoring**: new and small — one round: your card
+  (Start / Resume, into the full-screen card as it is), and the groups'
+  progress; the 580-line picker is for many rounds and kinds and is not
+  reused. Sections sit in `TripBaseProvider base=/golf/event/<code>` so
+  their links go where they go today.
+- **The tab bar:** `ClubTabBar` gains a link mode — on the competition page
+  each tab is `/club/<slug>?tab=…` (the club page reads `?tab=` already);
+  on the club page they stay buttons. Board (centre) goes to the live
+  competition's `?view=board`. The server cannot see who is signed in, so
+  the bar is drawn after hydration on the tier hint (`club:<slug>`) and
+  kept once the members ask agrees, as the club page does — fixed at the
+  foot, nothing moves when it arrives.
+- **The event's own addresses:** the hub (`/golf/event/<code>`) and the
+  short link go on to the competition page for a competition (the hub's own
+  trips read gains the column; the layout's kind read selects one column
+  more, **no extra request**). The card stays `/golf/event/<code>/scoring/1`,
+  full screen and unchanged, its back arrow to the competition; the event's
+  `TabBar` is not drawn on a competition (the same column, in the layout's
+  existing kind read).
+- **Members only (D113, D164) is the public PIN door, with a PIN nobody is
+  given** — D136's trick again. A members-only competition is made with an
+  unheld public PIN; the trip layout already sends a phone without the
+  door's cookie to `/enter/<code>`, and `/api/entry` already refuses one.
+  The door learns a second key: a signed-in, linked, not-removed member of
+  the event's verified club (`runDoor` given the account token; the
+  membership read is the entry store's own `clubAdminIds`-style query, so
+  nothing under `app/api/entry` or `app/enter` imports the club route or
+  names an account — the D94 guards hold). `/enter/<code>` for a competition
+  goes on to `/club/comp/<code>`, which looks up the club and lands on the
+  competition page, where the sign-in lives. **Guests welcome** is no
+  public PIN. *Without this the board would leak*: server pages read on the
+  service role and draw for anybody with the address, whatever `/api/entry`
+  refuses.
+
+**2. Booking "me" without a claimed player, and a list row that is no player
+yet.** Today a booking is the browser writing `tee_assignments` for players
+who already exist, and "me" is the claimed-player cookie. A competition has
+no field, so its booking goes through the server:
+
+- **`/api/club` `book`** (`runClub`, on its injected store): the account →
+  its list row (linked, not removed) → the competition is the club's and
+  Booking open → **find or make the player for each list row**
+  (`players.club_member_id`; name from the list, handicap from the row's
+  index, D166) → `account_players` linked for the booker (D134's link) →
+  the `tee_assignments` rows, `booked_by` the booker's player. The answer
+  sets the door's cookie and hands back the booker's player id; the phone
+  `rememberPlayer`s it and enters the event — so the tee sheet, the card
+  and "your time" all read "me" exactly as now.
+- **`withdraw`**: your own booking and those you made (`mayRemoveBooking`,
+  medium security) until the tee time has gone; a player with no score is
+  deleted with it, one with any score is kept.
+- **`names`**: a search of the list for partners — names and row ids only,
+  never numbers or emails, members of a verified club only, two letters at
+  least, twenty at most; already-booked rows marked.
+- `TeeSheetClient` gains a **club booking mode**: the picker reads `names`,
+  Save calls `book`, the two-minute freeze (presence) unchanged.
+- **D163: a column, `players.club_member_id`** (unique per event), not
+  `club_entries` — the player row plus its tee time *is* the entry, so a
+  second table would be a second copy. **"You're in"** then reads players
+  pointing at your list row (so it is right even when a partner booked you
+  before your account was linked), with `account_players` as today for
+  everything else.
+
+**3. Certified, and who.** **Not `trips.finalised_at`**: migration 010's
+backfill stamped it on every trip of its day, and `setup_status` (draft →
+live) still owns it — reused, every old trip would read as certified.
+**New, on the round** (a competition is one round; a multi-round one later
+needs nothing more): `rounds.certified_at` (phones read it, so the card can
+say it is closed) and **`round_certifications`** (server only: round,
+`certify` | `reopen`, by whom — an account id, so never on a phone-readable
+row — when). **Readers that must respect the lock:**
+- the database: `writable_rounds()` gains `AND r.certified_at IS NULL`, so
+  no phone writes `scores`, `live_scores`, `live_rounds`,
+  `live_player_locks`, `round_handicaps` or `composite_holes` for a
+  certified round — one function, every scoring write;
+- the service-role writers, each refusing a certified round: the card void
+  (`lib/scorecardVoid.ts`, the dashboard and `/admin/live`), the card
+  check's re-score of committed scores, a handicap snapshot rewrite
+  (`lib/roundHandicaps.ts`), the nightly stale-card step, the summary writer
+  (below), `rounds.casual` and `cardsOff`;
+- the board (gold only once certified, D171), the competition page's phase,
+  Comps, the hub's standing, the export;
+- **Reopen** clears `certified_at`, logs it, deletes the round's club
+  summaries; nothing else is touched.
+
+**4. The data today, and No return.**
+- **Booked, no card:** a `tee_assignments` row for the player and round, and
+  no `live_player_locks` row on any of the round's `live_rounds`.
+- **Card open, never signed:** a `live_rounds` row, `active` (or `closed` by
+  the nightly step after 12 quiet hours), its `live_player_locks`, and
+  `live_scores` — but no `scores` rows for that player and round. Signing is
+  the commit: `live_scores` copied to `scores`, a missing hole written as a
+  hole no return, the card `finalised`.
+- **A trap:** `lib/staleLive.ts` closes a card untouched for 12 hours and
+  deletes its leftover `live_scores` after 48. An unsigned competition card
+  awaiting an admin over a weekend would lose its scores. **The nightly
+  step skips the rounds of an uncertified competition** (d2).
+- **No return** is per hole today; a whole round has none. **New:
+  `round_no_returns`** (round, player, by whom, when; server only). Offered
+  for a booked player with no card, or once their card is voided; an open
+  card is signed or voided first. A No return is off the board (listed under
+  it as NR, no place), feeds no season, and counts towards scoring closing.
+- **Signing a card for somebody:** the commit lives in `LiveScoringFlow` in
+  the browser. Its rule moves into `lib/` (one copy, the browser's commit
+  and the admin's server route both call it) — the riskiest piece in (d3),
+  held by `test:score-outbox` and a new test of the rule.
+
+**5. Reads.**
+
+| Page | Today | With competitions |
+|---|---|---|
+| Comps (the club members ask) | `trip_private` by club, the trips, entries, season, outside, top scores | **+1** always: the club's competitions' rounds (date, sheet rules, `certified_at`). **+3, in parallel**, only while a competition is in play or awaiting sign-off: bookings, signed cards, No returns for those rounds |
+| Competition page | — | the club face (1–2, as the club page), the competition with its round and club in one read, then **one** section: the tee sheet's own reads, or the board's copy, or the scoring section's (its live cards and players, 2) |
+| The event's layout | 4 reads, in parallel | **unchanged** (one more column in the kind read) |
+
+**The D91 shared board copy is unchanged** in shape — one copy per event,
+through `eventReader`, ten seconds at most; its trips read selects
+`certified_at` (via the round) too, so Results show within ten seconds of
+certifying.
+
+**6. What this breaks, or bends.**
+- **D94 is narrowed, and Ross should say so in words.** A members-only
+  competition's door is the club's list and an account (D164–D165), so a
+  member with no account cannot open it on their own phone — they are
+  booked and scored by a partner. D94 ("nobody ever needs an account to
+  join, play, score or watch") needs its exception written: *"…except a
+  club's members-only competition, where the club's list is the door."*
+  The code guards (`test:clubs`, `test:account`: nothing in `app/golf`,
+  `app/run`, `app/scoring`, `app/join`, `app/enter`, `app/api/entry`,
+  `app/api/trip` imports the club route, the tiers or an account) hold as
+  drawn above — the door's member check lives in `app/api/event` and the
+  entry store.
+- **D140's 'anyone' does two jobs today.** `club_access` says who edits,
+  but `publicClubEvents` and the "Members only" pill read it as who may
+  watch. D164 splits them: **watching is the door** (a public PIN, held or
+  unheld); editing stays `club_access`. For club events that are not
+  competitions nothing changes — they keep today's reading until Ross says
+  otherwise — or every 'admins' event made so far would suddenly show on
+  the public face.
+- **`club_access` 'pin' and the door:** a helper lent the organiser PIN gets
+  in through the door with it (the admin PIN already opens the door).
+- **D162 says "calls /api/trip/create"**: the plan keeps `runCreate`'s
+  checks and calls it in-process from a server route
+  (`/api/club` `competition`) that then writes the golf item, the round,
+  `rounds.tee_sheet` and the board in the same request — no browser chain
+  of writes, nothing half-made.
+- **D171's countback is not on today's boards.** Only a prizes board
+  answers the tie question (`offersTieBreak`: `combine: 'position'`); a
+  plain totals board shares the place. The competition's one board must
+  carry Tiebreak — either made as a prizes board, or `offersTieBreak`
+  widened for a single-round board — and since `parseLeaderboards` drops
+  the answer off any other board, that widening is a rule change with its
+  own test (d2). The countback itself, back 9/6/3/2, is `lib/tiebreak.ts`
+  as it stands; Certify freezes it.
+- **New `trips` columns need their column grant** (071 granted the columns
+  that existed): `trips.competition` gets its `GRANT SELECT (competition)`
+  in 089; `rounds.certified_at` in 090 likewise if `rounds` was granted by
+  column (to be checked when written).
+- **Watch links** (D164's "or a watch link") are not built — the
+  spectator role is reserved and nothing grants it. Until then a
+  members-only competition has no outside viewer.
+- `test:branding`: gold appears later, never in a new place. The tee
+  sheet's outline stays `accent-deep` inside the club skin — emerald is
+  action everywhere (D125).
+- `test:rls` `CREATE_COLUMNS` gains `competition`.
+
+#### Stages
+
+**(d1) Groundwork.** Migration **089** (paste before its deploy):
+`clubs.home_course_id` (→ courses), `club_members.handicap_index`
+(numeric, −10 to 54, null), `players.club_member_id` (→ club_members, on
+delete set null; unique per event where set), `trips.competition` (text,
+'club' or null, with its column grant). *Undo:* drop the four columns and
+the index. Code: the home course on `/club/[slug]/list` (`CourseSelect`;
+the scorecard gate asked there — `cardBlocker`, the `ScorecardGate`
+photo — so a competition never starts on a course without a card);
+handicap index on a list row (admin) and your own (member, Club tab);
+`lib/compPhase.ts` and its test; "You're in" by list row; the door's
+account key (`runDoor`) and `/club/comp/[code]`; `ClubEvent` told apart —
+`membersOnly` from the door, for competitions only. No competition can be
+made yet.
+
+**(d2) The competition in the club area.** No migration. **New competition**
+on Comps for owners and admins (name, date, Stableford or strokes and the
+allowance, guests welcome or members only, tee times: first, interval, per
+time, when booking opens) → `/api/club` `competition` (the event, club,
+`competition: 'club'`, Club admins only, the door's PIN for members only,
+standalone single day, start format tee sheet, `rounds.tee_sheet`, one
+board, `edit_handicaps` off). Comps rows wear their phase. The competition
+page (Q1) with its sections; booking, withdraw and partner search (Q2); the
+event's hub and short link go on to it; no event tab bar on its card; the
+nightly stale step skips uncertified competitions; the board provisional
+(no gold). Players sign their own cards as today.
+
+**(d3) Certify and Results.** Migration **090** (paste after its deploy;
+the code reads it fail-soft until then): `rounds.certified_at`,
+`round_certifications` and `round_no_returns` (server only, their own
+grants), and `writable_rounds()` with the certified lock. *Undo:* 079's
+`writable_rounds()` put back word for word, then drop the two tables and
+the column. Code: the commit rule into `lib/`; the admins' actions on
+their competition — No return, sign an open card, void, **Certify**
+(countback frozen, cards locked, board → Results, gold) and **Reopen**;
+summaries for a competition written at certify with origin `club` and
+deleted on reopen (D172 — only certified rounds feed the season); every
+reader in Q3 respecting the lock.
+
+#### Ross's jobs by hand
+- **(d1):** paste 089 before the deploy. Set the test club's home course
+  (photograph its card there if asked). Give two test members a handicap
+  index.
+- **(d2):** nothing to paste. Two accounts on the test club's list (one an
+  admin), and one listed member with no account.
+- **(d3):** paste 090 after the deploy, with no competition card open.
+- **Any time:** write D94's exception (Q6), and send D174–D175's text.
+
+#### Phone checks
+- **(d1):** the list page sets a home course; a course with no card asks
+  for its photo. A member sets their own index; an admin corrects it.
+  Nothing else in the club area or any event changes.
+- **(d2):** an admin makes a competition in under a minute; it is on Comps
+  as Announced, then Booking open at its time. A member books themselves in
+  one tap and a partner by name (including the member with no account);
+  withdraws; "You're in" shows. A phone with the code but no account is
+  stopped at the door of a members-only competition, and sees a
+  guests-welcome one read-only. In play: the card opens full screen and its
+  back arrow returns to the competition; the club tab bar works from the
+  competition page; Board opens it. The board shows no gold. An event
+  outside a club: unchanged, tee sheet included.
+- **(d3):** an admin marks a no-show No return, signs a forgotten card,
+  certifies: the board becomes Results with gold, every card refuses an
+  edit, the season shows the round. Reopen: the gold goes, cards edit
+  again, the season drops it.
 
 ### Stage (h) as built — the club area and the club's events (15 Nov 2026; D144, D153, Q3)
 
@@ -1165,7 +1448,9 @@ per page, not once per file. *Reads:* a members-area
 page, one `club_members` row for the asker; the list page, the club's rows
 (past 1,000 through `readAllRows`); nothing on any event page.
 
-**(d) Club events and booking (D112, D113, D127).** Migration **087** if
+**(d) Club events and booking (D112, D113, D127).** *Superseded twice: the
+numbers were redrawn under D141–D152, and the whole stage is replaced by
+"Club competitions (D161–D175)" (16 Nov 2026). Kept as the record.* Migration **087** if
 anything needs storing beyond 086 (proposed: `club_entries`, an event's
 field drawn from the list — a list row as a player with **no account
 needed**, D112). A club event is any event with `trip_private.club_id`.
