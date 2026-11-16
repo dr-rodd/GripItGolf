@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
-import { askBooking, type BookingAnswer } from '@/lib/accountClient'
+import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
 import { enterEvent } from '@/lib/entryClient'
 import { formatHandicap } from '@/lib/handicap'
 import { rememberPlayer } from '@/lib/playerCookie'
@@ -31,7 +31,10 @@ export default function CompTeeSheet({ code, slots, groupSize, bookingOpen, wait
   waitLine: string | null
 }) {
   const router = useRouter()
-  const [me, setMe] = useState<Me>(null)
+  const [me, setMe] = useState<Me>(() => {
+    const r = peekKept<{ ok: true } & BookingAnswer>('booking', code)
+    return r ? { myRowId: r.myRowId, myPlayerId: r.myPlayerId ?? null, admin: !!r.admin } : null
+  })
   const [open, setOpen] = useState<number | null>(null)
   const [error, setError] = useState<{ slot: number; text: string } | null>(null)
   const [busy, setBusy] = useState(false)

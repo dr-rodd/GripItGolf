@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ButtonLink } from '@/app/components/ui'
-import { askBooking } from '@/lib/accountClient'
+import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
 import { compSectionHref } from '@/lib/clubBar'
 import type { CompPhase } from '@/lib/compPhase'
 import { joinNames } from '@/lib/matchplayEntrants'
@@ -26,7 +26,10 @@ export default function CompSummaryAction({ slug, code, phase, line, slots }: {
   slug: string; code: string; phase: CompPhase; line: string; slots: SummarySlot[]
 }) {
   const asks = phase === 'booking' || phase === 'in_play' || phase === 'awaiting'
-  const [me, setMe] = useState<Me | null>(null)
+  const [me, setMe] = useState<Me | null>(() => {
+    const r = peekKept<{ ok: true } & BookingAnswer>('booking', code)
+    return r ? { booked: !!r.booked, playerId: r.myPlayerId ?? null, admin: !!r.admin } : null
+  })
   useEffect(() => {
     if (!asks) return
     let live = true

@@ -438,6 +438,7 @@ export async function signOutAccount(): Promise<Answer> {
     await (await client()).auth.signOut({ scope: 'local' })
     forgetOwnerUnlocks()
     forgetTier()
+    forgetAllKept()
     forgetPending()
     try { window.sessionStorage.removeItem(OWED_KEY) } catch { /* nothing owed */ }
     return { ok: true }
@@ -461,6 +462,7 @@ export async function deleteAccount(): Promise<Answer> {
     await s.auth.signOut({ scope: 'local' }).catch(() => null)
     forgetOwnerUnlocks()
     forgetTier()
+    forgetAllKept()
     forgetPending()
     return { ok: true }
   } catch {
@@ -571,6 +573,14 @@ export interface BookingAnswer {
  * list), `book` and `withdraw`. Never throws.
  */
 export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number }> {
+  const code = typeof body.code === 'string' ? body.code : ''
+  if (action === 'state') return kept(`booking:${code}`, () => askBookingNow(action, body))
+  const r = await askBookingNow(action, body)
+  if (r.ok) forgetKept(code)
+  return r
+}
+
+async function askBookingNow(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number }> {
   const token = await accountToken()
   if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
   const r = await askServer(token, { ...body, action }, '/api/club/booking')
@@ -601,6 +611,17 @@ export interface CardToSign {
  * (a new one) and `send_back`. Never throws.
  */
 export async function askSign(
+  action: 'list' | 'approve' | 'mark' | 'marker' | 'send_back',
+  body: Record<string, unknown>,
+): Promise<{ ok: true; items: CardToSign[] } | { ok: false; error: string; status?: number }> {
+  const code = typeof body.code === 'string' ? body.code : ''
+  if (action === 'list') return kept(`sign:${code}`, () => askSignNow(action, body))
+  const r = await askSignNow(action, body)
+  if (r.ok) forgetKept(code)
+  return r
+}
+
+async function askSignNow(
   action: 'list' | 'approve' | 'mark' | 'marker' | 'send_back',
   body: Record<string, unknown>,
 ): Promise<{ ok: true; items: CardToSign[] } | { ok: false; error: string; status?: number }> {
@@ -638,10 +659,64 @@ export async function askCertify(
   action: 'state' | 'no_return' | 'undo_no_return' | 'void' | 'certify' | 'reopen',
   body: Record<string, unknown>,
 ): Promise<({ ok: true } & CertifyAnswer) | { ok: false; error: string; status?: number }> {
+  const code = typeof body.code === 'string' ? body.code : ''
+  if (action === 'state') return kept(`certify:${code}`, () => askCertifyNow(action, body))
+  const r = await askCertifyNow(action, body)
+  if (r.ok) forgetKept(code)
+  return r
+}
+
+async function askCertifyNow(
+  action: 'state' | 'no_return' | 'undo_no_return' | 'void' | 'certify' | 'reopen',
+  body: Record<string, unknown>,
+): Promise<({ ok: true } & CertifyAnswer) | { ok: false; error: string; status?: number }> {
   const token = await accountToken()
   if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
   const r = await askServer(token, { ...body, action }, '/api/card/certify')
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, ...(r.body as CertifyAnswer) }
+}
+
+// ─── A competition's own reads, shared and kept (D198) ─────────
+
+/**
+ * A competition page's reads of who this phone is in it (booked, an admin),
+ * its cards to sign and its results card — asked once for every part of the
+ * page that wants them (four parts asked the same `state` on every tab), and
+ * the last answer kept in this tab's memory so a part drawn again starts
+ * from it (`peekKept`) while the fresh one comes. Anything that changes a
+ * competition forgets that competition's answers. Never stored on the phone.
+ */
+const keptAnswers = new Map<string, { at: number; value: unknown }>()
+const inFlight = new Map<string, Promise<unknown>>()
+/** An answer this young is used as it is, not asked again — parts of one page mounting together. */
+const SHARE_MS = 4_000
+
+async function kept<T extends { ok: boolean }>(key: string, ask: () => Promise<T>): Promise<T> {
+  const have = keptAnswers.get(key)
+  if (have && Date.now() - have.at < SHARE_MS) return have.value as T
+  const going = inFlight.get(key)
+  if (going) return going as Promise<T>
+  const p = ask().then(r => {
+    if (r.ok) keptAnswers.set(key, { at: Date.now(), value: r })
+    return r
+  }).finally(() => inFlight.delete(key))
+  inFlight.set(key, p)
+  return p
+}
+
+/** The last answer kept for a competition's read, to draw from at once — or undefined. */
+export function peekKept<T>(kind: 'booking' | 'sign' | 'certify', code: string): T | undefined {
+  return keptAnswers.get(`${kind}:${code}`)?.value as T | undefined
+}
+
+/** A competition changed: its kept answers go, so the next read is fresh. */
+export function forgetKept(code: string) {
+  for (const k of ['booking', 'sign', 'certify']) keptAnswers.delete(`${k}:${code}`)
+}
+
+/** Every kept answer goes — signed out or deleted. */
+function forgetAllKept() {
+  keptAnswers.clear()
 }

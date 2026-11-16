@@ -1313,6 +1313,29 @@ async function competitionBarTests() {
     'the card\'s back arrow returns to Scoring (D190), through the code\'s door')
 }
 
+/** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function snappyTests() {
+  section('Preload, then be snappy (D198)')
+  const ctx = read('app/club/[slug]/ClubBarContext.tsx')
+  ok(/addEventListener\('click', onClick, true\)/.test(ctx) && /setGoing\(url\.pathname\)/.test(ctx), 'a tap into the club area is noted from the touch, ahead of the link')
+  ok(/useEffect\(\(\) => \{ setGoing\(null\) \}, \[pathname\]\)/.test(ctx), '…and let go once the new page is on screen')
+  ok(/barOf\(going \?\? pathname/.test(read('app/club/[slug]/ClubTabBar.tsx')), 'so the footer lights the tab and slides its set at the tap')
+  const shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
+  ok(/<CompAhead slug=\{slug\} code=\{code\} renderedAt=\{Date\.now\(\)\} \/>/.test(shell) && !/door[^\n]*CompAhead/.test(shell), 'every open competition page fetches the other three ahead — never behind the door')
+  const ahead = read('app/club/[slug]/comp/[code]/CompAhead.tsx')
+  ok(/for \(const s of SECTION_ORDER\) prefetchWhole/.test(ahead) && /prefetchWhole\(router, compHome/.test(ahead), '…the Summary and all three sections, whole')
+  ok(/if \(refreshed\.current\) return/.test(ahead) && /router\.refresh\(\)/.test(ahead), 'a page drawn from a copy asks again behind it, once')
+  ok(/prefetchWhole\(router, clubEventHref/.test(read('app/club/[slug]/ClubView.tsx')) && /\.slice\(0, 4\)/.test(read('app/club/[slug]/ClubView.tsx')),
+    'the club page fetches at most four unfinished competitions ahead')
+  const client = read('lib/accountClient.ts')
+  ok(/if \(action === 'state'\) return kept\(`booking:/.test(client) && /if \(r\.ok\) forgetKept\(code\)/.test(client), 'a competition\'s reads are shared and kept; a change forgets them')
+  for (const f of ['CompManage', 'CompSummaryAction', 'CompTeeSheet', 'CompSigning', 'CompAdmin']) {
+    ok(/useState[^\n]*\(\(\) =>[\s\S]{0,60}peekKept/.test(read(`app/club/[slug]/comp/[code]/${f}.tsx`)), `  ${f} draws from the kept answer first`)
+  }
+  ok(fs.existsSync('app/club/[slug]/comp/[code]/loading.tsx'), 'a page not fetched ahead lands on a stand-in at once')
+  ok(JSON.parse(read('vercel.json')).regions?.[0] === 'dub1', 'the functions run in Dublin, beside the database (D196)')
+}
+
 async function main() {
   ruleTests()
   await routeTests()
@@ -1325,6 +1348,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  snappyTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

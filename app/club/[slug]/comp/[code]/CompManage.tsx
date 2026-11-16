@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { ButtonLink } from '@/app/components/ui'
-import { askBooking } from '@/lib/accountClient'
+import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
 import { tripBase } from '@/lib/tripPaths'
 
 /**
@@ -11,7 +11,7 @@ import { tripBase } from '@/lib/tripPaths'
  * paints — the server cannot see who is signed in.
  */
 export default function CompManage({ code }: { code: string }) {
-  const [admin, setAdmin] = useState(false)
+  const [admin, setAdmin] = useState(() => !!peekKept<{ ok: true } & BookingAnswer>('booking', code)?.admin)
   useEffect(() => {
     let live = true
     askBooking('state', { code }).then(r => { if (live && r.ok) setAdmin(!!r.admin) })

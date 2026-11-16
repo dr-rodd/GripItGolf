@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
@@ -23,6 +24,7 @@ import { readTierHint, rememberTier } from '@/lib/tierHint'
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { compSectionHref } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
+import { prefetchWhole } from './prefetchWhole'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
 export interface ClubFace {
@@ -52,6 +54,18 @@ export default function ClubView({ face }: { face: ClubFace }) {
   // layout (D180 amended): coming back from a competition both are already
   // there while the page asks again.
   const { members, setMembers, tab, setTab } = useClubBar()
+  const router = useRouter()
+
+  // D198: the club's competitions still to finish, fetched whole while the
+  // member looks at the club, so tapping one is instant (at most four).
+  useEffect(() => {
+    if (!members) return
+    const today = irishToday(new Date())
+    members.events
+      .filter(e => e.competition && e.competition.phase !== 'certified' && (e.endDate ?? e.startDate ?? today) >= today)
+      .slice(0, 4)
+      .forEach(e => prefetchWhole(router, clubEventHref(e, face.slug)))
+  }, [members, router, face.slug])
 
   // The tab the address asks for, before paint: Comps from a competition
   // lands on Comps, the dot or Home on Home.

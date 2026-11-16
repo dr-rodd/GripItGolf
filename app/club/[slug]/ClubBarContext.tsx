@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import type { ClubEvent, ClubRole } from '@/lib/clubs'
 import type { SeasonRow } from '@/lib/cardSummary'
 
@@ -32,6 +33,12 @@ interface ClubBar {
   choose: (t: ClubTab) => void
   /** The tab the club page will open on, set before a link takes this phone there. */
   setTab: (t: ClubTab) => void
+  /**
+   * Where a tap inside the club area is taking this phone, from the touch
+   * until the new page is on screen (D198) — so the footer lights the tab
+   * and slides its set at once instead of waiting on the server.
+   */
+  going: string | null
 }
 
 const Context = createContext<ClubBar | null>(null)
@@ -47,6 +54,31 @@ const Context = createContext<ClubBar | null>(null)
 export function ClubBarProvider({ children }: { children: React.ReactNode }) {
   const [members, setMembers] = useState<ClubMembers | null>(null)
   const [tab, setTab] = useState<ClubTab>('home')
+  const pathname = usePathname()
+  const [going, setGoing] = useState<string | null>(null)
+
+  // Any link into the club area, tapped: noted from the touch (D198).
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
+      const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a || a.target === '_blank') return
+      const url = new URL(a.href, window.location.href)
+      if (url.origin !== window.location.origin || !url.pathname.startsWith('/club/')) return
+      if (url.pathname !== window.location.pathname) setGoing(url.pathname)
+    }
+    // Capture, ahead of the link's own handler (which prevents the default).
+    document.addEventListener('click', onClick, true)
+    return () => document.removeEventListener('click', onClick, true)
+  }, [])
+  // Arrived (or gone somewhere else): the address speaks for itself again.
+  // A tap that never lands lets go after a while.
+  useEffect(() => { setGoing(null) }, [pathname])
+  useEffect(() => {
+    if (!going) return
+    const t = setTimeout(() => setGoing(null), 15_000)
+    return () => clearTimeout(t)
+  }, [going])
 
   const choose = useCallback((t: ClubTab) => {
     setTab(t)
@@ -56,8 +88,8 @@ export function ClubBarProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const value = useMemo<ClubBar>(() => ({
-    members, setMembers, tab, choose, setTab,
-  }), [members, tab, choose])
+    members, setMembers, tab, choose, setTab, going,
+  }), [members, tab, choose, going])
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
 

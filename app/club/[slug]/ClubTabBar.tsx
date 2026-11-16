@@ -38,8 +38,9 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
  */
 export default function ClubTabBar({ slug }: { slug: string }) {
   const pathname = usePathname()
-  const { members, tab, choose, setTab } = useClubBar()
-  const state = barOf(pathname ?? '', slug)
+  const { members, tab, choose, setTab, going } = useClubBar()
+  // Where a tap is taking this phone counts from the touch (D198).
+  const state = barOf(going ?? pathname ?? '', slug) ?? barOf(pathname ?? '', slug)
   const comp = state?.set === 'comp' ? state : null
   // The last competition open, kept so its tabs still have their names
   // while they slide back behind Comps on the way out.
@@ -111,7 +112,7 @@ export default function ClubTabBar({ slug }: { slug: string }) {
               return (
                 <li key={s} className="club-bar-kid" style={{ '--k': i + 1 } as React.CSSProperties}>
                   {code && (
-                    <Tab href={compSectionHref(slug, code, s)}
+                    <Tab href={compSectionHref(slug, code, s)} prefetch={!!comp}
                       replace={!!comp && comp.active !== 'summary'}
                       lit={comp?.active === s} label={SECTION_LABEL[s]}>
                       <Icon size={22} />
@@ -127,8 +128,10 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   )
 }
 
-function Tab({ href, onClick, lit, label, aria, replace, children }: {
+function Tab({ href, onClick, lit, label, aria, replace, prefetch, children }: {
   href: string
+  /** A competition's sections fetched whole ahead of the tap (D198), so moving between them is instant. */
+  prefetch?: boolean
   onClick?: (e: React.MouseEvent) => void
   lit: boolean
   label: string
@@ -137,7 +140,7 @@ function Tab({ href, onClick, lit, label, aria, replace, children }: {
   children: React.ReactNode
 }) {
   return (
-    <Link href={href} onClick={onClick} replace={replace} aria-current={lit ? 'page' : undefined} aria-label={aria}
+    <Link href={href} onClick={onClick} replace={replace} prefetch={prefetch ? true : undefined} aria-current={lit ? 'page' : undefined} aria-label={aria}
       className={`club-bar-tab w-full flex flex-col items-center justify-center gap-1.5 h-16 ${
         lit ? 'text-club-deep' : 'text-bark/60 hover:text-bark/80'
       }`}>

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { buttonClass, cardClass } from '@/app/components/ui'
-import { askCertify, type CertifyAnswer, type CertifyPlayer } from '@/lib/accountClient'
+import { askCertify, peekKept, type CertifyAnswer, type CertifyPlayer } from '@/lib/accountClient'
 import { indexLabel } from '@/lib/handicapIndex'
 
 const STATE_WORDS: Record<CertifyPlayer['state'], string> = {
@@ -31,7 +31,7 @@ const when = (iso: string) => new Intl.DateTimeFormat('en-IE', { timeZone: 'Euro
  */
 export default function CompAdmin({ code }: { code: string }) {
   const router = useRouter()
-  const [state, setState] = useState<CertifyAnswer | null>(null)
+  const [state, setState] = useState<CertifyAnswer | null>(() => peekKept<{ ok: true } & CertifyAnswer>('certify', code) ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState('')
   const [confirm, setConfirm] = useState<string | null>(null)

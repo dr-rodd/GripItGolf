@@ -9,6 +9,7 @@ import { LiveDot } from '@/app/components/ui'
 import { Art, ClubHeader } from '../../ClubView'
 import { NoBar } from '../../ClubBarContext'
 import CompDoor from './CompDoor'
+import CompAhead from './CompAhead'
 import type { CompPage, OpenCompPage } from './read'
 
 /**
@@ -32,7 +33,12 @@ export default function CompShell({ page, children }: { page: CompPage; children
               <NoBar />
               <CompDoor code={code} clubName={clubFace.name} here={here} />
             </>
-          ) : children}
+          ) : (
+            <>
+              <CompAhead slug={slug} code={code} renderedAt={Date.now()} />
+              {children}
+            </>
+          )}
         </div>
       </div>
     </main>

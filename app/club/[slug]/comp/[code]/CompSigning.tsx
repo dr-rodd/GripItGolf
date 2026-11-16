@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ButtonLink, buttonClass, cardClass } from '@/app/components/ui'
-import { askBooking, askSign, type CardToSign } from '@/lib/accountClient'
+import { askBooking, askSign, peekKept, type BookingAnswer, type CardToSign } from '@/lib/accountClient'
 
 /**
  * Who plays (Ross, 16 Nov 2026): every member may watch a club's
@@ -12,7 +12,10 @@ import { askBooking, askSign, type CardToSign } from '@/lib/accountClient'
  * booked.
  */
 export function CompPlay({ code, href, closed = false }: { code: string; href: string; closed?: boolean }) {
-  const [may, setMay] = useState<boolean | null>(null)
+  const [may, setMay] = useState<boolean | null>(() => {
+    const r = peekKept<{ ok: true } & BookingAnswer>('booking', code)
+    return r ? !!r.booked || !!r.admin : null
+  })
   useEffect(() => {
     let live = true
     askBooking('state', { code }).then(r => { if (live) setMay(r.ok ? !!r.booked || !!r.admin : false) })
@@ -41,7 +44,7 @@ export function CompPlay({ code, href, closed = false }: { code: string; href: s
  */
 export function CardsToSign({ code, onlyWaiting = false }: { code: string; onlyWaiting?: boolean }) {
   const router = useRouter()
-  const [items, setItems] = useState<CardToSign[] | null>(null)
+  const [items, setItems] = useState<CardToSign[] | null>(() => peekKept<{ ok: true; items: CardToSign[] }>('sign', code)?.items ?? null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<{ id: string; text: string } | null>(null)
   const [open, setOpen] = useState<string | null>(null)
