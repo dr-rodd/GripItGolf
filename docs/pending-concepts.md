@@ -1445,6 +1445,38 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
+### Stage (d1) as built — club competitions' groundwork (16 Nov 2026; D161, D163, D164, D179)
+
+**Migration 089** (paste before the deploy): `clubs.home_course_id`,
+`club_members.handicap_index`, `players.club_member_id` (unique per event
+where set), `trips.competition` with its column grant, and the server-only
+`account_handicaps` and `handicap_changes`. Every read fails soft before it.
+
+- **The handicap index (D179)** — `lib/handicapIndex.ts` (rules) and
+  `app/api/handicaps/` (the one writer and its log). On **Me** and the club
+  area's **Club** tab (`HandicapIndexCard`, `/api/account` `handicap`); on
+  the **list** each row shows and an admin changes the one value (a linked
+  row's is the account's — changed there, logged as the list's). **Linking**
+  by code runs `linkPlan`; a difference is said once on the Clubs page.
+  **Taken off a list**, the row keeps a copy. Nothing yet reads the index
+  into an event — the start sheet does from (d2).
+- **The home course (D161)** — on the list page for a verified club
+  (`ClubHomeCourse`: `CourseSelect`, and `ScorecardGate` when the course
+  has no card or no ratings), `/api/club` `home-course`, owners and admins.
+- **`lib/compPhase.ts`** — the phases, the live sections, the waiting line.
+- **"You're in"** reads a player made from your list row (D163) as well as
+  `account_players`.
+- **The door's member key (D164)** — `runDoor` given the account token
+  opens a competition's members-only door for a member on its verified
+  club's list (`competitionMember` in the entry store); `/enter/<code>`
+  sends a competition to `/club/comp/<code>` before any PIN box, which finds
+  the club and goes on to `/club/<slug>/comp/<code>` (stage (d2)). `comp` is
+  reserved as a club address.
+
+No competition can be made yet; nothing outside the club area changes. The
+privacy notice's Clubs section says where the index lives and that changes
+are recorded.
+
 ### Stage (h) as built — the club area and the club's events (15 Nov 2026; D144, D153, Q3)
 
 No migration. **Where the club area lives:** it stays at `/club/<slug>`

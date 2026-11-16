@@ -152,6 +152,13 @@ export default function PrivacyPage() {
           checks each club before it is verified.
         </p>
         <p className="mt-3">
+          <B>Your handicap index</B> is kept on your Green Dot account, one value: you set it on Me,
+          and a club you are on the list of shows it there and may correct it. Somebody on a club&apos;s
+          list without an account has the index the club gives them, until they link one. Every change
+          is recorded — the old and new index, when, and by whom — so a club running a competition can
+          see a change made on the day; the record is kept with the account, and goes when it does.
+        </p>
+        <p className="mt-3">
           When a membership lapses, the golf played stays. When a club takes somebody off its list,
           their link to the club ends at once and the access it gave with it; their own account is
           never touched by a club, their names and scores stay with the events they played in, and

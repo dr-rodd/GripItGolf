@@ -152,6 +152,22 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       if (error) throw error
       return (data ?? []) as { id: string; name: string }[]
     },
+    async competitionMember(tripId, userId) {
+      // Each read fails soft: before 089 no event is a competition.
+      const [trip, priv] = await Promise.all([
+        db.from('trips').select('competition').eq('id', tripId).maybeSingle(),
+        db.from('trip_private').select('club_id').eq('trip_id', tripId).maybeSingle(),
+      ])
+      const competition = trip.error ? null : (trip.data as { competition?: string | null } | null)?.competition
+      const clubId = priv.error ? null : (priv.data as { club_id?: string | null } | null)?.club_id
+      if (competition !== 'club' || !clubId) return false
+      const [club, row] = await Promise.all([
+        db.from('clubs').select('verified_at').eq('id', clubId).maybeSingle(),
+        db.from('club_members').select('id').eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1),
+      ])
+      const verified = !club.error && !!(club.data as { verified_at?: string | null } | null)?.verified_at
+      return verified && !row.error && (row.data ?? []).length > 0
+    },
     async setEventClub(tripId, clubId, access) {
       const now = new Date().toISOString()
       const { error } = await db.from('trip_private')

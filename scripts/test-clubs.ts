@@ -22,8 +22,13 @@ import { inviteHash, runClub, runUpload, type ClubRecord, type ClubStore, type I
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { withOwner, type EntryTrip } from '../app/api/entry/entry'
-import { runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
+import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
+import { compPhase, sectionLive, sectionWaitLine, type CompFacts } from '../lib/compPhase'
+import { RESERVED_CLUB_SLUGS } from '../lib/clubs'
+import { hashPin as hashPinForDoor, unheldPin, entryToken } from '../lib/pinHash'
 import { verifyPin } from '../lib/pinHash'
+import { INDEX_MAX, INDEX_MIN, indexLabel, linkPlan, readIndex, sameIndex } from '../lib/handicapIndex'
+import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../app/api/handicaps/handicaps'
 
 process.env.SUPABASE_SERVICE_ROLE_KEY ??= 'test-service-key'
 
@@ -128,6 +133,7 @@ function ruleTests() {
 // ─── The club route on a stand-in ──────────────────────────────
 
 class Stand implements ClubStore {
+  handicaps?: HandicapStore
   users = new Map<string, AuthUser>()
   clubs = new Map<string, ClubRecord & { createdBy: string }>()
   list = new Map<string, MemberRecord>()
@@ -217,10 +223,11 @@ class Stand implements ClubStore {
   stored = new Map<string, Uint8Array>()
   assetBase() { return 'https://ref.supabase.co' }
   async clubBySlug(slug: string) { return [...this.clubs.values()].find(c => c.slug === slug) ?? null }
-  async updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null }>) {
+  async updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null; home_course_id: string | null }>) {
     const c = this.clubs.get(clubId)!
     this.clubs.set(clubId, {
       ...c,
+      ...('home_course_id' in patch ? { homeCourseId: patch.home_course_id } : {}),
       ...('colour' in patch ? { colour: patch.colour } : {}),
       ...('crest_path' in patch ? { crestPath: patch.crest_path } : {}),
       ...('art_path' in patch ? { artPath: patch.art_path } : {}),
@@ -654,12 +661,160 @@ function wiringTests() {
   ok(/legitimate interest in running its\s+membership/.test(notice), '…and why it may be held')
 }
 
+// ─── Stage (d1): the handicap index, one value (D179) ──────────
+
+class FakeHandicaps implements HandicapStore {
+  accounts = new Map<string, number>()
+  rows = new Map<string, number>()
+  rowClub = new Map<string, string>()
+  logs: { userId: string | null; memberId: string | null; oldIndex: number | null; newIndex: number | null; by: string | null; source: string; roundId?: string | null }[] = []
+  async accountIndex(u: string) { return this.accounts.get(u) ?? null }
+  async accountIndexes(us: string[]) { return new Map(us.filter(u => this.accounts.has(u)).map(u => [u, this.accounts.get(u)!])) }
+  async setAccountIndex(u: string, v: number | null) { if (v === null) this.accounts.delete(u); else this.accounts.set(u, v) }
+  async rowIndex(m: string) { return this.rows.get(m) ?? null }
+  async rowIndexesOf(c: string) { return new Map([...this.rows].filter(([m]) => (this.rowClub.get(m) ?? c) === c)) }
+  async setRowIndex(m: string, v: number | null) { if (v === null) this.rows.delete(m); else this.rows.set(m, v) }
+  async log(e: FakeHandicaps['logs'][number]) { this.logs.push(e) }
+}
+
+async function handicapTests() {
+  section('The handicap index: what may be stored (D179)')
+  eq(readIndex('14.2'), { ok: true, value: 14.2 }, 'an ordinary index')
+  eq(readIndex('+1.5'), { ok: true, value: -1.5 }, 'a plus index is stored negative, as every handicap here')
+  eq(readIndex(''), { ok: true, value: null }, 'an empty box takes it off')
+  eq(readIndex(null), { ok: true, value: null }, '…as null does')
+  ok(!readIndex('abc').ok && !readIndex('55').ok && !readIndex('+11').ok, 'nonsense and an index out of range are refused')
+  eq([INDEX_MIN, INDEX_MAX], [-10, 54], 'the range: +10 to 54')
+  eq(readIndex(14.26), { ok: true, value: 14.3 }, 'kept to one decimal, as the column holds it')
+  ok(sameIndex(14.2, 14.2) && !sameIndex(14.2, null) && sameIndex(null, null), 'the same to the decimal; null only equals null')
+  eq([indexLabel(-1.5), indexLabel(null)], ['+1.5', 'Not set'], 'written as people write it')
+
+  section('Linking a list row with its own index (D179)')
+  eq(linkPlan(null, 14.2, 'Lahinch'), { setAccount: 14.2, clearRow: true, note: null }, 'the account has none: it takes the row\'s')
+  eq(linkPlan(13.8, 13.8, 'Lahinch'), { setAccount: undefined, clearRow: true, note: null }, 'the same: only the row\'s copy goes')
+  const differ = linkPlan(13.8, 14.2, 'Lahinch')
+  ok(differ.setAccount === undefined && differ.clearRow && /Lahinch had 14\.2 for you; your Green Dot index 13\.8 stands/.test(differ.note ?? ''),
+    'they differ: the account\'s stands, the row\'s goes, and it is said once')
+  eq(linkPlan(13.8, null, 'Lahinch'), { setAccount: undefined, clearRow: false, note: null }, 'the row has none: nothing to do')
+
+  section('The one writer logs every change (D179)')
+  const h = new FakeHandicaps()
+  const first = await setIndex(h, { userId: 'ross' }, 14.2, 'ross', 'me')
+  ok(first.changed && h.accounts.get('ross') === 14.2, 'an account\'s index set')
+  eq(h.logs[0], { userId: 'ross', memberId: null, oldIndex: null, newIndex: 14.2, by: 'ross', source: 'me', roundId: null }, '…and logged: whose, old, new, by whom, from where')
+  const same = await setIndex(h, { userId: 'ross' }, 14.2, 'ross', 'me')
+  ok(!same.changed && h.logs.length === 1, 'the same value again writes nothing and logs nothing')
+  await setIndex(h, { memberId: 'row-ann' }, 22, 'ross', 'list')
+  ok(h.rows.get('row-ann') === 22 && h.logs[1].memberId === 'row-ann' && h.logs[1].userId === null, 'an unlinked row holds its own, logged against the row')
+
+  h.rows.set('row-dave', 14.2)
+  h.accounts.set('dave', 13.8)
+  const note = await linkIndex(h, 'dave', 'row-dave', 'Lahinch')
+  ok(h.accounts.get('dave') === 13.8 && !h.rows.has('row-dave') && !!note, 'linking keeps the account\'s, clears the row\'s, and says so')
+  ok(h.logs.some(l => l.memberId === 'row-dave' && l.oldIndex === 14.2 && l.newIndex === null && l.source === 'link'), '…the row\'s copy going is logged')
+  h.rows.set('row-eve', 9.1)
+  await linkIndex(h, 'eve', 'row-eve', 'Lahinch')
+  ok(h.accounts.get('eve') === 9.1 && !h.rows.has('row-eve'), 'an account with none takes the row\'s')
+  await severIndex(h, 'dave', 'row-dave', 'ross')
+  ok(h.rows.get('row-dave') === 13.8 && h.logs.at(-1)?.source === 'unlink', 'cut from the list, the row keeps a copy, logged')
+
+  h.rowClub.set('row-ann', 'c1'); h.rowClub.set('row-dave', 'c2')
+  const shown = await listIndexes(h, 'c1', [{ id: 'row-ann', userId: null }, { id: 'row-eve', userId: 'eve' }, { id: 'row-x', userId: null }])
+  eq([...shown], [['row-ann', 22], ['row-eve', 9.1], ['row-x', null]], 'the list: an unlinked row\'s own, a linked row\'s account\'s, else none')
+
+  section('The club\'s list sets the one index (D179)')
+  const st = new Stand()
+  const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie')
+  ;[ross, dave].forEach(u => st.add(u))
+  st.handicaps = new FakeHandicaps()
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, st, st.clock)
+  const made = await ask('tok-ross', 'create', { name: 'Index GC', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Dave Byrne', email: 'dave@x.ie' }, { name: 'Ann Lee' }] })
+  const listed = await ask('tok-ross', 'members', { clubId })
+  const annRow = listed.status === 200 ? listed.body.list!.find(r => r.name === 'Ann Lee')! : null
+  const set = await ask('tok-ross', 'update', { clubId, memberId: annRow?.id, handicapIndex: '18.4' })
+  ok(set.status === 200 && set.body.list?.find(r => r.id === annRow?.id)?.handicapIndex === 18.4, 'an admin sets an unlinked row\'s index, and the list shows it')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: annRow?.id, handicapIndex: '99' })).status, 400, 'an index out of range is refused')
+  const rossRow = [...st.list.values()].find(r => r.userId === 'ross')!
+  await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, handicapIndex: '+0.4' })
+  ok((st.handicaps as FakeHandicaps).accounts.get('ross') === -0.4, 'a linked row\'s is the account\'s own: changed there')
+  const rossLog = (st.handicaps as FakeHandicaps).logs.at(-1)
+  ok(rossLog?.userId === 'ross' && rossLog.source === 'list' && rossLog.by === 'ross', '…logged as the list\'s, by whom')
+  const home = await ask('tok-ross', 'home-course', { clubId, courseId: 'course-1' })
+  ok(home.status === 200 && home.body.club?.homeCourseId === 'course-1', 'the club\'s home course is set (D161)')
+  eq((await ask('tok-dave', 'home-course', { clubId, courseId: 'course-1' })).status, 403, '…by its owners and admins only')
+}
+
+// ─── Stage (d1): the competition's groundwork ──────────────────
+
+async function competitionTests() {
+  section('Where a competition stands (D169–D172, lib/compPhase.ts)')
+  const H = 3_600_000
+  const at = Date.parse('2026-11-22T08:00:00Z')
+  const f = (o: Partial<CompFacts> = {}): CompFacts => ({
+    bookingOpensAt: at - 48 * H, firstTeeAt: at, booked: 0, finished: 0, cardsStarted: false, certifiedAt: null, ...o,
+  })
+  eq(compPhase(f(), at - 72 * H), 'announced', 'before booking opens: Announced')
+  eq(compPhase(f(), at - 24 * H), 'booking', 'from the opening: Booking open')
+  eq(compPhase(f({ bookingOpensAt: null }), at - 72 * H), 'booking', 'no opening set: open from the start')
+  eq(compPhase(f({ booked: 8 }), at), 'in_play', 'from the first tee time: In play')
+  eq(compPhase(f({ booked: 8, cardsStarted: true }), at - H), 'in_play', '…or from the first card started')
+  eq(compPhase(f({ booked: 8, finished: 7 }), at + 8 * H), 'in_play', 'one card not yet accounted for: still In play, however late')
+  eq(compPhase(f({ booked: 8, finished: 8 }), at + 8 * H), 'awaiting', 'every booked player signed or No return: Awaiting sign-off')
+  eq(compPhase(f({ booked: 8, finished: 8, certifiedAt: '2026-11-22T18:00:00Z' }), at + 9 * H), 'certified', 'certified: Certified')
+  ok(!sectionLive('tee', 'announced') && sectionLive('tee', 'booking') && !sectionLive('scoring', 'booking')
+    && sectionLive('scoring', 'in_play') && sectionLive('board', 'certified'), 'the bar\'s sections go live by phase (D181)')
+  ok(/^Booking opens .*(November).*/.test(sectionWaitLine('tee', at - 48 * H)) && /first tee time/.test(sectionWaitLine('scoring', at)),
+    'a section not yet live says when it starts, Irish time')
+
+  section('A club competition\'s door: the club\'s list, never a PIN box (D164)')
+  const code = 'COMP01'
+  const publicHash = await hashPinForDoor(unheldPin(), code)
+  const door: Partial<ActionStore> = {
+    async tripByCode(c: string) { return c === code ? { id: 't1', code, publicHash } as never : null },
+    async userFromToken(t: string) { return t.startsWith('tok-') ? t.slice(4) : null },
+    async competitionMember(_trip: string, userId: string) { return userId === 'dave' },
+  }
+  const ask = (token: string | null, pin: string | null = null) => runDoor({ code, pin, address: 'a', token }, door as ActionStore, NOW)
+  const member = await ask('tok-dave')
+  ok(member.status === 200 && member.cookie === entryToken(publicHash, code), 'a signed-in member on the club\'s list goes through, with no PIN')
+  eq((await ask('tok-eve')).status, 403, 'an account not on the list is refused')
+  eq((await ask(null)).status, 403, 'a phone with no account is refused — the PIN is nobody\'s')
+  const enter = read('app/enter/[tripCode]/page.tsx')
+  ok(/if \(trip\.competition === 'club'\) redirect\(`\/club\/comp\/\$\{tripCode\}`\)/.test(enter)
+    && enter.indexOf("trip.competition === 'club'") < enter.indexOf('<EntryGate'),
+    'the event\'s own door sends a competition on before any PIN box is drawn')
+  const byCode = read('app/club/comp/[code]/page.tsx')
+  ok(/t\.competition !== 'club'/.test(byCode) && /verified_at/.test(byCode) && /redirect\(`\/club\/\$\{c\.slug\}\/comp\/\$\{code\}`\)/.test(byCode),
+    '/club/comp/<code> finds a verified club\'s competition and goes on to it; anything else is not found')
+  ok(RESERVED_CLUB_SLUGS.includes('comp'), 'no club may have the address "comp"')
+  eq(nextSlug('comp', []), 'comp-2', '…a club named Comp gets comp-2')
+  ok(/club_member_id/.test(read('app/api/club/store.ts')) && /in\('club_member_id', memberIds\)/.test(read('app/api/club/store.ts')),
+    '"You\'re in" reads a player made from your place on the list (D163)')
+
+  section('Migration 089')
+  const sql = read('supabase/migrations/20260101000089_club_competitions_groundwork.sql')
+  ok(/clubs ADD COLUMN IF NOT EXISTS home_course_id/.test(sql) && /club_members ADD COLUMN IF NOT EXISTS handicap_index/.test(sql)
+    && /players ADD COLUMN IF NOT EXISTS club_member_id/.test(sql) && /trips ADD COLUMN IF NOT EXISTS competition/.test(sql),
+    'the four columns')
+  ok(/GRANT SELECT \(competition\) ON public\.trips TO authenticated/.test(sql), 'the new trips column granted by name, as 071 needs')
+  ok(/uq_players_club_member ON players\(trip_id, club_member_id\) WHERE club_member_id IS NOT NULL/.test(sql), 'one player per list row per event')
+  for (const t of ['account_handicaps', 'handicap_changes']) {
+    ok(new RegExp(`ALTER TABLE ${t} ENABLE ROW LEVEL SECURITY`).test(sql) && new RegExp(`REVOKE ALL ON public\\.${t} FROM anon, authenticated`).test(sql),
+      `${t}: server only`)
+  }
+  ok(/-- ─── Undo/.test(sql) && /DROP TABLE IF EXISTS handicap_changes/.test(sql), 'with its undo')
+}
+
 async function main() {
   ruleTests()
   await routeTests()
   await eventTests()
   lookTests()
   await pageRouteTests()
+  await handicapTests()
+  await competitionTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

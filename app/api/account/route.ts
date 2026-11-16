@@ -23,6 +23,7 @@ export async function POST(req: NextRequest) {
         token, action: body?.action, ticket: body?.ticket,
         identifier: body?.identifier, password: body?.password, username: body?.username,
         code: body?.code, pin: body?.pin,
+        index: body && 'index' in body ? body.index : undefined,
         address: addressOf(req),
       },
       accountStore(createAdminClient()),

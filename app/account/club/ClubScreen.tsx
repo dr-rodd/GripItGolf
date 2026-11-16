@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import BackButton from '@/app/components/BackButton'
 import Toggle from '@/app/components/Toggle'
+import HandicapField from '@/app/components/HandicapField'
 import { FIELD, FIELD_LABEL, ListGroup, Pill, buttonClass } from '@/app/components/ui'
 import {
   CLUB_STATUS_WORDS, MAX_LIST_ROWS, clubMembersWord, listRowIssue, cleanRow, mayAdminister, mayChangeRoles,
   parseMemberList, roleWord, type ClubRole,
 } from '@/lib/clubs'
+import { indexLabel } from '@/lib/handicapIndex'
 import { askClub, type ClubListEntry, type ClubSummary } from '@/lib/accountClient'
 import ClubLook from './ClubLook'
+import ClubHomeCourse from './ClubHomeCourse'
 
 type State =
   | { kind: 'loading' }
@@ -139,6 +142,10 @@ export default function ClubScreen({ clubId: given, back }: {
 
       <ClubLook club={club} onChange={c => setState({ kind: 'ready', club: c, list })} />
 
+      {club.status === 'verified' && (
+        <ClubHomeCourse club={club} onChange={c => setState({ kind: 'ready', club: c, list })} />
+      )}
+
       <section className="mt-8">
         <h2 className="t-h2 text-ink">Add to the list</h2>
         <form onSubmit={addOne} className="mt-4 space-y-4">
@@ -221,7 +228,9 @@ export default function ClubScreen({ clubId: given, back }: {
                   <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}</span>
                   <span className="block t-cap text-ink/65 mt-0.5">
                     {[r.role !== 'member' ? roleWord(r.role, club.name) : null, r.memberNumber ? `No. ${r.memberNumber}` : null,
-                      r.guiNumber ? `GUI ${r.guiNumber}` : null, r.removed ? 'Taken off the list' : null].filter(Boolean).join(' · ') || (r.email ?? 'No email')}
+                      r.guiNumber ? `GUI ${r.guiNumber}` : null,
+                      r.handicapIndex !== null && r.handicapIndex !== undefined ? `Index ${indexLabel(r.handicapIndex)}` : null,
+                      r.removed ? 'Taken off the list' : null].filter(Boolean).join(' · ') || (r.email ?? 'No email')}
                   </span>
                 </span>
                 {r.linked && <Pill tone="win">Linked</Pill>}
@@ -264,6 +273,8 @@ function RowEditor({ row, club, busy, onAct }: {
   const [guiNumber, setGuiNumber] = useState('')
   const [email, setEmail] = useState(row.email ?? '')
   const [role, setRole] = useState<ClubRole>(row.role)
+  const shownIndex = row.handicapIndex === null || row.handicapIndex === undefined ? '' : indexLabel(row.handicapIndex)
+  const [index, setIndex] = useState(shownIndex)
   const [confirmRemove, setConfirmRemove] = useState(false)
 
   function save() {
@@ -273,6 +284,7 @@ function RowEditor({ row, club, busy, onAct }: {
     if (guiNumber.trim()) body.guiNumber = guiNumber
     if (email.trim().toLowerCase() !== (row.email ?? '')) body.email = email
     if (role !== row.role) body.role = role
+    if (index.trim() !== shownIndex) body.handicapIndex = index.trim()
     void onAct('update', body, 'Saved.').then(ok => { if (ok) { setMemberNumber(''); setGuiNumber('') } })
   }
 
@@ -295,6 +307,15 @@ function RowEditor({ row, club, busy, onAct }: {
         </div>
       </div>
       <p className="t-cap text-ink/65 -mt-2">Numbers are shown partly hidden. Type one to replace it.</p>
+      <div>
+        <label htmlFor={`row-index-${row.id}`} className={FIELD_LABEL}>Handicap index</label>
+        <HandicapField id={`row-index-${row.id}`} value={index} onChange={setIndex} placeholder="Not set" className={FIELD} />
+        <p className="t-cap text-ink/65 mt-2">
+          {row.linked
+            ? 'Their Green Dot account’s, the one value everywhere. A change here changes it there, and is kept on record.'
+            : 'Kept here until they link their account. A change is kept on record.'}
+        </p>
+      </div>
       <div>
         <label htmlFor={`row-email-${row.id}`} className={FIELD_LABEL}>Email</label>
         <input id={`row-email-${row.id}`} type="email" autoCapitalize="none" value={email} onChange={e => setEmail(e.target.value)} className={FIELD} />

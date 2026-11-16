@@ -3,6 +3,7 @@
 
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
+import { handicapStore } from '../handicaps/store'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
 import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
@@ -116,7 +117,11 @@ export function clubStore(db: Db): ClubStore {
         if (error.code === '22P02') return null // not a uuid
         throw error
       }
-      return data ? (await withArt(db, [asClub(data as ClubRow)]))[0] : null
+      if (!data) return null
+      const [club] = await withArt(db, [asClub(data as ClubRow)])
+      // D161: its home course (089), in a query of its own — none before it.
+      const home = await db.from('clubs').select('home_course_id').eq('id', clubId).maybeSingle()
+      return { ...club, homeCourseId: home.error ? null : (home.data as { home_course_id: string | null } | null)?.home_course_id ?? null }
     },
     async rows(clubId) {
       // A club's list can pass Supabase's 1,000-row page: read in pages.
@@ -222,6 +227,11 @@ export function clubStore(db: Db): ClubStore {
       if (error) throw error
       return data ? (await withArt(db, [asClub(data as ClubRow)]))[0] : null
     },
+    handicaps: handicapStore(db),
+    async courseExists(courseId) {
+      const { data, error } = await db.from('courses').select('id').eq('id', courseId).is('trip_id', null).maybeSingle()
+      return !error && !!data
+    },
     async updateClub(clubId, patch) {
       const { error } = await db.from('clubs').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', clubId)
       if (error) throw error
@@ -231,8 +241,20 @@ export function clubStore(db: Db): ClubStore {
       const { data: trips, error } = await db.from('trips').select('id, trip_code').in('trip_code', codes)
       if (error || !trips?.length) return []
       const ids = new Map((trips as { id: string; trip_code: string }[]).map(t => [t.id, t.trip_code]))
-      const { data: linked } = await db.from('account_players').select('trip_id').eq('user_id', userId).in('trip_id', [...ids.keys()])
-      return ((linked ?? []) as { trip_id: string }[]).map(r => ids.get(r.trip_id)!).filter(Boolean)
+      // "You're in": a player linked to this account (D134), or — a club
+      // competition's entry (D163, 089) — a player made from this account's
+      // place on the list, which is right even when a partner booked them
+      // before their account was linked. The second read fails soft before 089.
+      const [{ data: linked }, rows] = await Promise.all([
+        db.from('account_players').select('trip_id').eq('user_id', userId).in('trip_id', [...ids.keys()]),
+        db.from('club_members').select('id').eq('user_id', userId).is('removed_at', null),
+      ])
+      const memberIds = ((rows.data ?? []) as { id: string }[]).map(r => r.id)
+      const booked = memberIds.length
+        ? await db.from('players').select('trip_id').in('club_member_id', memberIds).in('trip_id', [...ids.keys()])
+        : { data: [], error: null }
+      const tripIds = [...((linked ?? []) as { trip_id: string }[]), ...(booked.error ? [] : (booked.data ?? []) as { trip_id: string }[])].map(r => r.trip_id)
+      return [...new Set(tripIds.map(id => ids.get(id)).filter((c): c is string => !!c))]
     },
     async seasonRows(userId, year) {
       return readSeason(db, userId, year)

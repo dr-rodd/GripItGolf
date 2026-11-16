@@ -39,6 +39,8 @@ import { claimCodeIssue, sortMyEvents, type MyEvent } from '@/lib/account'
 import { checkPin, type AttemptStore } from '../entry/entry'
 import { irishToday } from '@/lib/clubs'
 import type { SeasonRow } from '@/lib/cardSummary'
+import { readIndex } from '@/lib/handicapIndex'
+import { setIndex, type HandicapStore } from '../handicaps/handicaps'
 
 export interface AccountStore {
   userFromToken(token: string): Promise<AuthUser | null>
@@ -87,6 +89,9 @@ export interface AccountStore {
   homeClub?(userId: string): Promise<{ slug: string; name: string } | null>
   /** This account's own players' signed cards this year (migration 088), and the courses' names. */
   seasonFor?(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
+
+  // Stage (d1) — the handicap index on the account (D179, migration 089).
+  handicaps?: HandicapStore
 }
 
 export type AccountBody = {
@@ -102,6 +107,8 @@ export type AccountBody = {
   club?: { slug: string; name: string } | null
   season?: SeasonRow[]
   courses?: Record<string, string>
+  /** D179: this account's handicap index — one value, shown and changed on Me. */
+  handicapIndex?: number | null
 }
 
 export type AccountOutcome =
@@ -159,6 +166,8 @@ export async function runAccount(
     /** An event's code and organiser PIN, for claiming it (stage (b1)). */
     code?: unknown
     pin?: unknown
+    /** D179: a handicap index to set — absent reads it, null or '' takes it off. */
+    index?: unknown
     /** The caller's network address; only ever stored hashed. */
     address?: string
   },
@@ -234,15 +243,32 @@ export async function runAccount(
     await store.claimByEmail(user.id, user.email ?? '')
     await store.syncLinks(user.id)
     const year = Number(irishToday(now).slice(0, 4))
-    const [username, events, club, season] = await Promise.all([
+    const [username, events, club, season, handicapIndex] = await Promise.all([
       store.usernameOf(user.id),
       store.eventsFor(user.id),
       store.homeClub ? store.homeClub(user.id) : Promise.resolve(null),
       store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [], courses: {} }),
+      store.handicaps ? store.handicaps.accountIndex(user.id) : Promise.resolve(null),
     ])
     return {
       status: 200,
-      body: { ok: true, username, events: sortMyEvents(events), club, season: season.rows, courses: season.courses },
+      body: { ok: true, username, events: sortMyEvents(events), club, season: season.rows, courses: season.courses, handicapIndex },
+    }
+  }
+
+  // D179: the account's handicap index, read or set from Me — through the
+  // one writer, so the change is logged. An empty box takes it off.
+  if (input.action === 'handicap') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    if (!store.handicaps) return fail(503, 'Handicaps aren’t set up yet.')
+    if (input.index === undefined) return { status: 200, body: { ok: true, handicapIndex: await store.handicaps.accountIndex(user.id) } }
+    const read = readIndex(input.index)
+    if (!read.ok) return fail(400, read.why)
+    try {
+      const out = await setIndex(store.handicaps, { userId: user.id }, read.value, user.id, 'me')
+      return { status: 200, body: { ok: true, handicapIndex: out.now } }
+    } catch {
+      return fail(503, 'Could not save your index — try again.')
     }
   }
 

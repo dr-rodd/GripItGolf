@@ -25,8 +25,11 @@ export default async function EnterPage({ params }: { params: Promise<{ tripCode
     db.from('trips').select('*').eq('trip_code', tripCode).maybeSingle(),
     cookies(),
   ])
-  const trip = data as { name: string; kind?: string | null; public_passcode_hash?: string | null; settings_passcode_hash?: string | null } | null
+  const trip = data as { name: string; kind?: string | null; competition?: string | null; public_passcode_hash?: string | null; settings_passcode_hash?: string | null } | null
   if (!trip) notFound()
+  // A club competition never draws a PIN box (D164, stage (d1)): its door is
+  // the club's list, on the competition's own page.
+  if (trip.competition === 'club') redirect(`/club/comp/${tripCode}`)
   const lock = trip.public_passcode_hash ?? null
   const home = tripBase(tripCode, trip.kind)
   if (entryAllowed(lock, jar.get(entryCookie(tripCode))?.value, tripCode)) redirect(home)

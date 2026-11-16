@@ -361,6 +361,8 @@ export interface HomeData {
   club: { slug: string; name: string } | null
   season: SeasonRow[]
   courses: Record<string, string>
+  /** D179: the account's handicap index, shown and changed on Me. */
+  handicapIndex: number | null
 }
 
 /**
@@ -386,8 +388,23 @@ export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: f
       club,
       season: Array.isArray(b.season) ? b.season as SeasonRow[] : [],
       courses: b.courses && typeof b.courses === 'object' ? b.courses as Record<string, string> : {},
+      handicapIndex: typeof b.handicapIndex === 'number' ? b.handicapIndex : null,
     },
   }
+}
+
+/**
+ * D179: this account's handicap index — read (`undefined`) or set (a typed
+ * index, or '' to take it off) through the server's one writer, which logs
+ * it. Never throws.
+ */
+export async function accountIndex(index?: string): Promise<{ ok: true; index: number | null } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, index === undefined ? { action: 'handicap' } : { action: 'handicap', index })
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, index: typeof r.body.handicapIndex === 'number' ? r.body.handicapIndex : null }
 }
 
 /** "Add an event you run": its code and organiser PIN make it this account's. */
@@ -457,10 +474,14 @@ export type ClubRoleWord = 'owner' | 'admin' | 'member'
 export interface ClubSummary {
   id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'; role: ClubRoleWord
   colour: string | null; crestUrl: string | null; artUrl: string | null; artDarkUrl: string | null
+  /** D161: the club's home course, or null. */
+  homeCourseId?: string | null
 }
 export interface ClubListEntry {
   id: string; name: string; memberNumber: string | null; guiNumber: string | null; email: string | null
   role: ClubRoleWord; linked: boolean; removed: boolean; onBoards: boolean
+  /** D179: the one index — a linked row's account's, an unlinked row's own. */
+  handicapIndex?: number | null
 }
 export interface ClubAnswer {
   clubs?: ClubSummary[]
@@ -477,6 +498,8 @@ export interface ClubAnswer {
   courses?: Record<string, string>
   outside?: ClubEvent[]
   tops?: Record<string, { name: string; points: number }>
+  /** D179: said once on linking, when the club's index differed from the account's. */
+  note?: string
 }
 
 /**

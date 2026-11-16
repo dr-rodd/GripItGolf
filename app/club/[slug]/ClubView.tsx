@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
+import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
@@ -399,6 +400,7 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
     <section className="mt-6">
       <h1 className="t-h1 text-ink">Club</h1>
       <p className="text-ink/80 text-[15px] mt-2">You’re on {face.name}’s list as {roleWord(m.role, face.name).replace(/^(Owner|Admin)$/, r => `an ${r.toLowerCase()}`)}.</p>
+      <HandicapIndexCard className="mt-6" />
       <ListGroup className="mt-6">
         {mayAdminister(m.role) && (
           <ListRow href={`/club/${face.slug}/list`} label="The club’s list and look"

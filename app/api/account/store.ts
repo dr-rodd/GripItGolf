@@ -6,6 +6,7 @@ import type { createAdminClient } from '@/lib/supabase-admin'
 import type { AuthUser } from '@/lib/account'
 import type { AttemptWindow, Membership } from '@/lib/membership'
 import type { MyEvent } from '@/lib/account'
+import { handicapStore } from '../handicaps/store'
 import type { AccountStore } from './account'
 import { serviceStore } from '../entry/store'
 import { readSeason } from '../stats/season'
@@ -109,6 +110,7 @@ export function accountStore(db: Db): AccountStore {
       const c = (data ?? [])[0] as { slug: string; name: string } | undefined
       return c ? { slug: c.slug, name: c.name } : null
     },
+    handicaps: handicapStore(db),
     async seasonFor(userId, year) {
       return readSeason(db, userId, year)
     },

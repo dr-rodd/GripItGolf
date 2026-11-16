@@ -47,7 +47,8 @@ export default function ClubsScreen() {
     setBusy(null)
     if (!r.ok) { setCodeError(r.error); return }
     setCode('')
-    setJoined(r.club ? `You’re linked to ${r.club.name}’s list.` : 'Linked.')
+    // D179: a club index that differed from the account's is said once, here.
+    setJoined(`${r.club ? `You’re linked to ${r.club.name}’s list.` : 'Linked.'}${r.note ? ` ${r.note}` : ''}`)
     await load()
   }
 

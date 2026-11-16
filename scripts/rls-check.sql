@@ -266,3 +266,15 @@ SELECT
 -- A phone with no account is in no club's list and owns nothing, so it
 -- reads every event exactly as stage 4 answered. Expect 0:
 SELECT count(*) FROM club_members WHERE user_id IN (SELECT id FROM auth.users WHERE is_anonymous IS TRUE);
+
+-- ─── Stage (d1) (migration 089): club competitions' groundwork ──────
+-- The index on the account and its log never reach a phone; the one new
+-- trips column is readable by name, written only by the server. One row,
+-- every column true:
+SELECT
+  NOT has_table_privilege('authenticated', 'public.account_handicaps', 'SELECT') AS handicaps_closed,
+  NOT has_table_privilege('anon',          'public.account_handicaps', 'SELECT') AS handicaps_closed_anon,
+  NOT has_table_privilege('authenticated', 'public.handicap_changes',  'SELECT') AS log_closed,
+  (SELECT relrowsecurity FROM pg_class WHERE relname = 'handicap_changes')       AS log_rls_on,
+  has_column_privilege('authenticated', 'public.trips', 'competition', 'SELECT') AS competition_readable,
+  NOT has_column_privilege('authenticated', 'public.trips', 'competition', 'UPDATE') AS competition_not_phone_written;

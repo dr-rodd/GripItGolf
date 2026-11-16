@@ -46,6 +46,14 @@ export interface ActionStore extends EntryStore {
   adminClubs?(userId: string): Promise<{ id: string; name: string }[]>
   /** The event put under a club (or taken out, null), and who changes it. */
   setEventClub?(tripId: string, clubId: string | null, access: ClubAccess | null): Promise<void>
+
+  // Stage (d1) — club competitions (D164, migration 089).
+  /**
+   * The event is a club competition and this account is on its verified
+   * club's list — linked, not taken off. Its members-only door opens for
+   * them with no code's PIN (D164).
+   */
+  competitionMember?(tripId: string, userId: string): Promise<boolean>
 }
 
 type Fail = { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
@@ -83,9 +91,14 @@ export type DoorOutcome =
  * side with the same code. Every wrong try is counted once, as the public
  * PIN's. Needs no sign-in: the door is how a phone gets as far as signing in.
  * `cookie` is what the server sets — never the hash.
+ *
+ * **A club competition's members-only door** (D164, stage (d1)) is a public
+ * PIN nobody is given, and opens a second way: a signed-in Green Dot member
+ * on the competition's verified club's list, with no PIN at all. Nobody
+ * else gets in without the PIN, which nobody holds.
  */
 export async function runDoor(
-  input: { code: unknown; pin: unknown; address: string },
+  input: { code: unknown; pin: unknown; address: string; token?: string | null },
   store: ActionStore,
   now: Date,
 ): Promise<DoorOutcome> {
@@ -95,6 +108,13 @@ export async function runDoor(
   if (!trip) return fail(404, 'No event with that code.')
   if (!trip.publicHash) return { status: 200, body: { ok: true, organiser: false }, cookie: null }
   const pin = str(input.pin)
+  if (!pin && input.token && store.competitionMember) {
+    const userId = await store.userFromToken(input.token)
+    if (userId && (await store.competitionMember(trip.id, userId))) {
+      return { status: 200, body: { ok: true, organiser: false }, cookie: entryToken(trip.publicHash, code) }
+    }
+    return fail(403, 'This competition is for the club’s members. Sign in with the account on its list.')
+  }
   if (!pin) return fail(403, 'That PIN is not this event’s.')
 
   const r = await checkPin(store, { tripId: trip.id, code, kind: 'public', address: input.address, pin, hash: trip.publicHash }, now)

@@ -50,10 +50,17 @@ export function clubSlug(name: string): string {
   return s || 'club'
 }
 
-/** The slug with a number after it, for a name already taken: "-2", "-3"… */
+/**
+ * Addresses no club may have: `/club/comp/<code>` is a competition's door
+ * (stage (d1)), and a page's own folder always wins over a club's address.
+ */
+export const RESERVED_CLUB_SLUGS: readonly string[] = ['comp']
+
+/** The slug with a number after it, for a name already taken (or reserved): "-2", "-3"… */
 export function nextSlug(base: string, taken: readonly string[]): string {
-  if (!taken.includes(base)) return base
-  for (let i = 2; i < 1000; i++) if (!taken.includes(`${base}-${i}`)) return `${base}-${i}`
+  const blocked = [...taken, ...RESERVED_CLUB_SLUGS]
+  if (!blocked.includes(base)) return base
+  for (let i = 2; i < 1000; i++) if (!blocked.includes(`${base}-${i}`)) return `${base}-${i}`
   return `${base}-${Date.now().toString(36)}`
 }
 

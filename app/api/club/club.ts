@@ -22,6 +22,8 @@
 //   row. One GUI number to one account: a clash is held for the club.
 
 import { createHash } from 'crypto'
+import { readIndex } from '@/lib/handicapIndex'
+import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../handicaps/handicaps'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cleanHex } from '@/lib/clubColour'
 import type { SeasonRow } from '@/lib/cardSummary'
@@ -42,6 +44,8 @@ export interface ClubRecord {
   crestPath?: string | null
   artPath?: string | null
   artDarkPath?: string | null
+  /** Stage (d1), D161: the club's home course (089) — absent before it, or unset. */
+  homeCourseId?: string | null
 }
 
 export interface MemberRecord {
@@ -99,7 +103,7 @@ export interface ClubStore {
   assetBase(): string | undefined
   clubBySlug(slug: string): Promise<ClubRecord | null>
   /** The club's look changed: its colour, or an image's stored path. */
-  updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null }>): Promise<void>
+  updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null; home_course_id: string | null }>): Promise<void>
   /** Every event under the club, with who changes it. */
   clubEvents(clubId: string): Promise<ClubEvent[]>
   /** Of those events, the ones this account is linked to a player in (D134). */
@@ -113,6 +117,11 @@ export interface ClubStore {
   /** An image kept in the bucket; the old one let go. */
   putImage(path: string, bytes: Uint8Array): Promise<void>
   removeImage(path: string): Promise<void>
+
+  // Stage (d1) — the handicap index (D179) and the home course (D161), migration 089.
+  handicaps?: HandicapStore
+  /** Whether a course is one of the platform's. */
+  courseExists?(courseId: string): Promise<boolean>
 }
 
 /** Reading and resizing an uploaded image (sharp, on the server — D156), handed in so tests need no images. */
@@ -126,6 +135,8 @@ export interface ImageWork {
 export interface ClubSummary {
   id: string; slug: string; name: string; status: ClubStatus; role: ClubRole
   colour: string | null
+  /** D161: the club's home course, or null. */
+  homeCourseId: string | null
   crestUrl: string | null
   artUrl: string | null
   artDarkUrl: string | null
@@ -141,6 +152,8 @@ export interface ListEntry {
   linked: boolean
   removed: boolean
   onBoards: boolean
+  /** D179: the one index — a linked row's account's, an unlinked row's own. */
+  handicapIndex: number | null
 }
 
 export type ClubBody = {
@@ -162,6 +175,8 @@ export type ClubBody = {
   courses?: Record<string, string>
   outside?: ClubEvent[]
   tops?: Record<string, { name: string; points: number }>
+  /** D179: said once on linking, when the club's index differed from the account's. */
+  note?: string
 }
 
 export type ClubOutcome =
@@ -189,18 +204,27 @@ function summary(club: ClubRecord, role: ClubRole): ClubSummary {
   return {
     id: club.id, slug: club.slug, name: club.name, status: clubStatus(club), role,
     colour: cleanHex(club.colour),
+    homeCourseId: club.homeCourseId ?? null,
     crestUrl: clubAssetUrl(assetBase, club.crestPath ?? null),
     artUrl: clubAssetUrl(assetBase, club.artPath ?? null),
     artDarkUrl: clubAssetUrl(assetBase, club.artDarkPath ?? null),
   }
 }
 
-function entry(r: MemberRecord): ListEntry {
+function entry(r: MemberRecord, index: number | null = null): ListEntry {
   return {
     id: r.id, name: r.name,
     memberNumber: maskNumber(r.memberNumber), guiNumber: maskNumber(r.guiNumber), email: r.email,
-    role: r.role, linked: !!r.userId, removed: !!r.removedAt, onBoards: r.onBoards,
+    role: r.role, linked: !!r.userId, removed: !!r.removedAt, onBoards: r.onBoards, handicapIndex: index,
   }
+}
+
+/** A club's list as the screen reads it, each row with its one index (D179). */
+async function listOf(store: ClubStore, rows: MemberRecord[]): Promise<ListEntry[]> {
+  if (!store.handicaps) return rows.map(r => entry(r))
+  const clubId = rows[0]?.clubId
+  const indexes = clubId ? await listIndexes(store.handicaps, clubId, rows).catch(() => new Map<string, number | null>()) : new Map()
+  return rows.map(r => entry(r, indexes.get(r.id) ?? null))
 }
 
 function asRows(v: unknown): ListRow[] | null {
@@ -284,9 +308,22 @@ export async function runClub(
   }
   if (!mayAdminister(mine.role)) return fail(403, NOT_ON)
   const owners = rows.filter(r => r.role === 'owner' && !r.removedAt).length
-  const listed = (): ClubOutcome => ({ status: 200, body: { ok: true, club: summary(club, mine.role), list: rows.map(entry) } })
+  const listed = async (): Promise<ClubOutcome> => ({ status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, rows) } })
 
-  if (input.action === 'members') return listed()
+  if (input.action === 'members') return await listed()
+
+  // D161: the club's home course — new competitions default to it. A course
+  // without a card can be chosen; the screen asks for its photo there.
+  if (input.action === 'home-course') {
+    const courseId = input.courseId === null || input.courseId === '' ? null : str(input.courseId)
+    if (courseId && store.courseExists && !(await store.courseExists(courseId))) return fail(404, 'No such course.')
+    try {
+      await store.updateClub(clubId, { home_course_id: courseId })
+    } catch {
+      return fail(503, 'Could not save the home course — try again.')
+    }
+    return { status: 200, body: { ok: true, club: summary({ ...club, homeCourseId: courseId }, mine.role) } }
+  }
 
   if (input.action === 'colour') {
     const colour = input.colour === null || input.colour === '' ? null : cleanHex(input.colour)
@@ -317,7 +354,7 @@ export async function runClub(
     }
     const added = plan.inserts.length ? await store.insertRows(clubId, plan.inserts) : 0
     const after = await store.rows(clubId)
-    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: after.map(entry), added, updated, skipped } }
+    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, after), added, updated, skipped } }
   }
 
   const target = rows.find(r => r.id === str(input.memberId))
@@ -350,9 +387,21 @@ export async function runClub(
       }
     }
     if (typeof input.onBoards === 'boolean') patch.on_boards = input.onBoards
-    if (Object.keys(patch).length === 0) return listed()
+    // D179: the one index — a linked row's is the account's, an unlinked
+    // row's its own — through the one writer, logged as the list's.
+    if (input.handicapIndex !== undefined) {
+      if (!store.handicaps) return fail(503, 'Handicaps aren’t set up yet.')
+      const read = readIndex(input.handicapIndex)
+      if (!read.ok) return fail(400, read.why)
+      try {
+        await setIndex(store.handicaps, target.userId ? { userId: target.userId } : { memberId: target.id }, read.value, user.id, 'list')
+      } catch {
+        return fail(503, 'Could not save the index — try again.')
+      }
+    }
+    if (Object.keys(patch).length === 0) return { status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, await store.rows(clubId)) } }
     if ((await store.updateRow(target.id, patch)) === 'clash') return fail(409, 'That number is already another person’s on the list.')
-    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: (await store.rows(clubId)).map(entry) } }
+    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, await store.rows(clubId)) } }
   }
 
   if (input.action === 'remove') {
@@ -361,13 +410,15 @@ export async function runClub(
     if (why) return fail(409, why)
     // Severed, never deleted: the row stays, the link is cut, the access it
     // gave ends at once — and their account and their golf are untouched.
+    // D179: the row keeps a copy of their index, so the list is never blank.
+    if (target.userId && store.handicaps) await severIndex(store.handicaps, target.userId, target.id, user.id).catch(e => console.error('index copy failed:', e))
     await store.updateRow(target.id, { removed_at: now.toISOString(), user_id: null, linked_at: null })
-    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: (await store.rows(clubId)).map(entry) } }
+    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, await store.rows(clubId)) } }
   }
 
   if (input.action === 'restore') {
     await store.updateRow(target.id, { removed_at: null })
-    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: (await store.rows(clubId)).map(entry) } }
+    return { status: 200, body: { ok: true, club: summary(club, mine.role), list: await listOf(store, await store.rows(clubId)) } }
   }
 
   if (input.action === 'invite') {
@@ -432,7 +483,9 @@ async function runLink(input: Record<string, unknown> & { address?: string }, us
   if ((await store.updateRow(row.id, { user_id: user.id, linked_at: now.toISOString() })) === 'clash') {
     return fail(409, `Your account is already on ${club.name}’s list.`)
   }
-  return { status: 200, body: { ok: true, club: summary(club, row.role) } }
+  // D179: one index — the account's stands, the row's goes, a difference said once.
+  const note = store.handicaps ? await linkIndex(store.handicaps, user.id, row.id, club.name).catch(() => null) : null
+  return { status: 200, body: { ok: true, club: summary(club, row.role), ...(note ? { note } : {}) } }
 }
 
 /**
