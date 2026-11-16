@@ -1196,72 +1196,254 @@ certifying.
   action everywhere (D125).
 - `test:rls` `CREATE_COLUMNS` gains `competition`.
 
-#### Stages
+*The stages, jobs and phone checks first drawn here (03cb024) are replaced
+by the re-plan below.*
 
-**(d1) Groundwork.** Migration **089** (paste before its deploy):
-`clubs.home_course_id` (→ courses), `club_members.handicap_index`
-(numeric, −10 to 54, null), `players.club_member_id` (→ club_members, on
-delete set null; unique per event where set), `trips.competition` (text,
-'club' or null, with its column grant). *Undo:* drop the four columns and
-the index. Code: the home course on `/club/[slug]/list` (`CourseSelect`;
-the scorecard gate asked there — `cardBlocker`, the `ScorecardGate`
-photo — so a competition never starts on a course without a card);
-handicap index on a list row (admin) and your own (member, Club tab);
-`lib/compPhase.ts` and its test; "You're in" by list row; the door's
-account key (`runDoor`) and `/club/comp/[code]`; `ClubEvent` told apart —
-`membersOnly` from the door, for competitions only. No competition can be
-made yet.
+### Club competitions — the re-plan after review (16 Nov 2026; D174–D184)
 
-**(d2) The competition in the club area.** No migration. **New competition**
-on Comps for owners and admins (name, date, Stableford or strokes and the
-allowance, guests welcome or members only, tee times: first, interval, per
-time, when booking opens) → `/api/club` `competition` (the event, club,
-`competition: 'club'`, Club admins only, the door's PIN for members only,
-standalone single day, start format tee sheet, `rounds.tee_sheet`, one
-board, `edit_handicaps` off). Comps rows wear their phase. The competition
-page (Q1) with its sections; booking, withdraw and partner search (Q2); the
-event's hub and short link go on to it; no event tab bar on its card; the
-nightly stale step skips uncertified competitions; the board provisional
-(no gold). Players sign their own cards as today.
+**Agreed from 03cb024:** option (a), `/club/[slug]/comp/[code]`;
+`players.club_member_id`; `rounds.certified_at` with a log; members only
+through the public PIN door with a PIN nobody holds. **Changed:** D165
+amended, D166 replaced by D179, D168 and "club tabs as links" replaced by
+D180–D181, and D174–D184 new (`docs/design-brief.md`).
 
-**(d3) Certify and Results.** Migration **090** (paste after its deploy;
-the code reads it fail-soft until then): `rounds.certified_at`,
-`round_certifications` and `round_no_returns` (server only, their own
-grants), and `writable_rounds()` with the certified lock. *Undo:* 079's
-`writable_rounds()` put back word for word, then drop the two tables and
-the column. Code: the commit rule into `lib/`; the admins' actions on
-their competition — No return, sign an open card, void, **Certify**
-(countback frozen, cards locked, board → Results, gold) and **Reopen**;
-summaries for a competition written at certify with origin `club` and
-deleted on reopen (D172 — only certified rounds feed the season); every
-reader in Q3 respecting the lock.
+**What the amendments change in the first plan:**
+- **The event's layout is untouched after all.** D183 opens the organiser
+  area with the event's own bar, and D174 keeps external events as they
+  are, so the event bar stays everywhere under `/golf/event/`: no hidden
+  bar on the card, no extra column in the layout's read. The card's back
+  arrow goes to the competition page; the event's hub and short link go on
+  to it.
+- **The competition bar (D180–D181) replaces the `Segmented` and the club
+  tabs as links.** Drawn by the server with the page — Tee sheet, Scoring,
+  Leaderboard, Home — over the club footer; Home leaves for the club's
+  Home, where the club footer is back. All three sections are always in
+  the bar; one not yet live is a single line saying when it starts
+  ("Scoring opens with the first tee time, 8:00 on Saturday"). The rise out
+  of Comps waits for its spec; it will be a new motion in the style
+  guide's register, with a Reduce Motion version, before it is built.
+- **Guests can watch (D184)** is no public PIN and, for anybody not on the
+  list, **the spectator role** — reserved since migration 068 and granted
+  by nothing until now. `/api/entry` grants it on a competition to a phone
+  that is not a signed-in member of the club (the entry store's own
+  membership read; nothing under `app/api/entry` imports the club route or
+  names an account). Spectators read and never write, so "read-only for
+  anyone with the code" is enforced by the database. Watching is split
+  from editing for competitions only.
+- **The PIN entry screen is never drawn for a competition**: `/enter/<code>`
+  goes on to the competition (`/club/comp/<code>`), the padlock on a
+  competition's event pages offers no PIN box ("Run by <club>'s admins" —
+  an owner or admin opens it by being signed in, as today), and
+  `InlineUnlock` the same. A test renders each for a competition and finds
+  no PIN field.
+- **D175:** booking opening sends no email.
+
+#### D176–D179, the answers asked for
+
+**Signing on the server (D176–D178).** Today the commit runs in the
+browser (`handleCommit` in `LiveScoringFlow`): it writes `round_handicaps`,
+reads `live_scores`, upserts `scores` (a hole with nothing on it written as
+a hole no return), marks `live_scores.committed`, sets the card
+`finalised`, and asks for the summary. **The move, built once in (d3):**
+the rule into `lib/cardCommit.ts` (pure: the score rows and the hole no
+returns from a card's `live_scores`, its holes and handicaps), and
+`/api/card/sign` running it on the service role for the player's finalise,
+the marker's co-sign and an admin's alike. **Competition cards sign only
+through it.** An event outside a club keeps committing from the phone
+through the same `lib/` rule, writing the same rows (a test compares them
+row for row) — one copy of the rule, and no change on any other event.
+
+**The marker.**
+- A card in the app is a group's card; **a signature is a player's**. The
+  finaliser (any account, D165 — who keys the scores is never enforced)
+  finalises the group in one tap as today; **each player's card then needs
+  its marker**.
+- **Two different accounts on every card:** the marker can never be the
+  finaliser. The player's own account may be the second signature — in a
+  two-ball where Ross finalises both cards, Dave co-signs his own and Ross
+  marks nothing twice. *Confirm this reading of D176.*
+- **Choosing:** the tee time's other players first, then a name search of
+  the list (the `names` search); the player (or, for a member with no
+  account, whoever finalised) may change the marker until it is
+  co-signed. An owner or admin may sign as marker on any card (D178).
+
+**How a card waiting for its marker is stored.** At the finalise, the
+server writes the player's `scores` rows (the Stableford trigger scores
+them, and they are safe from every cleanup), sets the card `finalised` as
+today, and writes a **`card_signatures`** row — server only, migration
+090: round, player, card (`live_rounds`), finalised by and when (an
+account), the marker (a list row; its account once linked), co-signed by
+and when, sent back when. One row per finalise, so a card sent back and
+signed again keeps its history. **Phones may no longer write `scores` on a
+competition round** (090's policy) — only `/api/card/sign` does — so a
+signed card cannot change under its marker.
+
+**What the board shows for it.** Its total, in the standings, with a quiet
+"To be marked" under the name; **D182's ties break on co-signed cards
+only** — a card waiting for its marker level with another shares the place
+until it is marked. Scoring closes only when every booked player's card is
+co-signed or a No return.
+
+**Cards to sign (D177).** The marker's club Home leads with **Cards to
+sign** (the club members ask: one read of `card_signatures` for their list
+row, open and not sent back), and the competition's Scoring section lists
+the same. Each opens the finalise screen read-only with **Sign as marker**
+(co-signed) and **Send it back**: the signature is closed as sent back,
+the player's `scores` rows deleted, and the card opened again
+(`active`) for the players on it not yet co-signed — a co-signed player on
+it stays final (their rows are the server's, and a re-finalise skips them).
+
+**Cleanup skips it.** A waiting card is `finalised`, which the nightly step
+never closes, and its `live_scores` stay reachable, so never residue — and,
+from (d2), `/api/cleanup` skips every round of an uncertified competition
+outright. A test runs the cleanup's rules over a waiting card and finds
+nothing to close or delete.
+
+**The handicap (D179).**
+- **Where the one value lives:** **`account_handicaps`** (an account, its
+  index, when; server only, migration 089) for a Green Dot member, shown
+  and changed on Me. **`club_members.handicap_index`** only for a list row
+  with no account linked. The list shows the account's value for a linked
+  row and the row's own otherwise — one value either way.
+- **The log:** **`handicap_changes`** (server only, 089) — whose (the
+  account, or the list row while unlinked), old, new, when, by whom (an
+  account), where (Me, the list, the start sheet, linking), and the round
+  when it came from a start sheet. Every write goes through one server
+  helper that writes the value and its log line together.
+- **Linking a row with its own index:** the account has none → it takes
+  the row's (logged, from linking); both the same → nothing; they differ →
+  **the account's stands**, the row's is cleared and logged as the change,
+  and the person is told once: "Your club had 14.2 for you; your Green Dot
+  index 13.8 stands — change it on Me." When a link is cut (taken off the
+  list), the row keeps a copy of the value then, so the club's list is
+  never blank.
+- **The start sheet (D72), competitions only:** each player's index beside
+  their name to confirm; a change goes to the server (the same helper) and
+  updates the account or row, the player's `players.handicap` in this
+  competition and in any of theirs not yet started — "everywhere" — before
+  the card's snapshot (`round_handicaps`) is taken as today. Who may change
+  it: whoever is starting the card (members score each other's cards).
+- **At Certify (d4):** the admin sees every change made on the day to the
+  competition's players (the log, Irish date), each with old, new, when and
+  by whom.
+
+#### The stages, redrawn
+
+**(d1) Groundwork, and the handicap.** Migration **089** (paste before
+its deploy):
+- `clubs.home_course_id`, `club_members.handicap_index`,
+  `players.club_member_id` (unique per event where set), `trips.competition`
+  ('club' or null, its column grant);
+- `account_handicaps` and `handicap_changes`, server only, their own
+  grants.
+
+*Undo:* drop the two tables, the four columns and the index. **Code:**
+- the home course on `/club/[slug]/list`, with the scorecard gate asked
+  there;
+- the index on Me, on the list (the account's for a linked row), linking's
+  rule, the one writer and its log;
+- `lib/compPhase.ts`;
+- "You're in" by list row;
+- the door's member key and `/club/comp/[code]`.
+
+No competition can be made yet.
+
+**(d2) The competition in the club area.** No migration.
+- New competition on Comps.
+- The competition page with its bar (D180–D181) and Manage competition
+  (D183).
+- Booking, withdraw and partner search.
+- The hub and short link going on to the competition.
+- The PIN screens never drawn (tested).
+- Guests can watch as spectators (D184).
+- The start sheet's index (D179).
+- The cleanup skipping uncertified competitions.
+- The board: no gold; ties per D182 once a board carries Tiebreak
+  (`offersTieBreak` widened for a single-round board, with its test).
+- Cards finalise as today (from the phone) until (d3).
+
+**(d3) Signing on the server, the marker, Cards to sign.** Migration
+**090** (paste **after** its deploy — the server path must be live before
+phones lose the `scores` write):
+- `card_signatures` (server only);
+- the `scores` policies switched to a function that is `writable_rounds()`
+  less the rounds of a competition.
+
+*Undo:* the `scores` policies back to `writable_rounds()`, then drop
+`card_signatures`. **Code:**
+- `lib/cardCommit.ts` and `/api/card/sign`; the ordinary commit on the same
+  rule;
+- the marker picker, "To be marked" on the board, Cards to sign on the
+  club Home and the Scoring section, Sign as marker and Send it back;
+- an owner or admin signing as marker.
+
+**(d4) No return, void, Certify, Results, Reopen, the season.** Migration
+**091** (paste after its deploy, with no competition card open):
+- `rounds.certified_at` (and its grant);
+- `round_certifications` and `round_no_returns`, server only;
+- `writable_rounds()` with `AND r.certified_at IS NULL`.
+
+*Undo:* 079's `writable_rounds()` back word for word, then drop the two
+tables and the column. **Code:**
+- No return, void an open card, Certify with the day's handicap changes
+  shown, Results in gold, Reopen;
+- the season fed only by certified rounds (summaries written at certify,
+  deleted on reopen);
+- every reader in the first plan's answer 3 respecting the lock.
 
 #### Ross's jobs by hand
 - **(d1):** paste 089 before the deploy. Set the test club's home course
-  (photograph its card there if asked). Give two test members a handicap
-  index.
-- **(d2):** nothing to paste. Two accounts on the test club's list (one an
-  admin), and one listed member with no account.
-- **(d3):** paste 090 after the deploy, with no competition card open.
-- **Any time:** write D94's exception (Q6), and send D174–D175's text.
+  (its card photographed if asked). Give yourself an index on Me, and one
+  unlinked test row its own.
+- **(d2):** nothing to paste. On the test club's list: two accounts (one an
+  admin), and one member with no account.
+- **(d3):** paste 090 **after** the deploy.
+- **(d4):** paste 091 after the deploy, with no competition card open.
+- **To approve:** D94's exception — "…except a club's members-only
+  competition, where the club's list is the door. A member without an
+  account is booked and scored by another member." — and the two-ball
+  reading of D176 above.
 
 #### Phone checks
-- **(d1):** the list page sets a home course; a course with no card asks
-  for its photo. A member sets their own index; an admin corrects it.
-  Nothing else in the club area or any event changes.
-- **(d2):** an admin makes a competition in under a minute; it is on Comps
-  as Announced, then Booking open at its time. A member books themselves in
-  one tap and a partner by name (including the member with no account);
-  withdraws; "You're in" shows. A phone with the code but no account is
-  stopped at the door of a members-only competition, and sees a
-  guests-welcome one read-only. In play: the card opens full screen and its
-  back arrow returns to the competition; the club tab bar works from the
-  competition page; Board opens it. The board shows no gold. An event
-  outside a club: unchanged, tee sheet included.
-- **(d3):** an admin marks a no-show No return, signs a forgotten card,
-  certifies: the board becomes Results with gold, every card refuses an
-  edit, the season shows the round. Reopen: the gold goes, cards edit
-  again, the season drops it.
+- **(d1):**
+  - Me shows your index and changes it.
+  - The list shows a linked member's index as theirs, and an unlinked
+    row's own.
+  - Linking a row whose index differs keeps the account's and says so
+    once.
+  - The list sets a home course; a course with no card asks for its photo.
+  - Nothing else in the club area or any event changes.
+- **(d2):**
+  - An admin makes a competition; it is on Comps as Announced, then Booking
+    open.
+  - The bar: all three sections, one not yet live saying when it starts;
+    Home back to the club with its footer.
+  - Booking: yourself in one tap, a partner by name (the no-account member
+    too), withdraw.
+  - A phone with the code and no account is stopped at a members-only
+    competition — **and never shown a PIN box** — and watches a "Guests
+    can watch" one without being able to score.
+  - The start sheet shows each index; a change there shows on Me.
+  - The card's back arrow returns to the competition.
+  - Manage competition opens the organiser area with the event's bar.
+  - No gold. An event outside a club is unchanged.
+- **(d3):**
+  - Finalise a two-ball: each card asks for a marker, the other player
+    first; the board shows "To be marked".
+  - The marker's club Home leads with Cards to sign; Sign as marker
+    co-signs.
+  - Send it back reopens the card for its player.
+  - An admin signs as marker.
+  - A no-account member's card is finalised by their partner and
+    co-signed by a third member.
+  - A waiting card is untouched the next morning.
+  - An event outside a club still commits exactly as before.
+- **(d4):**
+  - Mark a no-show No return; void an open card.
+  - Certify lists the day's handicap changes, then the board becomes
+    Results with gold and every card refuses an edit; the season shows the
+    round.
+  - Reopen: the gold goes, cards edit again, the season drops it.
 
 ### Stage (h) as built — the club area and the club's events (15 Nov 2026; D144, D153, Q3)
 

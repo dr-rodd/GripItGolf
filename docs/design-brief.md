@@ -323,15 +323,27 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D158 | The public face: art, crest, name, the verified tick, "<club> members: sign in", and the club's guests-welcome events ("Anyone in the event") with their links. Never the list, the calendar or members-only boards | Built (e1) |
 | D159 | Comps lists the club's events — Upcoming, My entries, Results — each opening its event; no booking until (d) | Built (e1) |
 | D160 | Resend stays on its free plan until a day passes 50 emails (D111); the day's count is on /admin | Built (e1): `lib/emailCount.ts`, /admin Trips |
-| D161 | A club's home course (`clubs.home_course_id`), set on its list page with the scorecard gate asked there; new competitions default to it | Proposed; plan (d1) |
-| D162 | "New competition" on Comps for owners and admins: name, date, format and allowance, tee times; no PIN, no collaboration question, no tags | Proposed; plan (d2) |
-| D163 | A competition's field is the club's list: a player row made when a member is booked, pointing at the list row (`players.club_member_id`) | Proposed; plan (d1)–(d2) |
-| D164 | A members-only club competition admits a signed-in member on the club's list with no code or PIN, and nobody else bar a watch link (members-only boards, D113) | Proposed; plan (d1)–(d2): the public PIN door with a PIN nobody holds |
-| D165 | A listed member with no account is booked and scored by a partner or an admin; booking yourself and scoring on your phone need the account | Proposed; narrows D94 — its exception to be written |
-| D166 | A handicap index on the club's list (member edits own, admin corrects), snapshotted at card start; edit_handicaps off on a competition | Proposed; plan (d1)–(d2) |
-| D167–D168 | The competition page inside the club shell (back to Comps, name, date, phase, Tee sheet / Scoring / Leaderboard by phase); Board opens the live competition; the card stays full screen | Proposed; plan (d2), `/club/[slug]/comp/[code]` |
-| D169–D172 | Phases Announced, Booking open, In play, Awaiting sign-off, Certified; scoring closes when every booked player is signed or No return; admins mark No return, sign or void, Certify (countback, lock, Results, gold) and Reopen; only certified rounds feed the season | Proposed; plan (d3) |
-| D173 | Booking: your own name in one tap, partners from the list, withdraw until the time has gone | Proposed; plan (d2) |
-| D174–D175 | Named in the notes of 16 Nov; text not yet handed over | Waiting |
+| D161 | A club's home course (`clubs.home_course_id`), set on its list page with the scorecard gate asked there; new competitions default to it | Agreed; plan (d1) |
+| D162 | "New competition" on Comps for owners and admins: name, date, format and allowance, tee times; no PIN, no collaboration question, no tags | Agreed; plan (d2) |
+| D163 | A competition's field is the club's list: a player row made when a member is booked, pointing at the list row (`players.club_member_id`) | Agreed; plan (d1)–(d2) |
+| D164 | A members-only club competition admits a signed-in member on the club's list with no code or PIN, and nobody else bar a watch link (members-only boards, D113) | Agreed: the public PIN door with a PIN nobody holds; plan (d1)–(d2) |
+| D165 | *Amended 16 Nov:* members score each other's cards as today; who keys the scores is never enforced. Booking yourself, finalising and co-signing need an account | Agreed; plan (d2)–(d3) |
+| D166 | *Replaced by D179* | — |
+| D167 | The competition page inside the club shell: back to Comps, name, date, one phase line | Agreed; plan (d2), `/club/[slug]/comp/[code]` |
+| D168 | *Replaced by D180–D181* (and the card's place by D183's "the event's own bar") | — |
+| D169–D172 | Phases Announced, Booking open, In play, Awaiting sign-off, Certified; scoring closes when every booked player is signed or No return; admins mark No return, sign or void, Certify (countback, lock, Results, gold) and Reopen; only certified rounds feed the season | Agreed; plan (d3)–(d4) |
+| D173 | Booking: your own name in one tap, partners from the list, withdraw until the time has gone | Agreed; plan (d2) |
+| D174 | External (non-club) events open on their own with their own tab bar, as today | Agreed; nothing changes |
+| D175 | No emails when booking opens until the email plan allows | Agreed |
+| D176 | Marker: a competition card is final only when two different accounts have signed it — the one that finalises, then a marker chosen from the club's list (the tee time's other players first, then a name search); the player may change the marker until it is co-signed | Agreed; plan (d3). To confirm: the card's own player may be the second account |
+| D177 | "Cards to sign" at the top of the marker's club Home and in the competition's Scoring section, opening the finalise screen read-only with "Sign as marker" and "Send it back" (the card back to the player, unsigned) | Agreed; plan (d3) |
+| D178 | An owner or admin may sign as marker. A no-account member's card is finalised by whoever scored it and co-signed by a different member or an admin. Signing runs on the server for player, marker and admin alike | Agreed; plan (d3), `/api/card/sign`, `card_signatures` |
+| D179 | The handicap index lives on the Green Dot account (shown on Me), one value: the list shows it for a linked member, an unlinked row holds its own until linked; the card start sheet shows each index to confirm and a change there updates it everywhere; every change logged (old, new, when, by whom) and the day's changes shown at Certify | Agreed; plan (d1)–(d2), (d4) for Certify. `account_handicaps`, `handicap_changes` |
+| D180 | The competition bar on `/club/[slug]/comp/[code]`: Tee sheet, Scoring, Leaderboard, Home, over the club footer, drawn by the server with the page; Home leaves to the club Home and the club footer returns; coming from the club area it rises out of the Comps tab (spec to follow with the mockups) | Agreed; plan (d2), the rise waits for its spec |
+| D181 | All three sections always in the bar; one not yet live is a single line saying when it starts | Agreed; plan (d2) |
+| D182 | Ties: `lib/tiebreak.ts` as it is (back 9, 6, 3, 2), then shared; on finished (co-signed) cards only | Agreed; plan (d2)–(d3) |
+| D183 | Owners and admins get "Manage competition" on the page, opening the existing organiser area with the event's own bar | Agreed; plan (d2) |
+| D184 | Members only by default; "Guests can watch" is read-only for anyone with the code (the spectator role). Watching split from editing for competitions only | Agreed; plan (d2) |
+| D94 exception | "…except a club's members-only competition, where the club's list is the door. A member without an account is booked and scored by another member." | For Ross to approve |
 
 **The club area to the Pints hand-off** (Ross, 15 Nov 2026) — built with stage (f): the art an image at the top (members home 540px at .62 by day and .50 at night, other pages 380px at .20/.18, cropped 50% 38%, faded from 42%), the frosted header (crest in its ring, name, "Members", the 48px account button), Home's greeting, Live now, Club calendar (52×56 date tiles), Your season (three tiles and the self-claimed line), Outside the club ("These open in green dot."), and Competitions (Upcoming / My entries / Results, a featured card, results' top score in gold-deep). Waiting: "Your next round" with booking (d), and Live now's mini board (it links to the event's board for now).
