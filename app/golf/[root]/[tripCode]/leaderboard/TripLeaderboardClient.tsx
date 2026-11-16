@@ -80,6 +80,8 @@ type TeeRatingRow = { id: string; slope: number; course_rating: number; par: num
 interface Props {
   /** A club competition not yet certified (D171): its leader is not gold. */
   provisional?: boolean
+  /** A club competition's line under a player's name — "To be signed" (stage (d3)). */
+  notes?: Record<string, string>
   tripCode: string
   /**
    * Everything this trip is playing for, each board carrying its own complete
@@ -1073,10 +1075,12 @@ function TeamName({ row, byPlayers, memberNames }: {
 }
 
 function Board({
-  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById, renderCard, provisional = false,
+  board, rows: allRows, rounds, playerById, boardNameById, onOpenCard, linked, colourById, renderCard, provisional = false, notes,
 }: {
   /** A club competition not yet certified (D171): no gold. */
   provisional?: boolean
+  /** A line under a player's name, in place of its own (stage (d3)). */
+  notes?: Record<string, string>
   /**
    * The card drawn in place under a row — the site's rule (Ross, 10 Nov
    * 2026): one card to show opens as a slider below its row; several rounds
@@ -1384,9 +1388,9 @@ function Board({
                         {row.isLive && <LiveDot />}
                       </span>
                     )}
-                    {!isTeamBoard && row.subLabel && (
+                    {!isTeamBoard && (notes?.[row.id] ?? row.subLabel) && (
                       <ScrollingName
-                        text={row.subLabel}
+                        text={notes?.[row.id] ?? row.subLabel ?? ''}
                         className={`block ${dotOf(row) ? 'pl-3.5' : ''}`}
                         textClassName="text-ink/65 text-[13px] leading-snug"
                       />
@@ -1530,7 +1534,7 @@ export default function TripLeaderboardClient({
   tripCode, boards, activeRoundIds, livePlayerIds, legacyTeamScoring, rounds,
   teams, memberships, players, holes, scores, liveScores, roundHandicaps,
   tees = [], nicknames = [], isEvent = false, dayBoards, linkedIds, series = false, periods, periodRule, cardsOff, roundCards,
-  playerColours, sessionMatches, provisional = false,
+  playerColours, sessionMatches, provisional = false, notes,
 }: Props) {
   const linked = useMemo(() => new Set(linkedIds ?? []), [linkedIds])
   const colourById = useMemo(() => new Map(Object.entries(playerColours ?? {})), [playerColours])
@@ -2000,6 +2004,7 @@ export default function TripLeaderboardClient({
   const board = (
     <Board
       provisional={provisional}
+      notes={notes}
       key={activeBoard.id}
       board={activeBoard}
       rows={currentRows}

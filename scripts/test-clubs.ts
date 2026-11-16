@@ -21,7 +21,7 @@ import type { AttemptWindow, Membership } from '../lib/membership'
 import { inviteHash, runClub, runUpload, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
-import { withOwner, type EntryTrip } from '../app/api/entry/entry'
+import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { compPhase, sectionLive, sectionWaitLine, type CompFacts } from '../lib/compPhase'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm, withdrawIssue, type CompForm } from '../lib/clubComp'
@@ -29,6 +29,9 @@ import { runNewCompetition, type CompetitionStore } from '../app/api/club/compet
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
 import type { CreateStore } from '../app/api/trip/create/create'
 import { mergeGrant } from '../lib/membership'
+import { cardScoreRows, nrGross, type CommitHole } from '../lib/cardCommit'
+import { runSign, signedOff, type CardHole, type NewSignature, type Signature, type SignPlayer, type SignStore } from '../app/api/card/sign'
+import type { SavedScore } from '../lib/liveScores'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { RESERVED_CLUB_SLUGS } from '../lib/clubs'
 import { hashPin as hashPinForDoor, unheldPin, entryToken } from '../lib/pinHash'
@@ -780,7 +783,7 @@ async function competitionTests() {
   const door: Partial<ActionStore> = {
     async tripByCode(c: string) { return c === code ? { id: 't1', code, publicHash } as never : null },
     async userFromToken(t: string) { return t.startsWith('tok-') ? t.slice(4) : null },
-    async competitionMember(_trip: string, userId: string) { return userId === 'dave' },
+    async clubMember(_trip: string, userId: string) { return userId === 'dave' },
   }
   const ask = (token: string | null, pin: string | null = null) => runDoor({ code, pin, address: 'a', token }, door as ActionStore, NOW)
   const member = await ask('tok-dave')
@@ -935,12 +938,44 @@ async function competitionD2Tests() {
   const idx = await runBooking({ token: 'tok-ross', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '13.9' }, bstore, open)
   ok(idx.status === 200 && indexSets[0] === 'r-ross:13.9:ross', 'the start sheet changes the one index, by the member starting the card (D179)')
 
-  section('Guests can watch: everybody else a spectator (D184)')
-  eq(mergeGrant(null, { watchOnly: true, playerId: 'p1' }, NOW).role, 'spectator', 'a guest not on the list watches only, whatever they claim')
-  eq(mergeGrant({ role: 'player', playerId: 'p1', organiserUntil: null }, { watchOnly: true }, NOW).role, 'player', '…and nobody is lowered')
+  section('Every member watches; only the tee sheet plays (D184; Ross, 16 Nov 2026)')
+  eq(mergeGrant(null, { watchOnly: true, playerId: 'p1' }, NOW).role, 'spectator', 'somebody not playing watches only, whatever they claim')
+  eq(mergeGrant({ role: 'player', playerId: 'p1', organiserUntil: null }, { watchOnly: true }, NOW).role, 'player', '…and off a competition nobody is lowered')
+  const lowered = mergeGrant({ role: 'player', playerId: 'p1', organiserUntil: '2026-11-15T20:00:00Z' }, { watchOnly: true, exact: true }, NOW)
+  ok(lowered.role === 'spectator' && lowered.playerId === null && Date.parse(lowered.organiserUntil ?? '') === Date.parse('2026-11-15T20:00:00Z'),
+    'on a competition a player taken off the sheet is a spectator again — the organiser\'s hours untouched')
+  const raised = mergeGrant({ role: 'guest', playerId: null, organiserUntil: null }, { playerId: 'p9', exact: true }, NOW)
+  ok(raised.role === 'player' && raised.playerId === 'p9', '…and a booked player is their booked player')
+  const ent: Membership[] = []
+  const entryStore = (booked: string | null, admins: string[] = []): EntryStore => ({
+    async userFromToken(t) { return t.slice(4) },
+    async tripByCode() { return { id: 't1', code: 'COMP01', endDate: null, adminHash: 's1$x$y$fp', publicHash: null, openEnded: false, clubId: 'c1', clubName: 'Rosses', clubAdminIds: admins, competition: true } },
+    async claimedPlayer() { return true },
+    async readMembership() { return ent[ent.length - 1] ?? null },
+    async bookedPlayer() { return booked },
+    async writeMembership(_u, _t, m) { ent.push(m) },
+    async readAttempts() { return new Map() },
+    async writeAttempt() {},
+    async upgradePin() {},
+  })
+  const enter = (store: EntryStore, playerId: string | null = null) => runEntry({ token: 'tok-dave', code: 'COMP01', playerId, address: 'a' }, store, NOW)
+  const watching = await enter(entryStore(null), '00000000-0000-4000-8000-000000000001')
+  ok(watching.status === 200 && watching.body.ok && watching.body.role === 'spectator' && watching.body.readOnly, 'a member not on the tee sheet watches — reads, never writes')
+  const playing = await enter(entryStore('p-dave'))
+  ok(playing.status === 200 && playing.body.ok && playing.body.role === 'player' && ent[ent.length - 1].playerId === 'p-dave', 'a member on the tee sheet plays, as their booked player')
+  const withdrawn = await enter(entryStore(null))
+  ok(withdrawn.status === 200 && withdrawn.body.ok && withdrawn.body.role === 'spectator', '…and watches again once taken off it')
+  ent.length = 0
+  const adminIn = await enter(entryStore(null, ['dave']))
+  ok(adminIn.status === 200 && adminIn.body.ok && adminIn.body.role !== 'spectator', 'the club\'s admins are never made spectators')
   const entry = read('app/api/entry/entry.ts')
-  ok(/const watchOnly = !!trip\.competition/.test(entry) && /onClubList/.test(entry), 'the entry route makes a competition\'s non-members spectators')
-  ok(!/@\/app\/api\/club\//.test(entry) && !/@\/lib\/account/.test(entry), '…without naming the club route or an account (D94\'s guard)')
+  ok(!/@\/app\/api\/club\//.test(entry) && !/@\/lib\/account/.test(entry), '…without the entry route naming the club route or an account (D94\'s guard)')
+  const idxOff = await runBooking({ token: 'tok-dave', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '12' }, bstore, open)
+  eq(idxOff.status, 403, 'a member not on the tee sheet starts no card — the start sheet\'s index refused')
+  const stateRoss = await runBooking({ token: 'tok-ross', action: 'state', code: 'COMP01' }, bstore, open)
+  ok(stateRoss.status === 200 && stateRoss.body.ok && stateRoss.body.booked === true, 'the booking answer says whether this member is on the sheet')
+  ok(/memberDoor\(tripCode\)/.test(read('app/enter/[tripCode]/EntryGate.tsx')) && /storedAccountSession\(\)/.test(read('lib/entryClient.ts')),
+    'every club event\'s PIN door lets a signed-in member of the club straight through')
 
   section('Never a PIN box on a competition; its addresses lead into the club')
   for (const f of ['app/components/OrganiserLock.tsx', 'app/components/InlineUnlock.tsx']) {
@@ -965,6 +1000,130 @@ async function competitionD2Tests() {
   ok(/<CompBar slug=\{slug\} code=\{code\} active=\{section\} \/>/.test(page), '…and draws its bar on the server (D180)')
 }
 
+async function competitionD3Tests() {
+  section('A card\'s score rows, one rule for the phone and the server (lib/cardCommit.ts)')
+  const holes: CommitHole[] = Array.from({ length: 18 }, (_, i) => ({ id: `h${i + 1}`, hole_number: i + 1, par: i % 3 === 0 ? 3 : 4, stroke_index: i + 1 }))
+  const card = { 0: { a: { gross: 3, isNR: false, stableford: 2, putts: 5, fairway: null } }, 1: { a: { gross: null, isNR: true, stableford: 0, putts: null, fairway: 'left' as const } } }
+  const out = cardScoreRows(card, holes, [{ id: 'a', gender: 'M', playingHcp: 18 }], 'rd')
+  eq(out.length, 18, 'every hole is written for every player')
+  ok(out[0].gross_score === 3 && out[0].putts === null && !out[0].no_return, 'more putts than shots is dropped, the gross kept')
+  ok(out[1].no_return && out[1].gross_score === nrGross(4, 2, 18) && out[1].fairway_hit === 'left', 'a pick-up is net double bogey off the full handicap, its fairway kept')
+  ok(out[5].no_return && out[5].gross_score === nrGross(4, 6, 18) && out[5].fairway_hit === null, 'a hole with nothing on it is a no return')
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  ok(/const scoreRows = cardScoreRows\(finalCard, courseHoles,/.test(flow) && !/function nrGross/.test(flow),
+    'the phone\'s commit writes through the same rule — no second copy')
+  ok(/if \(competition && tripCode\) \{[\s\S]*signCompetitionCard\(tripCode/.test(flow) && flow.indexOf('signCompetitionCard(tripCode') < flow.indexOf('upsert(scoreRows'),
+    'a competition card is signed on the server, before the phone would write any score')
+  ok(!/@\/lib\/account/.test(read('app/scoring/MarkerPicker.tsx')) && !/@\/lib\/account/.test(flow), '…through the phone\'s own sign-in, never the account code')
+
+  section('Signing a competition card: the player\'s approval and a marker\'s (D176–D178, amended)')
+  const row = (id: string, name: string, userId: string | null, role: 'owner' | 'admin' | 'member' = 'member') =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role, userId, removedAt: null, onBoards: true })
+  const rows = [row('r-ross', 'Ross', 'ross'), row('r-dave', 'Dave', 'dave'), row('r-sean', 'Seán', 'sean'), row('r-ann', 'Ann', null), row('r-adm', 'Admin', 'adm', 'admin'), row('r-eve', 'Eve', 'eve')]
+  const players: SignPlayer[] = [
+    { id: 'p-ross', clubMemberId: 'r-ross', name: 'Ross', gender: 'M' },
+    { id: 'p-dave', clubMemberId: 'r-dave', name: 'Dave', gender: 'M' },
+  ]
+  const rules = { batches: [{ start: '08:00', interval: 10, count: 4, ends: 'count' as const }], groupSize: 4 }
+  let sigs: (Signature & { sentBack?: boolean })[] = []
+  let scoreRows: { player_id: string }[] = []
+  const committed = new Map<string, boolean>()
+  let liveStatus = 'active'
+  const saved: SavedScore[] = ['p-ross', 'p-dave'].flatMap(p => Array.from({ length: 18 }, (_, i) => ({ player_id: p, hole_number: i + 1, gross_score: 5, stableford_points: 1 })))
+  let ready = true
+  const store: SignStore = {
+    async userFromToken(t) { return member(t.slice(4), `${t.slice(4)}@x.ie`) },
+    async competition(c) { return c === 'COMP01' ? { tripId: 't1', code: 'COMP01', clubId: 'c1', roundId: 'rd', date: '2026-11-22', rules, publicHash: null } : null },
+    async myRow(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async rowsByIds(_c, ids) { return rows.filter(r => ids.includes(r.id)) },
+    async players() { return players },
+    async bookings() { return [{ playerId: 'p-ross', slot: 0, bookedBy: 'p-ross' }, { playerId: 'p-dave', slot: 0, bookedBy: 'p-ross' }] },
+    async liveCard(id) { return id === 'lr1' ? { id, roundId: 'rd', status: liveStatus, playerIds: ['p-ross', 'p-dave'] } : null },
+    async signatures() { return ready ? sigs.filter(x => !x.sentBack) : null },
+    async holes() { return holes },
+    async playingHcps(_r, ids) { return new Map(ids.map(id => [id, 10])) },
+    async liveScores(_r, ids) { return saved.filter(x => ids.includes(x.player_id)) },
+    async upsertScores(r) { scoreRows = [...scoreRows.filter(x => !r.some(y => y.player_id === x.player_id)), ...r] },
+    async markCommitted(_r, ids, c) { for (const id of ids) committed.set(id, c) },
+    async insertSignatures(r: NewSignature[]) {
+      if (r.some(n => sigs.some(x => !x.sentBack && x.playerId === n.player_id))) return 'clash'
+      sigs.push(...r.map((n, i) => ({ id: `s${sigs.length + i}`, playerId: n.player_id, liveRoundId: n.live_round_id, finalisedBy: n.finalised_by, finalisedAt: n.finalised_at,
+        approvedBy: n.approved_by, approvedAt: n.approved_at, markerMemberId: n.marker_member_id, markedBy: n.marked_by, markedAt: n.marked_at, markedAs: n.marked_as })))
+      return 'ok'
+    },
+    async updateSignature(id, patch) {
+      const x = sigs.find(y => y.id === id)!
+      if (patch.approved_at !== undefined) { x.approvedAt = patch.approved_at; x.approvedBy = patch.approved_by ?? null }
+      if (patch.marked_at !== undefined) { x.markedAt = patch.marked_at; x.markedBy = patch.marked_by ?? null; x.markedAs = (patch.marked_as as 'marker' | 'admin') ?? null }
+      if (patch.marker_member_id !== undefined) x.markerMemberId = patch.marker_member_id
+      if (patch.sent_back_at) x.sentBack = true
+    },
+    async finaliseCard() { liveStatus = 'finalised' },
+    async reopenCard() { liveStatus = 'active' },
+    async deleteScores(_r, p) { scoreRows = scoreRows.filter(x => x.player_id !== p) },
+    async card(): Promise<CardHole[]> { return [] },
+  }
+  const sign = (tok: string, action: string, body: Record<string, unknown> = {}) => runSign({ token: tok, action, code: 'COMP01', ...body }, store, NOW)
+  const sigOf = (p: string) => sigs.find(x => x.playerId === p && !x.sentBack)!
+
+  ready = false
+  const early = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: {} })
+  ok(early.status === 503 && !early.body.ok && /not set up yet/.test(early.body.error), 'before migration 090 the server says so, and writes nothing')
+  ready = true
+  eq((await sign('tok-eve', 'finalise', { liveRoundId: 'lr1', markers: { 'p-ross': { playerId: 'p-dave' }, 'p-dave': { playerId: 'p-ross' } } })).status, 403,
+    'a member not on the tee sheet signs no card')
+  const self = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: { 'p-ross': { memberId: 'r-ross' }, 'p-dave': { playerId: 'p-ross' } } })
+  ok(self.status === 400 && !self.body.ok && /own card/.test(self.body.error), 'a player never marks their own card')
+  const noAcct = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: { 'p-ross': { memberId: 'r-ann' }, 'p-dave': { playerId: 'p-ross' } } })
+  ok(noAcct.status === 400 && !noAcct.body.ok && /needs a Green Dot account/.test(noAcct.body.error), 'a marker needs their own account')
+  ok(scoreRows.length === 0 && sigs.length === 0, '…a refused finalise writes nothing')
+
+  const fin = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: { 'p-ross': { playerId: 'p-dave' }, 'p-dave': { playerId: 'p-ross' } } })
+  ok(fin.status === 200 && scoreRows.length === 36 && committed.get('p-dave') === true && liveStatus === 'finalised', 'Ross finalises the two-ball: both cards\' scores written by the server, the card closed')
+  ok(!!sigOf('p-ross').approvedAt && !sigOf('p-ross').markedAt, '…Ross\'s own card approved by his finalise, waiting for Dave to mark it')
+  ok(!sigOf('p-dave').approvedAt && sigOf('p-dave').markedAs === 'marker', '…Dave\'s marked by Ross, who scored it, waiting for Dave\'s own approval')
+  ok(fin.status === 200 && fin.body.ok && JSON.stringify(fin.body.waiting) === JSON.stringify(['p-ross', 'p-dave']), '…both waiting on somebody')
+  const again = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: {} })
+  ok(again.status === 200 && sigs.length === 2, 'finalising again rewrites nobody already signed')
+
+  const davesList = await sign('tok-dave', 'list')
+  ok(davesList.status === 200 && davesList.body.ok && davesList.body.items?.length === 2
+    && davesList.body.items.some(i => i.mine && i.canApprove) && davesList.body.items.some(i => !i.mine && i.canMark), 'Dave\'s Cards to sign: his own to approve, Ross\'s to mark')
+  eq((await sign('tok-ross', 'approve', { playerId: 'p-dave' })).status, 403, 'only Dave approves Dave\'s card, on his own account')
+  eq((await sign('tok-sean', 'mark', { playerId: 'p-ross' })).status, 403, 'somebody not chosen, and not an admin, marks nothing')
+  eq((await sign('tok-dave', 'approve', { playerId: 'p-dave' })).status, 200, 'Dave approves his card')
+  ok(signedOff(sigOf('p-dave')), '…which is final: approved and marked')
+  eq((await sign('tok-dave', 'send_back', { playerId: 'p-dave' })).status, 409, 'a card signed by both is not sent back — reopening is (d4)\'s')
+
+  const back = await sign('tok-dave', 'send_back', { playerId: 'p-ross' })
+  ok(back.status === 200 && !scoreRows.some(x => x.player_id === 'p-ross') && committed.get('p-ross') === false && liveStatus === 'active',
+    'Dave, the marker, sends Ross\'s card back: its scores off and the card open again')
+  ok(sigs.filter(x => x.playerId === 'p-ross').length === 1 && sigs[0].sentBack === true, '…the signature kept, closed')
+  const refin = await sign('tok-ross', 'finalise', { liveRoundId: 'lr1', markers: { 'p-ross': { memberId: 'r-sean' }, 'p-dave': { playerId: 'p-ross' } } })
+  ok(refin.status === 200 && sigs.length === 3 && sigOf('p-ross').markerMemberId === 'r-sean' && signedOff(sigOf('p-dave')),
+    'finalised again: a fresh signature for Ross with a new marker, Dave\'s final card left alone')
+  eq((await sign('tok-adm', 'approve', { playerId: 'p-ross' })).status, 403, 'an admin never approves for the player')
+  const adm = await sign('tok-adm', 'mark', { playerId: 'p-ross' })
+  ok(adm.status === 200 && sigOf('p-ross').markedAs === 'admin' && signedOff(sigOf('p-ross')), 'an admin signs as marker on any card (D178)')
+  eq((await sign('tok-ross', 'marker', { playerId: 'p-ross', marker: { playerId: 'p-dave' } })).status, 409, 'a card marked keeps its marker')
+
+  section('Migration 090, and who reads the signatures')
+  const m090 = read('supabase/migrations/20260101000090_card_signatures.sql')
+  ok(/CREATE TABLE IF NOT EXISTS card_signatures/.test(m090) && /REVOKE ALL ON public\.card_signatures FROM anon, authenticated/.test(m090)
+    && /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.card_signatures TO service_role/.test(m090), 'card_signatures is server only, its grants in the file')
+  ok(/uq_card_signatures_open ON card_signatures\(round_id, player_id\) WHERE sent_back_at IS NULL/.test(m090), '…one open signature a player a round')
+  ok(/t\.competition IS DISTINCT FROM 'club'/.test(m090) && (m090.match(/phone_score_rounds\(\)\)\)/g) ?? []).length >= 4,
+    'phones keep writing scores everywhere but a club competition')
+  ok(/PASTE THIS AFTER THE DEPLOY/.test(m090) && /-- ─── Undo/.test(m090) && /writable_rounds\(\)\)\);\n--   DROP POLICY|WITH CHECK \(round_id IN \(SELECT public\.writable_rounds\(\)\)\);/.test(m090), '…pasted after the deploy, with its undo back to 079')
+  const page = read('app/club/[slug]/comp/[code]/page.tsx')
+  ok(/finished: sheet\.final\.filter/.test(page), 'scoring closes once every booked card is final — approved and marked')
+  ok(/<CompPlay code=\{code\}/.test(page) && /<CardsToSign code=\{code\} \/>/.test(page), 'the Scoring section: the card for the players on the sheet, and Cards to sign')
+  ok(/m\.toSign\.length > 0/.test(read('app/club/[slug]/ClubView.tsx')), 'Cards to sign leads the club Home (D177)')
+  ok(/notes=\{notes\}/.test(read('app/club/[slug]/comp/[code]/CompBoard.tsx')) && /notes\?\.\[row\.id\] \?\? row\.subLabel/.test(read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')),
+    'the board says "To be signed" under a card still waiting')
+  ok(/competition \? \(/.test(read('app/scoring/[slug]/CourseDashboardClient.tsx')), 'a competition card is never unfinalised from a phone — it is sent back')
+}
+
 async function main() {
   ruleTests()
   await routeTests()
@@ -974,6 +1133,7 @@ async function main() {
   await handicapTests()
   await competitionTests()
   await competitionD2Tests()
+  await competitionD3Tests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

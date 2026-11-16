@@ -76,9 +76,16 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
         competition: !comp.error && (comp.data as { competition?: string | null } | null)?.competition === 'club',
       }
     },
-    async onClubList(clubId, userId) {
-      const { data, error } = await db.from('club_members').select('id').eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1)
-      return !error && (data ?? []).length > 0
+    async bookedPlayer(tripId, clubId, userId) {
+      // Every read fails soft: before 089 nobody is booked from a list.
+      const rows = await db.from('club_members').select('id').eq('club_id', clubId).eq('user_id', userId).is('removed_at', null)
+      const ids = rows.error ? [] : (rows.data ?? []).map(r => (r as { id: string }).id)
+      if (!ids.length) return null
+      const ps = await db.from('players').select('id').eq('trip_id', tripId).in('club_member_id', ids)
+      const pids = ps.error ? [] : (ps.data ?? []).map(r => (r as { id: string }).id)
+      if (!pids.length) return null
+      const ta = await db.from('tee_assignments').select('player_id').eq('trip_id', tripId).in('player_id', pids).limit(1)
+      return ta.error ? null : ((ta.data ?? [])[0] as { player_id?: string } | undefined)?.player_id ?? null
     },
     async linkPlayer(userId, tripId, playerId) {
       // Only a Green Dot member — a confirmed email, never an anonymous phone.
@@ -159,15 +166,11 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       if (error) throw error
       return (data ?? []) as { id: string; name: string }[]
     },
-    async competitionMember(tripId, userId) {
-      // Each read fails soft: before 089 no event is a competition.
-      const [trip, priv] = await Promise.all([
-        db.from('trips').select('competition').eq('id', tripId).maybeSingle(),
-        db.from('trip_private').select('club_id').eq('trip_id', tripId).maybeSingle(),
-      ])
-      const competition = trip.error ? null : (trip.data as { competition?: string | null } | null)?.competition
+    async clubMember(tripId, userId) {
+      // Fails soft: before 086 no event is a club's.
+      const priv = await db.from('trip_private').select('club_id').eq('trip_id', tripId).maybeSingle()
       const clubId = priv.error ? null : (priv.data as { club_id?: string | null } | null)?.club_id
-      if (competition !== 'club' || !clubId) return false
+      if (!clubId) return false
       const [club, row] = await Promise.all([
         db.from('clubs').select('verified_at').eq('id', clubId).maybeSingle(),
         db.from('club_members').select('id').eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1),

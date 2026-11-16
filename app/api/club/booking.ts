@@ -76,6 +76,8 @@ export interface BookingBody {
   /** This account's place on the list. */
   myRowId?: string
   admin?: boolean
+  /** This account's player is on a tee time — only those play (Ross, 16 Nov 2026). */
+  booked?: boolean
   names?: { id: string; name: string; booked: boolean; linked: boolean }[]
 }
 
@@ -106,8 +108,9 @@ export async function runBooking(
   const [players, bookings] = await Promise.all([store.players(comp.tripId), store.bookings(comp.roundId)])
   const playerOfRow = new Map(players.filter(p => p.clubMemberId).map(p => [p.clubMemberId as string, p.id]))
   const mine = playerOfRow.get(me.id) ?? null
+  const booked = !!mine && bookings.some(b => b.playerId === mine)
   const ok = (body: Omit<BookingBody, 'ok'> = {}): BookingOutcome =>
-    ({ status: 200, body: { ok: true, myRowId: me.id, admin, ...body }, door })
+    ({ status: 200, body: { ok: true, myRowId: me.id, admin, booked, ...body }, door })
 
   // What this phone is in the competition — and its way through the door.
   if (input.action === 'state') {
@@ -168,13 +171,15 @@ export async function runBooking(
       console.error('booking failed:', e)
       return fail(503, 'Could not book — try again.')
     }
-    return ok({ myPlayerId })
+    return ok({ myPlayerId, booked: booked || rows.some(r => r.id === me.id) })
   }
 
   // D179: the card start sheet confirms each player's index, and a change
-  // there is the one value changed everywhere — by any member starting the
-  // card (members score each other's cards), logged as the start sheet's.
+  // there is the one value changed everywhere — by whoever starts the card:
+  // a player on the tee sheet (only they play — Ross, 16 Nov 2026) or the
+  // club's admins, logged as the start sheet's.
   if (input.action === 'index') {
+    if (!admin && !booked) return fail(403, 'Only the players on the tee sheet start a card.')
     const player = players.find(p => p.id === str(input.playerId))
     if (!player?.clubMemberId) return fail(404, 'That player isn’t in this competition.')
     const read = readIndex(input.index)
@@ -206,7 +211,7 @@ export async function runBooking(
     } catch {
       return fail(503, 'Could not take the booking off — try again.')
     }
-    return ok({ myPlayerId: rowId === me.id ? null : mine })
+    return ok({ myPlayerId: rowId === me.id ? null : mine, booked: rowId === me.id ? false : booked })
   }
 
   return fail(400, 'Unknown request.')

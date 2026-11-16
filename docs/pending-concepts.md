@@ -1445,6 +1445,78 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
+### Stage (d3) as built — signing on the server, the marker, Cards to sign (16 Nov 2026; D176–D178, D185)
+
+**Ross, 16 Nov (D185):** every club event may be viewed by every member on the
+club's list; only the players on a competition's tee sheet play it.
+- A signed-in member on the list goes through **any** club event's PIN door
+  with no PIN. `/enter/<code>` tries it once (`memberDoor`, only on a phone
+  holding an account's sign-in); `runDoor`'s `clubMember` checks the
+  verified club's list.
+- On a competition, `/api/entry` sets the field role **exactly** on every
+  entry (`Grant.exact`, the one grant that lowers): a player — their booked
+  player — while on a tee time, a spectator otherwise. The club's admins are
+  untouched.
+- The Scoring section offers the card only to the booked and the admins, and
+  the start sheet's index refuses anybody else.
+- Playing a non-competition club event is unchanged: it follows that event's
+  own settings.
+
+**Migration 090** (paste **after** the deploy). Before it, `/api/card/sign`
+answers "not set up yet" and the card stays open with its holes safe.
+- `card_signatures`, server only.
+- `scores`' phone policies switched to `phone_score_rounds()`: 079's
+  `writable_rounds()` less a club competition's rounds.
+
+**Built:**
+- **One commit rule.** `lib/cardCommit.ts` (`cardScoreRows`, `nrGross`,
+  `effectivePar`, `effectiveSI`) is the phone's commit in `LiveScoringFlow`
+  and the server's alike. An event outside a club commits from the phone
+  exactly as before.
+- **Signing a competition card.** On the card's last screen the scorer picks
+  a marker for each card (`MarkerPicker`): the next player round the group
+  first, or anybody on the list with an account by name. **Sign the cards**
+  then sends it to `/api/card/sign` `finalise`, which:
+  - reads `live_scores` back and writes `scores` through the same rule;
+  - marks the holes committed;
+  - writes a `card_signatures` row for each player not already signed;
+  - closes the card.
+  - The finalise counts as the player's **approval** when the player
+    finalised. It counts as the **marker's** signature when the finaliser
+    chose themselves.
+  - The player and the marker are never the same account. Every player and
+    marker needs an account.
+  - In a two-ball Ross scores: Ross's card waits for Dave to mark it, and
+    Dave's waits for Dave's own approval. Dave signs both from Cards to sign.
+- **Cards to sign** (D177):
+  - at the top of the club Home (`toSign` on the club members ask);
+  - in the competition's Scoring section (`CompSigning.tsx`), with the card
+    hole by hole and **Approve my card**, **Sign as marker** and **Send it
+    back**;
+  - an owner or admin sees every card still waiting and may sign as marker,
+    on anyone's card but their own (D178), but never approves for a player.
+- **Send it back**, by the player, the marker or an admin while the card
+  still waits on someone:
+  - the signature is closed (kept as history);
+  - the player's `scores` are deleted and their holes uncommitted;
+  - the card is opened again;
+  - the next finalise writes that player afresh, leaving anyone already
+    signed alone.
+  - A card signed by both is changed only by Reopen (d4).
+- **The board** says "To be signed" under a card waiting on someone. The
+  competition reads Awaiting sign-off (the page and Comps) once every
+  booked card is final. A competition card cannot be unfinalised from a
+  phone; it is sent back.
+- D182's "ties on co-signed cards only" holds at Certify, when every card is
+  final. Until then the board is provisional (no gold) and countback runs
+  on the cards as they stand.
+
+**Known, not built:**
+- Changing a marker after the finalise (`marker` in the route) has no screen
+  yet; the picker sets it at the finalise.
+- A card sent back is reopened for the whole group on the phone, but its
+  already-signed players are not rewritten.
+
 ### Stage (d2) as built — the competition in the club area (16 Nov 2026; D162–D184)
 
 **Ross's amendment, 16 Nov (before (d2) was finished):** *every member must

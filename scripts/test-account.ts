@@ -505,7 +505,7 @@ function wiringTests() {
   ok(!/from\('account_usernames'\)/.test(files.filter(f => /^['"]use client['"]/m.test(read(f))).map(read).join('\n')),
     'no browser file reads the usernames table')
   const importers = files.filter(f => /from ['"]@\/lib\/accountClient['"]|from ['"]\.\/accountClient['"]/.test(read(f)))
-  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/NewCompetition.tsx', 'app/club/[slug]/comp/[code]/CompDoor.tsx', 'app/club/[slug]/comp/[code]/CompManage.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
+  eq(importers.filter(f => !f.startsWith('app/account/')), ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/NewCompetition.tsx', 'app/club/[slug]/comp/[code]/CompDoor.tsx', 'app/club/[slug]/comp/[code]/CompManage.tsx', 'app/club/[slug]/comp/[code]/CompSigning.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx', 'app/components/HandicapIndexCard.tsx', 'app/dashboard/create/MemberGate.tsx', 'app/home/EventsTab.tsx', 'app/home/HomeScreen.tsx'],
     'only the account pages import it, the gate in front of making an event (D135), a club page asking whether this phone is on its list (D157), a club competition\'s door, booking and New competition (stage (d2)), and a member\'s home (D148)')
   ok(!/\b(updateUser|signIn|sendCode|confirmCode|deleteAccount|signOutAccount)\b/.test(strip(read('app/dashboard/create/MemberGate.tsx'))),
     '  …which only asks whether this phone is signed in')
@@ -513,8 +513,8 @@ function wiringTests() {
   const reached = files.filter(f => f.startsWith('app/api/')
     && /^import (?!type )[^\n]*from ['"](@\/app\/api\/account\/account|\.\/account)['"]/m.test(read(f)))
   eq(reached.sort(), ['app/api/account/route.ts'], 'only /api/account runs the account logic')
-  const accountWords = files.filter(f => /isAccount\(/.test(strip(read(f))) && !/^(lib\/account\.ts|app\/api\/account\/|app\/api\/club\/)/.test(f))
-  eq(accountWords, [], 'nothing outside the account’s and the clubs’ own files asks whether a phone has an account')
+  const accountWords = files.filter(f => /isAccount\(/.test(strip(read(f))) && !/^(lib\/account\.ts|app\/api\/account\/|app\/api\/club\/|app\/api\/card\/)/.test(f))
+  eq(accountWords, [], 'nothing outside the account’s and the clubs’ own files (a club competition’s card signing among them) asks whether a phone has an account')
   for (const dir of ['app/golf', 'app/run', 'app/scoring', 'app/join', 'app/enter', 'app/api/entry', 'app/api/trip']) {
     if (!fs.existsSync(dir)) continue
     // Making an event is the one door an account opens (D135).

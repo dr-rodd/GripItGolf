@@ -118,6 +118,12 @@ export interface ClubStore {
   putImage(path: string, bytes: Uint8Array): Promise<void>
   removeImage(path: string): Promise<void>
 
+  /**
+   * Stage (d3): the club's competitions with a card waiting on this list
+   * row — its own to approve, or one it was chosen to mark. Empty before 090.
+   */
+  cardsToSign?(clubId: string, rowId: string): Promise<{ code: string; name: string; count: number }[]>
+
   // Stage (d1) — the handicap index (D179) and the home course (D161), migration 089.
   handicaps?: HandicapStore
   /** Whether a course is one of the platform's. */
@@ -175,6 +181,7 @@ export type ClubBody = {
   courses?: Record<string, string>
   outside?: ClubEvent[]
   tops?: Record<string, { name: string; points: number }>
+  toSign?: { code: string; name: string; count: number }[]
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
 }
@@ -279,11 +286,13 @@ export async function runClub(
     const events = await store.clubEvents(club.id)
     const today = irishToday(now)
     const past = events.filter(e => clubEventWhen(e, today) === 'past').map(e => e.code)
-    const [entries, season, outside, tops] = await Promise.all([
+    const comps = events.some(e => e.competition)
+    const [entries, season, outside, tops, toSign] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
       store.outsideEvents(user.id, events.map(e => e.code)),
       past.length ? store.topScores(past) : Promise.resolve({}),
+      comps && store.cardsToSign ? store.cardsToSign(club.id, mineRow.id).catch(() => []) : Promise.resolve([]),
     ])
     // D161: the home course, for New competition's first answer (089).
     const full = mayAdminister(mineRow.role) ? await store.club(club.id).catch(() => null) : null
@@ -291,7 +300,7 @@ export async function runClub(
       status: 200,
       body: {
         ok: true, club: summary(full ?? club, mineRow.role), events, entries, me: { name: mineRow.name },
-        season: season.rows, courses: season.courses, outside, tops,
+        season: season.rows, courses: season.courses, outside, tops, toSign,
       },
     }
   }

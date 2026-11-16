@@ -15,7 +15,11 @@ import { boardCopy } from '@/app/golf/[root]/[tripCode]/leaderboard/boardCopy'
  * ten seconds at most), drawn by the event's own board. `provisional` until
  * certified: no gold (D171).
  */
-export default async function CompBoard({ code, provisional, active }: { code: string; provisional: boolean; active: boolean }) {
+export default async function CompBoard({ code, provisional, active, notes }: {
+  code: string; provisional: boolean; active: boolean
+  /** "To be signed" under a player whose card waits on a signature (stage (d3)). */
+  notes?: Record<string, string>
+}) {
   const copy = await boardCopy(code)
   // A competition is never a bracket.
   if (!copy || copy.bracket) notFound()
@@ -44,6 +48,7 @@ export default async function CompBoard({ code, provisional, active }: { code: s
           tees={copy.tees}
           isEvent
           provisional={provisional}
+          notes={notes}
         />
       </TripBaseProvider>
     </section>

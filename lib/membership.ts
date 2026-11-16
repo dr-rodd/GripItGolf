@@ -95,6 +95,12 @@ export interface Grant {
    * (D184, stage (d2)). Lifts an absent row to spectator, never lowers one.
    */
   watchOnly?: boolean
+  /**
+   * The field role set exactly — a club competition, where a phone is a
+   * player while booked on the tee sheet and a spectator otherwise (Ross,
+   * 16 Nov 2026). The one grant that lowers; organiser hours are untouched.
+   */
+  exact?: boolean
 }
 
 // ─── Merging an entry into what the phone already had ──────────
@@ -112,9 +118,11 @@ const isFieldRole = (r: unknown): r is FieldRole =>
 export function mergeGrant(existing: Membership | null, grant: Grant, now: Date): Membership {
   const before: FieldRole = existing && isFieldRole(existing.role) ? existing.role : 'spectator'
   const asked: FieldRole = grant.watchOnly ? 'spectator' : grant.playerId ? 'player' : 'guest'
-  const role = FIELD_RANK[asked] > FIELD_RANK[before] ? asked : before
+  const role = grant.exact ? asked : FIELD_RANK[asked] > FIELD_RANK[before] ? asked : before
 
-  const playerId = (grant.watchOnly ? null : grant.playerId) ?? existing?.playerId ?? null
+  const playerId = grant.exact
+    ? (grant.watchOnly ? null : grant.playerId ?? null)
+    : (grant.watchOnly ? null : grant.playerId) ?? existing?.playerId ?? null
 
   const was = existing?.organiserUntil ? Date.parse(existing.organiserUntil) : NaN
   const fresh = grant.organiser ? now.getTime() + ORGANISER_MS : NaN

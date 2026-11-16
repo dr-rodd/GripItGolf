@@ -84,15 +84,35 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
 
 /**
  * Each competition's phase for Comps (D169): from its sheet's opening, its
- * first tee time and whether a card has started — one read of the rounds,
- * one of the cards. Who is booked and signed is the competition page's to
- * count; certified arrives with (d4).
+ * first tee time, whether a card has started, and — from stage (d3) — who
+ * is booked and whose card is final: one read of the rounds, then the cards,
+ * the bookings and the signatures together. Certified arrives with (d4).
  */
 async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string, CompPhase>> {
   const { data: rounds } = await db.from('rounds').select('id, trip_id, scheduled_date, tee_sheet').in('trip_id', tripIds)
   const rs = (rounds ?? []) as { id: string; trip_id: string; scheduled_date: string | null; tee_sheet?: unknown }[]
-  const { data: cards } = rs.length ? await db.from('live_rounds').select('round_id').in('round_id', rs.map(r => r.id)) : { data: [] }
+  const roundIds = rs.map(r => r.id)
+  const [{ data: cards }, { data: seats }, sigs] = roundIds.length
+    ? await Promise.all([
+        db.from('live_rounds').select('round_id').in('round_id', roundIds),
+        db.from('tee_assignments').select('round_id, player_id').in('round_id', roundIds),
+        db.from('card_signatures').select('round_id, player_id, approved_at, marked_at').in('round_id', roundIds).is('sent_back_at', null),
+      ])
+    : [{ data: [] }, { data: [] }, { data: [], error: null }]
   const started = new Set(((cards ?? []) as { round_id: string }[]).map(c => c.round_id))
+  // Stage (d3): booked players, and those whose card is final — approved and
+  // marked — so a competition reads Awaiting sign-off once all are. Before 090, none.
+  const bookedOf = new Map<string, Set<string>>()
+  for (const a of (seats ?? []) as { round_id: string; player_id: string }[]) {
+    if (!bookedOf.has(a.round_id)) bookedOf.set(a.round_id, new Set())
+    bookedOf.get(a.round_id)!.add(a.player_id)
+  }
+  const finalOf = new Map<string, number>()
+  if (!sigs.error) {
+    for (const s of (sigs.data ?? []) as { round_id: string; player_id: string; approved_at: string | null; marked_at: string | null }[]) {
+      if (s.approved_at && s.marked_at && bookedOf.get(s.round_id)?.has(s.player_id)) finalOf.set(s.round_id, (finalOf.get(s.round_id) ?? 0) + 1)
+    }
+  }
   const now = Date.now()
   const out = new Map<string, CompPhase>()
   for (const r of rs) {
@@ -102,7 +122,8 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
     out.set(r.trip_id, compPhase({
       bookingOpensAt: opensAt(rules, r.scheduled_date)?.getTime() ?? null,
       firstTeeAt: first ? teeInstant(r.scheduled_date, first) : null,
-      booked: 0, finished: 0, cardsStarted: started.has(r.id), certifiedAt: null,
+      booked: bookedOf.get(r.id)?.size ?? 0, finished: finalOf.get(r.id) ?? 0,
+      cardsStarted: started.has(r.id), certifiedAt: null,
     }, now))
   }
   return out
@@ -275,6 +296,27 @@ export function clubStore(db: Db): ClubStore {
       if (error) throw error
     },
     clubEvents: clubId => readClubEvents(db, clubId),
+    async cardsToSign(clubId, rowId) {
+      const { data: priv } = await db.from('trip_private').select('trip_id').eq('club_id', clubId)
+      const ids = ((priv ?? []) as { trip_id: string }[]).map(p => p.trip_id)
+      if (!ids.length) return []
+      const { data: trips, error } = await db.from('trips').select('id, trip_code, name').in('id', ids).eq('competition', 'club')
+      const comps = (error ? [] : trips ?? []) as { id: string; trip_code: string; name: string }[]
+      if (!comps.length) return []
+      const compIds = comps.map(c => c.id)
+      const [sigs, mine] = await Promise.all([
+        db.from('card_signatures').select('trip_id, player_id, marker_member_id, approved_at, marked_at').in('trip_id', compIds).is('sent_back_at', null),
+        db.from('players').select('id').in('trip_id', compIds).eq('club_member_id', rowId),
+      ])
+      if (sigs.error) return []
+      const myPlayers = new Set(((mine.data ?? []) as { id: string }[]).map(p => p.id))
+      const count = new Map<string, number>()
+      for (const s of (sigs.data ?? []) as { trip_id: string; player_id: string; marker_member_id: string | null; approved_at: string | null; marked_at: string | null }[]) {
+        const waits = (s.marker_member_id === rowId && !s.marked_at) || (myPlayers.has(s.player_id) && !s.approved_at)
+        if (waits) count.set(s.trip_id, (count.get(s.trip_id) ?? 0) + 1)
+      }
+      return comps.filter(c => count.has(c.id)).map(c => ({ code: c.trip_code, name: c.name, count: count.get(c.id) as number }))
+    },
     async entries(userId, codes) {
       const { data: trips, error } = await db.from('trips').select('id, trip_code').in('trip_code', codes)
       if (error || !trips?.length) return []

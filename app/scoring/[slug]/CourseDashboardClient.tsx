@@ -945,7 +945,11 @@ export default function CourseDashboardClient({
                                     <p className="text-accent-deep/60 text-sm mt-0.5">Reopens at hole 18. Other players on this card keep finalised state.</p>
                                   )}
                                 </div>
-                                {!isConfirming ? (
+                                {competition ? (
+                                  // A competition card is signed in the club (stage (d3)):
+                                  // changed only by sending it back from Cards to sign.
+                                  <span className="flex-shrink-0 t-cap text-ink/50">Sent for signing</span>
+                                ) : !isConfirming ? (
                                   <button
                                     onClick={() => setPlayerConfirm({ type: "unfinalise", playerId: id, liveRoundId, roundId, playerName: name })}
                                     className="flex-shrink-0 px-3 py-1.5 text-sm text-accent-deep/60 border border-accent/25 hover:border-accent/50 hover:text-accent-deep transition-colors rounded-xl"

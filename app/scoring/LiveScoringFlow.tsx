@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import { supabase } from "@/lib/supabase"
 import { mergeSaved, anyScored, type Fairway } from "@/lib/liveScores"
+import { cardScoreRows, effectivePar, effectiveSI, nrGross } from "@/lib/cardCommit"
 import { FULL_ALLOWANCE, allowedHandicap } from "@/lib/handicapAllowance"
 import IndexConfirm from "./IndexConfirm"
 import { type QuotaScale } from "@/lib/quota"
@@ -17,7 +18,8 @@ import { scoreOutbox, refusal } from "./outbox"
 import { unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS } from "@/lib/scoreOutbox"
 import { useAfterDelay } from "@/app/components/useAfterDelay"
 import { IconSignalWeak } from "@/app/components/icons"
-import { recoverEvents, summariseCard } from "@/lib/entryClient"
+import { recoverEvents, signCompetitionCard, summariseCard, type MarkerAsk } from "@/lib/entryClient"
+import MarkerPicker from "./MarkerPicker"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./activeLiveRound"
@@ -246,15 +248,8 @@ function calcStableford(gross: number, par: number, si: number, hcp: number) {
  * double bogey at the full handicap, and a reduced handicap gives at most the
  * same number of shots, so the hole still scores zero on every board.
  */
-function nrGross(par: number, si: number, hcp: number) {
-  return par + 2 + shotsReceived(hcp, si)
-}
-function effectivePar(hole: Hole, gender: string) {
-  return gender === "F" && hole.par_ladies ? hole.par_ladies : hole.par
-}
-function effectiveSI(hole: Hole, gender: string) {
-  return gender === "F" && hole.stroke_index_ladies ? hole.stroke_index_ladies : hole.stroke_index
-}
+// `nrGross`, `effectivePar` and `effectiveSI` are lib/cardCommit.ts's — the
+// one rule the commit below and the server's signing route share (d3).
 /**
  * The course handicap this card is scored off, unrounded.
  *
@@ -520,6 +515,8 @@ export default function LiveScoringFlow({
   const [scores, setScores] = useState<Record<number, Record<string, HoleScore>>>({})
   const [holeIdx, setHoleIdx] = useState(0)
   const [saving, setSaving] = useState(false)
+  /** A club competition's markers, one a player on this card (stage (d3)). */
+  const [markers, setMarkers] = useState<Record<string, MarkerAsk>>({})
   const [error, setError] = useState<string | null>(null)
   const [closeConfirm, setCloseConfirm] = useState(false)
   const [selectedSummaryPlayerId, setSelectedSummaryPlayerId] = useState("")
@@ -1002,6 +999,21 @@ export default function LiveScoringFlow({
         )
       )
 
+      // A club competition (stage (d3)): the server signs. It reads the card
+      // back from `live_scores` itself (everything is there — step 0),
+      // writes `scores` through the same rule (phones may not on a
+      // competition, migration 090) and starts each player's two
+      // signatures — their own approval and the marker chosen here.
+      if (competition && tripCode) {
+        const unmarked = playerSetups.find(ps => !markers[ps.player.id])
+        if (unmarked) throw new Error(`Choose who marks ${unmarked.player.name}’s card.`)
+        const signed = await signCompetitionCard(tripCode, { liveRoundId: liveRound.id, markers })
+        if (!signed.ok) throw new Error(signed.error)
+        outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
+        onBack()
+        return
+      }
+
       // 2. Reconcile the card with what was actually saved while it was
       //    played. `live_scores` is the record; this component's state is a
       //    view of it, and a view can be incomplete — a resume that failed, a
@@ -1034,44 +1046,10 @@ export default function LiveScoringFlow({
       //    written below, so the delete removed nothing the upsert would not
       //    have replaced — but it opened a window where a failure between the
       //    two left the round with no scores at all.
-      const scoreRows: any[] = []
-      for (const [hIdx, hole] of courseHoles.entries()) {
-        for (const setup of playerSetups) {
-          const hs = finalCard[hIdx]?.[setup.player.id]
-          // Unchanged from before: an explicit pick-up is a no return, and so
-          // is a hole nothing anywhere has a score for. What changed is that
-          // `finalCard` has already been reconciled with what was saved, so
-          // "absent" now means genuinely absent rather than merely not on
-          // this device.
-          const noReturn = hs?.isNR === true || hs?.gross == null
-          const p = effectivePar(hole, setup.player.gender)
-          const si = effectiveSI(hole, setup.player.gender)
-          const gross = noReturn ? nrGross(p, si, setup.playingHcp) : hs!.gross!
-
-          // Copied across rather than translated: migration 028 gave `scores`
-          // the same two columns under the same names, so the card carries its
-          // stats over the commit unchanged. Null on a no return and on a par
-          // 3, matching what was written live.
-          //
-          // More putts than shots is a mis-tap, not a hole, and it is dropped
-          // here. The database deliberately does not refuse it — a commit that
-          // fails on the eighteenth green is the worse failure — so this is
-          // where the impossible card is caught rather than at the write.
-          const putts = noReturn || hs?.putts == null || hs.putts > gross
-            ? null
-            : hs.putts
-
-          scoreRows.push({
-            player_id: setup.player.id, hole_id: hole.id, round_id: roundId,
-            gross_score: gross,
-            no_return: noReturn,
-            // A recorded fairway survives an explicit no return; a hole
-            // that is simply absent has nothing recorded and stays null.
-            fairway_hit: p < 4 ? null : (hs?.fairway ?? null),
-            putts,
-          })
-        }
-      }
+      //    The rule is lib/cardCommit.ts's, the server's own for a club
+      //    competition: one copy, the same rows.
+      const scoreRows = cardScoreRows(finalCard, courseHoles,
+        playerSetups.map(su => ({ id: su.player.id, gender: su.player.gender, playingHcp: su.playingHcp })), roundId)
       if (scoreRows.length > 0) {
         const { error: scoreErr } = await supabase.from("scores")
           .upsert(scoreRows, { onConflict: "player_id,hole_id,round_id" })
@@ -2046,6 +2024,11 @@ export default function LiveScoringFlow({
           )
         })()}
 
+        {competition && tripCode && (
+          <MarkerPicker code={tripCode} players={playerSetups.map(ps => ({ id: ps.player.id, name: ps.player.name }))}
+            markers={markers} onChange={setMarkers} />
+        )}
+
         {error && <p className="text-rust-deep text-base text-center">{error}</p>}
 
         {/* Actions. Edit Scorecard exists only where the organiser allows
@@ -2065,7 +2048,7 @@ export default function LiveScoringFlow({
             disabled={saving}
             className="flex-[2] py-4 bg-accent-deep text-white text-base font-bold hover:bg-accent disabled:opacity-50 transition-colors rounded-xl"
           >
-            {saving ? "Saving…" : "Commit All"}
+            {saving ? "Saving…" : competition ? "Sign the cards" : "Commit All"}
           </button>
         </div>
 

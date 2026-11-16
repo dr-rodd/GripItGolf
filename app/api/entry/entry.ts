@@ -79,10 +79,12 @@ export interface EntryStore {
   claimedPlayer(tripId: string, playerId: string): Promise<boolean>
   readMembership(userId: string, tripId: string): Promise<Membership | null>
   /**
-   * D184: whether this account is on the club's list — linked, not taken
-   * off. A club competition's phone that is not watches only.
+   * A club competition (D184, and Ross 16 Nov 2026: every member watches,
+   * only the tee sheet plays): this account's player in the competition —
+   * made from its place on the club's list — when it is booked on a tee
+   * time, else null.
    */
-  onClubList?(clubId: string, userId: string): Promise<boolean>
+  bookedPlayer?(tripId: string, clubId: string, userId: string): Promise<string | null>
   writeMembership(userId: string, tripId: string, m: Membership): Promise<void>
   readAttempts(keys: string[]): Promise<Map<string, AttemptWindow>>
   writeAttempt(key: string, tripId: string, w: AttemptWindow): Promise<void>
@@ -226,17 +228,23 @@ export async function runEntry(input: EntryInput, store: EntryStore, now: Date):
     ? asked.toLowerCase()
     : null
 
-  // A club competition (D184): anybody not on its club's list — and not one
-  // of its admins — watches only, whatever they claim. Members score as ever.
-  const watchOnly = !!trip.competition && !!trip.clubId && !organiser
+  // A club competition (D184; Ross, 16 Nov 2026): every member of the club
+  // may watch it, and only those on its tee sheet play — so anybody but its
+  // admins is a player exactly while booked and a spectator otherwise,
+  // whatever they claim, set afresh on every entry (a withdrawal lowers).
+  const compRole = !!trip.competition && !!trip.clubId && !organiser
     && !(trip.clubAdminIds ?? []).includes(userId)
-    && !(store.onClubList ? await store.onClubList(trip.clubId, userId) : false)
+  const booked = compRole && store.bookedPlayer ? await store.bookedPlayer(trip.id, trip.clubId as string, userId) : null
+  const watchOnly = compRole && !booked
+  const grant = compRole
+    ? { organiser, playerId: booked, watchOnly, exact: true }
+    : { organiser, playerId }
 
   const existing = await store.readMembership(userId, trip.id)
-  const next = mergeGrant(existing, { organiser, playerId: watchOnly ? null : playerId, watchOnly }, now)
+  const next = mergeGrant(existing, grant, now)
   await store.writeMembership(userId, trip.id, next)
-  if (playerId && !watchOnly && store.linkPlayer) {
-    try { await store.linkPlayer(userId, trip.id, playerId) } catch (e) { console.error('player link failed:', e) }
+  if (grant.playerId && !watchOnly && store.linkPlayer) {
+    try { await store.linkPlayer(userId, trip.id, grant.playerId) } catch (e) { console.error('player link failed:', e) }
   }
   return answer(trip, withOwner(next, trip, userId), facts, now)
 }

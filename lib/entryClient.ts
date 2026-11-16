@@ -22,6 +22,7 @@
 import { ORGANISER_MS, entryStamp, needsEntry, type Role } from './membership'
 import { forgetUnlock, hasUnlocked, rememberUnlock } from './passcode'
 import { playerCookieName, readPlayerId } from './playerCookie'
+import { storedAccountSession } from './tierHint'
 
 export interface EntryExtras {
   /** The admin PIN, as typed — the server checks it (stage 4). */
@@ -361,6 +362,21 @@ export async function openDoor(tripCode: string, pin: string): Promise<UnlockRes
   return 'ok'
 }
 
+/**
+ * A club's event, opened by being on the club's list (Ross, 16 Nov 2026:
+ * every club event may be watched by every member). Asked only by a phone
+ * holding a Green Dot account's sign-in; the server checks the list and sets
+ * the door's cookie. True when the door opened.
+ */
+export async function memberDoor(tripCode: string): Promise<boolean> {
+  if (!inBrowser() || !tripCode || !storedAccountSession()) return false
+  const code = tripCode.trim().toUpperCase()
+  const r = await ask('/api/event/door', { code })
+  if (!r || r.status !== 200) return false
+  void enterEvent(code)
+  return true
+}
+
 // ─── Writes to the event's own row (stage 4, D65) ──────────────
 
 /** What a server write answered: done, or the calm sentence to show. */
@@ -574,4 +590,32 @@ export async function confirmCompetitionIndex(code: string, playerId: string, in
   if (!r) return { ok: false, error: 'Could not reach Green Dot — try again.' }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not save the index — try again.' }
   return { ok: true }
+}
+
+// ─── A club competition's card, signed on the server (stage (d3)) ───
+
+/** Who marks a player's card: another player in the competition, or a row of the club's list. */
+export type MarkerAsk = { playerId: string } | { memberId: string; name: string }
+
+/**
+ * The group's card signed — the server writes the scores and starts each
+ * player's two signatures (their approval, the marker's). Asked with this
+ * phone's sign-in, which on a signed-in member is their account.
+ */
+export async function signCompetitionCard(
+  code: string,
+  o: { liveRoundId: string; markers: Record<string, MarkerAsk> },
+): Promise<{ ok: true; waiting: string[] } | { ok: false; error: string }> {
+  if (!inBrowser()) return { ok: false, error: 'Could not sign the card — try again.' }
+  const r = await ask('/api/card/sign', { action: 'finalise', code: code.trim().toUpperCase(), liveRoundId: o.liveRoundId, markers: o.markers })
+  if (!r) return { ok: false, error: 'Could not reach Green Dot — the scores are safe on the card. Try again.' }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : 'Could not sign the card — try again.' }
+  return { ok: true, waiting: Array.isArray(r.body.waiting) ? r.body.waiting as string[] : [] }
+}
+
+/** Names on a competition's club list, for choosing a marker — names only. */
+export async function competitionNames(code: string, q: string): Promise<{ id: string; name: string; linked: boolean }[]> {
+  if (!inBrowser() || q.trim().length < 2) return []
+  const r = await ask('/api/club/booking', { action: 'names', code: code.trim().toUpperCase(), q: q.trim() })
+  return r && r.status === 200 && Array.isArray(r.body.names) ? r.body.names as { id: string; name: string; linked: boolean }[] : []
 }

@@ -161,8 +161,12 @@ export default function PrivacyPage() {
         <p className="mt-3">
           <B>Club competitions.</B> To book a club&apos;s competition together, people on its list can find
           each other by name — the name only, never a number or an email — and see who is on each tee
-          time. Every player in a club competition needs their own Green Dot account. A competition is
-          for the club&apos;s members unless the club lets guests watch it, read-only, with its code.
+          time. Every player in a club competition needs their own Green Dot account. Every member on
+          the club&apos;s list may watch the club&apos;s events, and only the players on a competition&apos;s tee
+          sheet score it; guests watch only where the club lets them, read-only, with its code. A
+          competition card is signed twice — approved by its player on their own account and signed by a
+          marker from the club&apos;s list — and each signature is recorded with who gave it and when, as is a
+          card sent back, so the club can see how every card was signed.
         </p>
         <p className="mt-3">
           When a membership lapses, the golf played stays. When a club takes somebody off its list,

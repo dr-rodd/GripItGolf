@@ -12,7 +12,7 @@ import { teeInstant } from '@/lib/clubComp'
 import { clubEventDates } from '@/lib/clubs'
 import { courseLabel } from '@/lib/courseDirectory'
 import { tripBase } from '@/lib/tripPaths'
-import { ButtonLink, cardClass } from '@/app/components/ui'
+import { cardClass } from '@/app/components/ui'
 import { IconChevronLeft } from '@/app/components/icons'
 import TripHeader from '@/app/components/TripHeader'
 import Poller from '@/app/components/Poller'
@@ -24,6 +24,7 @@ import CompDoor from './CompDoor'
 import CompManage from './CompManage'
 import CompTeeSheet, { type CompSlot } from './CompTeeSheet'
 import CompBoard from './CompBoard'
+import { CardsToSign, CompPlay } from './CompSigning'
 
 /**
  * A club competition inside the club area (D167, D180–D181; stage (d2)):
@@ -88,7 +89,8 @@ export default async function CompetitionPage({ params, searchParams }: {
   const booked = new Set(sheet.seats.map(s => s.playerId))
   const phase = compPhase({
     bookingOpensAt, firstTeeAt, booked: booked.size,
-    finished: sheet.signed.filter(id => booked.has(id)).length,
+    // Scoring closes when every booked card is final — approved and marked (d3).
+    finished: sheet.final.filter(id => booked.has(id)).length,
     cardsStarted: sheet.onCourse.length + sheet.signed.length > 0,
     certifiedAt: null,
   }, now)
@@ -133,14 +135,10 @@ export default async function CompetitionPage({ params, searchParams }: {
       )}
       {live && section === 'scoring' && (
         <section className="mt-6">
-          <Poller isActive={phase === 'in_play'} />
+          <Poller isActive={phase === 'in_play' || phase === 'awaiting'} />
           <h1 className="t-h1 text-ink">Scoring</h1>
-          <p className="text-ink/80 text-[15px] leading-relaxed mt-2">
-            Members score each other’s cards. Start your group’s card, or carry on with it.
-          </p>
-          <ButtonLink href={`${tripBase(code, 'tournament')}/scoring/1`} className="mt-4">
-            Open the card
-          </ButtonLink>
+          <CompPlay code={code} href={`${tripBase(code, 'tournament')}/scoring/1`} />
+          <CardsToSign code={code} />
           <ul className="mt-6 space-y-2">
             {slots.filter(s => s.seats.length > 0).map(s => (
               <li key={s.index} className={`${cardClass()} p-3 flex gap-3`}>
@@ -150,7 +148,9 @@ export default async function CompetitionPage({ params, searchParams }: {
                     <span key={x.playerId} className="flex items-baseline justify-between gap-2">
                       <span className="text-[15px] text-ink truncate">{x.name}</span>
                       <span className="t-cap text-ink/65 whitespace-nowrap">
-                        {sheet.signed.includes(x.playerId) ? 'Card signed' : sheet.onCourse.includes(x.playerId) ? 'On the course' : 'Not started'}
+                        {sheet.final.includes(x.playerId) ? 'Signed'
+                          : sheet.waiting.includes(x.playerId) ? 'To be signed'
+                          : sheet.onCourse.includes(x.playerId) ? 'On the course' : 'Not started'}
                       </span>
                     </span>
                   ))}
@@ -160,7 +160,10 @@ export default async function CompetitionPage({ params, searchParams }: {
           </ul>
         </section>
       )}
-      {live && section === 'board' && <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'} />}
+      {live && section === 'board' && (
+        <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
+          notes={Object.fromEntries(sheet.waiting.map(id => [id, 'To be signed']))} />
+      )}
     </>,
     <CompBar slug={slug} code={code} active={section} />,
   )

@@ -49,11 +49,12 @@ export interface ActionStore extends EntryStore {
 
   // Stage (d1) — club competitions (D164, migration 089).
   /**
-   * The event is a club competition and this account is on its verified
-   * club's list — linked, not taken off. Its members-only door opens for
-   * them with no code's PIN (D164).
+   * The event is a verified club's (a competition or any event put under
+   * it) and this account is on the club's list — linked, not taken off.
+   * Its door opens for them with no PIN (D164; Ross, 16 Nov 2026: every
+   * club event may be watched by every member).
    */
-  competitionMember?(tripId: string, userId: string): Promise<boolean>
+  clubMember?(tripId: string, userId: string): Promise<boolean>
 }
 
 type Fail = { status: 400 | 401 | 403 | 404 | 409 | 429 | 503; body: { ok: false; error: string } }
@@ -108,12 +109,12 @@ export async function runDoor(
   if (!trip) return fail(404, 'No event with that code.')
   if (!trip.publicHash) return { status: 200, body: { ok: true, organiser: false }, cookie: null }
   const pin = str(input.pin)
-  if (!pin && input.token && store.competitionMember) {
+  if (!pin && input.token && store.clubMember) {
     const userId = await store.userFromToken(input.token)
-    if (userId && (await store.competitionMember(trip.id, userId))) {
+    if (userId && (await store.clubMember(trip.id, userId))) {
       return { status: 200, body: { ok: true, organiser: false }, cookie: entryToken(trip.publicHash, code) }
     }
-    return fail(403, 'This competition is for the club’s members. Sign in with the account on its list.')
+    return fail(403, 'This event is for the club’s members. Sign in with the account on its list.')
   }
   if (!pin) return fail(403, 'That PIN is not this event’s.')
 

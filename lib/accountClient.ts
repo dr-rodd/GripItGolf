@@ -498,6 +498,8 @@ export interface ClubAnswer {
   courses?: Record<string, string>
   outside?: ClubEvent[]
   tops?: Record<string, { name: string; points: number }>
+  /** Stage (d3): competitions with a card waiting on this member. */
+  toSign?: { code: string; name: string; count: number }[]
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
 }
@@ -559,6 +561,7 @@ export interface BookingAnswer {
   myPlayerId?: string | null
   myRowId?: string
   admin?: boolean
+  booked?: boolean
   names?: { id: string; name: string; booked: boolean; linked: boolean }[]
 }
 
@@ -574,4 +577,37 @@ export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw'
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, ...(r.body as BookingAnswer) }
+}
+
+/** One card waiting to be signed, or signed (stage (d3), `/api/card/sign` `list`). */
+export interface CardToSign {
+  playerId: string
+  name: string
+  approved: boolean
+  marked: boolean
+  markerName: string | null
+  markedAs: 'marker' | 'admin' | null
+  mine: boolean
+  canApprove: boolean
+  canMark: boolean
+  canSendBack: boolean
+  canChangeMarker: boolean
+  card: { number: number; par: number; gross: number | null; noReturn: boolean; points: number | null }[]
+}
+
+/**
+ * A club competition's cards to sign (stage (d3)): `list`, `approve` (the
+ * player's own), `mark` (the marker's, or an owner's or admin's), `marker`
+ * (a new one) and `send_back`. Never throws.
+ */
+export async function askSign(
+  action: 'list' | 'approve' | 'mark' | 'marker' | 'send_back',
+  body: Record<string, unknown>,
+): Promise<{ ok: true; items: CardToSign[] } | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
+  const r = await askServer(token, { ...body, action }, '/api/card/sign')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, items: Array.isArray(r.body.items) ? r.body.items as CardToSign[] : [] }
 }

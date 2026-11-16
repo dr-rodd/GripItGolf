@@ -46,6 +46,8 @@ interface Members {
   courses: Record<string, string>
   outside: ClubEvent[]
   tops: Record<string, { name: string; points: number }>
+  /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
+  toSign: { code: string; name: string; count: number }[]
 }
 
 const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Event', run: 'Challenge' }
@@ -79,7 +81,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
       setMembers({
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, role: r.club.role, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
-        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {},
+        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
       })
       const asked = new URLSearchParams(window.location.search).get('tab')
       if (asked === 'comps' || asked === 'board' || asked === 'stats' || asked === 'club') setTab(asked)
@@ -240,6 +242,23 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         {new Intl.DateTimeFormat('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }).format(now)}
         {' · '}{roleWord(m.role, face.name)}
       </p>
+
+      {/* Stage (d3): a card waiting on this member leads Home (D177). */}
+      {m.toSign.length > 0 && (
+        <section className="mt-6">
+          <h2 className="t-h2 text-ink">Cards to sign</h2>
+          <div className="mt-3 space-y-3">
+            {m.toSign.map(c => (
+              <Link key={c.code} href={`/club/${face.slug}/comp/${c.code}?view=scoring`} className={`${cardClass('floating', true)} block p-4`}>
+                <p className="t-card text-ink">{c.name}</p>
+                <p className="t-cap mt-1 text-club-deep font-semibold">
+                  {c.count === 1 ? 'A card waits for your signature' : `${c.count} cards wait for your signature`}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
 
       {/* Stage (h): the front page's way into an event, and making one —
           the club's own for its admins, asked at the gate (Q3, D153). */}

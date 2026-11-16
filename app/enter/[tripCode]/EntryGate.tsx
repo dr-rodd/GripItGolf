@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { MAX_PASSCODE } from '@/lib/passcode'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import LegalLinks from '@/app/components/LegalLinks'
-import { openDoor } from '@/lib/entryClient'
+import { memberDoor, openDoor } from '@/lib/entryClient'
 import { unlockError } from '@/app/components/OrganiserLock'
 
 /**
@@ -27,6 +27,16 @@ export default function EntryGate({ tripCode, home, eventName }: {
   const [code, setCode] = useState('')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  // A club's event opens for anybody on the club's list, signed in — no PIN
+  // (Ross, 16 Nov 2026). Asked once; anybody else gets the PIN box as ever.
+  useEffect(() => {
+    let live = true
+    memberDoor(tripCode).then(open => {
+      if (open && live) { router.replace(home); router.refresh() }
+    })
+    return () => { live = false }
+  }, [tripCode, home, router])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()

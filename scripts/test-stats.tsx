@@ -176,33 +176,38 @@ section('Nothing on the write path drops the two columns')
   // off the card — `putts: null` also contains the word "putts", which is
   // how a weaker version of this check let a commit that dropped every putt
   // count go by.
-  for (const [label, marker, puttsRule] of [
-    ['the hole submit', 'round_id: roundId, hole_number: hole.hole_number,',
+  // The commit's rule is lib/cardCommit.ts's from stage (d3) — the one the
+  // phone's commit and the server's signing of a club competition share.
+  const commit = code('lib/cardCommit.ts')
+  for (const [label, src, marker, puttsRule] of [
+    ['the hole submit', flow, 'round_id: roundId, hole_number: hole.hole_number,',
       /putts:\s*hs\.isNR\s*\?\s*null\s*:\s*\(hs\.putts\s*\?\?\s*null\)/],
-    ['the edit draft', 'upsertRows.push',
+    ['the edit draft', flow, 'upsertRows.push',
       /putts:\s*hs\.isNR\s*\?\s*null\s*:\s*\(hs\.putts\s*\?\?\s*null\)/],
-    ['the commit', 'scoreRows.push',
+    ['the commit', commit, 'rows.push',
       /const putts = noReturn \|\| hs\?\.putts == null \|\| hs\.putts > gross/],
   ] as const) {
-    const at = flow.indexOf(marker)
+    const at = src.indexOf(marker)
     ok(at > -1, `${label} is where this expects it`)
-    const window = flow.slice(Math.max(0, at - 700), at + 700)
+    const window = src.slice(Math.max(0, at - 700), at + 700)
     ok(/fairway_hit:\s*p < 4 \? null/.test(window),
       `${label} writes a fairway that came off the card`)
     ok(puttsRule.test(window), `  …and ${label} writes a putt count that did too`)
   }
+  ok(/cardScoreRows\(finalCard, courseHoles/.test(flow), 'the phone\'s commit writes through that rule')
   // …and the commit's row actually carries the value it just worked out.
-  const rows = flow.slice(flow.indexOf('scoreRows.push'), flow.indexOf('scoreRows.push') + 500)
+  const rows = commit.slice(commit.indexOf('rows.push'), commit.indexOf('rows.push') + 500)
   ok(/^\s*putts,\s*$/m.test(rows), 'the committed row carries that putt count and not a literal')
 
   // A picked-up ball has no putt count — but its fairway stands: the tee
   // shot happened, and two lost balls right is a miss that should count.
   // Only a par 3 clears the fairway now, in every writer.
-  ok((flow.match(/fairway_hit:\s*p < 4 \? null/g) ?? []).length >= 3,
+  const writers = flow + commit
+  ok((writers.match(/fairway_hit:\s*p < 4 \? null/g) ?? []).length >= 3,
     'only a par 3 clears the fairway — a no return keeps its tee shot, every writer')
-  ok(!/fairway_hit:\s*(hs\.isNR|noReturn)/.test(flow),
+  ok(!/fairway_hit:\s*(hs\.isNR|noReturn)/.test(writers),
     '  …and no writer quietly drops it on a no return')
-  ok(/hs\.putts > gross/.test(flow),
+  ok(/hs\.putts > gross/.test(commit),
     'more putts than shots is dropped on the way in rather than trusted')
 }
 

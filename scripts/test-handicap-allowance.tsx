@@ -549,8 +549,12 @@ section('A no return is written off the full handicap')
   // the full course handicap — a no return is a fact about the hole, not about
   // whichever board happened to be on screen when the card was signed.
   // Call sites only — the declaration itself matches `nrGross(` too.
-  const calls = [...flow.matchAll(/nrGross\(p, si, [^)]*\)/g)].map(m => m[0])
+  // The commit's moved into lib/cardCommit.ts (stage (d3)), the one rule the
+  // phone and the server's signing share — so two here, one there.
+  const commit = readFileSync('lib/cardCommit.ts', 'utf-8')
+  const calls = [...flow.matchAll(/nrGross\(p, si, [^)]*\)/g), ...commit.matchAll(/nrGross\(p, si, [^)]*\)/g)].map(m => m[0])
   eq(calls.length, 3, 'three places write a no return')
+  ok(/cardScoreRows\(finalCard/.test(flow), '…the commit\'s through the shared rule')
   ok(calls.every(c => /playingHcp/.test(c) && !/displayHcp/.test(c)),
     'and every one of them uses the full handicap, never the reduced one')
 

@@ -3,7 +3,7 @@ import { runDoor } from '../actions'
 import { asked, failed, respond } from '../respond'
 
 // POST /api/event/door — `{ code, pin }`, or a club member's account token
-// for a competition's members-only door (D164): the public PIN's door
+// for any club event's door (D164; every member watches, 16 Nov 2026): the public PIN's door
 // (../actions.ts `runDoor`). Sets this phone's entry cookie on the way out.
 export const dynamic = 'force-dynamic'
 

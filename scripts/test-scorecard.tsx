@@ -309,7 +309,8 @@ section('Nett and no-return arithmetic is untouched')
 
   // A no return is capped at the score that scores nothing — this is what
   // makes nett strokes work when somebody picks up
-  ok(flow.includes('return par + 2 + shotsReceived(hcp, si)'),
+  // The rule lives in lib/cardCommit.ts from stage (d3), shared with the server.
+  ok(fs.readFileSync('lib/cardCommit.ts', 'utf8').includes('return par + 2 + shotsReceived(hcp, si)') && /from "@\/lib\/cardCommit"/.test(flow),
     'a no return still counts as nett double bogey, which is what nett strokes need')
 
   // The call sites that decide which of the two is used
