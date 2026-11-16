@@ -6,6 +6,26 @@
    Nothing outside this file should carry a raw brand hex value.
    ════════════════════════════════════════════════════════════════ */
 
+/* A club's own colour (D118, D125): identity only — the crest's ring,
+   "Members", the lit tab, the "Members only" pill, your own row. Never a
+   result, a side, a button or Live. Bark until a club page sets it, so a
+   club with no colour looks like Green Dot. Set only inside a [data-club]
+   wrapper, from hex lib/clubColour.ts has checked.
+
+   `inline`, unlike the palette above, and that is the whole point: a
+   custom property is worked out where it is declared, so a `--color-club`
+   declared on :root was bark for good — the wrapper re-pointed `--gd-club`
+   underneath it and no class ever saw the change (found 16 Nov 2026, with
+   the competition bar's tray). Inline, a class reads `var(--gd-club)` on
+   the element itself, inside the wrapper. Still a var(), so nothing is
+   folded away at build time. */
+@theme inline {
+  --color-club:      var(--gd-club);
+  --color-club-deep: var(--gd-club-deep);   /* club-coloured words */
+  --color-on-club:   var(--gd-on-club);     /* words on a club fill */
+  --color-club-tint: var(--gd-club-tint);
+}
+
 @theme {
   /* ── Colour ──
      No pure grey anywhere. Every neutral — borders, secondary text,
@@ -50,16 +70,6 @@
   --color-side-a:  var(--gd-side-a);
   --color-side-b:  var(--gd-side-b);
   --color-on-side: var(--gd-on-side);
-
-  /* A club's own colour (D118, D125): identity only — the crest's ring,
-     "Members", the lit tab, the "Members only" pill, your own row. Never a
-     result, a side, a button or Live. Bark until a club page sets it, so a
-     club with no colour looks like Green Dot. Set only inside a
-     [data-club] wrapper, from hex lib/clubColour.ts has checked. */
-  --color-club:      var(--gd-club);
-  --color-club-deep: var(--gd-club-deep);   /* club-coloured words */
-  --color-on-club:   var(--gd-on-club);     /* words on a club fill */
-  --color-club-tint: var(--gd-club-tint);
 
   /* ── Type ──
      Three families, one job each, never mixed.
@@ -367,6 +377,82 @@ html.dark .club-grain { display: block; }
   background-color: color-mix(in srgb, var(--color-surface) 72%, transparent);
   -webkit-backdrop-filter: blur(14px);
   backdrop-filter: blur(14px);
+}
+
+/* ── The club footer and a competition's set (D180 amended, D188) ──
+   One bar, drawn by the club's layout (`ClubTabBar`), so opening a
+   competition from Comps changes its set in place: Board, Stats and Club
+   fade (120ms ease-out) while Tee times, Scoring and Leaderboard slide out
+   from behind Comps at full opacity, 40ms apart on the putt curve, and the
+   tray fades in behind Comps and the three. Leaving is the reverse in 200ms
+   ease-out, all together. A bar that has just arrived changed nothing, so
+   a shared link or a refresh moves nothing. The three's strip begins at
+   Comps' right edge and clips (`overflow: hidden`): parked one, two and
+   three columns left (`--k`, a transform's percentage being its own
+   column), they are out of sight behind Comps. */
+.club-bar-tray {
+  position: absolute;
+  top: 6px; bottom: 6px; left: calc(20% + 4px); right: 4px;
+  border-radius: 14px;
+  opacity: 0;
+  transition: opacity 200ms ease-out;
+}
+.club-bar[data-set="comp"] .club-bar-tray { opacity: 1; transition: opacity 280ms ease-out; }
+
+.club-bar-kids {
+  position: absolute;
+  top: 0; bottom: 0; left: 40%; right: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  pointer-events: none;
+}
+.club-bar[data-set="comp"] .club-bar-kids { pointer-events: auto; }
+.club-bar-kid {
+  transform: translateX(calc(var(--k) * -100%));
+  visibility: hidden;
+  transition: transform 200ms ease-out, visibility 0s linear 200ms;
+}
+.club-bar[data-set="comp"] .club-bar-kid {
+  transform: none;
+  visibility: visible;
+  transition: transform 280ms var(--gd-ease) calc((var(--k) - 1) * 40ms), visibility 0s;
+}
+
+.club-bar-own { transition: opacity 200ms ease-out, visibility 0s; }
+.club-bar[data-set="comp"] .club-bar-own {
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease-out, visibility 0s linear 120ms;
+}
+
+/* Comps' icon becomes the way back while a competition is open. */
+.club-bar-icon-back { opacity: 0; transition: opacity 200ms ease-out; }
+.club-bar-icon-comps { transition: opacity 200ms ease-out; }
+.club-bar[data-set="comp"] .club-bar-icon-back { opacity: 1; transition: opacity 280ms ease-out; }
+.club-bar[data-set="comp"] .club-bar-icon-comps { opacity: 0; transition: opacity 280ms ease-out; }
+
+/* Switching between the three: the lit state only. */
+.club-bar-tab { transition: color 150ms ease-out; }
+
+/* The members-only door draws no footer — said in the server's HTML. */
+body:has([data-no-club-bar]) .club-bar { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  /* No travel: the two sets cross-fade in 160ms. Important, because the
+     catch-all below would otherwise cut the fade to nothing too. */
+  .club-bar-kid {
+    transform: none !important;
+    opacity: 0;
+    transition: opacity 160ms ease-out, visibility 0s linear 160ms !important;
+  }
+  .club-bar[data-set="comp"] .club-bar-kid { opacity: 1; transition: opacity 160ms ease-out, visibility 0s !important; }
+  .club-bar-own { transition: opacity 160ms ease-out, visibility 0s !important; }
+  .club-bar[data-set="comp"] .club-bar-own { transition: opacity 160ms ease-out, visibility 0s linear 160ms !important; }
+  .club-bar-tray, .club-bar-icon-back, .club-bar-icon-comps,
+  .club-bar[data-set="comp"] .club-bar-tray,
+  .club-bar[data-set="comp"] .club-bar-icon-back,
+  .club-bar[data-set="comp"] .club-bar-icon-comps { transition: opacity 160ms ease-out !important; }
 }
 
 html {

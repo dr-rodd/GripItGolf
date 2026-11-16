@@ -1445,9 +1445,18 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
-### Stage (d2), amended — the competition bar and the Summary (16 Nov 2026, evening; D180 amended, D186–D190)
+### Stage (d2), amended, as built — the competition bar and the Summary (16 Nov 2026, evening; D180 amended, D186–D190)
 
-**Plan only — nothing built.** Ross's sketch replaces D180's four-slot bar
+**Built, 16 Nov 2026.** What landed, and where it differs from the plan below:
+- **One footer, drawn by the club's layout** (`app/club/[slug]/layout.tsx` → `ClubBarProvider` + `ClubTabBar`), its set from the address (`lib/clubBar.ts` `barOf`). `CompBar.tsx` is gone; `ClubView` draws no bar and keeps its members home and open tab in the layout's context (`ClubBarContext.tsx`), so coming back from a competition the club footer and page are there at once. The layout reads only the club's colour (`clubLook`, one cached row read shared with the page).
+- **The motion** is `.club-bar` in `globals.css`: the three **slide out from behind Comps at full opacity** (Ross's answer) — their strip starts at Comps' right edge and clips — 280ms on the putt curve, 40ms apart; Board, Stats and Club fade in 120ms; the tray fades in; out is the reverse in 200ms; Reduce Motion a 160ms cross-fade. The tray is the accent saying they are Comps' children.
+- **Comps from any competition page goes back to the club's Comps list, the footer back to normal** (Ross's answer 4, replacing "one level back"). A section reaches the Summary by **‹ Summary** above its title.
+- **The Summary** (`comp/[code]/page.tsx`): name, day · course · format (`boardFacts`), one floating card — the phase line (**In play**, Ross's answer 1, with the live dot), the line (`summaryLine`, `shortWhen`) and the action (`CompSummaryAction`, asked after paint: Book a tee time / your time and Change / Start your card / Certify result; **See the results secondary** — Ross to judge on the phone), the top three from the board's shared copy (`summaryBoard.ts`, gold only once certified), Manage competition. The sections are `tee-times/`, `scoring/`, `leaderboard/` over one body (`section.tsx`); the shared read is `read.ts` (`cache`), the frame `CompShell.tsx`. `?view=` on the Summary or the code's door goes on to the section.
+- **The members-only door draws no footer** — a `<NoBar />` mark read by `body:has([data-no-club-bar])`, so the server's HTML has none.
+- **Found on the way: club colours never reached a class** (`docs/gotchas-and-debt.md`, 16 Nov) — fixed with the four club tokens in `@theme inline`. Every club page now shows its club's colour.
+- `test:clubs` holds the bar, the Summary and the fix; `test:account` lists the Summary's action.
+
+*The plan as written before the build:* Ross's sketch replaces D180's four-slot bar
 (Tee sheet, Scoring, Leaderboard, Home over the club footer). His list
 numbered the new decisions D185–D189; D185 was already "every member
 watches, only the tee sheet plays", so they are recorded as **D186–D190**,
@@ -1607,7 +1616,7 @@ have to:
    D127's line (the bar gains the competition set), and this section
    rewritten as built.
 
-**Asks for Ross before building** (none blocks the plan):
+**Asks for Ross before building** — answered 16 Nov: In play; See the results to be judged on the phone; the three slide from behind Comps at full opacity, accented as its children; Comps goes back to the club's Comps and the footer returns:
 - **"Live" or "In play"?** The Summary's phase line says "Live" in the spec;
   Comps' rows say "In play" from the one copy (`PHASE_WORDS`). One word
   for both, or the Summary alone says Live?

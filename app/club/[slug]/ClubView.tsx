@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
@@ -20,7 +20,8 @@ import { PHASE_WORDS } from '@/lib/compPhase'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { readTierHint, rememberTier } from '@/lib/tierHint'
-import ClubTabBar, { type ClubTab } from './ClubTabBar'
+import { useClubBar, type ClubMembers } from './ClubBarContext'
+import { compSectionHref } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
@@ -34,21 +35,7 @@ export interface ClubFace {
   events: ClubEvent[]
 }
 
-interface Members {
-  clubId: string
-  /** D161: the club's home course, for New competition (owners and admins). */
-  homeCourseId: string | null
-  role: ClubRole
-  name: string
-  events: ClubEvent[]
-  entries: string[]
-  season: SeasonRow[]
-  courses: Record<string, string>
-  outside: ClubEvent[]
-  tops: Record<string, { name: string; points: number }>
-  /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
-  toSign: { code: string; name: string; count: number }[]
-}
+type Members = ClubMembers
 
 const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Event', run: 'Challenge' }
 
@@ -61,13 +48,22 @@ const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Eve
  * never an empty heading; "Your next round" waits for booking (stage (d)).
  */
 export default function ClubView({ face }: { face: ClubFace }) {
-  const [members, setMembers] = useState<Members | null>(null)
-  const [tab, setTab] = useState<ClubTab>('home')
+  // The members home and the open tab live with the footer, in the club's
+  // layout (D180 amended): coming back from a competition both are already
+  // there while the page asks again.
+  const { members, setMembers, tab, setTab } = useClubBar()
+
+  // The tab the address asks for, before paint: Comps from a competition
+  // lands on Comps, the dot or Home on Home.
+  useLayoutEffect(() => {
+    const asked = new URLSearchParams(window.location.search).get('tab')
+    setTab(asked === 'comps' || asked === 'board' || asked === 'stats' || asked === 'club' ? asked : 'home')
+  }, [setTab])
 
   useEffect(() => {
     let live = true
     ;(async () => {
-      if (!(await readAccount())) return
+      if (!(await readAccount())) { if (live) setMembers(null); return }
       const r = await askClub('home', { slug: face.slug })
       if (!live) return
       // D154: on the list, this phone opens on the club; taken off it, a
@@ -75,6 +71,9 @@ export default function ClubView({ face }: { face: ClubFace }) {
       const hint = readTierHint()
       if (!r.ok || !r.club) {
         if (!r.ok && /not on this club/i.test(r.error) && hint?.kind === 'club' && hint.slug === face.slug) rememberTier({ kind: 'dot' })
+        // Refused outright (taken off the list): the kept home goes too. A
+        // lost signal keeps what this phone already had.
+        if (!r.ok && /not on this club/i.test(r.error)) setMembers(null)
         return
       }
       rememberTier({ kind: 'club', slug: face.slug })
@@ -83,18 +82,9 @@ export default function ClubView({ face }: { face: ClubFace }) {
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
         courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
       })
-      const asked = new URLSearchParams(window.location.search).get('tab')
-      if (asked === 'comps' || asked === 'board' || asked === 'stats' || asked === 'club') setTab(asked)
     })()
     return () => { live = false }
-  }, [face.slug])
-
-  function choose(t: ClubTab) {
-    setTab(t)
-    const url = t === 'home' ? window.location.pathname : `${window.location.pathname}?tab=${t}`
-    window.history.replaceState(window.history.state, '', url)
-    window.scrollTo({ top: 0 })
-  }
+  }, [face.slug, setMembers])
 
   const home = !members || tab === 'home'
   return (
@@ -112,7 +102,6 @@ export default function ClubView({ face }: { face: ClubFace }) {
           {members && tab === 'club' && <ClubTabPage face={face} m={members} />}
         </div>
       </div>
-      {members && <ClubTabBar active={tab} onChoose={choose} hasBoard={members.events.length > 0} />}
     </main>
   )
 }
@@ -216,7 +205,7 @@ function membersOnly(e: ClubEvent): boolean {
 
 /** An event's board: a competition's inside the club area, any other event's own. */
 function boardHref(e: ClubEvent, slug: string): string {
-  return e.competition ? `${clubEventHref(e, slug)}?view=board` : `${tripBase(e.code, e.kind)}/leaderboard`
+  return e.competition ? compSectionHref(slug, e.code, 'board') : `${tripBase(e.code, e.kind)}/leaderboard`
 }
 
 /** D125: the one pill in the club's colour. */
@@ -249,7 +238,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           <h2 className="t-h2 text-ink">Cards to sign</h2>
           <div className="mt-3 space-y-3">
             {m.toSign.map(c => (
-              <Link key={c.code} href={`/club/${face.slug}/comp/${c.code}?view=scoring`} className={`${cardClass('floating', true)} block p-4`}>
+              <Link key={c.code} href={compSectionHref(face.slug, c.code, 'scoring')} className={`${cardClass('floating', true)} block p-4`}>
                 <p className="t-card text-ink">{c.name}</p>
                 <p className="t-cap mt-1 text-club-deep font-semibold">
                   {c.count === 1 ? 'A card waits for your signature' : `${c.count} cards wait for your signature`}

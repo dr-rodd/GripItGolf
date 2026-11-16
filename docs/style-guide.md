@@ -324,6 +324,7 @@ and the named rules below say what replaces each.
 | Long name glide | A board name wider than its column | 11s, shared phase | ease-in-out | Drag strip instead |
 | Landing collapse | Create / Join tapped | 340ms shake + 700ms travel | smoothed | Straight there |
 | Site intro | First hub visit | 420–500ms slides; 1.5s birth | putt / slow-in-out | Appears in place |
+| Club footer's competition set (`.club-bar`) | Opening a competition from the club area; leaving it | In: Board, Stats, Club fade 120ms ease-out while Tee times, Scoring, Leaderboard slide out from behind Comps at full opacity (280ms, 40ms apart, done by 360ms) and the tray fades in. Out: the reverse in 200ms ease-out, no stagger. Between the three: the lit state only, 150ms. Nothing on a cold link or a refresh (the bar is the club layout's, so only a change of set moves it) | putt (in) / ease-out (out) | A 160ms cross-fade between the two sets |
 | Count-up (`CountUp`) | Your run total after logging a run; your round total, first view after signing | 400ms | putt | The final number |
 | Dot bloom (`DotBloom`) | A card signed; a run logged — once per action | 600ms | putt | The settled tinted disc and tick |
 

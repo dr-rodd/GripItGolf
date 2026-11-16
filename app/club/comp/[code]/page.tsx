@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { compHome, compSectionHref, sectionOfView } from '@/lib/clubBar'
 
 /**
  * A club competition by its code alone (stage (d1), D164): the address the
@@ -34,7 +35,7 @@ export default async function CompetitionByCode({ params, searchParams }: {
   const { data: club } = await db.from('clubs').select('slug, verified_at').eq('id', clubId).maybeSingle()
   const c = club as { slug: string; verified_at: string | null } | null
   if (!c?.verified_at) notFound()
-  // A section asked for comes along (the card's way back is to Scoring).
-  const section = view === 'tee' || view === 'scoring' || view === 'board' ? `?view=${view}` : ''
-  redirect(`/club/${c.slug}/comp/${code}${section}`)
+  // A section asked for comes along: the card's way back is to Scoring (D190).
+  const section = sectionOfView(view)
+  redirect(section ? compSectionHref(c.slug, code, section) : compHome(c.slug, code))
 }

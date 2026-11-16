@@ -1,5 +1,11 @@
 # Gotchas and debt
 
+## A club's colour never reached a class (16 November 2026)
+
+Found building the competition bar: its tray in `bg-club-tint` and its lit tab in `text-club-deep` came out bark on a club whose colour was navy. Not the bar — **every club class on every club page** (the crest's ring, "Members", the lit tab, the "Members only" pill) had been bark since stage (e1). The club's colour is set on a `[data-club]` wrapper as `--gd-club…`, and the Tailwind tokens the classes read, `--color-club…: var(--gd-club…)`, were declared in `@theme` — on `:root`. **A custom property is worked out where it is declared**, so `--color-club-deep` was bark at the root and every descendant inherited that, whatever the wrapper said underneath. The palette's own tokens never hit this because dark mode re-points `--gd-*` on `<html>`, the same element.
+
+The fix is the four club tokens in **`@theme inline`** (`app/globals.css`): a class then reads `var(--gd-club-deep)` on the element itself, inside the wrapper — still a var(), so nothing is folded at build time. `test:clubs` holds it. **A token meant to change inside a wrapper goes in `@theme inline`**, never the plain `@theme`. Checked in a browser with the built stylesheet, both themes; Ross sees the club colours on the club pages for the first time with this deploy.
+
 ## A half-typed year froze the creation form (9 November 2026)
 
 Ross: a standalone multi-day league's dates "wouldn't allow further editing and the page had to be refreshed". A date box passes through nonsense on its way to a real date — typing a year on a desktop goes 0002, 0020, 0202, 2026, and an iPhone wheel scrolls every year between — and `dayCount('0202-11-14', '2026-11-16')` was **666,206 days**. `CreateLeagueForm` built its playing-day slots from that count *before* its "too long for one run" guard applied, so every render built and dated an array that long and the page locked. `ItineraryBuilder` (trips, the match play door) had the same exposure with no guard at all.
