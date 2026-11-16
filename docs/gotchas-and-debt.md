@@ -1,5 +1,9 @@
 # Gotchas and debt
 
+## A big club's list lost its indexes past the thousandth row (16 November 2026)
+
+Found planning the Clubhouse's Members grid: `rowIndexesOf` (`app/api/handicaps/store.ts`) read a club's own handicap indexes in one query, so Supabase's silent 1,000-row page left every unlinked row past the thousandth showing no index. The list itself already read in pages; this one read did not. Fixed in stage (k0) by reading it in pages too. **Every read of a club's list that grows with the club pages past 1,000** — the same rule as `lib/allRows.ts` for an event's scores. Still open, for the (k1) grid: every one-row change on the list re-reads and re-sends the whole list (about 200 KB at 1,000 rows); the grid reads 50 a page and answers a change with the changed row.
+
 ## A club's colour never reached a class (16 November 2026)
 
 Found building the competition bar: its tray in `bg-club-tint` and its lit tab in `text-club-deep` came out bark on a club whose colour was navy. Not the bar — **every club class on every club page** (the crest's ring, "Members", the lit tab, the "Members only" pill) had been bark since stage (e1). The club's colour is set on a `[data-club]` wrapper as `--gd-club…`, and the Tailwind tokens the classes read, `--color-club…: var(--gd-club…)`, were declared in `@theme` — on `:root`. **A custom property is worked out where it is declared**, so `--color-club-deep` was bark at the root and every descendant inherited that, whatever the wrapper said underneath. The palette's own tokens never hit this because dark mode re-points `--gd-*` on `<html>`, the same element.
