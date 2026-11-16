@@ -20,7 +20,8 @@ import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
-import { readTierHint, rememberTier } from '@/lib/tierHint'
+import { readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
+import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClubHome } from '@/lib/clubHomeCopy'
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { compSectionHref } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
@@ -69,46 +70,89 @@ export default function ClubView({ face }: { face: ClubFace }) {
 
   // The tab the address asks for, before paint: Comps from a competition
   // lands on Comps, the dot or Home on Home.
+  // Before paint: the tab the address asks for, and — for a phone hinted to
+  // this club (D197) — the member mark the head script sets on a full load,
+  // set here too for a move from inside the site, and the last club home
+  // kept on this phone drawn at once (D193).
   useLayoutEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('tab')
     setTab(asked === 'comps' || asked === 'board' || asked === 'stats' || asked === 'club' ? asked : 'home')
-  }, [setTab])
+    const hint = readTierHint()
+    if (hint?.kind === 'club' && hint.slug === face.slug) {
+      document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '')
+      setMembers(m => m ?? readClubHome(face.slug))
+    }
+  }, [setTab, setMembers, face.slug])
+
+  // A signal lost on the way: what is on screen stays, with a way to try again.
+  const [lost, setLost] = useState(false)
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     let live = true
     ;(async () => {
-      if (!(await readAccount())) { if (live) setMembers(null); return }
+      if (!(await readAccount())) {
+        if (!live) return
+        // A sign-in kept but not read just now is a lost signal (D192);
+        // none kept at all is nobody signed in: the public face.
+        if (storedAccountSession()) { setLost(true); return }
+        notClubMember()
+        setMembers(null)
+        return
+      }
       const r = await askClub('home', { slug: face.slug })
       if (!live) return
       // D154: on the list, this phone opens on the club; taken off it, a
       // hint naming this club falls back to the personal page.
       const hint = readTierHint()
       if (!r.ok || !r.club) {
-        if (!r.ok && /not on this club/i.test(r.error) && hint?.kind === 'club' && hint.slug === face.slug) rememberTier({ kind: 'dot' })
-        // Refused outright (taken off the list): the kept home goes too. A
-        // lost signal keeps what this phone already had.
-        if (!r.ok && /not on this club/i.test(r.error)) setMembers(null)
+        const refused = !r.ok && /not on this club/i.test(r.error)
+        if (refused || r.ok) {
+          // Not on the list (D193): the kept home goes, and the public face shows.
+          if (hint?.kind === 'club' && hint.slug === face.slug) rememberTier({ kind: 'dot' })
+          forgetClubHome(face.slug)
+          notClubMember()
+          setMembers(null)
+          setLost(false)
+          return
+        }
+        // A lost signal keeps what this phone already had.
+        setLost(true)
         return
       }
       rememberTier({ kind: 'club', slug: face.slug })
-      setMembers({
+      const fresh: Members = {
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, role: r.club.role, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
         courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
-      })
+      }
+      setMembers(fresh)
+      keepClubHome(face.slug, fresh)
+      setLost(false)
     })()
     return () => { live = false }
-  }, [face.slug, setMembers])
+  }, [face.slug, setMembers, attempt])
 
   const home = !members || tab === 'home'
   return (
-    <main data-club style={face.style as React.CSSProperties} className={`min-h-dvh paper relative isolate ${members ? 'has-tabbar' : ''}`}>
+    <main data-club style={face.style as React.CSSProperties} className={`min-h-dvh paper relative isolate ${members ? 'has-tabbar' : 'club-wait-pad'}`}>
       <Art face={face} home={home} />
       <div className="relative z-10">
         <TripHeader backTo="/" />
         <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
           <ClubHeader face={face} members={!!members} />
-          {!members && <PublicFace face={face} />}
+          {/* D197: a phone hinted to this club sees the stand-in from the
+              first paint (the head script's mark on <html>), never the
+              public face; anybody else sees the public face. */}
+          {!members && <div className="club-public-face"><PublicFace face={face} /></div>}
+          {!members && <MembersWait />}
+          {lost && (
+            <div className="mt-6" role="alert">
+              <p className="t-cap text-ink/80">Could not reach Green Dot — try again.</p>
+              <button type="button" onClick={() => { setLost(false); setAttempt(a => a + 1) }}
+                className={`${buttonClass('secondary', false)} mt-3`}>Try again</button>
+            </div>
+          )}
           {members && tab === 'home' && <MembersHome face={face} m={members} />}
           {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
           {members && tab === 'board' && <Board m={members} slug={face.slug} />}
@@ -231,6 +275,28 @@ function useGroups(events: ClubEvent[]) {
   return useMemo(() => groupClubEvents(events, irishToday(new Date())), [events])
 }
 
+/**
+ * The members home's stand-in (D197, the hand-off of 16 Nov): the first
+ * time a hinted phone opens its club, with no copy kept yet — the club
+ * header above it and the footer below, placeholders the size of what they
+ * stand for, breathing as every skeleton does (still under Reduce Motion).
+ * Hidden unless the head script marked this phone a member here.
+ */
+function MembersWait() {
+  return (
+    <div className="club-member-wait" aria-busy="true" aria-label="Loading your club">
+      <div className="h-[168px]" aria-hidden="true" />
+      <div className="skeleton h-8 w-2/3" />
+      <div className="skeleton h-4 w-1/2 mt-2" />
+      <div className="skeleton h-24 rounded-card mt-6" />
+      <div className="skeleton h-24 rounded-card mt-3" />
+      <div className="skeleton h-14 rounded-card mt-6" />
+      <div className="skeleton h-14 rounded-card mt-3" />
+      <div className="skeleton h-14 rounded-card mt-3" />
+    </div>
+  )
+}
+
 function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   const g = useGroups(m.events)
   const now = new Date()
@@ -248,7 +314,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
 
       {/* Stage (d3): a card waiting on this member leads Home (D177). */}
       {m.toSign.length > 0 && (
-        <section className="mt-6">
+        <section className="mt-6 club-fresh-in">
           <h2 className="t-h2 text-ink">Cards to sign</h2>
           <div className="mt-3 space-y-3">
             {m.toSign.map(c => (
@@ -268,8 +334,9 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
       <CodeBox />
       <ButtonLink href="/create" variant="secondary" className="mt-3">Make an event</ButtonLink>
 
-      {g.now.length > 0 && (
-        <section className="mt-6">
+      {/* Never from the copy (D194): Live now waits for the fresh answer. */}
+      {!m.fromCopy && g.now.length > 0 && (
+        <section className="mt-6 club-fresh-in">
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
           <div className="mt-3 space-y-3">
             {g.now.map(e => (

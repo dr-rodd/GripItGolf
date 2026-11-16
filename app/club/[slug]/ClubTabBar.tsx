@@ -46,7 +46,10 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   // while they slide back behind Comps on the way out.
   const [shown, setShown] = useState(comp?.code ?? null)
   if (comp && comp.code !== shown) setShown(comp.code)
-  if (!state || (state.set === 'club' && !members)) return null
+  if (!state) return null
+  // The club set before the page has said this phone is on the list: drawn,
+  // but shown only to a phone hinted to this club (D197), with the stand-in.
+  const waiting = state.set === 'club' && !members
 
   const club = `/club/${slug}`
   const hasBoard = comp !== null || (members?.events.length ?? 0) > 0
@@ -71,7 +74,7 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   return (
     <nav
       data-set={comp ? 'comp' : 'club'}
-      className="club-bar hide-with-keyboard fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-line print:hidden"
+      className={`club-bar ${waiting ? 'club-bar-wait' : ''} hide-with-keyboard fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-line print:hidden`}
       style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
       aria-label={comp ? 'Competition' : 'Club'}
     >

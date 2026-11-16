@@ -558,6 +558,7 @@ function wiringTests() {
 // ─── Stage (g): the tiers, and a member's home (D147–D149, D154) ─
 
 /** The head script run as a browser would, at an address with a hint stored. */
+const marked: string[] = []
 function bootAt(href: string, hint: string | null, refuse = false, session: object | null = null): string | null {
   const url = new URL(href, 'https://greendot.live')
   let went: string | null = null
@@ -568,7 +569,9 @@ function bootAt(href: string, hint: string | null, refuse = false, session: obje
     key: (i: number) => Object.keys(kept)[i] ?? null,
     get length() { return Object.keys(kept).length },
   }
-  vm.runInNewContext(TIER_BOOT_SCRIPT, { location, localStorage })
+  marked.length = 0
+  const document = { documentElement: { setAttribute: (k: string) => { marked.push(k) } } }
+  vm.runInNewContext(TIER_BOOT_SCRIPT, { location, localStorage, document })
   return went
 }
 
@@ -599,6 +602,10 @@ async function tierTests() {
   eq(bootAt('/', null, false, { user: { is_anonymous: true, email: null } }), null, '…an anonymous phone’s is no account: the front page')
   eq(bootAt('/?front', null, false, accountSession), null, '…and /?front is still the front page')
   eq(bootAt('/', 'club:lahinch', false, accountSession), '/club/lahinch', '…a club hint still goes straight to the club')
+  eq([bootAt('/club/lahinch', 'club:lahinch'), [...marked]], [null, ['data-club-member']], 'D197: at its own club a hinted phone is marked a member before the first paint')
+  eq([bootAt('/club/ballybunion', 'club:lahinch'), [...marked]], [null, []], '…never at another club')
+  eq([bootAt('/club/lahinch/comp/AB12CD', 'club:lahinch'), [...marked]], [null, []], '…nor on a competition page, which has no public face')
+  eq([bootAt('/club/lahinch', 'dot'), [...marked]], [null, []], '…nor without the club’s hint')
 
   section('The personal page’s one ask (Q5)')
   const now = new Date('2026-11-14T12:00:00Z')

@@ -51,9 +51,12 @@ export function homeOf(h: TierHint): string {
 export const TIER_BOOT_SCRIPT =
   `(function(){try{` +
   `var p=location.pathname,f=p==='/'&&!location.search&&!location.hash,` +
-  `o=p==='/home'&&!location.search;` +
+  `o=p==='/home'&&!location.search,ls=localStorage,h=ls.getItem('${TIER_KEY}');` +
+  // D197: at the club this phone is hinted to, the members home's stand-in
+  // shows from the first paint, never the public face.
+  `var c=/^\\/club\\/([a-z0-9-]{1,60})\\/?$/.exec(p);` +
+  `if(c){if(h==='club:'+c[1])document.documentElement.setAttribute('data-club-member','');return}` +
   `if(!f&&!o)return;` +
-  `var ls=localStorage,h=ls.getItem('${TIER_KEY}');` +
   `var m=/^club:([a-z0-9-]{1,60})$/.exec(h||'');` +
   `if(m){location.replace('/club/'+m[1]);return}` +
   // D192: no hint, but a Green Dot account's sign-in kept on this phone —

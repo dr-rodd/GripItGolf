@@ -7,6 +7,7 @@
  *   npx tsx scripts/test-clubs.ts
  */
 import fs from 'fs'
+import * as copy from '../lib/clubHomeCopy'
 import path from 'path'
 import {
   INVITE_LENGTH, cleanRow, clubNameIssue, clubSlug, formatInviteCode, inviteCodeFrom, inviteCodeIssue, inviteEmail,
@@ -1334,6 +1335,42 @@ function snappyTests() {
   }
   ok(fs.existsSync('app/club/[slug]/comp/[code]/loading.tsx'), 'a page not fetched ahead lands on a stand-in at once')
   ok(JSON.parse(read('vercel.json')).regions?.[0] === 'dub1', 'the functions run in Dublin, beside the database (D196)')
+
+  section('The club home from the last copy (D193, D194, D197)')
+  const kept = new Map<string, string>()
+  const w = { localStorage: {
+    getItem: (k: string) => kept.get(k) ?? null, setItem: (k: string, v: string) => { kept.set(k, v) }, removeItem: (k: string) => { kept.delete(k) },
+    key: (i: number) => [...kept.keys()][i] ?? null, get length() { return kept.size },
+  } }
+  ;(globalThis as unknown as { window: unknown }).window = w
+  kept.set('sb-x-auth-token', JSON.stringify({ user: { id: 'acct', is_anonymous: false, email: 'a@b.ie' } }))
+  const m = { clubId: 'c1', homeCourseId: null, role: 'member' as const, name: 'Ross', events: [], entries: [], season: [], courses: {}, outside: [], tops: {},
+    toSign: [{ code: 'AB12CD', name: 'Medal', count: 1 }] }
+  copy.keepClubHome('lahinch', m)
+  ok([...kept.keys()].includes('gd.clubhome.v1:acct:lahinch') && !/AB12CD/.test(kept.get('gd.clubhome.v1:acct:lahinch')!), 'kept by account and club, versioned — never the cards to sign')
+  const back = copy.readClubHome('lahinch')
+  eq([back?.name, back?.toSign, back?.fromCopy], ['Ross', [], true], 'read back as a copy, its live parts empty')
+  kept.set('sb-x-auth-token', JSON.stringify({ user: { id: 'other', is_anonymous: false, email: 'c@d.ie' } }))
+  eq(copy.readClubHome('lahinch'), null, 'another account signed in on this phone draws nothing from it')
+  kept.set('sb-x-auth-token', JSON.stringify({ user: { id: 'acct', is_anonymous: false, email: 'a@b.ie' } }))
+  copy.forgetClubHome('lahinch')
+  eq(copy.readClubHome('lahinch'), null, 'not on the list: the copy goes')
+  copy.keepClubHome('lahinch', m); copy.keepClubHome('ballybunion', m)
+  copy.forgetAllClubHomes()
+  ok(![...kept.keys()].some(k => k.startsWith('gd.clubhome')), 'signed out or deleted: every copy goes')
+  delete (globalThis as unknown as { window?: unknown }).window
+  eq((read('lib/accountClient.ts').match(/forgetAllClubHomes\(\)/g) ?? []).length, 2, '…on signing out and on deleting')
+  const view = read('app/club/[slug]/ClubView.tsx')
+  ok(/<div className="club-public-face"><PublicFace face=\{face\} \/><\/div>/.test(view) && /<MembersWait \/>/.test(view), 'the public face and the stand-in are both in the HTML, the mark choosing')
+  ok(/setMembers\(m => m \?\? readClubHome\(face\.slug\)\)/.test(view), 'a hinted phone draws its copy before the first paint of the page')
+  ok(/!m\.fromCopy && g\.now\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
+  ok(/forgetClubHome\(face\.slug\)\s*\n\s*notClubMember\(\)/.test(view), 'taken off the list: the copy goes and the public face shows')
+  ok(/if \(storedAccountSession\(\)\) \{ setLost\(true\); return \}/.test(view) && /Could not reach Green Dot — try again\./.test(view), 'a lost signal keeps what is on screen, with Try again')
+  const sheet = read('app/globals.css')
+  ok(/html\[data-club-member\] \.club-public-face \{ display: none; \}/.test(sheet), 'the public face is never drawn for a hinted phone (D197)')
+  ok(/\.club-member-wait, \.club-bar\.club-bar-wait \{ display: none; \}/.test(sheet), '…and the stand-in is never drawn for anybody else')
+  ok(/\.club-fresh-in \{ animation: clubFreshIn 160ms ease-out both; \}/.test(sheet) && /prefers-reduced-motion: reduce\) \{ \.club-fresh-in \{ animation: none; \} \}/.test(sheet),
+    'the fade is 160ms ease-out, and none under Reduce Motion')
 }
 
 async function main() {

@@ -31,6 +31,7 @@ import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from '
 import { phoneIdentity } from './entryClient'
 import { forgetOwnerUnlocks } from './passcode'
 import { forgetTier, readTierHint, rememberTier, storedAccountSession } from './tierHint'
+import { forgetAllClubHomes } from './clubHomeCopy'
 
 export type Mode = 'upgrade' | 'existing'
 
@@ -444,6 +445,7 @@ export async function signOutAccount(): Promise<Answer> {
     forgetOwnerUnlocks()
     forgetTier()
     forgetAllKept()
+    forgetAllClubHomes()
     forgetPending()
     try { window.sessionStorage.removeItem(OWED_KEY) } catch { /* nothing owed */ }
     return { ok: true }
@@ -468,6 +470,7 @@ export async function deleteAccount(): Promise<Answer> {
     forgetOwnerUnlocks()
     forgetTier()
     forgetAllKept()
+    forgetAllClubHomes()
     forgetPending()
     return { ok: true }
   } catch {

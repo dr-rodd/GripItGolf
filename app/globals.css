@@ -438,6 +438,19 @@ html.dark .club-grain { display: block; }
 /* The members-only door draws no footer — said in the server's HTML. */
 body:has([data-no-club-bar]) .club-bar { display: none; }
 
+/* D197: a phone hinted to this club (the head script's mark on <html>)
+   sees the members home's stand-in and the footer from the first paint,
+   never the public face; anybody else sees the public face, no stand-in. */
+.club-member-wait, .club-bar.club-bar-wait { display: none; }
+html[data-club-member] .club-member-wait { display: block; }
+html[data-club-member] .club-bar.club-bar-wait { display: block; }
+html[data-club-member] .club-public-face { display: none; }
+html[data-club-member] .club-wait-pad { padding-bottom: calc(64px + env(safe-area-inset-bottom)); }
+/* D194: the live parts arrive with the fresh answer, faded in; at once under Reduce Motion. */
+.club-fresh-in { animation: clubFreshIn 160ms ease-out both; }
+@keyframes clubFreshIn { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .club-fresh-in { animation: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   /* No travel: the two sets cross-fade in 160ms. Important, because the
      catch-all below would otherwise cut the fade to nothing too. */

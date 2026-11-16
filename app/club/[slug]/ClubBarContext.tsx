@@ -22,12 +22,14 @@ export interface ClubMembers {
   tops: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
   toSign: { code: string; name: string; count: number }[]
+  /** Drawn from the copy kept on this phone (D193): the live parts wait for the fresh answer (D194). */
+  fromCopy?: boolean
 }
 
 interface ClubBar {
   /** The members home, kept while this phone moves between the club and its competitions. */
   members: ClubMembers | null
-  setMembers: (m: ClubMembers | null) => void
+  setMembers: React.Dispatch<React.SetStateAction<ClubMembers | null>>
   tab: ClubTab
   /** A club tab tapped: switched in place, the address following. */
   choose: (t: ClubTab) => void
