@@ -32,6 +32,8 @@ import { mergeGrant } from '../lib/membership'
 import { cardScoreRows, nrGross, type CommitHole } from '../lib/cardCommit'
 import { runSign, signedOff, type CardHole, type NewSignature, type Signature, type SignPlayer, type SignStore } from '../app/api/card/sign'
 import type { SavedScore } from '../lib/liveScores'
+import { irishDay, mayCertifyNow, playerStates, runCertify, type CertifyStore, type DayChange } from '../app/api/card/certify'
+import { writeRoundSummaries, type SummaryDeps } from '../app/api/stats/summaries'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { RESERVED_CLUB_SLUGS } from '../lib/clubs'
 import { hashPin as hashPinForDoor, unheldPin, entryToken } from '../lib/pinHash'
@@ -1116,12 +1118,132 @@ async function competitionD3Tests() {
     'phones keep writing scores everywhere but a club competition')
   ok(/PASTE THIS AFTER THE DEPLOY/.test(m090) && /-- ─── Undo/.test(m090) && /writable_rounds\(\)\)\);\n--   DROP POLICY|WITH CHECK \(round_id IN \(SELECT public\.writable_rounds\(\)\)\);/.test(m090), '…pasted after the deploy, with its undo back to 079')
   const page = read('app/club/[slug]/comp/[code]/page.tsx')
-  ok(/finished: sheet\.final\.filter/.test(page), 'scoring closes once every booked card is final — approved and marked')
+  ok(/finished: new Set\(\[\.\.\.sheet\.final, \.\.\.sheet\.noReturns\]/.test(page), 'scoring closes once every booked card is final — approved and marked — or No return')
   ok(/<CompPlay code=\{code\}/.test(page) && /<CardsToSign code=\{code\} \/>/.test(page), 'the Scoring section: the card for the players on the sheet, and Cards to sign')
   ok(/m\.toSign\.length > 0/.test(read('app/club/[slug]/ClubView.tsx')), 'Cards to sign leads the club Home (D177)')
   ok(/notes=\{notes\}/.test(read('app/club/[slug]/comp/[code]/CompBoard.tsx')) && /notes\?\.\[row\.id\] \?\? row\.subLabel/.test(read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')),
     'the board says "To be signed" under a card still waiting')
   ok(/competition \? \(/.test(read('app/scoring/[slug]/CourseDashboardClient.tsx')), 'a competition card is never unfinalised from a phone — it is sent back')
+}
+
+async function competitionD4Tests() {
+  section('Who is accounted for, and when the results may be certified (D172)')
+  const st = playerStates({
+    booked: ['a', 'b', 'c', 'd', 'e'],
+    noReturns: ['e'],
+    signatures: [{ playerId: 'a', approvedAt: 'x', markedAt: 'x' }, { playerId: 'b', approvedAt: null, markedAt: 'x' }],
+    cards: [{ id: 'lr1', status: 'active', playerIds: ['c', 'z'] }, { id: 'lr0', status: 'closed', playerIds: ['d'] }],
+  })
+  eq([...st.values()].map(x => x.state).join(','), 'final,waiting,on_course,none,no_return', 'final, waiting, on the course, nothing yet, No return')
+  ok(st.get('c')?.liveRoundId === 'lr1' && st.get('d')?.liveRoundId === null, '…an open card is the one to void; a voided card is no card')
+  ok(!mayCertifyNow(st.values()), 'not certifiable while anybody is not accounted for')
+  ok(mayCertifyNow([{ state: 'final' }, { state: 'no_return' }]) && !mayCertifyNow([]), '…certifiable once every booked player is signed or No return — and never with nobody booked')
+  const day = irishDay('2026-07-04')
+  ok(day?.from === '2026-07-03T23:00:00.000Z' && day?.to === '2026-07-04T23:00:00.000Z', 'the day\'s handicap changes are read on the Irish day (summer time)')
+  ok(irishDay('2026-11-22')?.from === '2026-11-22T00:00:00.000Z', '…and in winter')
+
+  section('No return, void, Certify, Reopen (stage (d4), /api/card/certify)')
+  const row = (id: string, name: string, userId: string | null, role: 'owner' | 'admin' | 'member' = 'member') =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role, userId, removedAt: null, onBoards: true })
+  const rows = [row('r-ross', 'Ross', 'ross'), row('r-dave', 'Dave', 'dave'), row('r-ann', 'Ann', 'ann'), row('r-adm', 'Admin', 'adm', 'admin')]
+  const players: SignPlayer[] = [
+    { id: 'p-ross', clubMemberId: 'r-ross', name: 'Ross', gender: 'M' },
+    { id: 'p-dave', clubMemberId: 'r-dave', name: 'Dave', gender: 'M' },
+    { id: 'p-ann', clubMemberId: 'r-ann', name: 'Ann', gender: 'F' },
+  ]
+  const rules = { batches: [{ start: '08:00', interval: 10, count: 4, ends: 'count' as const }], groupSize: 4 }
+  let ready = true
+  let certifiedAt: string | null = null
+  let nrs: string[] = []
+  const log: string[] = []
+  let cards = [{ id: 'lr1', roundId: 'rd', status: 'active', playerIds: ['p-ann'] }]
+  let sigs: Signature[] = [
+    { id: 's1', playerId: 'p-ross', liveRoundId: 'lr0', finalisedBy: 'ross', finalisedAt: 'x', approvedBy: 'ross', approvedAt: 'x', markerMemberId: 'r-dave', markedBy: 'dave', markedAt: 'x', markedAs: 'marker' },
+    { id: 's2', playerId: 'p-dave', liveRoundId: 'lr0', finalisedBy: 'ross', finalisedAt: 'x', approvedBy: null, approvedAt: null, markerMemberId: 'r-ross', markedBy: 'ross', markedAt: 'x', markedAs: 'marker' },
+  ]
+  const changes: DayChange[] = [{ userId: 'dave', memberId: null, oldIndex: 12.1, newIndex: 11.4, at: '2026-11-22T08:05:00Z', by: 'ross', source: 'start_sheet' }]
+  const cstore: CertifyStore = {
+    async userFromToken(t) { return member(t.slice(4), `${t.slice(4)}@x.ie`) },
+    async competition(c) { return c === 'COMP01' ? { tripId: 't1', code: 'COMP01', clubId: 'c1', roundId: 'rd', date: '2026-11-22', rules, publicHash: null } : null },
+    async myRow(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async rowsByIds(_c, ids) { return rows.filter(r => ids.includes(r.id)) },
+    async rowsByAccounts(_c, ids) { return rows.filter(r => r.userId && ids.includes(r.userId)) },
+    async players() { return players },
+    async bookings() { return players.map((p, i) => ({ playerId: p.id, slot: i, bookedBy: p.id })) },
+    async liveCards() { return cards },
+    async signatures() { return sigs },
+    async roundLock() { return { ready, certifiedAt, noReturns: nrs } },
+    async dayChanges() { return changes },
+    async insertNoReturn(_r, p) { nrs = [...nrs, p] },
+    async deleteNoReturn(_r, p) { nrs = nrs.filter(x => x !== p) },
+    async voidCard(id) { cards = cards.map(c => (c.id === id ? { ...c, status: 'closed' } : c)); log.push(`void:${id}`) },
+    async setCertified(_r, at) { certifiedAt = at },
+    async logCertification(_r, a, by) { log.push(`${a}:${by}`) },
+    async writeSummaries() { log.push('summaries') },
+    async dropSummaries() { log.push('drop') },
+  }
+  const cert = (tok: string, action: string, body: Record<string, unknown> = {}) => runCertify({ token: tok, action, code: 'COMP01', ...body }, cstore, NOW)
+
+  eq((await cert('tok-ross', 'state')).status, 403, 'only the club\'s owners and admins run the results')
+  ready = false
+  const early = await cert('tok-adm', 'state')
+  ok(early.status === 503 && !early.body.ok && /not set up yet/.test(early.body.error), 'before migration 091 the server says so')
+  ready = true
+  const s0 = await cert('tok-adm', 'state')
+  ok(s0.status === 200 && s0.body.ok && s0.body.mayCertify === false && s0.body.players?.find(p => p.name === 'Ann')?.state === 'on_course', 'Ann\'s card is still open: no certifying yet')
+  ok(s0.status === 200 && s0.body.ok && s0.body.changes?.[0]?.name === 'Dave' && s0.body.changes[0].by === 'Ross' && s0.body.changes[0].newIndex === 11.4,
+    'the day\'s index changes listed: whose, old and new, when, by whom (D179)')
+  const nrOpen = await cert('tok-adm', 'no_return', { playerId: 'p-ann' })
+  ok(nrOpen.status === 409 && !nrOpen.body.ok && /void it first/.test(nrOpen.body.error), 'an open card is signed or voided before a No return')
+  eq((await cert('tok-adm', 'void', { liveRoundId: 'lr1' })).status, 200, 'an admin voids Ann\'s open card')
+  eq((await cert('tok-adm', 'void', { liveRoundId: 'lr1' })).status, 409, '…a card no longer being scored is not voided again')
+  eq((await cert('tok-adm', 'no_return', { playerId: 'p-ann' })).status, 200, 'then marks her No return')
+  const early2 = await cert('tok-adm', 'certify')
+  ok(early2.status === 409 && !early2.body.ok && /Dave/.test(early2.body.error), 'Dave\'s card still waits on his approval: not certified yet, and it says whose')
+  sigs = sigs.map(x => (x.playerId === 'p-dave' ? { ...x, approvedAt: 'y', approvedBy: 'dave' } : x))
+  const done = await cert('tok-adm', 'certify')
+  ok(done.status === 200 && !!certifiedAt && log.includes('certify:adm') && log.includes('summaries'), 'certified: the round locked, logged, the season fed')
+  ok((await cert('tok-adm', 'undo_no_return', { playerId: 'p-ann' })).status === 409 && nrs.includes('p-ann'), 'a certified round\'s No returns stand')
+  const signAfter = await runSign({ token: 'tok-dave', action: 'send_back', code: 'COMP01', playerId: 'p-ross' }, {
+    ...({} as SignStore),
+    userFromToken: cstore.userFromToken, competition: cstore.competition, myRow: cstore.myRow, rowsByIds: cstore.rowsByIds,
+    players: cstore.players, signatures: cstore.signatures, roundLock: cstore.roundLock,
+  } as SignStore, NOW)
+  eq(signAfter.status, 409, 'no card is signed, sent back or changed once certified')
+  const re = await cert('tok-adm', 'reopen')
+  ok(re.status === 200 && certifiedAt === null && log.includes('reopen:adm') && log.includes('drop'), 'reopened: unlocked, logged, the round out of the season')
+
+  section('The season is fed by certified rounds only')
+  const written: string[] = []
+  const removed: string[] = []
+  const deps = (held: boolean): SummaryDeps => ({
+    async readRound() { return { tripId: 't1', roundId: 'rd', courseId: null, playedOn: null, stats: [], teeOf: new Map() } },
+    async verifiedClubOf() { return 'c1' },
+    async upsert(r) { written.push(...r.map(x => x.player_id)) },
+    async removeOthers(r, keep) { removed.push(`${r}:${keep.length}`) },
+    held: async () => held,
+  })
+  const heldOut = await writeRoundSummaries('COMP01', 'rd', deps(true), NOW)
+  ok('written' in heldOut && heldOut.written === 0 && removed.includes('rd:0'), 'a competition round not yet certified writes no summaries and lets any go')
+  ok(/heldRounds\(db, \[\.\.\.signed\]/.test(read('app/api/stats/store.ts')), '…and the nightly backstop never counts it as owed')
+
+  section('Migration 091, and every writer respecting the lock')
+  const m091 = read('supabase/migrations/20260101000091_certify_and_no_return.sql')
+  ok(/ADD COLUMN IF NOT EXISTS certified_at timestamptz NULL/.test(m091), 'rounds.certified_at')
+  for (const t of ['round_certifications', 'round_no_returns']) {
+    ok(new RegExp(`REVOKE ALL ON public\\.${t} FROM anon, authenticated`).test(m091) && new RegExp(`GRANT SELECT, INSERT, UPDATE, DELETE ON public\\.${t} TO service_role`).test(m091),
+      `${t} is server only, its grants in the file`)
+  }
+  ok(/r\.trip_id IN \(SELECT public\.writable_trips\(\)\) AND r\.certified_at IS NULL/.test(m091), 'writable_rounds() locks a certified round to every phone')
+  ok(/PASTE THIS AFTER THE DEPLOY, WITH NO COMPETITION CARD OPEN/.test(m091) && /--     SELECT r\.id FROM public\.rounds r WHERE r\.trip_id IN \(SELECT public\.writable_trips\(\)\)\n/.test(m091),
+    '…pasted after the deploy, its undo 079\'s function word for word')
+  ok(/certifiedRounds\(supabaseAdmin/.test(read('app/api/card-check/apply/route.ts')), 'a card check never re-tells a certified round')
+  ok(/certifiedRounds\(db, \[roundId\]\)/.test(read('app/admin/live/actions.ts')), '/admin never voids a card on a certified round')
+  const page = read('app/club/[slug]/comp/[code]/page.tsx')
+  ok(/certifiedAt: sheet\.certifiedAt/.test(page) && /\.\.\.sheet\.noReturns/.test(page), 'the page\'s phase reads the certification and counts No returns as accounted for')
+  ok(/phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results<\/h1>/.test(page) && /No return: /.test(page), 'certified, the board is the Results; No returns listed under it')
+  ok(/<CompAdmin code=\{code\} \/>/.test(page), 'the Scoring section carries the admins\' Results card')
+  ok(/round_no_returns/.test(read('app/api/club/store.ts')) && /certifiedAt: certifiedOf\.get/.test(read('app/api/club/store.ts')), 'Comps rows read Awaiting sign-off and Certified')
 }
 
 async function main() {
@@ -1134,6 +1256,7 @@ async function main() {
   await competitionTests()
   await competitionD2Tests()
   await competitionD3Tests()
+  await competitionD4Tests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

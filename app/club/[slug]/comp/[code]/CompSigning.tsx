@@ -11,13 +11,14 @@ import { askBooking, askSign, type CardToSign } from '@/lib/accountClient'
  * admins — open the card to score. Asked of the server, which knows who is
  * booked.
  */
-export function CompPlay({ code, href }: { code: string; href: string }) {
+export function CompPlay({ code, href, closed = false }: { code: string; href: string; closed?: boolean }) {
   const [may, setMay] = useState<boolean | null>(null)
   useEffect(() => {
     let live = true
     askBooking('state', { code }).then(r => { if (live) setMay(r.ok ? !!r.booked || !!r.admin : false) })
     return () => { live = false }
   }, [code])
+  if (closed) return <p className="text-ink/80 text-[15px] leading-relaxed mt-2">The results are certified — every card is closed.</p>
   if (may === null) return null
   return may ? (
     <>

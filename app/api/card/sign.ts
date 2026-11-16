@@ -91,6 +91,8 @@ export interface SignStore {
   deleteScores(roundId: string, playerId: string): Promise<void>
   /** A player's card as signed: hole by hole, from `scores`. */
   card(roundId: string, playerId: string): Promise<CardHole[]>
+  /** Stage (d4): whether the round is certified, and who is No return — `ready: false` before 091. */
+  roundLock?(roundId: string): Promise<{ ready: boolean; certifiedAt: string | null; noReturns: string[] }>
 }
 
 /** Who marks a player's card: another player in the competition, or a row of the list. */
@@ -146,8 +148,13 @@ export async function runSign(
   const admin = mayAdminister(me.role)
   const at = now.toISOString()
 
-  const [players, open] = await Promise.all([store.players(comp.tripId), store.signatures(comp.roundId)])
+  const [players, open, lock] = await Promise.all([
+    store.players(comp.tripId), store.signatures(comp.roundId),
+    store.roundLock ? store.roundLock(comp.roundId) : Promise.resolve({ ready: false, certifiedAt: null, noReturns: [] as string[] }),
+  ])
   if (open === null) return fail(503, NOT_READY)
+  // Stage (d4): a certified round's cards are closed — reopening is the admins'.
+  if (lock.certifiedAt && input.action !== 'list') return fail(409, 'The results are certified — the club’s admins reopen the competition to change a card.')
   const playerById = new Map(players.map(p => [p.id, p]))
   const openFor = new Map(open.map(s => [s.playerId, s]))
 
@@ -194,6 +201,7 @@ export async function runSign(
     const markers = (input.markers && typeof input.markers === 'object' ? input.markers : {}) as Record<string, unknown>
     const chosen = new Map<string, MemberRecord>()
     for (const id of todo) {
+      if (lock.noReturns.includes(id)) return fail(409, `${playerById.get(id)?.name ?? 'A player'} is marked No return — the club’s admins take that off first.`)
       if (!accountOf(id)) return fail(409, `${playerById.get(id)?.name ?? 'A player'} needs a Green Dot account linked to the club’s list to sign a card.`)
       const m = markerFor(id, markers[id])
       if ('error' in m) return fail(400, m.error)

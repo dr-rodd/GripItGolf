@@ -27,11 +27,20 @@ export interface SummaryDeps {
   upsert(rows: CardSummary[]): Promise<void>
   /** Rows of this round for players no longer on a signed card (a void) let go. */
   removeOthers(roundId: string, keep: string[]): Promise<void>
+  /**
+   * Stage (d4): a club competition's round not yet certified — the season is
+   * fed by certified rounds only, so it is summed up at Certify and not before.
+   */
+  held?(roundId: string): Promise<boolean>
 }
 
 export type SummaryOutcome = { written: number } | { missing: true }
 
 export async function writeRoundSummaries(tripCode: string, roundId: string, deps: SummaryDeps, now: Date): Promise<SummaryOutcome> {
+  if (deps.held && await deps.held(roundId)) {
+    await deps.removeOthers(roundId, [])
+    return { written: 0 }
+  }
   const read = await deps.readRound(tripCode, roundId)
   if (!read) return { missing: true }
   const clubId = await deps.verifiedClubOf(read.tripId)

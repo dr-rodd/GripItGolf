@@ -3,7 +3,7 @@ import type { CommitHole } from '@/lib/cardCommit'
 import type { SavedScore } from '@/lib/liveScores'
 import { bookingStore } from '../club/bookingStore'
 import type { CardHole, SignStore } from './sign'
-import { readSignatures } from './signatures'
+import { readRoundLock, readSignatures } from './signatures'
 
 // A club competition's signatures on the service role (stage (d3)). Every
 // read of `card_signatures` fails soft to null — before migration 090 the
@@ -35,6 +35,7 @@ export function signStore(db: Db): SignStore {
       return l ? { id: l.id, roundId: l.round_id, status: l.status, playerIds: ((locks ?? []) as { player_id: string }[]).map(x => x.player_id) } : null
     },
     signatures: roundId => readSignatures(db, roundId),
+    roundLock: roundId => readRoundLock(db, roundId),
     async holes(roundId) {
       const { data: r } = await db.from('rounds').select('course_id').eq('id', roundId).maybeSingle()
       const courseId = (r as { course_id?: string } | null)?.course_id

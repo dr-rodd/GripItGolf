@@ -331,7 +331,7 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D166 | *Replaced by D179* | — |
 | D167 | The competition page inside the club shell: back to Comps, name, date, one phase line | Built (d2), `/club/[slug]/comp/[code]` |
 | D168 | *Replaced by D180–D181* (and the card's place by D183's "the event's own bar") | — |
-| D169–D172 | Phases Announced, Booking open, In play, Awaiting sign-off, Certified; scoring closes when every booked player is signed or No return; admins mark No return, sign or void, Certify (countback, lock, Results, gold) and Reopen; only certified rounds feed the season | Agreed; plan (d3)–(d4) |
+| D169–D172 | Phases Announced, Booking open, In play, Awaiting sign-off, Certified; scoring closes when every booked player is signed or No return; admins mark No return, sign or void, Certify (countback, lock, Results, gold) and Reopen; only certified rounds feed the season | Built (d3)–(d4): Certify shows the day's handicap index changes first; migration 091 locks a certified round to every phone |
 | D173 | Booking: your own name in one tap, partners from the list, withdraw until the time has gone | Built (d2) |
 | D174 | External (non-club) events open on their own with their own tab bar, as today | Agreed; nothing changes |
 | D175 | No emails when booking opens until the email plan allows | Agreed |

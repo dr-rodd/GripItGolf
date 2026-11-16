@@ -1445,6 +1445,52 @@ tables and the column. **Code:**
     round.
   - Reopen: the gold goes, cards edit again, the season drops it.
 
+### Stage (d4) as built — No return, void, Certify, Results, Reopen, the season (16 Nov 2026; D169–D172)
+
+**Migration 091** (paste **after** the deploy, with no competition card
+open). Before it the admins' Results card says certifying is not set up yet,
+and every round scores as before.
+- `rounds.certified_at`.
+- `round_certifications` and `round_no_returns`, both server only.
+- `writable_rounds()` less a certified round. 090's `phone_score_rounds()`
+  builds on it, so every phone scoring write follows.
+
+**Built:**
+- **`/api/card/certify`** (`app/api/card/certify.ts`, owners and admins
+  only), drawn as the **Results** card in the competition's Scoring section
+  (`CompAdmin.tsx`). It lists each booked player as Signed, To be signed, On
+  the course, No card or No return (`playerStates`).
+- **No return:** offered only for a player with no card (never started, or
+  voided). It can be taken off again until the results are certified.
+- **Void:** offered for a card still being scored. It voids the whole card,
+  and the confirmation names everyone on it.
+- **Certify:** offered once every booked player is signed by both or No
+  return (`mayCertifyNow`). It first lists every handicap index changed on
+  the competition's Irish day for its players: old and new, when, by whom,
+  and where (`irishDay` over the D179 log). Then **Certify the results**:
+  - `certified_at` is set and logged;
+  - the board becomes **Results** in gold;
+  - No returns are listed under it;
+  - the round's card summaries are written.
+- **Reopen:** clears `certified_at`, logs it and drops the round's summaries.
+  Nothing else is touched.
+- **The season is fed by certified rounds only.** The summary writer holds a
+  competition's uncertified round (`SummaryDeps.held`), and the nightly fill
+  never counts one as owed.
+- **The lock**, beyond the database:
+  - the signing route refuses every change on a certified round;
+  - `/admin`'s void and the card check's re-score skip one
+    (`certifiedRounds`);
+  - finalising a card refuses a player marked No return.
+- **Comps and the page:** both read Awaiting sign-off and Certified, and
+  count a No return as accounted for.
+
+**Not built:**
+- `rounds.casual` and a league's `cardsOff` do not ask about certification.
+  A competition is never a league, so neither is offered on one.
+- The hub's standing and the export read the scores as they are, and a
+  certified round's scores no longer change.
+
 ### Stage (d3) as built — signing on the server, the marker, Cards to sign (16 Nov 2026; D176–D178, D185)
 
 **Ross, 16 Nov (D185):** every club event may be viewed by every member on the

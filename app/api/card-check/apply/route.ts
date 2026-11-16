@@ -1,3 +1,4 @@
+import { certifiedRounds } from '@/app/api/card/signatures'
 import { NextRequest, NextResponse } from 'next/server'
 import { writeRoundSummaries } from '@/app/api/stats/summaries'
 import { summaryDeps } from '@/app/api/stats/store'
@@ -162,7 +163,9 @@ async function handle(req: NextRequest) {
         .from('rounds').select('id')
         .eq('trip_id', trip.id)
         .eq('course_id', courseId)
-      const roundIds = (rounds ?? []).map(r => r.id as string)
+      // A certified competition round is closed (stage (d4)): never re-told.
+      const certified = await certifiedRounds(supabaseAdmin, (rounds ?? []).map(r => r.id as string))
+      const roundIds = (rounds ?? []).map(r => r.id as string).filter(id => !certified.has(id))
       if (roundIds.length > 0) {
         // The values do not change; the UPDATE itself is what fires
         // `trg_scores_stableford`, which reads the corrected holes.

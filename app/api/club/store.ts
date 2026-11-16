@@ -86,19 +86,22 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
  * Each competition's phase for Comps (D169): from its sheet's opening, its
  * first tee time, whether a card has started, and — from stage (d3) — who
  * is booked and whose card is final: one read of the rounds, then the cards,
- * the bookings and the signatures together. Certified arrives with (d4).
+ * the bookings, the signatures, the No returns and the certification together (d4).
  */
 async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string, CompPhase>> {
   const { data: rounds } = await db.from('rounds').select('id, trip_id, scheduled_date, tee_sheet').in('trip_id', tripIds)
   const rs = (rounds ?? []) as { id: string; trip_id: string; scheduled_date: string | null; tee_sheet?: unknown }[]
   const roundIds = rs.map(r => r.id)
-  const [{ data: cards }, { data: seats }, sigs] = roundIds.length
+  const [{ data: cards }, { data: seats }, sigs, nrs, certs] = roundIds.length
     ? await Promise.all([
         db.from('live_rounds').select('round_id').in('round_id', roundIds),
         db.from('tee_assignments').select('round_id, player_id').in('round_id', roundIds),
         db.from('card_signatures').select('round_id, player_id, approved_at, marked_at').in('round_id', roundIds).is('sent_back_at', null),
+        // Stage (d4), migration 091 — each in its own query, none before it.
+        db.from('round_no_returns').select('round_id, player_id').in('round_id', roundIds),
+        db.from('rounds').select('id, certified_at').in('id', roundIds),
       ])
-    : [{ data: [] }, { data: [] }, { data: [], error: null }]
+    : [{ data: [] }, { data: [] }, { data: [], error: null }, { data: [], error: null }, { data: [], error: null }]
   const started = new Set(((cards ?? []) as { round_id: string }[]).map(c => c.round_id))
   // Stage (d3): booked players, and those whose card is final — approved and
   // marked — so a competition reads Awaiting sign-off once all are. Before 090, none.
@@ -107,12 +110,20 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
     if (!bookedOf.has(a.round_id)) bookedOf.set(a.round_id, new Set())
     bookedOf.get(a.round_id)!.add(a.player_id)
   }
-  const finalOf = new Map<string, number>()
+  // Accounted for: a card final, or a No return (d4).
+  const doneOf = new Map<string, Set<string>>()
+  const done = (round: string, player: string) => {
+    if (!bookedOf.get(round)?.has(player)) return
+    if (!doneOf.has(round)) doneOf.set(round, new Set())
+    doneOf.get(round)!.add(player)
+  }
   if (!sigs.error) {
     for (const s of (sigs.data ?? []) as { round_id: string; player_id: string; approved_at: string | null; marked_at: string | null }[]) {
-      if (s.approved_at && s.marked_at && bookedOf.get(s.round_id)?.has(s.player_id)) finalOf.set(s.round_id, (finalOf.get(s.round_id) ?? 0) + 1)
+      if (s.approved_at && s.marked_at) done(s.round_id, s.player_id)
     }
   }
+  if (!nrs.error) for (const n of (nrs.data ?? []) as { round_id: string; player_id: string }[]) done(n.round_id, n.player_id)
+  const certifiedOf = new Map(certs.error ? [] : ((certs.data ?? []) as { id: string; certified_at?: string | null }[]).map(r => [r.id, r.certified_at ?? null]))
   const now = Date.now()
   const out = new Map<string, CompPhase>()
   for (const r of rs) {
@@ -122,8 +133,8 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
     out.set(r.trip_id, compPhase({
       bookingOpensAt: opensAt(rules, r.scheduled_date)?.getTime() ?? null,
       firstTeeAt: first ? teeInstant(r.scheduled_date, first) : null,
-      booked: bookedOf.get(r.id)?.size ?? 0, finished: finalOf.get(r.id) ?? 0,
-      cardsStarted: started.has(r.id), certifiedAt: null,
+      booked: bookedOf.get(r.id)?.size ?? 0, finished: doneOf.get(r.id)?.size ?? 0,
+      cardsStarted: started.has(r.id), certifiedAt: certifiedOf.get(r.id) ?? null,
     }, now))
   }
   return out

@@ -166,7 +166,10 @@ export default function PrivacyPage() {
           sheet score it; guests watch only where the club lets them, read-only, with its code. A
           competition card is signed twice — approved by its player on their own account and signed by a
           marker from the club&apos;s list — and each signature is recorded with who gave it and when, as is a
-          card sent back, so the club can see how every card was signed.
+          card sent back, so the club can see how every card was signed. When a club&apos;s owner or admin
+          certifies a competition&apos;s results, or reopens them, or marks a player No return, that is recorded
+          with who did it and when; before certifying they see every handicap index changed that day for the
+          competition&apos;s players. A competition&apos;s round counts towards your season only once certified.
         </p>
         <p className="mt-3">
           When a membership lapses, the golf played stays. When a club takes somebody off its list,

@@ -611,3 +611,37 @@ export async function askSign(
   if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, items: Array.isArray(r.body.items) ? r.body.items as CardToSign[] : [] }
 }
+
+/** A booked player as the club's admins see them when certifying (stage (d4)). */
+export interface CertifyPlayer {
+  playerId: string
+  name: string
+  state: 'none' | 'on_course' | 'waiting' | 'final' | 'no_return'
+  liveRoundId: string | null
+  cardmates: string[]
+}
+
+export interface CertifyAnswer {
+  ready?: boolean
+  certifiedAt?: string | null
+  mayCertify?: boolean
+  players?: CertifyPlayer[]
+  changes?: { name: string; oldIndex: number | null; newIndex: number | null; at: string; by: string; source: string }[]
+}
+
+/**
+ * A club competition's results, its owners' and admins' (stage (d4)):
+ * `state`, `no_return`, `undo_no_return`, `void`, `certify`, `reopen`.
+ * Never throws.
+ */
+export async function askCertify(
+  action: 'state' | 'no_return' | 'undo_no_return' | 'void' | 'certify' | 'reopen',
+  body: Record<string, unknown>,
+): Promise<({ ok: true } & CertifyAnswer) | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
+  const r = await askServer(token, { ...body, action }, '/api/card/certify')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as CertifyAnswer) }
+}

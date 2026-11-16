@@ -6,7 +6,7 @@ import { setIndex } from '../handicaps/handicaps'
 import { serviceStore } from '../entry/store'
 import { ROW_COLS, asRow, clubStore, type RowRow } from './store'
 import type { BookingStore, CompRecord } from './booking'
-import { readSignatures } from '../card/signatures'
+import { readRoundLock, readSignatures } from '../card/signatures'
 import { signedOff } from '../card/sign'
 
 // A club competition's booking, on the service role (stage (d2)). The
@@ -131,6 +131,9 @@ export interface CompSheet {
    */
   final: string[]
   waiting: string[]
+  /** Stage (d4): booked players marked No return, and when the round was certified — none before 091. */
+  noReturns: string[]
+  certifiedAt: string | null
   courseName: string | null
 }
 
@@ -153,8 +156,8 @@ export async function readCompSheet(db: Db, c: { tripId: string; roundId: string
   const statusOf = new Map(liveCards.map(l => [l.id, l.status]))
   const onCourse = locks.filter(l => statusOf.get(l.live_round_id) === 'active').map(l => l.player_id)
   const signed = locks.filter(l => statusOf.get(l.live_round_id) === 'finalised').map(l => l.player_id)
-  const sigs = await readSignatures(db, c.roundId)
+  const [sigs, lock] = await Promise.all([readSignatures(db, c.roundId), readRoundLock(db, c.roundId)])
   const final = sigs === null ? signed : sigs.filter(signedOff).map(x => x.playerId)
   const waiting = sigs === null ? [] : sigs.filter(x => !signedOff(x)).map(x => x.playerId)
-  return { seats, onCourse, signed, final, waiting, courseName: (course.data as { name?: string } | null)?.name ?? null }
+  return { seats, onCourse, signed, final, waiting, noReturns: lock.noReturns, certifiedAt: lock.certifiedAt, courseName: (course.data as { name?: string } | null)?.name ?? null }
 }

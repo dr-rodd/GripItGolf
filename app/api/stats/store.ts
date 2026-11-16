@@ -28,6 +28,7 @@ export function summaryDeps(db: Db = createAdminClient()): SummaryDeps {
       const { error } = await db.from('card_summaries').upsert(rows, { onConflict: 'round_id,player_id' })
       if (error && !notThere(error)) throw error
     },
+    held: roundId => heldRound(db, roundId),
     async removeOthers(roundId, keep) {
       let q = db.from('card_summaries').delete().eq('round_id', roundId)
       if (keep.length) q = q.not('player_id', 'in', `(${keep.join(',')})`)
@@ -35,6 +36,32 @@ export function summaryDeps(db: Db = createAdminClient()): SummaryDeps {
       if (error && !notThere(error)) throw error
     },
   }
+}
+
+/**
+ * A club competition's round not yet certified (stage (d4)): its cards feed
+ * nobody's season until Certify. Before 091 no round is certified, so a
+ * competition's round is held; outside a competition nothing is.
+ */
+export async function heldRound(db: Db, roundId: string): Promise<boolean> {
+  return (await heldRounds(db, [roundId])).has(roundId)
+}
+
+async function heldRounds(db: Db, roundIds: string[]): Promise<Set<string>> {
+  if (roundIds.length === 0) return new Set()
+  const { data: rounds } = await db.from('rounds').select('id, trip_id').in('id', roundIds)
+  const rs = (rounds ?? []) as { id: string; trip_id: string }[]
+  const tripIds = [...new Set(rs.map(r => r.trip_id))]
+  if (tripIds.length === 0) return new Set()
+  const { data: comps, error } = await db.from('trips').select('id').in('id', tripIds).eq('competition', 'club')
+  if (error || !(comps ?? []).length) return new Set()
+  const compTrips = new Set(((comps ?? []) as { id: string }[]).map(c => c.id))
+  const compRounds = rs.filter(r => compTrips.has(r.trip_id)).map(r => r.id)
+  if (compRounds.length === 0) return new Set()
+  const cert = await db.from('rounds').select('id, certified_at').in('id', compRounds)
+  const certified = cert.error ? new Set<string>()
+    : new Set(((cert.data ?? []) as { id: string; certified_at: string | null }[]).filter(r => r.certified_at).map(r => r.id))
+  return new Set(compRounds.filter(id => !certified.has(id)))
 }
 
 /**
@@ -63,7 +90,9 @@ export async function fillSummaries(opts: { limit: number; rewriteOlder?: boolea
     }
     if ((data ?? []).length < 1000) break
   }
-  const todo = [...signed].filter(id => !done.has(id))
+  // A competition's round waits for Certify (stage (d4)) — never counted as owed.
+  const held = await heldRounds(db, [...signed].filter(id => !done.has(id)))
+  const todo = [...signed].filter(id => !done.has(id) && !held.has(id))
   if (todo.length === 0) return { filled: 0, remaining: 0 }
   const batch = todo.slice(0, opts.limit)
   const { data: rounds } = await db.from('rounds').select('id, trip_id').in('id', batch)

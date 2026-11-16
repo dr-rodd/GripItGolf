@@ -26,3 +26,26 @@ export async function readSignatures(db: Db, roundId: string): Promise<Signature
   return ((data ?? []) as SigRow[]).map(asSignature)
 }
 
+
+/** A round's certification and No returns, or `ready: false` before 091. */
+export async function readRoundLock(db: Db, roundId: string) {
+  const [round, nrs] = await Promise.all([
+    db.from('rounds').select('certified_at').eq('id', roundId).maybeSingle(),
+    db.from('round_no_returns').select('player_id').eq('round_id', roundId),
+  ])
+  if (round.error || nrs.error) return { ready: false, certifiedAt: null, noReturns: [] as string[] }
+  return {
+    ready: true,
+    certifiedAt: (round.data as { certified_at?: string | null } | null)?.certified_at ?? null,
+    noReturns: ((nrs.data ?? []) as { player_id: string }[]).map(r => r.player_id),
+  }
+}
+
+/** Which of these rounds are certified — none before 091 (the service-role writers' check). */
+export async function certifiedRounds(db: Db, roundIds: string[]): Promise<Set<string>> {
+  if (roundIds.length === 0) return new Set()
+  const { data, error } = await db.from('rounds').select('id, certified_at').in('id', roundIds)
+  if (error) return new Set()
+  return new Set(((data ?? []) as { id: string; certified_at: string | null }[]).filter(r => r.certified_at).map(r => r.id))
+}
+

@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { voidScorecard } from '@/lib/scorecardVoid'
+import { certifiedRounds } from '@/app/api/card/signatures'
 import { why } from '@/lib/writeFailure'
 import { requireAdmin } from '../adminGate'
 import { writeRoundSummaries } from '@/app/api/stats/summaries'
@@ -51,6 +52,8 @@ export async function voidCard(
   if (!(await requireAdmin())) return { error: 'Signed out — log in again.' }
 
   const db = createAdminClient()
+  // A certified competition round is closed (stage (d4)) — reopen it first.
+  if ((await certifiedRounds(db, [roundId])).has(roundId)) return { error: 'This round’s results are certified — its club reopens it first.' }
   const failure = await voidScorecard(liveRoundId, roundId, db)
   if (failure) {
     return { error: `Could not void the scorecard${why(failure)}` }

@@ -25,6 +25,7 @@ import CompManage from './CompManage'
 import CompTeeSheet, { type CompSlot } from './CompTeeSheet'
 import CompBoard from './CompBoard'
 import { CardsToSign, CompPlay } from './CompSigning'
+import CompAdmin from './CompAdmin'
 
 /**
  * A club competition inside the club area (D167, D180–D181; stage (d2)):
@@ -89,10 +90,11 @@ export default async function CompetitionPage({ params, searchParams }: {
   const booked = new Set(sheet.seats.map(s => s.playerId))
   const phase = compPhase({
     bookingOpensAt, firstTeeAt, booked: booked.size,
-    // Scoring closes when every booked card is final — approved and marked (d3).
-    finished: sheet.final.filter(id => booked.has(id)).length,
+    // Scoring closes when every booked player is accounted for: a card final —
+    // approved and marked (d3) — or a No return (d4).
+    finished: new Set([...sheet.final, ...sheet.noReturns].filter(id => booked.has(id))).size,
     cardsStarted: sheet.onCourse.length + sheet.signed.length > 0,
-    certifiedAt: null,
+    certifiedAt: sheet.certifiedAt,
   }, now)
   const section: CompSection = SECTIONS.includes(view as CompSection) ? view as CompSection : firstSection(phase)
   const live = sectionLive(section, phase)
@@ -137,8 +139,9 @@ export default async function CompetitionPage({ params, searchParams }: {
         <section className="mt-6">
           <Poller isActive={phase === 'in_play' || phase === 'awaiting'} />
           <h1 className="t-h1 text-ink">Scoring</h1>
-          <CompPlay code={code} href={`${tripBase(code, 'tournament')}/scoring/1`} />
+          <CompPlay code={code} href={`${tripBase(code, 'tournament')}/scoring/1`} closed={phase === 'certified'} />
           <CardsToSign code={code} />
+          <CompAdmin code={code} />
           <ul className="mt-6 space-y-2">
             {slots.filter(s => s.seats.length > 0).map(s => (
               <li key={s.index} className={`${cardClass()} p-3 flex gap-3`}>
@@ -148,7 +151,8 @@ export default async function CompetitionPage({ params, searchParams }: {
                     <span key={x.playerId} className="flex items-baseline justify-between gap-2">
                       <span className="text-[15px] text-ink truncate">{x.name}</span>
                       <span className="t-cap text-ink/65 whitespace-nowrap">
-                        {sheet.final.includes(x.playerId) ? 'Signed'
+                        {sheet.noReturns.includes(x.playerId) ? 'No return'
+                          : sheet.final.includes(x.playerId) ? 'Signed'
                           : sheet.waiting.includes(x.playerId) ? 'To be signed'
                           : sheet.onCourse.includes(x.playerId) ? 'On the course' : 'Not started'}
                       </span>
@@ -161,8 +165,18 @@ export default async function CompetitionPage({ params, searchParams }: {
         </section>
       )}
       {live && section === 'board' && (
-        <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
-          notes={Object.fromEntries(sheet.waiting.map(id => [id, 'To be signed']))} />
+        <>
+          {/* Stage (d4): certified, the board is the Results — gold for the winner (D171). */}
+          {phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results</h1>}
+          <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
+            notes={Object.fromEntries(sheet.waiting.map(id => [id, 'To be signed']))} />
+          {sheet.noReturns.length > 0 && (
+            // A No return is off the board, listed under it, with no place.
+            <p className="t-cap text-ink/65 mt-3">
+              No return: {sheet.seats.filter(x => sheet.noReturns.includes(x.playerId)).map(x => x.name).join(', ')}
+            </p>
+          )}
+        </>
       )}
     </>,
     <CompBar slug={slug} code={code} active={section} />,
