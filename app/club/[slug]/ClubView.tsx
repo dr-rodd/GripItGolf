@@ -29,6 +29,7 @@ import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClub
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
+import ClubTeeTimes from './ClubTeeTimes'
 import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
 import { noteTimeLine, noteWhen, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { prefetchWhole } from './prefetchWhole'
@@ -56,7 +57,7 @@ const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Eve
  * hand-off, D123–D127). Everybody first sees the public face the server
  * drew; a phone signed in to a Green Dot account then asks whether it is on
  * this club's list, and if so the members area takes its place — Home ·
- * Comps · Board · Stats · Club. A section with nothing in it is not drawn,
+ * Comps · Tee times · Stats · Club. A section with nothing in it is not drawn,
  * never an empty heading; "Your next round" waits for booking (stage (d)).
  */
 export default function ClubView({ face }: { face: ClubFace }) {
@@ -85,7 +86,8 @@ export default function ClubView({ face }: { face: ClubFace }) {
   // kept on this phone drawn at once (D193).
   useLayoutEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('tab')
-    setTab(asked === 'comps' || asked === 'board' || asked === 'stats' || asked === 'club' ? asked : 'home')
+    // Board's place is Tee times now (Ross, 17 Nov 2026): an old ?tab=board link opens Comps, which carries the live leaderboard.
+    setTab(asked === 'board' ? 'comps' : asked === 'comps' || asked === 'tee' || asked === 'stats' || asked === 'club' ? asked : 'home')
     // D223: at any club the hint names. A home held for another club (a
     // switch between clubs) is never drawn under this one's face.
     if (hintClubs(readTierHint()).includes(face.slug)) {
@@ -189,7 +191,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
           )}
           {members && tab === 'home' && <MembersHome face={face} m={members} />}
           {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
-          {members && tab === 'board' && <Board m={members} slug={face.slug} />}
+          {members && tab === 'tee' && <ClubTeeTimes clubId={members.clubId} />}
           {members && tab === 'stats' && <Stats face={face} m={members} />}
           {members && tab === 'club' && <ClubTabPage face={face} m={members} />}
         </div>
@@ -556,6 +558,14 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       {clubMay('run_events', { row: m.credentials ?? null }) && (
         <button type="button" onClick={() => setMaking(true)} className={`${buttonClass('secondary')} mt-4`}>New competition</button>
       )}
+      {g.now[0] && (
+        // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
+        <Link href={boardHref(g.now[0], slug)} className={`${cardClass('floating', true)} block p-4 mt-4`}>
+          <p className="t-cap text-ink/65">Live now</p>
+          <p className="t-card text-ink mt-1 break-words">{g.now[0].name}</p>
+          <p className="t-label text-club-deep mt-2">Open the leaderboard</p>
+        </Link>
+      )}
       <Segmented className="mt-4" label="Which competitions" value={view} onChange={setView}
         options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' }, { value: 'results', label: 'Results' }] as const} />
       {view === 'upcoming' && <TypeChips types={upcomingTypes} value={type} onChange={setType} />}
@@ -610,23 +620,6 @@ function NoteListRow({ n, onOpen }: { n: ClubNote; onOpen: () => void }) {
   return (
     <ListRow label={n.title} onClick={onOpen}
       hint={[typeLabel(n.type), clubEventDates(n.startsOn, n.endsOn ?? n.startsOn), noteTimeLine(n)].filter(Boolean).join(' · ')} />
-  )
-}
-
-/** The live event's board, else the latest one played — never empty (D149's rule, the club's own). */
-function Board({ m, slug }: { m: Members; slug: string }) {
-  const g = useGroups(m.events)
-  const e = g.now[0] ?? g.past[0] ?? g.upcoming[0]
-  if (!e) return <p className="text-ink/65 text-[15px] mt-8">No club events yet.</p>
-  return (
-    <section className="mt-6">
-      <h1 className="t-h1 text-ink">{g.now[0] ? 'Live now' : g.past[0] ? 'Latest result' : 'Next up'}</h1>
-      <p className="text-ink/80 text-[15px] mt-2">{e.name}</p>
-      <p className="t-cap text-ink/65 mt-0.5">{clubEventDates(e.startDate, e.endDate)}</p>
-      <ButtonLink href={boardHref(e, slug)} variant="secondary" className="mt-6">
-        Open the leaderboard
-      </ButtonLink>
-    </section>
   )
 }
 

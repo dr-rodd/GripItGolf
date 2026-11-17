@@ -32,6 +32,9 @@ import { applyPreset, formFromPreset, planIssue, presetIssue, readPreset, resolv
 import { CALENDAR_COLUMNS, CALENDAR_FORMAT, calendarPrompt, calendarTemplate, readCalendarFile, readCalendarRow, rowRecipe, type CalendarCells, type CalendarContext } from '../lib/calendarImport'
 import { runCalendarImport, type ImportStore } from '../app/api/club/calendarImport'
 import { parseTeeRules } from '../lib/teeSheet'
+import { describeTime } from '../lib/itinerary'
+import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
+import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { inviteHash, linkDetails, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
@@ -1647,7 +1650,8 @@ async function competitionBarTests() {
   ok(/data-set=\{comp \? 'comp' : 'club'\}/.test(bar) && /club-bar-kids/.test(bar) && /club-bar-own/.test(bar), 'one bar, both sets')
   ok(/club-bar-tray bg-club-tint/.test(bar), 'the tray in the club\'s tint (D188)')
   ok(/IconChevronLeft[^\n]*club-bar-icon-back/.test(bar), 'Comps wears a back chevron in a competition (D188)')
-  ok(/compSectionHref\(slug, live\.code, 'board'\)/.test(bar) && /phase === 'in_play'/.test(bar), 'Board opens an in-play competition\'s leaderboard (D189)')
+  ok(/key: 'tee', label: 'Tee times'/.test(bar) && !/label: 'Board'/.test(bar), 'Tee times holds Board\'s old place (Ross, 17 Nov 2026)')
+  ok(/Live now[\s\S]*Open the leaderboard/.test(read('app/club/[slug]/ClubView.tsx')), '…and Board\'s job, the competition in play, is on Comps')
   ok(!/\b(bg|text|border|ring)-(accent|emerald)/.test(bar), 'no emerald in the bar')
   const css = read('app/globals.css')
   const inline = css.match(/@theme inline \{([^}]*)\}/)?.[1] ?? ''
@@ -2202,7 +2206,140 @@ async function importTests() {
   ok(pv5.status === 200 && (pv5.body.notInFile ?? []).some(x => x.name === 'April Monthly Medal') && made.length === 2, '…a file across the year lists what it does not mention — shown, never acted on')
 }
 
+
+// ─── The casual tee sheet (Ross, 17 Nov 2026) ─────────────────────
+
+async function teeTimesTests() {
+  section('The casual tee sheet on the server (app/api/club/teeTimes.ts)')
+  const CLUB = 'c1'
+  const club: ClubRecord = { id: CLUB, slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null, homeCourseId: 'course-1' }
+  const row = (id: string, name: string, userId: string | null, o: Partial<MemberRecord> = {}): MemberRecord => ({
+    id, clubId: CLUB, name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true,
+    playsHere: true, officer: false, clubhouse: false, categoryId: 'full', gender: 'M', birthDate: null, ...o,
+  })
+  const rows = [
+    row('r-ross', 'Ross', 'ross', { clubhouse: true, officer: true }),
+    row('r-ann', 'Ann', 'ann', { gender: 'F' }),
+    row('r-dave', 'Dave', 'dave', { categoryId: 'five' }),
+    row('r-sean', 'Seán', 'sean', { categoryId: 'social' }),
+  ]
+  const cats: TeeCategory[] = [
+    { id: 'full', name: 'Full', code: 'FULL', days: [0, 1, 2, 3, 4, 5, 6], booksTeeTimes: true },
+    { id: 'five', name: 'Five day', code: 'FIVE', days: [0, 1, 2, 3, 4], booksTeeTimes: true },
+    { id: 'social', name: 'Social', code: 'SOC', days: [0, 1, 2, 3, 4, 5, 6], booksTeeTimes: false },
+  ]
+  let ready = true
+  let settings: CasualSettings = { ...DEFAULT_CASUAL }
+  let bookings: StoredBooking[] = []
+  const activity: ActivityEntry[] = []
+  let n = 0
+  const SAT = '2026-11-21'
+  const place = { lat: 53.35, lng: -6.26 }
+  const times = casualDay(SAT, place, DEFAULT_CASUAL).times
+  const comp: TeeComp = { code: 'MEDAL1', name: 'Saturday Medal', date: SAT, courseId: 'course-1', clocks: [times[3], times[4], times[5]], entry: { genders: ['M'] }, certified: false }
+  const away: TeeComp = { ...comp, code: 'AWAY1', name: 'Away day', courseId: 'course-2', clocks: [times[8], times[9]] }
+  const outing: ClubNote = { id: 'n1', ref: null, title: 'Corporate outing: Acme', type: 'GOLF', startsOn: SAT, endsOn: null, startTime: times[10], endTime: times[12], place: null, notes: 'Shotgun start', visibility: 'members', blocksSheet: true }
+  const store: TeeTimesStore = {
+    async userFromToken(t) { const id = t.replace('tok-', ''); return id === 'nobody' ? null : member(id, `${id}@x.ie`) },
+    async club(id) { return id === CLUB ? club : null },
+    async rowOf(_c, userId) { return rows.find(r => r.userId === userId) ?? null },
+    async isStaff(userId) { return userId === 'staff' },
+    async settings() { return { settings, ready } },
+    async saveSettings(_c, x) { settings = x },
+    async place() { return place },
+    async categories() { return cats },
+    async setBooks(_c, id, books) { cats.find(c => c.id === id)!.booksTeeTimes = books },
+    async bookings(_c, from, to) { return ready ? bookings.filter(b => b.date >= from && b.date <= to) : null },
+    async insertBookings(rs) {
+      if (rs.some(r => bookings.some(b => b.date === r.play_on && b.time === r.tee_time && (b.seat === r.seat || (r.member_id && b.memberId === r.member_id))))) return 'clash'
+      for (const r of rs) bookings.push({ id: `b${++n}`, date: r.play_on, time: r.tee_time, seat: r.seat, memberId: r.member_id, guestName: r.guest_name, bookedBy: r.booked_by })
+      return 'ok'
+    },
+    async deleteBookings(_c, ids) { bookings = bookings.filter(b => !ids.includes(b.id)) },
+    async moveBookings(_c, moves) { for (const m of moves) Object.assign(bookings.find(b => b.id === m.id)!, { date: m.date, time: m.time, seat: m.seat }); return 'ok' },
+    async rowsByIds(_c, ids) { return rows.filter(r => ids.includes(r.id)) },
+    async searchRows(_c, q) { return rows.filter(r => r.name.toLowerCase().includes(q.toLowerCase())) },
+    async comps(_c, from, to) { return [comp, away].filter(c => c.date >= from && c.date <= to) },
+    async blocks(_c, from, to) { return [outing].filter(o => o.startsOn >= from && o.startsOn <= to) },
+    async ageDate() { return '01-01' },
+    async logActivity(e) { activity.push(...e) },
+  }
+  const now = new Date('2026-11-18T10:00:00Z')
+  const ask = (who: string, action: string, body: Record<string, unknown> = {}) => runTeeTimes({ token: `tok-${who}`, action, clubId: CLUB, date: SAT, ...body }, store, now)
+  const dayOf = async (who: string) => { const o = await ask(who, 'day'); return o.status === 200 ? o.body as TeeDayBody : null }
+
+  const d = await dayOf('ross')
+  ok(!!d && d.times.length === times.length && d.times[0] === times[0], 'a member reads the day: sunrise to an hour before sunset')
+  eq(d?.overlays.map(o => `${o.kind}:${o.title}`), ['competition:Saturday Medal', 'block:Corporate outing: Acme'], 'the home course\'s competition and the outing overlay it — never a competition on another course')
+  eq(d?.overlays[0].bookHref, '/club/pints/comp/MEDAL1/tee-times', 'a member who may enter the competition gets its tee sheet from the overlay')
+  eq((await dayOf('ann'))?.overlays[0].bookHref, null, '…one who may not (a men\'s competition) gets no Book')
+  eq((await ask('nobody', 'day')).status, 403, 'nobody signed in reads nothing')
+  eq((await ask('stranger', 'day')).status, 403, 'somebody not on the list reads nothing')
+  eq((await ask('ross', 'day', { date: '2027-03-01' })).status, 400, 'a member looks four weeks ahead at most')
+
+  const book = (who: string, time: string, people: unknown[]) => ask(who, 'book', { time, people })
+  eq((await book('ann', times[0], [{ memberId: 'r-ann' }, { guestName: 'Pat' }])).status, 200, 'Ann books herself and a guest')
+  eq((await book('ross', times[0], [{ memberId: 'r-ross' }, { memberId: 'r-dave' }])).body, { ok: false, error: 'Sat 21 Nov isn’t one of Dave’s playing days.' }, 'a five-day member is refused on a Saturday, by name')
+  eq((await book('ross', times[0], [{ memberId: 'r-ross' }, { guestName: 'A' }, { guestName: 'B' }])).body, { ok: false, error: `Only 2 places left at ${describeTime(times[0])}.` }, 'guests take places like anybody')
+  eq((await book('sean', times[1], [{ memberId: 'r-sean' }])).body, { ok: false, error: 'Your membership doesn’t book tee times.' }, 'a social membership books no tee times')
+  eq((await book('ross', times[4], [{ memberId: 'r-ross' }])).status, 409, 'nobody books under the competition')
+  eq((await book('ross', times[11], [{ memberId: 'r-ross' }])).status, 409, '…or the outing')
+  eq((await book('ann', times[1], [{ memberId: 'r-ann' }])).body, { ok: false, error: `You already have a tee time that day (${describeTime(times[0])}).` }, 'one tee time a member a day')
+  const early = await runTeeTimes({ token: 'tok-ross', action: 'book', clubId: CLUB, date: SAT, time: times[1], people: [{ memberId: 'r-ross' }] }, store, new Date('2026-11-13T10:00:00Z'))
+  eq(early.body, { ok: false, error: 'Booking opens Sat 14 Nov at 7:00 pm.' }, 'not before booking opens')
+
+  const ann = await dayOf('ann')
+  const pat = ann?.bookings.find(b => b.name === 'Pat')
+  ok(!!pat && pat.guestOf === 'Ann' && pat.mayCancel && pat.mine, 'Ann\'s guest reads "Guest of Ann", hers to take off')
+  const forRoss = (await dayOf('ross'))?.bookings.find(b => b.name === 'Ann')
+  ok(!!forRoss && !forRoss.mayCancel && !forRoss.mine, '…never Ross\'s, on the members app')
+  eq((await ask('ross', 'cancel', { id: forRoss!.id })).status, 403, 'a member cannot take somebody else off')
+  const annSelf = ann!.bookings.find(b => b.name === 'Ann')!
+  eq((await ask('ann', 'cancel', { id: annSelf.id })).status, 200, 'Ann takes herself off…')
+  eq(bookings.length, 0, '…and the guest she brought goes with her')
+  ok(!activity.length, 'a member\'s own booking is not the office\'s log')
+
+  section('The Clubhouse keeps the tee sheet')
+  eq((await ask('ann', 'office.day')).status, 403, 'a member without Clubhouse has no office')
+  const od = await ask('ross', 'office.day')
+  const week = od.status === 200 ? (od.body as TeeDayBody).week ?? [] : []
+  ok(week.length === 7 && week[0].date === '2026-11-16' && week[5].date === SAT && week[5].overlays === 2, 'the birdseye: the week Monday first, each day\'s places and overlays')
+  eq((await ask('ross', 'office.book', { time: times[1], people: [{ memberId: 'r-dave' }, { memberId: 'r-sean' }, { guestName: 'Visitor' }] })).status, 200, 'the office books anybody — a five-day member on a Saturday, a social member, a guest')
+  eq((await ask('ross', 'office.book', { time: times[11], people: [{ memberId: 'r-ann' }] })).status, 409, '…never under the outing')
+  const visitor = bookings.find(b => b.guestName === 'Visitor')!
+  eq(visitor.bookedBy, 'r-dave', 'a guest the office books is the first member\'s in the booking')
+  const dave = bookings.find(b => b.memberId === 'r-dave')!
+  eq((await ask('ross', 'office.move', { ids: [dave.id], time: times[2] })).status, 200, 'the office moves a booking to another time')
+  eq(bookings.find(b => b.id === dave.id)!.time, times[2], '…and there it is')
+  eq((await ask('ross', 'office.move', { ids: [dave.id], time: times[3] })).status, 409, '…never under the competition')
+  eq((await ask('ross', 'office.remove', { ids: [visitor.id] })).status, 200, 'the office takes anybody off')
+  ok(['teesheet.book', 'teesheet.move', 'teesheet.remove'].every(a => activity.some(x => x.action === a && x.byName === 'Ross')), 'every office change on the club\'s activity log, by name')
+  const staffAsk = await runTeeTimes({ token: 'tok-staff', action: 'office.remove', clubId: CLUB, date: SAT, ids: [dave.id] }, store, now)
+  ok(staffAsk.status === 200 && activity.some(a => a.byStaff && a.byName === STAFF_NAME), 'Green Dot staff keep it too, logged as staff')
+
+  eq((await ask('ross', 'office.settings', { settings: { interval: 3 } })).status, 400, 'settings checked: five to thirty minutes')
+  eq((await ask('ross', 'office.settings', { settings: { interval: 8, perDay: 2 } })).status, 200, 'the office sets eight minutes apart and two a day')
+  eq([settings.interval, settings.perDay], [8, 2], '…kept')
+  eq((await ask('ross', 'office.settings', { books: [{ id: 'social', books: true }] })).status, 200, 'and lets the social membership book')
+  eq((await book('sean', casualDay(SAT, place, settings).times[0], [{ memberId: 'r-sean' }])).status, 200, '…so Seán books')
+  eq((await ask('ann', 'office.settings', { settings: { interval: 12 } })).status, 403, 'a member sets nothing')
+
+  ready = false
+  eq((await dayOf('ross'))?.ready, false, 'before 096 the sheet says it is not set up yet')
+  eq((await book('ross', times[0], [{ memberId: 'r-ross' }])).status, 503, '…and books nothing')
+  ready = true
+
+  section('The casual tee sheet\'s wiring')
+  const route = read('app/api/club/tee-times/route.ts')
+  ok(route.includes('teeTimesStore(createAdminClient())'), 'one route, on the service role')
+  const mig = read('supabase/migrations/20260101000096_club_tee_sheet.sql')
+  ok(/uq_club_tee_bookings_seat/.test(mig) && /REVOKE ALL ON public\.club_tee_bookings FROM anon, authenticated/.test(mig), '096: one place a seat, closed to phones')
+  ok(/ck_club_events_block CHECK \(NOT blocks_tee_sheet OR \(type IN \('GOLF', 'COURSE'\)/.test(mig), '096: only a Golf or Course event takes the sheet, in the database too')
+  ok(read('lib/clubMay.ts').includes("case 'keep_tee_sheet':"), 'keeping the tee sheet is the Clubhouse\'s act')
+}
+
 async function main() {
+  await teeTimesTests()
   ruleTests()
   await importTests()
   await calendarTests()

@@ -20,7 +20,7 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
 /**
  * The club footer (D127), and inside a competition its second set (D180
  * amended, Ross, 16 Nov 2026): Home and Comps where they are, and Tee times,
- * Scoring and Leaderboard in the slots Board, Stats and Club hold, on a tray
+ * Scoring and Leaderboard in the slots the club's Tee times, Stats and Club hold, on a tray
  * in the club's tint behind Comps and the three (D188), Comps wearing a back
  * chevron. The lit tab in the club's colour (D125); no emerald.
  *
@@ -33,8 +33,8 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
  * this phone is on the club's list.
  *
  * Comps from a competition goes back to the club's Comps and the club
- * footer returns (Ross's answer, 16 Nov). Board, while a competition is in
- * play, opens its leaderboard (D189).
+ * footer returns (Ross's answer, 16 Nov). Tee times took Board's slot (Ross,
+ * 17 Nov 2026) — the club's casual tee sheet; the competition in play is on Comps.
  */
 export default function ClubTabBar({ slug }: { slug: string }) {
   const pathname = usePathname()
@@ -52,16 +52,14 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   const waiting = state.set === 'club' && !members
 
   const club = `/club/${slug}`
-  const hasBoard = comp !== null || (members?.events.length ?? 0) > 0
-  const live = members?.events.find(e => e.competition?.phase === 'in_play') ?? null
 
+  // Tee times holds Board's old place (Ross, 17 Nov 2026): the club's casual
+  // tee sheet; Board's job — the competition in play — is Comps' now.
   const own: { key: ClubTab; label: string; Icon: typeof IconHome; href?: string }[] = [
-    ...(hasBoard ? [{ key: 'board' as const, label: 'Board', Icon: IconTrophy, href: live ? compSectionHref(slug, live.code, 'board') : undefined }] : []),
+    { key: 'tee', label: 'Tee times', Icon: IconClock },
     ...(STATS_READY ? [{ key: 'stats' as const, label: 'Stats', Icon: IconChartBar }] : []),
     { key: 'club', label: 'Club', Icon: IconSettings },
   ]
-  // A club with no events has no Board: the four tabs it always had, and no
-  // competition to open, so no second set.
   const five = own.length === 3
 
   /** A club tab switches the page in place; one with an address of its own goes there. */

@@ -6,7 +6,7 @@ import type { ClubEvent } from '@/lib/clubs'
 import type { Credentials } from '@/lib/clubMay'
 import type { SeasonRow } from '@/lib/cardSummary'
 
-export type ClubTab = 'home' | 'comps' | 'board' | 'stats' | 'club'
+export type ClubTab = 'home' | 'comps' | 'tee' | 'stats' | 'club'
 
 /** What the members home holds once the club has said this phone is on its list. */
 export interface ClubMembers {

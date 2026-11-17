@@ -99,6 +99,12 @@ export type ClubAct =
    * the members app's).
    */
   | 'keep_calendar'
+  /**
+   * Clubhouse: the casual tee sheet in full — book, move and take off
+   * anybody, its settings, which memberships book (Ross, 17 Nov 2026). A
+   * member books their own through `play`.
+   */
+  | 'keep_tee_sheet'
   /** The list: add, paste, change a row, take off, put back, email a code, download. */
   | 'keep_list'
   /** The club's look and its home course. */
@@ -118,6 +124,7 @@ export function clubMay(act: ClubAct, a: Asker): boolean {
     case 'run_events': return !!r?.officer
     case 'open_clubhouse':
     case 'keep_calendar':
+    case 'keep_tee_sheet':
     case 'keep_list':
     case 'set_look':
     case 'grant_plays_here':

@@ -801,3 +801,18 @@ export function forgetKept(code: string) {
 function forgetAllKept() {
   keptAnswers.clear()
 }
+
+// ─── A club's casual tee sheet (Ross, 17 Nov 2026) ─────────────
+
+/**
+ * One ask of /api/club/tee-times as this signed-in member: `day`, `names`,
+ * `book`, `cancel` — and the Clubhouse's `office.*`. Never throws.
+ */
+export async function askTeeTimes<T = Record<string, unknown>>(action: string, body: Record<string, unknown>): Promise<({ ok: true } & T) | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { ...body, action }, '/api/club/tee-times')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach, status: r.status }
+  return { ok: true, ...(r.body as T) }
+}

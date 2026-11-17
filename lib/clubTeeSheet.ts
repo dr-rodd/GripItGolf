@@ -351,3 +351,45 @@ export function lookAheadDays(today: string, days = CASUAL_LOOK_AHEAD_DAYS): str
   const t = Date.parse(`${today}T00:00:00Z`)
   return Array.from({ length: days + 1 }, (_, i) => new Date(t + i * 86_400_000).toISOString().slice(0, 10))
 }
+
+// ─── What the server answers (/api/club/tee-times) ───────────────
+
+export type TeeCategory = Category & { booksTeeTimes: boolean }
+
+export interface TeeBookingView {
+  id: string
+  time: string
+  name: string
+  /** A guest's host — "Guest of Ross". */
+  guestOf: string | null
+  memberId: string | null
+  /** This member may take it off. */
+  mayCancel: boolean
+  /** This member, or a guest they brought. */
+  mine: boolean
+}
+
+/** A day's sheet as the server answers it — the members app and the Clubhouse draw it. */
+export interface TeeDayBody {
+  ok: true
+  /** False before 096 — the sheet says it is not set up yet. */
+  ready: boolean
+  date: string
+  today: string
+  sun: SunDay
+  times: string[]
+  overlays: Overlay[]
+  settings: CasualSettings
+  /** "Booking opens Sat 15 Nov at 7:00 pm" — null once open. */
+  opening: string | null
+  bookings: TeeBookingView[]
+  /** This member, and why they may not book this day (null: they may). */
+  me: { memberId: string; name: string; refusal: string | null } | null
+  office: boolean
+  /** The Clubhouse: the week (Monday first) around the day, each day's places booked of all. */
+  week?: { date: string; booked: number; places: number; overlays: number }[]
+  categories?: TeeCategory[]
+  /** The club has no home course: the sun is Greenwich's and every competition takes the sheet. */
+  noHomeCourse: boolean
+}
+
