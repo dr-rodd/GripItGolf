@@ -321,26 +321,46 @@ export async function savePassword(password: string): Promise<Answer | { ok: fal
 export async function signIn(identifier: string, password: string): Promise<Answer> {
   if (!inBrowser()) return { ok: false, error: ACCOUNT_WORDS.noReach }
   const phone = await phoneIdentity()
-  try {
-    const res = await fetch('/api/account', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...(phone ? { Authorization: `Bearer ${phone.token}` } : {}) },
-      body: JSON.stringify({ action: 'sign-in', identifier, password }),
-      credentials: 'same-origin',
-    })
-    const body = await res.json().catch(() => ({})) as { session?: { access_token?: unknown; refresh_token?: unknown } }
-    if (res.status === 429) return { ok: false, error: ACCOUNT_WORDS.tooMany }
-    if (res.status === 401) return { ok: false, error: ACCOUNT_WORDS.signInFailed }
-    const at = body.session?.access_token, rt = body.session?.refresh_token
-    if (res.status !== 200 || typeof at !== 'string' || typeof rt !== 'string') return { ok: false, error: ACCOUNT_WORDS.noReach }
-    const { error } = await (await client()).auth.setSession({ access_token: at, refresh_token: rt })
-    if (error) return { ok: false, error: ACCOUNT_WORDS.noReach }
-    forgetPending()
-    if (!readTierHint()) rememberTier({ kind: 'dot' })
-    return { ok: true }
-  } catch {
-    return { ok: false, error: ACCOUNT_WORDS.noReach }
+  // Where it went wrong, said in a few words after the calm sentence (Ross,
+  // 17 Nov 2026: the server answered 200 and the screen still said "could
+  // not reach" — which step of the browser's is the one to mend?). Never a
+  // password, a token or a name.
+  const lost = (step: string, e?: unknown): Answer => {
+    const said = e instanceof Error ? e.message : typeof e === 'object' && e && 'message' in e ? String((e as { message?: unknown }).message) : ''
+    console.error('sign-in:', step, e)
+    return { ok: false, error: `${ACCOUNT_WORDS.noReach} (${[step, said].filter(Boolean).join(': ').slice(0, 90)})` }
   }
+  // The ask is safe to repeat — a phone that dropped the answer (the server
+  // had already said 200) tries once more before giving up.
+  const post = async (): Promise<Response> => fetch('/api/account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...(phone ? { Authorization: `Bearer ${phone.token}` } : {}) },
+    body: JSON.stringify({ action: 'sign-in', identifier, password }),
+    credentials: 'same-origin',
+  })
+  let res: Response
+  try {
+    try { res = await post() } catch { await new Promise(r => setTimeout(r, 600)); res = await post() }
+  } catch (e) {
+    return lost('no answer', e)
+  }
+  const body = await res.json().catch(() => ({})) as { session?: { access_token?: unknown; refresh_token?: unknown } }
+  if (res.status === 429) return { ok: false, error: ACCOUNT_WORDS.tooMany }
+  if (res.status === 401) return { ok: false, error: ACCOUNT_WORDS.signInFailed }
+  const at = body.session?.access_token, rt = body.session?.refresh_token
+  if (res.status !== 200 || typeof at !== 'string' || typeof rt !== 'string') return lost(`reply ${res.status}`)
+  try {
+    const auth = (await client()).auth
+    let { error } = await auth.setSession({ access_token: at, refresh_token: rt })
+    // Keeping the session asks Supabase to vouch for it once: a second way in if that ask was dropped.
+    if (error) ({ error } = await auth.refreshSession({ refresh_token: rt }))
+    if (error) return lost('keeping the session', error)
+  } catch (e) {
+    return lost('keeping the session', e)
+  }
+  forgetPending()
+  if (!readTierHint()) rememberTier({ kind: 'dot' })
+  return { ok: true }
 }
 
 // ─── My events (stage (b1), D134) ──────────────────────────────
