@@ -91,6 +91,24 @@ const WHY_KEY = 'gd.whyOut.v1'
 
 /** What this phone holds as its sign-in right now, in a word — for saying why somebody was sent back to sign in. */
 export function describeStoredSession(): string {
+  return `${keptSession()} — storage ${storageWorks() ? 'works' : 'is blocked'}${typeof navigator !== 'undefined' && navigator.cookieEnabled === false ? ', cookies off' : ''}`
+}
+
+/** Whether this browser lets the site keep anything at all (private modes and blockers may not). */
+export function storageWorks(): boolean {
+  try {
+    const k = 'gd.probe.v1'
+    window.localStorage.setItem(k, '1')
+    const ok = window.localStorage.getItem(k) === '1'
+    window.localStorage.removeItem(k)
+    return ok
+  } catch {
+    return false
+  }
+}
+
+/** What the browser holds as the sign-in, in a few words. */
+function keptSession(): string {
   try {
     const keys = Object.keys(window.localStorage).filter(k => /^sb-.+-auth-token$/.test(k))
     if (!keys.length) return 'nothing kept on this phone'
@@ -392,6 +410,12 @@ export async function signIn(identifier: string, password: string): Promise<Answ
     // Keeping the session asks Supabase to vouch for it once: a second way in if that ask was dropped.
     if (error) ({ error } = await auth.refreshSession({ refresh_token: rt }))
     if (error) return lost('keeping the session', error)
+    // Signed in, but will the browser keep it past the next page? A phone
+    // that holds nothing would send the member straight back to sign in.
+    if (/^(nothing|an empty|could not)/.test(keptSession())) {
+      console.error('sign-in not kept:', describeStoredSession())
+      return { ok: false, error: `Signed in, but this browser won’t keep your sign-in (${describeStoredSession()}). Turn off Private Browsing or Block All Cookies for this site, then try again.` }
+    }
   } catch (e) {
     return lost('keeping the session', e)
   }
