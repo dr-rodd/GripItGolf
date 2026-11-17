@@ -29,6 +29,9 @@ import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHid
 import { compFormFrom } from '../lib/clubComp'
 import { runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
 import { applyPreset, formFromPreset, planIssue, presetIssue, readPreset, resolvePlan, type TeePlan } from '../lib/clubPresets'
+import { CALENDAR_COLUMNS, CALENDAR_FORMAT, calendarPrompt, calendarTemplate, readCalendarFile, readCalendarRow, rowRecipe, type CalendarCells, type CalendarContext } from '../lib/calendarImport'
+import { runCalendarImport, type ImportStore } from '../app/api/club/calendarImport'
+import { parseTeeRules } from '../lib/teeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { inviteHash, linkDetails, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
@@ -2069,8 +2072,139 @@ async function calendarTests() {
   ok(read('next.config.ts').includes('/clubhouse/:slug/competitions'), 'the Clubhouse’s old Competitions address goes on to Events')
 }
 
+
+// ─── Stage c2: a calendar imported (M12–M16) ─────────────────────────
+
+async function importTests() {
+  section('Stage c2: the calendar file (lib/calendarImport.ts)')
+  const ctx: CalendarContext = {
+    clubName: 'Pints Golf Club', year: 2027, homeCourse: 'Pints — Old Course',
+    memberships: [{ id: 'cat-full', code: 'FULL', name: 'Full', days: [0, 1, 2, 3, 4, 5, 6] }, { id: 'cat-six', code: '6DAY', name: '6 Day', days: [0, 1, 2, 3, 4, 6] }],
+    presets: [{ code: 'SMC', name: 'Saturday men’s comp', usedFor: 'Saturday singles', isDefault: true, plan: { batches: [{ start: { kind: 'clock', at: '08:00' }, end: { kind: 'count', n: 12 }, interval: 10, perTime: 4 }], opens: { daysBefore: 7, time: '20:00' } } }],
+  }
+  const prompt = calendarPrompt(ctx)
+  ok(prompt.includes(CALENDAR_FORMAT) && prompt.includes(CALENDAR_COLUMNS.join(',')) && prompt.includes('- FULL: Full (plays every day)') && prompt.includes('- 6DAY: 6 Day (plays Monday, Tuesday, Wednesday, Thursday, Friday, Sunday)'),
+    'the prompt is written from the club: the stamp, the header, its memberships and their days')
+  ok(prompt.includes('- SMC: Saturday men’s comp (the default) — used for Saturday singles') && prompt.includes('Home course: Pints — Old Course') && prompt.includes('Season: 2027'),
+    '…its presets with what they are for, its home course, the season')
+  ok(/Answer with the CSV only, in one code block/.test(prompt) && /Never invent a membership, a preset or a date/.test(prompt) && /COMP only for singles Stableford or strokeplay/.test(prompt)
+    && /Blank means the preset's memberships, or with none, whoever's membership plays that day/.test(prompt) && /blank Start and End mean the preset's tee times/.test(prompt) && /fill in Check/.test(prompt),
+    '…and the rules: the CSV alone, never invent, doubt in Check, COMP only for singles, blanks meaning the preset')
+  const tpl = calendarTemplate(ctx)
+  eq(tpl.split('\r\n').filter(Boolean).length, 4, 'the blank template: the stamp, the header and two example rows')
+  const read1 = readCalendarFile(tpl)
+  ok(read1.ok && read1.rows.length === 2 && read1.rows[0].cells.Type === 'COMP', '…which reads back')
+  const v2 = readCalendarFile(tpl.replace('format v1', 'format v2'))
+  ok(!v2.ok && /v2.*reads v1.*Copy the prompt/.test(v2.why), 'a file from another version is refused, with what to do')
+  ok(!readCalendarFile('Date,Title\n2027-01-01,x').ok, 'a file with other columns is refused')
+  const fenced = '```csv\n' + tpl.split('\r\n').slice(1).join('\n') + '\n```'
+  ok(readCalendarFile(fenced).ok, 'a chatbot’s answer pasted with its code block, and no stamp, still reads by its header')
+  const quoted = readCalendarFile(`${CALENDAR_FORMAT}\n${CALENDAR_COLUMNS.join(',')}\nQ1,2027-02-05,,20:00,,Quiz night,SOCIAL,MEMBERS,,,,,,,,"Bar, upstairs","Teams of 4, ""fun""",`)
+  ok(quoted.ok && quoted.rows[0].cells.Where === 'Bar, upstairs' && quoted.rows[0].cells.Notes === 'Teams of 4, "fun"', 'a quoted cell keeps its commas and quotes')
+  const row = (cells: CalendarCells) => readCalendarRow(5, cells, ctx)
+  const comp = row({ Ref: 'M1', Date: '2027-04-17', Title: 'April Medal', Type: 'COMP', Memberships: 'FULL|GOLD', Preset: 'XYZ', Gender: 'Q' })
+  eq(comp.bad.map(b => b.column), ['Memberships', 'Gender', 'Preset'], 'an unknown membership, gender or preset is a bad cell, each with why (M15)')
+  eq(row({ Date: '2027-04-17', Title: 'Interclub', Type: 'GOLF', Visibility: 'OFFICE' }).bad.map(b => b.column), ['Visibility'], 'golf is never Office only')
+  eq(row({ Date: '2027-04-17', Title: 'Medal', Type: 'COMP', Start: 'SUNRISE', End: 'SUNSET' }).bad, [], 'a competition may start at SUNRISE and end at SUNSET')
+  eq(row({ Date: '2027-04-17', Title: 'Medal', Type: 'COMP' }).comp?.preset, 'SMC', 'a blank Preset is the club’s default')
+  const recipe = rowRecipe(row({ Date: '2027-04-17', Title: 'Medal', Type: 'COMP', Start: '07:30', End: '09:00', Gender: 'F', Allowance: '90' }), { scoring: 'stableford', allowance: 95, entry: { categories: ['cat-full'] }, plan: ctx.presets[0].plan })
+  ok(recipe.allowance === 90 && JSON.stringify(recipe.entry) === JSON.stringify({ categories: ['cat-full'], genders: ['F'] })
+    && JSON.stringify(recipe.plan.batches) === JSON.stringify([{ start: { kind: 'clock', at: '07:30' }, end: { kind: 'clock', at: '09:00' }, interval: 10, perTime: 4 }]),
+    'the row’s own values override the preset’s; Start and End make one run at its interval and players a time')
+
+  section('Stage c2: importing (/api/club/competition)')
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints Golf Club', verifiedAt: NOW.toISOString(), refusedAt: null, homeCourseId: 'course-1' }
+  type Made = { tripId: string; code: string; name: string; date: string; ref: string | null; sheet: unknown; entry: unknown; boards: unknown[] }
+  const made: Made[] = []
+  const notes: ClubNote[] = []
+  const log: ActivityEntry[] = []
+  let n = 0
+  const create: CreateStore = {
+    async userFromToken(t) { return t.slice(4) }, async isMember() { return true },
+    async insertTrip(r) { made.push({ tripId: `trip-${++n}`, code: String(r.trip_code), name: String(r.name), date: String(r.start_date), ref: null, sheet: null, entry: null, boards: r.leaderboards as unknown[] }); return { id: `trip-${n}` } },
+    async writeMembership() {}, async writeLeadEmail() {}, async deleteTrip() { made.pop() },
+    async setEventClub() {},
+  }
+  const store: ImportStore = {
+    async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },
+    async clubsOf() { return [] },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf() { return { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role: 'member', userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer: false, clubhouse: true } },
+    async isStaff() { return false },
+    create,
+    async insertItem() { return 'item' },
+    async insertRound(r) { const m = made.find(x => x.tripId === r.trip_id)!; m.sheet = r.tee_sheet; m.date = String(r.scheduled_date) },
+    async deleteTrip() {},
+    newCode: () => `IMP${String(n + 1).padStart(3, '0')}`,
+    newId: () => `round-${n + 1}`,
+    async setEntryRules(tripId, r) { made.find(x => x.tripId === tripId)!.entry = r },
+    async setImportRef(tripId, ref) { made.find(x => x.tripId === tripId)!.ref = ref },
+    async categories() { return [{ id: 'cat-full', name: 'Full', code: 'FULL', days: [0, 1, 2, 3, 4, 5, 6] }] },
+    async presets() { return [{ id: 'p1', code: 'SMC', name: 'Saturday men’s comp', usedFor: null, scoring: 'stableford', allowance: 95, entry: { genders: ['M'] }, plan: ctx.presets[0].plan, isDefault: true }] },
+    async notes() { return notes },
+    async saveNote(_c, note, by) { const id = note.id ?? `note-${notes.length + 1}`; const i = notes.findIndex(x => x.id === id); const kept = { ...note, id }; if (i >= 0) notes[i] = kept; else notes.push(kept); ok(by.batch !== undefined, ''); return id },
+    async course() { return { name: 'Pints — Old Course', lat: 53.35, lng: -6.26 } },
+    async clubComps() {
+      return made.map(m => ({ code: m.code, ref: m.ref, name: m.name, date: m.date,
+        form: compFormFrom({ name: m.name, date: m.date, courseId: 'course-1', board: (m.boards[0] as { scoring?: unknown; handicapAllowance?: unknown }) ?? null, teeSheet: m.sheet, membersOnly: true, entry: m.entry }) }))
+    },
+    async compNow(code) {
+      const m = made.find(x => x.code === code)
+      return m ? { tripId: m.tripId, roundId: 'r', itemId: null, clubId: 'c1', code: m.code, name: m.name, date: m.date, courseId: 'course-1', rules: parseTeeRules(m.sheet)!, leaderboards: m.boards, entry: m.entry, membersOnly: true, started: false, certified: false, bookings: [] } : null
+    },
+    async applyChange(c, ch) { const m = made.find(x => x.code === c.code)!; m.name = ch.name; m.date = ch.date; m.sheet = ch.teeSheet; m.entry = ch.entry; m.boards = ch.leaderboards },
+    async logActivity(e) { log.push(...e) },
+  }
+  const file = [CALENDAR_FORMAT, CALENDAR_COLUMNS.join(','),
+    'MED-0417,2027-04-17,,,,April Medal,COMP,MEMBERS,FULL,,,,STROKES,,SMC,,,',
+    'AGM,2027-03-05,,20:00,22:00,AGM,BUSINESS,OFFICE,,,,,,,,Lounge,,',
+    'IC-1,2027-05-01,,10:00,,Interclub v Lahinch,GOLF,MEMBERS,,,,,,,,,,Is this home or away?',
+    'BAD-1,2027-05-08,,,,Bad one,COMP,MEMBERS,GOLD,,,,,,,,,',
+    'SUN-1,2027-12-18,,SUNRISE,15:00,Christmas Hamper,COMP,MEMBERS,,,,,,,,,,',
+  ].join('\n')
+  const parsed = readCalendarFile(file)
+  const rows = parsed.ok ? parsed.rows : []
+  const ask = (action: string, body: Record<string, unknown> = {}) => runCalendarImport({ token: 'tok-ross', action, clubId: 'c1', ...body }, store, NOW)
+  const pr = await ask('import.prompt', { year: 2027 })
+  ok(pr.status === 200 && pr.body.ok && !!pr.body.prompt?.includes('- FULL: Full') && !!pr.body.template, 'the prompt and template come from the club as it stands')
+  eq((await runCalendarImport({ token: 'tok-ross', action: 'import.prompt', clubId: 'c1' }, { ...store, async rowOf() { return { id: 'row', clubId: 'c1', name: 'Ollie', memberNumber: null, guiNumber: null, email: null, role: 'member', userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer: true, clubhouse: false } } }, NOW)).status, 403,
+    'an Officer without Clubhouse imports nothing')
+  const pv = await ask('import.preview', { rows })
+  const st = pv.status === 200 ? (pv.body.rows ?? []).map(r => r.status) : []
+  eq(st, ['new', 'new', 'new', 'bad', 'new'], 'the preview: new rows, and one with an unknown membership that cannot come in (M15)')
+  eq(made.length + notes.length, 0, '…and nothing saved by looking')
+  const batch = '0b0e4a3c-9d2f-4c11-8a5e-3f1d2c3b4a5d'
+  const run1 = await ask('import.rows', { rows, batch, confirmed: [] })
+  const out1 = run1.status === 200 ? (run1.body.done ?? []).map(d => d.outcome) : []
+  eq(out1, ['made', 'made', 'skipped', 'failed', 'made'], 'imported: a competition and the AGM made, the unsure interclub skipped until ticked, the bad row failed — the rest carry on (M16)')
+  ok(made[0].ref === 'MED-0417' && JSON.stringify(made[0].entry) === JSON.stringify({ genders: ['M'], categories: ['cat-full'] }) && (made[0].boards[0] as { scoring?: string }).scoring === 'strokes',
+    '…the competition through New competition’s own path, its Ref kept, the preset’s men’s with the row’s Full and Strokes')
+  ok(notes[0]?.visibility === 'office' && notes[0]?.ref === 'AGM', '…the AGM Office only, its Ref kept')
+  ok(log.length === 5 && log.every(l => l.batchId === batch && l.action === 'calendar.import'), 'one batch id, a line per row, on the club’s activity log')
+  const run2 = await ask('import.rows', { rows, batch: '1b0e4a3c-9d2f-4c11-8a5e-3f1d2c3b4a5d', confirmed: [5] })
+  const out2 = run2.status === 200 ? (run2.body.done ?? []).map(d => d.outcome) : []
+  eq(out2, ['same', 'same', 'made', 'failed', 'same'], 'the same file again changes nothing — and the interclub, now ticked, comes in')
+  const changedFile = file.replace('MED-0417,2027-04-17,,,,April Medal', 'MED-0417,2027-04-17,,,,April Monthly Medal').replace('SUN-1,2027-12-18,,SUNRISE,15:00', 'SUN-1,2027-12-18,,SUNRISE,08:00')
+  const r3 = readCalendarFile(changedFile)
+  const pv3 = await ask('import.preview', { rows: r3.ok ? r3.rows : [] })
+  const sun = pv3.status === 200 ? pv3.body.rows?.[4] : undefined
+  ok(pv3.status === 200 && pv3.body.rows?.[0].status === 'changed' && sun?.status === 'same' && /no tee times between sunrise/.test(sun?.sheetWhy ?? ''),
+    'matched by Ref: a new title is a change; a sheet that cannot be made on the new times is said, the rest the same')
+  const before = JSON.stringify(made.find(m => m.ref === null && m.name === 'Christmas Hamper')?.sheet ?? made[made.length - 1].sheet)
+  const run3 = await ask('import.rows', { rows: r3.ok ? r3.rows : [], batch: '2b0e4a3c-9d2f-4c11-8a5e-3f1d2c3b4a5d', confirmed: [5] })
+  const hamper = run3.status === 200 ? run3.body.done?.[4] : undefined
+  ok(made[0].name === 'April Monthly Medal' && hamper?.outcome === 'same' && /^Tee sheet kept/.test(hamper.why ?? '') && JSON.stringify(made[made.length - 1].sheet) === before,
+    '…an existing competition whose new sheet cannot be made keeps its old one, and says so (M16)')
+  const pv4 = await ask('import.preview', { rows: (r3.ok ? r3.rows : []).slice(0, 1) })
+  ok(pv4.status === 200 && (pv4.body.notInFile ?? []).length === 0, 'a file of one day lists nothing else of that day as Not in this file')
+  const wide = readCalendarFile([CALENDAR_FORMAT, CALENDAR_COLUMNS.join(','), 'X1,2027-01-01,,,,New Year Swim,SPORT,MEMBERS,,,,,,,,,,', 'X2,2027-12-31,,,,Eve,SOCIAL,MEMBERS,,,,,,,,,,'].join('\n'))
+  const pv5 = await ask('import.preview', { rows: wide.ok ? wide.rows : [] })
+  ok(pv5.status === 200 && (pv5.body.notInFile ?? []).some(x => x.name === 'April Monthly Medal') && made.length === 2, '…a file across the year lists what it does not mention — shown, never acted on')
+}
+
 async function main() {
   ruleTests()
+  await importTests()
   await calendarTests()
   await clubhouseTests()
   membershipRuleTests()

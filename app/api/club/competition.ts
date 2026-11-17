@@ -13,8 +13,8 @@
 
 import { isAccount, type AuthUser } from '@/lib/account'
 import { compBoard, compFirstTee, compFormFrom, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, type CompForm, type SheetBooking } from '@/lib/clubComp'
-import { entryRefusal, readAgeDate, refusalWords } from '@/lib/clubMembership'
-import type { TeeRules } from '@/lib/teeSheet'
+import { entryRefusal, readAgeDate, readEntryRules, refusalWords } from '@/lib/clubMembership'
+import { teeClocks, type TeeRules } from '@/lib/teeSheet'
 import { STAFF_NAME } from '@/lib/clubhouse'
 import { MAX_COPIES } from '@/lib/clubhouse'
 import { irishToday } from '@/lib/clubs'
@@ -32,7 +32,7 @@ import type { ClubRecord, MemberRecord } from './club'
  * Clubhouse holders and Green Dot staff (`keep_calendar` — Clubhouse is its
  * own level of admin). The club, and the name its log carries.
  */
-async function competitionAsker(store: CompetitionStore, userId: string, clubId: unknown, from: 'app' | 'clubhouse'):
+export async function competitionAsker(store: CompetitionStore, userId: string, clubId: unknown, from: 'app' | 'clubhouse'):
   Promise<{ ok: true; club: ClubRecord; byName: string; staff: boolean } | { ok: false; error: string }> {
   if (from === 'app') {
     const mine = (await store.clubsOf(userId)).find(x => x.club.id === clubId)
@@ -357,6 +357,29 @@ export async function runChangeCompetition(
   const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, who.club.id, form)
   if (issue) return no(400, issue)
 
+  const out = await changeOne(store, c, form, false)
+  if (!out.ok) return no(out.status, out.error, out.problems)
+  if (store.logActivity) {
+    const before = compFormFrom({ name: c.name, date: c.date, courseId: c.courseId, board: null, teeSheet: c.rules, membersOnly: c.membersOnly, entry: c.entry })
+    await store.logActivity([{
+      clubId: c.clubId, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.change',
+      memberId: null, memberName: null,
+      changes: { [c.code]: [`${c.name} · ${c.date} · ${before ? sheetLine(before) : ''}`, `${form.name} · ${form.date} · ${sheetLine(form)}`] }, batchId: null,
+    }]).catch(e => console.error('club activity not logged:', e))
+  }
+  return { status: 200, body: { ok: true, moved: out.moved } }
+}
+
+/**
+ * One competition changed (M11) — the Clubhouse's panel and a calendar
+ * import alike: every booking kept at its tee time, the member kept in if
+ * they may still enter (an Officer's Book anyway kept). Where they cannot
+ * be, the panel is refused; an import (`keepSheet`) keeps the old tee sheet,
+ * day, course and who may enter, changes the rest, and says why (M16).
+ */
+export async function changeOne(store: CompetitionStore, c: CompNow, form: CompForm, keepSheet: boolean):
+  Promise<{ ok: true; moved: number; keptSheet: { name: string; why: string }[] | null } | { ok: false; status: 409 | 503; error: string; problems?: { name: string; why: string }[] }> {
+  if (!store.applyChange) return { ok: false, status: 503, error: 'Changing a competition isn’t set up yet — try again later.' }
   const after = compTeeRules(form)
   // Each booked member's entry under the new rules and day — unless an Officer booked them anyway (D231).
   const rowIds = c.bookings.map(b => b.rowId).filter((x): x is string => !!x)
@@ -376,28 +399,22 @@ export async function runChangeCompetition(
     return { playerId: b.playerId, name: b.name, slot: b.slot, refused: f ? refusalWords(f, b.name) : null }
   })
   const plan = planSheetChange({ before: c.rules, after, bookings })
-  if (!plan.ok) {
-    return no(409, `The change would leave ${plan.problems.length === 1 ? 'a booking' : `${new Set(plan.problems.map(p => p.name)).size} bookings`} that can’t be kept — nothing was changed.`, plan.problems)
+  if (!plan.ok && !keepSheet) {
+    return { ok: false, status: 409, error: `The change would leave ${plan.problems.length === 1 ? 'a booking' : `${new Set(plan.problems.map(p => p.name)).size} bookings`} that can’t be kept — nothing was changed.`, problems: plan.problems }
   }
+  const kept = !plan.ok
   const boards = c.leaderboards.map(b => ((b as { clubCompetition?: boolean }).clubCompetition ? compBoard(c.roundId, form) : b))
   try {
     await store.applyChange(c, {
-      moves: plan.moves, name: form.name, date: form.date, courseId: form.courseId, teeSheet: after, firstTee: compFirstTee(form),
-      leaderboards: boards, entry: form.entry ?? null,
+      moves: plan.ok ? plan.moves : [], name: form.name, date: kept ? c.date : form.date, courseId: kept ? c.courseId : form.courseId,
+      teeSheet: kept ? c.rules : after, firstTee: kept ? (teeClocks(c.rules)[0] ?? compFirstTee(form)) : compFirstTee(form),
+      leaderboards: boards, entry: kept ? readEntryRules(c.entry) : form.entry ?? null,
     })
   } catch (e) {
     console.error('competition change failed:', e)
-    return no(503, (e as Error)?.name === 'EntryNotReady' ? ENTRY_LATER : 'Could not change the competition — try again.')
+    return { ok: false, status: 503, error: (e as Error)?.name === 'EntryNotReady' ? ENTRY_LATER : 'Could not change the competition — try again.' }
   }
-  if (store.logActivity) {
-    const before = compFormFrom({ name: c.name, date: c.date, courseId: c.courseId, board: null, teeSheet: c.rules, membersOnly: c.membersOnly, entry: c.entry })
-    await store.logActivity([{
-      clubId: c.clubId, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.change',
-      memberId: null, memberName: null,
-      changes: { [c.code]: [`${c.name} · ${c.date} · ${before ? sheetLine(before) : ''}`, `${form.name} · ${form.date} · ${sheetLine(form)}`] }, batchId: null,
-    }]).catch(e => console.error('club activity not logged:', e))
-  }
-  return { status: 200, body: { ok: true, moved: plan.moves.length } }
+  return { ok: true, moved: plan.ok ? plan.moves.length : 0, keptSheet: plan.ok ? null : plan.problems }
 }
 
 const sheetLine = (f: Pick<CompForm, 'batches'>) => f.batches.map(b => `${b.start} ×${b.times} every ${b.interval} in ${b.perTime}s`).join(', ')

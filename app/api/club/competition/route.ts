@@ -8,7 +8,10 @@ import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetit
 import { parseTeeRules } from '@/lib/teeSheet'
 import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
-import { missing095 } from '../notesStore'
+import { missing095, readNotes, saveNote } from '../notesStore'
+import { readPresets } from '../presetsStore'
+import { runCalendarImport, type ImportStore } from '../calendarImport'
+import { compFormFrom, type CompForm } from '@/lib/clubComp'
 import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
 
@@ -23,12 +26,12 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null) as { action?: unknown; clubId?: unknown; form?: unknown; code?: unknown; dates?: unknown; from?: unknown } | null
+  const body = await req.json().catch(() => null) as { action?: unknown; clubId?: unknown; form?: unknown; code?: unknown; dates?: unknown; from?: unknown; rows?: unknown; confirmed?: unknown; batch?: unknown; year?: unknown } | null
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
     const db = createAdminClient()
     const clubs = clubStore(db)
-    const store: CompetitionStore = {
+    const store: ImportStore = {
       userFromToken: t => clubs.userFromToken(t),
       clubsOf: u => clubs.clubsOf(u),
       create: createStore(db),
@@ -76,6 +79,21 @@ export async function POST(req: NextRequest) {
         return new Set(((data ?? []) as { member_id: string; changes: Record<string, unknown> | null }[]).filter(r => r.changes && code in r.changes).map(r => r.member_id))
       },
       applyChange: (c, change) => applyChange(db, c, change),
+      // Stage c2: a calendar imported.
+      notes: clubId => readNotes(db, clubId),
+      saveNote: (clubId, note, by) => saveNote(db, clubId, note, by),
+      presets: clubId => readPresets(db, clubId),
+      async course(courseId) {
+        const { data } = await db.from('courses').select('name, latitude, longitude').eq('id', courseId).maybeSingle()
+        const c = data as { name: string; latitude: number | null; longitude: number | null } | null
+        return c ? { name: c.name, lat: c.latitude === null ? null : Number(c.latitude), lng: c.longitude === null ? null : Number(c.longitude) } : null
+      },
+      clubComps: clubId => readClubComps(db, clubId),
+    }
+    // Stage c2, M12–M16: a calendar imported in the Clubhouse.
+    if (body?.action === 'import.prompt' || body?.action === 'import.preview' || body?.action === 'import.rows') {
+      const out = await runCalendarImport({ token, action: body.action, clubId: body.clubId, rows: body.rows, confirmed: body.confirmed, batch: body.batch, year: body.year }, store, new Date())
+      return NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
     }
     // Stage (k2): Copy to another date, and Repeat weekly.
     if (body?.action === 'copy') {
@@ -192,4 +210,44 @@ async function applyChange(db: Db, c: CompNow, ch: import('../competition').Comp
   }
   const trip = await db.from('trips').update({ name: ch.name, start_date: ch.date, end_date: ch.date, leaderboards: ch.leaderboards }).eq('id', c.tripId)
   if (trip.error) throw trip.error
+}
+
+/**
+ * Every competition under a club as its form, with the Ref a calendar file
+ * gave it (stage c2) — three reads, whatever the season's size. The Ref
+ * (095) is read fail-soft; before it nothing has one.
+ */
+async function readClubComps(db: Db, clubId: string): Promise<{ code: string; ref: string | null; name: string; date: string; form: CompForm | null }[]> {
+  // The Ref is 095's and the entry rules 094's: each column asked for only while it is there.
+  type Priv = { trip_id: string; entry_rules?: unknown; import_ref?: string | null }
+  const readPriv = async (): Promise<Priv[] | null> => {
+    for (const cols of ['trip_id, entry_rules, import_ref', 'trip_id, entry_rules', 'trip_id']) {
+      const { data, error } = await db.from('trip_private').select(cols).eq('club_id', clubId)
+      if (!error) return (data ?? []) as unknown as Priv[]
+      if (!missing095(error) && !isMissingColumn(error)) throw error
+    }
+    return null
+  }
+  const priv = await readPriv()
+  if (!priv) return []
+  if (!priv.length) return []
+  const ids = priv.map(p => p.trip_id)
+  const [trips, rounds] = await Promise.all([
+    db.from('trips').select('id, trip_code, name, leaderboards, competition, public_passcode_hash').in('id', ids).eq('competition', 'club'),
+    db.from('rounds').select('trip_id, course_id, scheduled_date, tee_sheet, round_number').in('trip_id', ids).order('round_number'),
+  ])
+  if (trips.error) return []
+  const roundOf = new Map<string, { course_id: string; scheduled_date: string | null; tee_sheet: unknown }>()
+  for (const r of (rounds.data ?? []) as { trip_id: string; course_id: string; scheduled_date: string | null; tee_sheet: unknown }[]) if (!roundOf.has(r.trip_id)) roundOf.set(r.trip_id, r)
+  const privOf = new Map(priv.map(p => [p.trip_id, p]))
+  return ((trips.data ?? []) as { id: string; trip_code: string; name: string; leaderboards: unknown; public_passcode_hash: string | null }[]).flatMap(t => {
+    const r = roundOf.get(t.id)
+    if (!r?.scheduled_date) return []
+    const board = (Array.isArray(t.leaderboards) ? t.leaderboards : []).find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: unknown; handicapAllowance?: unknown } | undefined
+    const p = privOf.get(t.id)
+    return [{
+      code: t.trip_code, ref: p?.import_ref ?? null, name: t.name, date: r.scheduled_date,
+      form: compFormFrom({ name: t.name, date: r.scheduled_date, courseId: r.course_id, board: board ?? null, teeSheet: r.tee_sheet, membersOnly: !!t.public_passcode_hash, entry: p?.entry_rules ?? null }),
+    }]
+  })
 }

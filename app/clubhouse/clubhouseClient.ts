@@ -81,3 +81,30 @@ export async function changeCompetition(clubId: string, code: string, form: Comp
   if (r.status === 200) return { ok: true, moved: Number(r.body.moved) || 0 }
   return { ok: false, error: errorOf(r.body), ...(Array.isArray(r.body.problems) ? { problems: r.body.problems as { name: string; why: string }[] } : {}) }
 }
+
+// ─── Stage c2, M12–M16: a calendar imported ───
+
+export type ImportPreviewRow = import('@/lib/calendarImport').PreviewRow
+export type ImportRowOutcome = import('@/lib/calendarImport').RowOutcome
+type SentRow = { line: number; cells: Record<string, string> }
+
+/** The prompt and the blank template, written live from the club. */
+export async function calendarPromptOf(clubId: string, year: number): Promise<{ ok: true; prompt: string; template: string; ready: boolean } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'import.prompt', clubId, year })
+  if (r.status !== 200) return { ok: false, error: errorOf(r.body) }
+  return { ok: true, prompt: String(r.body.prompt ?? ''), template: String(r.body.template ?? ''), ready: r.body.ready === true }
+}
+
+/** Every row read and matched against the club — nothing saved. */
+export async function previewCalendar(clubId: string, rows: SentRow[]): Promise<{ ok: true; rows: ImportPreviewRow[]; notInFile: { name: string; date: string; type: string }[] } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'import.preview', clubId, rows })
+  if (r.status !== 200) return { ok: false, error: errorOf(r.body) }
+  return { ok: true, rows: (r.body.rows ?? []) as ImportPreviewRow[], notInFile: (r.body.notInFile ?? []) as { name: string; date: string; type: string }[] }
+}
+
+/** A few rows imported under the import's one batch id. */
+export async function importCalendarRows(clubId: string, batch: string, rows: SentRow[], confirmed: number[]): Promise<{ ok: true; done: ImportRowOutcome[] } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'import.rows', clubId, batch, rows, confirmed })
+  if (r.status !== 200) return { ok: false, error: errorOf(r.body) }
+  return { ok: true, done: (r.body.done ?? []) as ImportRowOutcome[] }
+}
