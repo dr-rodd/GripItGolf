@@ -92,6 +92,13 @@ export type ClubAct =
   | 'run_events'
   /** Clubhouse: the office itself. */
   | 'open_clubhouse'
+  /**
+   * Clubhouse: the club's calendar in the office — its events, presets,
+   * competitions made and changed there, a calendar imported (Ross, 17 Nov
+   * 2026: Clubhouse is its own level of admin; an Officer's golf editing is
+   * the members app's).
+   */
+  | 'keep_calendar'
   /** The list: add, paste, change a row, take off, put back, email a code, download. */
   | 'keep_list'
   /** The club's look and its home course. */
@@ -110,6 +117,7 @@ export function clubMay(act: ClubAct, a: Asker): boolean {
     case 'play': return !!r?.playsHere
     case 'run_events': return !!r?.officer
     case 'open_clubhouse':
+    case 'keep_calendar':
     case 'keep_list':
     case 'set_look':
     case 'grant_plays_here':

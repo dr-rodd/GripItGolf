@@ -4,6 +4,7 @@ import ClubLook from '@/app/account/club/ClubLook'
 import ClubHomeCourse from '@/app/account/club/ClubHomeCourse'
 import { cardClass } from '@/app/components/ui'
 import { useShell } from '../ShellContext'
+import ShowToMembers from './ShowToMembers'
 
 /**
  * Club settings (stage (k1)): the club's look — crest, art, colour — and its
@@ -23,6 +24,11 @@ export default function ClubSettings() {
         {club.status === 'verified' && (
           <section className={`${cardClass()} p-5 [&>section]:mt-0`}>
             <ClubHomeCourse club={club} onChange={setClub} />
+          </section>
+        )}
+        {club.status === 'verified' && may('keep_calendar') && (
+          <section className={`${cardClass()} p-5`}>
+            <ShowToMembers clubId={club.id} />
           </section>
         )}
       </div>

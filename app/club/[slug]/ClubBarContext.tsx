@@ -28,6 +28,8 @@ export interface ClubMembers {
   tops: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
   toSign: { code: string; name: string; count: number }[]
+  /** Stage c1, M6: the club's own events this member sees (filtered on the server) — none in a copy kept before. */
+  notes?: import('@/lib/clubEvents').ClubNote[]
   /** Drawn from the copy kept on this phone (D193): the live parts wait for the fresh answer (D194). */
   fromCopy?: boolean
 }

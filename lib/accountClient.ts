@@ -25,6 +25,7 @@
 //
 // Never throws: every function resolves to an answer the screen can say.
 
+import type { ClubEventType, ClubNote } from './clubEvents'
 import type { ClubEvent } from './clubs'
 import type { Credentials } from './clubMay'
 import type { Category, MyDetails } from './clubMembership'
@@ -436,6 +437,19 @@ export async function accountDetails(): Promise<{ ok: true; details: MyDetails |
   return { ok: true, details: (r.body.details as MyDetails | null) ?? null }
 }
 
+/**
+ * Stage c1, M5: "From my clubs, show me" — the club event types this
+ * account has turned off, read, or saved when `hidden` is given. Never throws.
+ */
+export async function accountEventTypes(hidden?: ClubEventType[]): Promise<{ ok: true; hidden: ClubEventType[]; ready: boolean } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { action: 'event-types', ...(hidden ? { hidden } : {}) })
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, hidden: (r.body.hiddenTypes as ClubEventType[] | undefined) ?? [], ready: r.body.eventTypesReady === true }
+}
+
 /** "Add an event you run": its code and organiser PIN make it this account's. */
 export async function claimEvent(code: string, pin: string): Promise<Answer> {
   const token = await accountToken()
@@ -557,6 +571,11 @@ export interface ClubAnswer {
   /** Stage (m): the club's memberships with how many are in each, and the day its ages count on. */
   categories?: (Category & { count: number })[]
   ageDate?: string
+  /** Stage c1: the club's own events — on the members home, only those this member sees. */
+  notes?: ClubNote[]
+  notesReady?: boolean
+  hiddenTypes?: ClubEventType[]
+  noteId?: string
 }
 
 /**

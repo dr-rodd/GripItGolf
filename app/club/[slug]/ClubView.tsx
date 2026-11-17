@@ -8,6 +8,7 @@ import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
+import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
 import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
@@ -28,6 +29,8 @@ import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClub
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
+import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
+import { noteTimeLine, noteWhen, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { prefetchWhole } from './prefetchWhole'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
@@ -148,6 +151,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, credentials: r.club.credentials, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
         courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
+        notes: r.notes ?? [],
       }
       setMembers(fresh)
       keepClubHome(face.slug, fresh)
@@ -321,9 +325,14 @@ function PublicFace({ face }: { face: ClubFace }) {
 function EventRows({ events, slug, entries = [], tops = {} }: { events: ClubEvent[]; slug: string; entries?: string[]; tops?: Members['tops'] }) {
   return (
     <ListGroup className="mt-4">
-      {events.map(e => (
+      {events.map(e => <EventRow key={e.code} e={e} slug={slug} entries={entries} tops={tops} />)}
+    </ListGroup>
+  )
+}
+
+function EventRow({ e, slug, entries, tops }: { e: ClubEvent; slug: string; entries: string[]; tops: Members['tops'] }) {
+  return (
         <ListRow
-          key={e.code}
           href={clubEventHref(e, slug)}
           label={e.name}
           hint={
@@ -339,8 +348,6 @@ function EventRows({ events, slug, entries = [], tops = {} }: { events: ClubEven
           }
           trailing={membersOnly(e) ? <MembersOnly /> : undefined}
         />
-      ))}
-    </ListGroup>
   )
 }
 
@@ -361,6 +368,21 @@ function MembersOnly() {
 
 function useGroups(events: ClubEvent[]) {
   return useMemo(() => groupClubEvents(events, irishToday(new Date())), [events])
+}
+
+/** A golf event's type on the members' chips: a competition, a run challenge's Other sport, any other Golf. */
+function eventType(e: ClubEvent): EventType {
+  return e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF'
+}
+
+/** The club's events and its own events still on or to come, in date order (stage c1). */
+type CalItem = { key: string; day: string; e?: ClubEvent; n?: ClubNote }
+function calendarItems(events: ClubEvent[], notes: ClubNote[], today: string): CalItem[] {
+  const items: CalItem[] = [
+    ...events.map(e => ({ key: e.code, day: e.startDate ?? '9999', e })),
+    ...notes.filter(n => noteWhen(n, today) !== 'past').map(n => ({ key: `n-${n.id}`, day: n.startsOn, n })),
+  ]
+  return items.sort((a, b) => a.day.localeCompare(b.day) || (a.e?.name ?? a.n!.title).localeCompare(b.e?.name ?? b.n!.title))
 }
 
 /**
@@ -390,7 +412,9 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   const now = new Date()
   const first = m.name.trim().split(/\s+/)[0]
   const season = seasonOf(m.season)
-  const calendar = g.upcoming.slice(0, 5)
+  // Stage c1, M6: the club's own events sit on the calendar with its golf.
+  const calendar = calendarItems(g.upcoming, m.notes ?? [], irishToday(now)).slice(0, 5)
+  const [opened, setOpened] = useState<ClubNote | null>(null)
   return (
     <>
       <div className="h-[168px]" aria-hidden="true" />
@@ -443,7 +467,9 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         <section className="mt-6">
           <h2 className="t-h2 text-ink">Club calendar</h2>
           <ul className="mt-3 space-y-2">
-            {calendar.map(e => <CalendarRow key={e.code} e={e} slug={face.slug} mine={m.entries.includes(e.code)} />)}
+            {calendar.map(x => x.e
+              ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code)} />
+              : <NoteRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
           </ul>
         </section>
       )}
@@ -469,6 +495,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           {face.name}’s events show here once its admins put them under the club.
         </p>
       )}
+      {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </>
   )
 }
@@ -504,14 +531,23 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
   const g = useGroups(m.events)
   const [view, setView] = useState<CompsView>('upcoming')
   const [making, setMaking] = useState(false)
+  // Stage c1, M6: Upcoming holds the club's own events too, narrowed by type.
+  const [type, setType] = useState<EventType | 'all'>('all')
+  const [opened, setOpened] = useState<ClubNote | null>(null)
+  const today = irishToday(new Date())
+  const notes = (m.notes ?? []).filter(n => noteWhen(n, today) !== 'past')
   if (making) return <NewCompetition clubId={m.clubId} homeCourseId={m.homeCourseId} onCancel={() => setMaking(false)} />
   const lists: Record<CompsView, ClubEvent[]> = {
     upcoming: [...g.now, ...g.upcoming],
     mine: [...g.now, ...g.upcoming, ...g.past].filter(e => m.entries.includes(e.code)),
     results: g.past,
   }
-  const list = lists[view]
+  const upcomingTypes = [...new Set<EventType>([...lists.upcoming.map(eventType), ...notes.map(n => n.type)])]
+  const list = view === 'upcoming' && type !== 'all' ? lists.upcoming.filter(e => eventType(e) === type) : lists[view]
+  const shownNotes = view === 'upcoming' ? notes.filter(n => type === 'all' || n.type === type) : []
   const [featured, ...rest] = list
+  // The featured card is a golf event; the rest run in date order with the club's own events among them.
+  const restItems = view === 'upcoming' ? calendarItems(rest, shownNotes, today) : rest.map(e => ({ key: e.code, day: e.startDate ?? '', e }) as CalItem)
   return (
     <>
       <div className="h-6" aria-hidden="true" />
@@ -522,7 +558,12 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       )}
       <Segmented className="mt-4" label="Which competitions" value={view} onChange={setView}
         options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' }, { value: 'results', label: 'Results' }] as const} />
-      {!featured ? (
+      {view === 'upcoming' && <TypeChips types={upcomingTypes} value={type} onChange={setType} />}
+      {!featured && restItems.length > 0 ? (
+        <ListGroup className="mt-5">
+          {restItems.map(x => <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
+        </ListGroup>
+      ) : !featured ? (
         <p className="text-ink/65 text-[15px] mt-6">
           {view === 'mine' ? 'Nothing you’re in yet.' : view === 'results' ? 'No results yet.' : 'Nothing coming up yet.'}
         </p>
@@ -543,15 +584,32 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
               </p>
             )}
           </Link>
-          {rest.length > 0 && (
+          {restItems.length > 0 && (
             <section className="mt-6">
               {view === 'results' && <h2 className="t-h2 text-ink">Recent results</h2>}
-              <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} />
+              {restItems.some(x => x.n) ? (
+                <ListGroup className="mt-4">
+                  {restItems.map(x => x.e
+                    ? <EventRow key={x.key} e={x.e} slug={slug} entries={m.entries} tops={{}} />
+                    : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
+                </ListGroup>
+              ) : (
+                <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} />
+              )}
             </section>
           )}
         </>
       )}
+      {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </>
+  )
+}
+
+/** One of the club's own events as a row of Upcoming: its type, day and time; it opens a sheet. */
+function NoteListRow({ n, onOpen }: { n: ClubNote; onOpen: () => void }) {
+  return (
+    <ListRow label={n.title} onClick={onOpen}
+      hint={[typeLabel(n.type), clubEventDates(n.startsOn, n.endsOn ?? n.startsOn), noteTimeLine(n)].filter(Boolean).join(' · ')} />
   )
 }
 
@@ -598,6 +656,7 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
       <p className="text-ink/80 text-[15px] mt-2">You’re on {face.name}’s list: {credentialLine(m.credentials ?? NOTHING_HELD, face.name)}.</p>
       <HandicapIndexCard className="mt-6" />
       <YourDetailsCard club={face.name} className="mt-4" />
+      <ClubEventTypesCard className="mt-4" />
       <ListGroup className="mt-6">
         {clubMay('open_clubhouse', { row: m.credentials ?? null }) && (
           <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"

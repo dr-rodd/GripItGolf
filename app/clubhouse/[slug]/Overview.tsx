@@ -70,7 +70,7 @@ export default function Overview() {
           <h2 id="ov-comps" className="t-card text-ink">Competitions this season</h2>
           {!data ? <Skeleton /> : (
             <ul className="mt-3">
-              {PHASES.map(p => <Figure key={p} href={clubhouseHref(face.slug, 'competitions')} label={PHASE_WORDS[p]} value={data.byPhase?.[p] ?? 0} />)}
+              {PHASES.map(p => <Figure key={p} href={clubhouseHref(face.slug, 'events')} label={PHASE_WORDS[p]} value={data.byPhase?.[p] ?? 0} />)}
             </ul>
           )}
         </section>

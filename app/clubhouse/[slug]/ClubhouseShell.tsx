@@ -19,7 +19,7 @@ type State =
   | { kind: 'in'; club: ClubSummary; clubs: { slug: string; name: string }[] }
 
 const ICON: Record<SectionKey, (p: { size?: number }) => React.ReactNode> = {
-  overview: IconHome, members: IconUsers, memberships: IconClipboardList, competitions: IconTrophy, calendar: IconCalendar, settings: IconSettings,
+  overview: IconHome, members: IconUsers, memberships: IconClipboardList, events: IconTrophy, calendar: IconCalendar, settings: IconSettings,
 }
 
 /**

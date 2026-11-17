@@ -4,7 +4,9 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
 import { buttonClass, cardClass } from '@/app/components/ui'
-import { eventHref, eventsOn, monthGrid, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
+import { eventHref, eventsOn, isOfficeOnly, monthGrid, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
+import { typeLabel, type ClubNote } from '@/lib/clubEvents'
+import EventPanel from '../events/EventPanel'
 import { irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { useShell } from '../ShellContext'
@@ -19,8 +21,10 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
  * something on (D202).
  */
 export default function ClubCalendar() {
-  const { face, club } = useShell()
+  const { face, club, may } = useShell()
   const { events, lost, again } = useSeason(club.id)
+  const [editing, setEditing] = useState<ClubNote | null>(null)
+  const office = may('keep_calendar')
   const today = irishToday(new Date())
   const [ym, setYm] = useState<[number, number]>([Number(today.slice(0, 4)), Number(today.slice(5, 7))])
   const [year, month] = ym
@@ -29,12 +33,25 @@ export default function ClubCalendar() {
   const days = weeks.flat().filter((d): d is string => !!d)
   const busyDays = days.map(d => ({ d, on: eventsOn(events ?? [], d) })).filter(x => x.on.length > 0)
 
-  const chip = (e: SeasonEvent) => (
-    <Link key={e.code} href={eventHref(e, face.slug)} title={e.name}
-      className="ch-hover ch-focus block rounded-tile px-1.5 py-1 bg-club-tint text-club-deep text-[13px] font-semibold leading-tight truncate">
-      {e.name}
-    </Link>
+  // Stage c1: an event's type is said in words, never by colour alone; a
+  // club event opens its panel here (the office's), a competition or other
+  // golf event opens where it lives.
+  const chipBody = (e: SeasonEvent) => (
+    <>
+      {seasonType(e) !== 'COMP' && <span className="block text-[13px] font-normal text-ink/65 leading-tight">{typeLabel(seasonType(e))}{isOfficeOnly(e) ? ' · Office' : ''}</span>}
+      <span className="block truncate">{e.name}</span>
+    </>
   )
+  const chipClass = (e: SeasonEvent) => `ch-hover ch-focus block w-full text-left rounded-tile px-1.5 py-1 text-[13px] font-semibold leading-tight ${e.competition ? 'bg-club-tint text-club-deep' : 'bg-tint text-ink'}`
+  const chip = (e: SeasonEvent) => {
+    const href = eventHref(e, face.slug)
+    if (!href) {
+      return office && e.note
+        ? <button key={e.code} type="button" title={e.name} onClick={() => setEditing(e.note!)} className={chipClass(e)}>{chipBody(e)}</button>
+        : <div key={e.code} title={e.name} className={chipClass(e)}>{chipBody(e)}</div>
+    }
+    return <Link key={e.code} href={href} title={e.name} className={chipClass(e)}>{chipBody(e)}</Link>
+  }
 
   return (
     <>
@@ -82,16 +99,25 @@ export default function ClubCalendar() {
           {busyDays.map(({ d, on }) => (
             <li key={d} className="px-4 py-3">
               <p className="t-cap text-ink/65">{new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))}</p>
-              {on.map(e => (
-                <Link key={e.code} href={eventHref(e, face.slug)} className="flex items-center justify-between gap-3 min-h-11 text-ink text-[15px] font-medium">
-                  {e.name}
-                  {e.competition && <span className="t-cap text-ink/65 font-normal">{PHASE_WORDS[e.competition.phase]}</span>}
-                </Link>
-              ))}
+              {on.map(e => {
+                const href = eventHref(e, face.slug)
+                const inner = (
+                  <>
+                    {e.name}
+                    <span className="t-cap text-ink/65 font-normal">{e.competition ? PHASE_WORDS[e.competition.phase] : `${typeLabel(seasonType(e))}${isOfficeOnly(e) ? ' · Office only' : ''}`}</span>
+                  </>
+                )
+                const cls = 'flex items-center justify-between gap-3 min-h-11 text-ink text-[15px] font-medium w-full text-left'
+                return href
+                  ? <Link key={e.code} href={href} className={cls}>{inner}</Link>
+                  : e.note && office ? <button key={e.code} type="button" onClick={() => setEditing(e.note!)} className={cls}>{inner}</button>
+                    : <div key={e.code} className={cls}>{inner}</div>
+              })}
             </li>
           ))}
         </ul>
       </div>
+      {editing && <EventPanel clubId={club.id} note={editing} onClose={() => setEditing(null)} onSaved={again} />}
     </>
   )
 }

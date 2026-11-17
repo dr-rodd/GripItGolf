@@ -28,6 +28,7 @@
 //   (ON DELETE CASCADE), and its username; names and scores stay with their
 //   events.
 
+import { readMemberHidden, type ClubEventType } from '@/lib/clubEvents'
 import { createHash } from 'crypto'
 import { sealJson, openJson } from '@/lib/signedState'
 import {
@@ -99,10 +100,17 @@ export interface AccountStore {
   // Stage (m) — a person's gender and date of birth, set by their club (094).
   /** This account's details and its membership at each verified club — null before 094. */
   detailsOf?(userId: string): Promise<MyDetails | null>
+  // Stage c1 (095) — "From my clubs, show me".
+  /** The club event types this account has turned off — null before 095. */
+  eventHidden?(userId: string): Promise<ClubEventType[] | null>
+  setEventHidden?(userId: string, types: ClubEventType[]): Promise<void>
 }
 
 export type AccountBody = {
   ok: true
+  /** Stage c1: the club event types this account has turned off, and whether that can be kept yet (095). */
+  hiddenTypes?: ClubEventType[]
+  eventTypesReady?: boolean
   ticket?: string
   moved?: number
   username?: string | null
@@ -181,6 +189,8 @@ export async function runAccount(
     pin?: unknown
     /** D179: a handicap index to set — absent reads it, null or '' takes it off. */
     index?: unknown
+    /** Stage c1: the club event types to turn off. */
+    hidden?: unknown
     /** The caller's network address; only ever stored hashed. */
     address?: string
   },
@@ -282,6 +292,20 @@ export async function runAccount(
   if (input.action === 'details') {
     if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
     return { status: 200, body: { ok: true, details: store.detailsOf ? await store.detailsOf(user.id).catch(() => null) : null } }
+  }
+
+  // Stage c1, M5: "From my clubs, show me" — the club event types this
+  // account sees on its clubs' homes and Upcoming. Competitions always show.
+  if (input.action === 'event-types') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    if (!store.eventHidden || !store.setEventHidden) return fail(503, 'Not set up yet — try again later.')
+    if (input.hidden === undefined) {
+      const hidden = await store.eventHidden(user.id).catch(() => null)
+      return { status: 200, body: { ok: true, hiddenTypes: hidden ?? [], eventTypesReady: hidden !== null } }
+    }
+    const hidden = readMemberHidden(input.hidden)
+    try { await store.setEventHidden(user.id, hidden) } catch { return fail(503, 'Could not save that — try again.') }
+    return { status: 200, body: { ok: true, hiddenTypes: hidden, eventTypesReady: true } }
   }
 
   // D179: the account's handicap index, read or set from Me — through the

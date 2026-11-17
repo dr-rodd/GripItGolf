@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
       // /dashboard/create under it — lands there too.
       { source: "/account/events", destination: "/home?tab=events", permanent: false },
       { source: "/dashboard", destination: "/home", permanent: false },
+      // The Clubhouse's Competitions became Events (stage c1, M1).
+      { source: "/clubhouse/:slug/competitions", destination: "/clubhouse/:slug/events", permanent: false },
     ];
   },
 };

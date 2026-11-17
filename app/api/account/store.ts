@@ -1,6 +1,8 @@
 // The service-role store behind /api/account (./account.ts).
 
 import { createHmac } from 'crypto'
+import { readMemberHidden } from '@/lib/clubEvents'
+import { missing095, writeMemberHidden } from '../club/notesStore'
 import { createClient } from '@supabase/supabase-js'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import type { AuthUser } from '@/lib/account'
@@ -169,6 +171,15 @@ export function accountStore(db: Db): AccountStore {
         memberships: list.filter(r => clubName.has(r.club_id) && r.category_id && cat.has(r.category_id))
           .map(r => ({ club: clubName.get(r.club_id)!, name: cat.get(r.category_id!)!.name, days: cat.get(r.category_id!)!.days ?? [] })),
       }
+    },
+    // Stage c1 (095): "From my clubs, show me".
+    async eventHidden(userId) {
+      const { data, error } = await db.from('account_event_prefs').select('hidden_types').eq('user_id', userId).maybeSingle()
+      if (error) return missing095(error) ? null : []
+      return readMemberHidden((data as { hidden_types?: unknown } | null)?.hidden_types)
+    },
+    async setEventHidden(userId, types) {
+      await writeMemberHidden(db, userId, types)
     },
     async seasonFor(userId, year) {
       return readSeason(db, userId, year)

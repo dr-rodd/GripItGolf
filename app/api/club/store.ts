@@ -10,6 +10,7 @@ import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/
 import { compPhase, type CompPhase } from '@/lib/compPhase'
 import { teeInstant } from '@/lib/clubComp'
 import { opensAt, parseTeeRules, sheetCapacity, teeClocks } from '@/lib/teeSheet'
+import { deleteNote, readClubHidden, readMemberHiddenOf, readNotes, saveNote, writeClubHidden } from './notesStore'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
@@ -241,7 +242,7 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
 export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEvent[]> {
   const events = await readClubEvents(db, clubId)
   const comps = events.filter(e => e.competition)
-  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, startDate: e.startDate, endDate: e.endDate, competition: null })
+  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null })
   if (!comps.length) return events.map(base)
   const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards').in('trip_code', comps.map(c => c.code))
   const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown }[]
@@ -637,6 +638,13 @@ export function clubStore(db: Db): ClubStore {
       return readListCounts(db, clubId)
     },
     seasonEvents: clubId => readClubSeason(db, clubId),
+    // Stage c1 (095): the club's own events, what it shows, what a member asks to see.
+    notes: (clubId, opts) => readNotes(db, clubId, opts),
+    saveNote: (clubId, note, by) => saveNote(db, clubId, note, by),
+    deleteNote: (clubId, id) => deleteNote(db, clubId, id),
+    clubHidden: clubId => readClubHidden(db, clubId),
+    setClubHidden: (clubId, types) => writeClubHidden(db, clubId, types),
+    memberHidden: userId => readMemberHiddenOf(db, userId),
     categories: clubId => readCategories(db, clubId),
     async categoryCounts(clubId) {
       const { data, error } = await db.from('club_members').select('category_id').eq('club_id', clubId).is('removed_at', null).not('category_id', 'is', null)

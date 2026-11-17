@@ -32,6 +32,7 @@ import type { SeasonRow } from '@/lib/cardSummary'
 import type { ListCounts, GridRow, Need, SeasonEvent } from '@/lib/clubhouse'
 import type { Category, Gender, RowExtras } from '@/lib/clubMembership'
 import { STAFF_NAME } from '@/lib/clubhouse'
+import { memberSees, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { isClubhouseAction, runClubhouse, type ClubhouseStore } from './clubhouse'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
 import {
@@ -269,6 +270,12 @@ export type ClubBody = {
   csv?: string
   /** Stage (k2): every event under the club, with a competition's facts. */
   calendar?: SeasonEvent[]
+  /** Stage c1 (095): whether the club's own events can be kept yet, the types it does not show its members, and an event just kept. */
+  notesReady?: boolean
+  hiddenTypes?: import('@/lib/clubEvents').ClubEventType[]
+  noteId?: string
+  /** Stage c1: the members home's club events — only those this member may see (`memberSees`). */
+  notes?: import('@/lib/clubEvents').ClubNote[]
   /** Stage (m): the club's memberships with their head counts, and its age date ('MM-DD'). */
   categories?: (Category & { count: number })[]
   ageDate?: string
@@ -286,6 +293,23 @@ const NOT_ON = 'Only someone with Clubhouse keeps the club’s list.'
 const NOT_LOOK = 'Only someone with Clubhouse changes the club’s look.'
 const TICKS_LATER = 'The ticks aren’t set up yet — try again later.'
 const PEOPLE_LATER = 'Memberships, genders and dates of birth aren’t set up yet — try again later.'
+
+/**
+ * The club's own events a member sees on the members home (M3–M6): Members
+ * events only, of a type the club shows, not one this member has turned
+ * off — from today on (a few days back, so a week-long event in hand
+ * stays). Filtered here on the server: an Office only event never leaves it.
+ */
+async function membersNotes(store: ClubStore, clubId: string, userId: string, today: string): Promise<ClubNote[]> {
+  if (!store.notes) return []
+  const from = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10)
+  const [notes, clubHidden, mine] = await Promise.all([
+    store.notes(clubId, { from, membersOnly: true }),
+    store.clubHidden ? store.clubHidden(clubId).catch(() => []) : Promise.resolve([]),
+    store.memberHidden ? store.memberHidden(userId).catch(() => []) : Promise.resolve([]),
+  ])
+  return (notes ?? []).filter(n => memberSees(n, clubHidden, mine))
+}
 
 export { inviteHash, inviteTryKey } from './invites'
 import { inviteHash, inviteTryKey } from './invites'
@@ -476,7 +500,7 @@ export async function runClub(
     const comps = events.some(e => e.competition)
     const compList = first?.comps.map(c => ({ ...c, name: events.find(e => e.code === c.code)?.name })) ?? undefined
     const clubId = club.id
-    const [entries, season, outside, tops, toSign, phases, myClubs] = await Promise.all([
+    const [entries, season, outside, tops, toSign, phases, myClubs, notes] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
       store.outsideEvents(user.id, events.map(e => e.code)),
@@ -484,6 +508,9 @@ export async function runClub(
       comps && store.cardsToSign ? store.cardsToSign(club.id, row.id, compList).catch(() => []) : Promise.resolve([]),
       first?.comps.length && store.compPhases ? store.compPhases(first.comps).catch(() => null) : Promise.resolve(null),
       otherClubs(store, user.id, clubId).catch(() => null),
+      // Stage c1, M3–M6: the club's own events this member may see — in this
+      // wave, beside everything else, never a third.
+      membersNotes(store, clubId, user.id, today).catch(() => [] as ClubNote[]),
     ])
     if (phases) {
       events = events.map(e => (e.competition ? { ...e, competition: { ...e.competition, phase: phases.get(e.code) ?? e.competition.phase } } : e))
@@ -499,7 +526,7 @@ export async function runClub(
       status: 200,
       body: {
         ok: true, club: summary(full ?? club, row), events, entries, me: { name: mineRowName },
-        season: seasonHere, courses: season.courses, outside, tops, toSign,
+        season: seasonHere, courses: season.courses, outside, tops, toSign, notes,
         ...(myClubs && myClubs.length > 1 ? { myClubs } : {}),
       },
     }

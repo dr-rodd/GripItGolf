@@ -72,7 +72,8 @@ async function main() {
       ['/event/:code/:path*', '/golf/event/:code/:path*', false],
       ['/account/events', '/home?tab=events', false],
       ['/dashboard', '/home', false],
-    ], 'the old /trip/ and /event/ addresses are sent on by Next\'s own redirects, the rest kept, never cached for good — and My events and /dashboard to a member\'s home (D148)')
+      ['/clubhouse/:slug/competitions', '/clubhouse/:slug/events', false],
+    ], 'the old /trip/ and /event/ addresses are sent on by Next\'s own redirects, the rest kept, never cached for good — and My events and /dashboard to a member\'s home (D148), and the Clubhouse\'s Competitions to Events (stage c1)')
     const layout = read('app/golf/[root]/[tripCode]/layout.tsx')
     ok(layout.includes('if (!isTripRoot(root)) notFound()'), 'anything under /golf/ but trip or event is no page')
     ok(layout.includes('<AddressFix base={base} />') && layout.includes('<TripBaseProvider base={base}>') && layout.includes('base={base}'),

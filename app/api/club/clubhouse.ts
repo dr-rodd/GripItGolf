@@ -27,6 +27,8 @@ import { AGE_MAX, AGE_MIN, ageCountedOn, categoryCodeFrom, categoryIssue, cleanD
 import { severIndex } from '../handicaps/handicaps'
 import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
+import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
+import { noteAsSeason } from '@/lib/clubhouse'
 import type { ActivityEntry, ClubOutcome, ClubRecord, ClubStore, ClubSummary, MemberRecord } from './club'
 
 /** A row as the grid's read returns it: the list row, when its code was last sent, and its own index. */
@@ -62,6 +64,16 @@ export interface ClubhouseStore {
   markInvited?(memberId: string, at: string): Promise<void>
   /** Stage (k2): every event under the club, with a competition's facts. */
   seasonEvents?(clubId: string): Promise<SeasonEvent[]>
+  /** Stage c1 (095): the club's own events — office ones too — null before 095. */
+  notes?(clubId: string, opts?: { from?: string; membersOnly?: boolean }): Promise<ClubNote[] | null>
+  /** One kept, the id back; throws NotesNotReady before 095. */
+  saveNote?(clubId: string, note: Omit<ClubNote, 'id'> & { id: string | null }, by: { userId: string; batch?: string | null }): Promise<string>
+  deleteNote?(clubId: string, id: string): Promise<void>
+  /** The types the club does not show its members — none before 095. */
+  clubHidden?(clubId: string): Promise<ClubEventType[]>
+  setClubHidden?(clubId: string, types: ClubEventType[]): Promise<void>
+  /** The types a member has asked not to see — none before 095. */
+  memberHidden?(userId: string): Promise<ClubEventType[]>
 }
 
 type Store = ClubStore & ClubhouseStore
@@ -71,7 +83,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -242,9 +254,56 @@ export async function runClubhouse(
   }
 
   // Stage (k2), D214, D215: the season table and the calendar read one list.
+  // Stage c1: the club's own events are in it too — office ones, this being the office.
   if (action === 'season') {
     if (!store.seasonEvents) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
-    return { status: 200, body: { ok: true, calendar: await store.seasonEvents(club.id) } }
+    const [events, notes, hidden] = await Promise.all([
+      store.seasonEvents(club.id),
+      store.notes ? store.notes(club.id).catch(() => null) : Promise.resolve(null),
+      store.clubHidden ? store.clubHidden(club.id).catch(() => []) : Promise.resolve([]),
+    ])
+    return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(noteAsSeason)], notesReady: notes !== null, hiddenTypes: hidden } }
+  }
+
+  // Stage c1, M1–M4: one of the club's own events made, changed or deleted,
+  // and what the club shows its members — the office's (Clubhouse).
+  if (action === 'event.save' || action === 'event.delete' || action === 'event-types') {
+    if (!clubMay('keep_calendar', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s calendar.')
+    const LATER = 'The club’s calendar isn’t set up yet — try again later.'
+    if (action === 'event-types') {
+      if (!store.setClubHidden) return fail(503, LATER)
+      const raw = Array.isArray(input.hidden) ? input.hidden : []
+      const hidden = readHiddenTypes(raw)
+      if (raw.some(t => !(OFFICE_TYPES as readonly unknown[]).includes(t))) return fail(400, 'Competitions, Golf and Course are always shown to members.')
+      const before = store.clubHidden ? await store.clubHidden(club.id).catch(() => []) : []
+      try { await store.setClubHidden(club.id, hidden) } catch { return fail(503, LATER) }
+      await logged([line('events.shown', null, { hidden: [before.map(typeLabel).join(', ') || null, hidden.map(typeLabel).join(', ') || null] })])
+      return { status: 200, body: { ok: true, hiddenTypes: hidden } }
+    }
+    if (!store.notes || !store.saveNote || !store.deleteNote) return fail(503, LATER)
+    const all = await store.notes(club.id)
+    if (all === null) return fail(503, LATER)
+    const id = str(input.id)
+    const before = id ? all.find(n => n.id === id) : undefined
+    if (id && !before) return fail(404, 'That event isn’t the club’s.')
+    if (action === 'event.delete') {
+      try { await store.deleteNote(club.id, id) } catch { return fail(503, LATER) }
+      await logged([line('event.delete', null, { [before!.title]: [`${typeLabel(before!.type)} · ${before!.startsOn}`, null] })])
+      return { status: 200, body: { ok: true } }
+    }
+    const note = readClubNote({ ...(input.event && typeof input.event === 'object' ? input.event : {}), id: id || null })
+    const why = noteIssue(note)
+    if (why) return fail(400, why)
+    if (note.ref && all.some(n => n.ref === note.ref && n.id !== id)) return fail(409, 'Another event already has that Ref.')
+    let saved: string
+    try {
+      saved = await store.saveNote(club.id, { ...note, ref: note.ref ?? before?.ref ?? null }, { userId: user.id })
+    } catch (e) {
+      return (e as Error)?.name === 'NotesNotReady' ? fail(503, LATER) : fail(503, 'Could not save the event — try again.')
+    }
+    const said = (n: Pick<ClubNote, 'type' | 'startsOn' | 'visibility'>) => `${typeLabel(n.type)} · ${n.startsOn}${n.visibility === 'office' ? ' · Office only' : ''}`
+    await logged([line(before ? 'event.update' : 'event.add', null, { [note.title]: [before ? said(before) : null, said(note)] })])
+    return { status: 200, body: { ok: true, noteId: saved } }
   }
 
   if (action === 'export') {

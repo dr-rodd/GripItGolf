@@ -24,7 +24,8 @@ import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
-import { MAX_COPIES, eventsOn, formatLine, monthGrid, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
+import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
+import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
 import { runCopyCompetition } from '../app/api/club/competition'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
@@ -355,6 +356,26 @@ class Stand implements ClubStore {
     this.cats.delete(id)
     for (const r of this.list.values()) if (r.categoryId === id) this.list.set(r.id, { ...r, categoryId: null })
   }
+  // Stage c1 (095): the club's own events, what it shows, what a member asks to see.
+  notesOf = new Map<string, ClubNote[]>()
+  hiddenOf = new Map<string, ClubEventType[]>()
+  memberHiddenOf = new Map<string, ClubEventType[]>()
+  async seasonEvents(clubId: string): Promise<SeasonEvent[]> {
+    return (await this.clubEvents(clubId)).map(e => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' as const : 'GOLF' as const, startDate: e.startDate, endDate: e.endDate, competition: null }))
+  }
+  async notes(clubId: string, opts: { from?: string; membersOnly?: boolean } = {}) {
+    return (this.notesOf.get(clubId) ?? []).filter(n => !opts.membersOnly || n.visibility === 'members').filter(n => !opts.from || (n.endsOn ?? n.startsOn) >= opts.from)
+  }
+  async saveNote(clubId: string, n: Omit<ClubNote, 'id'> & { id: string | null }) {
+    const list = this.notesOf.get(clubId) ?? []
+    const id = n.id ?? `note${++this.n}`
+    this.notesOf.set(clubId, [...list.filter(x => x.id !== id), { ...n, id }])
+    return id
+  }
+  async deleteNote(clubId: string, id: string) { this.notesOf.set(clubId, (this.notesOf.get(clubId) ?? []).filter(n => n.id !== id)) }
+  async clubHidden(clubId: string) { return this.hiddenOf.get(clubId) ?? [] }
+  async setClubHidden(clubId: string, t: ClubEventType[]) { this.hiddenOf.set(clubId, t) }
+  async memberHidden(userId: string) { return this.memberHiddenOf.get(userId) ?? [] }
   async accountDetails(userId: string) { return this.details.get(userId) ?? null }
   async saveDetails(userId: string, patch: { gender?: Gender | null; birthDate?: string | null }) {
     const was = this.details.get(userId) ?? { gender: null, birthDate: null }
@@ -877,7 +898,7 @@ function wiringTests() {
   ok(!/isTripRoot|app\/golf/.test(door + room), 'not under /golf: the trip tree is untouched')
 
   section('Stage (k1): the Clubhouse’s screens (D202, D207, D212, D222)')
-  for (const s of ['page.tsx', 'members/page.tsx', 'competitions/page.tsx', 'calendar/page.tsx', 'settings/page.tsx']) {
+  for (const s of ['page.tsx', 'members/page.tsx', 'events/page.tsx', 'calendar/page.tsx', 'settings/page.tsx']) {
     ok(fs.existsSync(`app/clubhouse/[slug]/${s}`), `  /clubhouse/<club>/${s.replace(/\/?page\.tsx$/, '') || '(Overview)'}`)
   }
   ok(/<ShellContext\.Provider/.test(room) && /lg:w-60/.test(room) && /max-w-\[1200px\]/.test(room), 'one shell for every section: a 240 sidebar, content up to 1200')
@@ -909,8 +930,8 @@ function wiringTests() {
     '…any sheet copies now, each run with its own players a time (Ross, 17 Nov 2026)')
   eq(compFormFrom({ ...stored, teeSheet: { batches: [] } }), null, '…and a sheet that does not read is never guessed at')
   eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
-  const compsSrc = read('app/clubhouse/[slug]/competitions/Competitions.tsx')
-  ok(/may\('run_events'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/competitions/Competitions.tsx')), 'Copy is an Officer’s, as New competition is (D219)')
+  const compsSrc = read('app/clubhouse/[slug]/events/Events.tsx')
+  ok(/may\('run_events'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/events/Events.tsx')), 'Copy is an Officer’s, as New competition is (D219)')
   ok(/makeOne\(store, input\.token, mine\.club\.id, form, now\)/.test(read('app/api/club/competition.ts')), 'a copy is made exactly as New competition makes one')
 
 
@@ -1905,8 +1926,72 @@ async function membershipRouteTests() {
   eq((await ask('tok-ann', 'update', { clubId, memberId: annRow.id, gender: 'M' })).status, 403, 'a member cannot change their own gender — the club sets it')
 }
 
+// ─── Stage c1: the club's own events, who sees them (M1–M6) ───────────
+
+async function calendarTests() {
+  section('Stage c1: the club’s own events (lib/clubEvents.ts)')
+  const base = { title: 'AGM', type: 'BUSINESS', startsOn: '2026-12-02', startTime: '20:00', endTime: '22:00', visibility: 'office' }
+  eq(noteIssue(readClubNote(base)), null, 'an AGM, Office only: kept')
+  eq(noteIssue(readClubNote({ ...base, type: 'GOLF' })), 'Golf events are always shown to members — anything that touches the golf is.', 'Office only is never for golf (Ross, 17 Nov 2026)')
+  ok(!!noteIssue(readClubNote({ ...base, type: 'COURSE' })), '…nor a course closure')
+  ok(!!noteIssue(readClubNote({ ...base, endTime: '19:00' })) && !!noteIssue(readClubNote({ ...base, startsOn: '2026-02-30' })) && !!noteIssue(readClubNote({ ...base, title: '' })),
+    'an end before the start, a day that does not exist, no title: each said')
+  eq(readHiddenTypes(['SOCIAL', 'GOLF', 'COURSE', 'X']), ['SOCIAL'], 'a club can never hide golf from its members')
+  eq(readMemberHidden(['COMP', 'SOCIAL', 'GOLF']), ['GOLF', 'SOCIAL'], 'a member can turn off anything but competitions')
+  const social: Pick<ClubNote, 'type' | 'visibility'> = { type: 'SOCIAL', visibility: 'members' }
+  ok(memberSees(social, []) && !memberSees({ ...social, visibility: 'office' }, []) && !memberSees(social, ['SOCIAL']) && !memberSees(social, [], ['SOCIAL']),
+    'a member sees a Members event of a type the club shows and they want — never an Office only one')
+  eq(noteTimeLine({ startTime: '19:30', endTime: '22:00' }), '7:30 pm to 10:00 pm', 'the times as the sheet says them')
+  eq(seasonType({ kind: 'trip', competition: null }), 'GOLF', 'an event under the club that is not a competition reads as Golf')
+  eq(EVENT_TYPES.map(t => t.code), ['COMP', 'GOLF', 'SOCIAL', 'BUSINESS', 'SPORT', 'COURSE', 'MISC'], 'the seven types, in the calendar file’s codes')
+
+  section('Stage c1: who sees what, decided on the server (M3, M4)')
+  const s = new Stand()
+  const ross = member('ross', 'ross@x.ie'), ann = member('ann', 'ann@x.ie'), ollie = member('ollie', 'ollie@x.ie')
+  ;[ross, ann, ollie].forEach(u => s.add(u))
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
+  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
+  await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Ann Byrne', email: 'ann@x.ie' }, { name: 'Ollie Officer', email: 'ollie@x.ie' }] })
+  for (const r of s.list.values()) {
+    if (r.name === 'Ann Byrne') s.list.set(r.id, { ...r, userId: 'ann' })
+    if (r.name === 'Ollie Officer') s.list.set(r.id, { ...r, userId: 'ollie', officer: true, clubhouse: false })
+  }
+  const agm = await ask('tok-ross', 'event.save', { clubId, event: { title: 'AGM', type: 'BUSINESS', startsOn: '2026-12-02', visibility: 'office' } })
+  const quiz = await ask('tok-ross', 'event.save', { clubId, event: { title: 'Quiz night', type: 'SOCIAL', startsOn: '2026-12-04', startTime: '20:00' } })
+  const shut = await ask('tok-ross', 'event.save', { clubId, event: { title: 'Course closed', type: 'COURSE', startsOn: '2026-12-08', visibility: 'office' } })
+  ok(agm.status === 200 && quiz.status === 200, 'Clubhouse adds an AGM (Office only) and a quiz night')
+  eq(shut.status, 400, '…and is refused a course closure kept from the members')
+  eq((await ask('tok-ollie', 'event.save', { clubId, event: { title: 'Mine', type: 'SOCIAL', startsOn: '2026-12-09' } })).status, 403, 'an Officer without Clubhouse keeps no calendar here (Ross: Clubhouse is its own level)')
+  const seasonOf = await ask('tok-ross', 'season', { clubId })
+  ok(seasonOf.status === 200 && (seasonOf.body.calendar ?? []).some(e => e.name === 'AGM' && e.note?.visibility === 'office'), 'the AGM is on the Clubhouse’s Events and Calendar')
+  eq((await ask('tok-ollie', 'season', { clubId })).status, 403, 'an Officer without Clubhouse gets no season — and so no Office only event')
+  const homeOllie = await ask('tok-ollie', 'home', { slug: 'pints-golf-club' })
+  const homeAnn = await ask('tok-ann', 'home', { slug: 'pints-golf-club' })
+  const titles = (o: Awaited<ReturnType<typeof ask>>) => (o.status === 200 ? (o.body.notes ?? []).map(n => n.title) : ['refused'])
+  eq(titles(homeOllie), ['Quiz night'], 'the members home for an Officer without Clubhouse: the quiz, never the AGM (M3)')
+  eq(titles(homeAnn), ['Quiz night'], '…the same for any member')
+  ok(!JSON.stringify(homeOllie.body).includes('AGM'), '…not a word of it anywhere in the answer')
+  eq((await ask('tok-ross', 'event-types', { clubId, hidden: ['GOLF'] })).status, 400, 'a club cannot stop showing golf to its members')
+  eq((await ask('tok-ross', 'event-types', { clubId, hidden: ['SOCIAL'] })).status, 200, 'Club settings: Social not shown to members (M4)')
+  eq(titles(await ask('tok-ann', 'home', { slug: 'pints-golf-club' })), [], '…and the quiz leaves the members home')
+  await ask('tok-ross', 'event-types', { clubId, hidden: [] })
+  s.memberHiddenOf.set('ann', ['SOCIAL'])
+  eq(titles(await ask('tok-ann', 'home', { slug: 'pints-golf-club' })), [], 'a member who turned Social off does not see it (M5)…')
+  eq(titles(await ask('tok-ollie', 'home', { slug: 'pints-golf-club' })), ['Quiz night'], '…while everybody else still does')
+  const quizId = quiz.status === 200 ? quiz.body.noteId! : ''
+  eq((await ask('tok-ross', 'event.delete', { clubId, id: quizId })).status, 200, 'an event deleted from its panel')
+  ok(s.activity.some(a => a.action === 'event.add') && s.activity.some(a => a.action === 'event.delete') && s.activity.some(a => a.action === 'events.shown'), 'each change on the club’s activity log')
+  const accountSrc = read('app/api/account/account.ts')
+  ok(/input\.action === 'event-types'/.test(accountSrc) && /readMemberHidden\(input\.hidden\)/.test(accountSrc), '“From my clubs, show me” is kept on the account')
+  ok(read('app/club/[slug]/ClubView.tsx').includes('<ClubEventTypesCard') && read('app/home/HomeScreen.tsx').includes('<ClubEventTypesCard'), '…on the club’s Club tab and Me')
+  ok(read('next.config.ts').includes('/clubhouse/:slug/competitions'), 'the Clubhouse’s old Competitions address goes on to Events')
+}
+
 async function main() {
   ruleTests()
+  await calendarTests()
   await clubhouseTests()
   membershipRuleTests()
   await membershipRouteTests()

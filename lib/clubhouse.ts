@@ -13,6 +13,7 @@ import { indexLabel } from './handicapIndex'
 import type { Credentials } from './clubMay'
 import type { CompPhase } from './compPhase'
 import { GENDER_WORDS, birthDateLabel, type Category, type Gender } from './clubMembership'
+import type { ClubNote, EventType } from './clubEvents'
 
 /** Rows a page of the grid (D207). */
 export const PAGE_SIZE = 50
@@ -213,7 +214,7 @@ export const SECTIONS = [
   { key: 'overview', label: 'Overview', path: '' },
   { key: 'members', label: 'Members', path: '/members' },
   { key: 'memberships', label: 'Memberships', path: '/memberships' },
-  { key: 'competitions', label: 'Competitions', path: '/competitions' },
+  { key: 'events', label: 'Events', path: '/events' },
   { key: 'calendar', label: 'Calendar', path: '/calendar' },
   { key: 'settings', label: 'Club settings', path: '/settings' },
 ] as const
@@ -243,7 +244,12 @@ export const STAFF_NAME = 'Green Dot staff'
 export interface SeasonEvent {
   code: string
   name: string
-  kind: 'trip' | 'tournament' | 'run'
+  /** `club` — one of the club's own events (`club_events`, stage c1), its facts on `note`. */
+  kind: 'trip' | 'tournament' | 'run' | 'club'
+  /** Its type (lib/clubEvents.ts) — absent on an event read before types: `seasonType` works it out. */
+  type?: EventType
+  /** A club event's own facts. */
+  note?: ClubNote
   startDate: string | null
   endDate: string | null
   /** A club competition's facts; null for any other event under the club. */
@@ -258,6 +264,21 @@ export interface SeasonEvent {
     /** Stage (m): who may enter, said short — absent, everybody. */
     entry?: string
   } | null
+}
+
+/** An event's type: its own, else a competition's, a run challenge's Other sport, any other golf event's Golf. */
+export function seasonType(e: Pick<SeasonEvent, 'type' | 'competition' | 'kind'>): EventType {
+  return e.type ?? (e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF')
+}
+
+/** A club event as the season table and the calendar read it. */
+export function noteAsSeason(n: ClubNote): SeasonEvent {
+  return { code: `ev-${n.id}`, name: n.title, kind: 'club', type: n.type, startDate: n.startsOn, endDate: n.endsOn ?? n.startsOn, competition: null, note: n }
+}
+
+/** Whether an event is Office only — the Clubhouse alone (only a club event can be). */
+export function isOfficeOnly(e: Pick<SeasonEvent, 'note'>): boolean {
+  return e.note?.visibility === 'office'
 }
 
 /** The format as the table says it: "Stableford · 95%". */
@@ -313,7 +334,8 @@ export function weeklyFrom(start: string, count: number): string[] {
   return Array.from({ length: Math.min(count, MAX_COPIES) }, (_, i) => new Date(Date.UTC(y, m - 1, d + 7 * i)).toISOString().slice(0, 10))
 }
 
-/** Where an event opens: a competition inside its club, anything else by its code (`clubEventHref`'s rule). */
-export function eventHref(e: Pick<SeasonEvent, 'code' | 'competition'>, slug: string): string {
+/** Where an event opens: a competition inside its club, anything else by its code (`clubEventHref`'s rule); a club event opens in place (null). */
+export function eventHref(e: Pick<SeasonEvent, 'code' | 'competition' | 'kind'>, slug: string): string | null {
+  if (e.kind === 'club') return null
   return e.competition ? `/club/${slug}/comp/${e.code}` : `/${e.code}`
 }
