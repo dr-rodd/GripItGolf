@@ -140,11 +140,11 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
       )}
       <div>
         <p className={FIELD_LABEL}>Ages</p>
-        <div className="flex items-center gap-2">
-          <input aria-label="Aged from" className={`${FIELD} w-24`} inputMode="numeric" placeholder="From" value={entry.minAge ?? ''}
+        <div className="grid grid-cols-[6rem_auto_6rem] items-center gap-2 w-fit">
+          <input aria-label="Aged from" className={FIELD} inputMode="numeric" placeholder="From" value={entry.minAge ?? ''}
             onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, minAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
           <span className="t-label text-ink/80">to</span>
-          <input aria-label="Aged up to" className={`${FIELD} w-24`} inputMode="numeric" placeholder="To" value={entry.maxAge ?? ''}
+          <input aria-label="Aged up to" className={FIELD} inputMode="numeric" placeholder="To" value={entry.maxAge ?? ''}
             onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, maxAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
         </div>
         <p className="t-cap text-ink/65 mt-2">Empty is any age. Ages count on {ageDateLabel(ageDate)}.</p>

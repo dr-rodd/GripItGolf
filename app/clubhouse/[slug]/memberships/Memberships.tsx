@@ -212,11 +212,11 @@ function AgeDateCard({ clubId, ageDate, onSaved, ready }: { clubId: string; ageD
     <section className={`${cardClass()} p-5`} aria-labelledby="mem-age">
       <h2 id="mem-age" className="t-card text-ink">Ages count on</h2>
       <p className="t-cap text-ink/65 mt-1">A competition’s age band reads each player’s age on this day of the season.</p>
-      <div className="flex gap-2 mt-4">
-        <select aria-label="Day" value={d} disabled={!ready} onChange={e => setDay(Number(e.target.value))} className={`${FIELD} ch-focus w-24`}>
+      <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-2 mt-4">
+        <select aria-label="Day" value={d} disabled={!ready} onChange={e => setDay(Number(e.target.value))} className={`${FIELD} ch-focus`}>
           {Array.from({ length: MONTH_DAYS[m - 1] }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}</option>)}
         </select>
-        <select aria-label="Month" value={m} disabled={!ready} onChange={e => setMonth(Number(e.target.value))} className={`${FIELD} ch-focus flex-1`}>
+        <select aria-label="Month" value={m} disabled={!ready} onChange={e => setMonth(Number(e.target.value))} className={`${FIELD} ch-focus`}>
           {MONTHS.map((name, i) => <option key={name} value={i + 1}>{name}</option>)}
         </select>
       </div>

@@ -409,6 +409,10 @@ html.club-switch-fade::view-transition-group(club-header) { animation-duration: 
 .ch-focus:focus-visible { outline: 2px solid var(--color-accent-deep); outline-offset: 2px; }
 .ch-row[aria-selected="true"] > td { background-color: var(--color-accent-tint); }
 .ch-cell-editing { background-color: var(--color-accent-tint); }
+/* Stage (m): the grid grew wider than the page; the tick and the name stay
+   put while the rest scrolls under them, as a spreadsheet's first columns do. */
+.ch-stick { position: sticky; z-index: 1; background-color: var(--color-surface); }
+.ch-row[aria-selected="true"] > td.ch-stick { background-color: color-mix(in srgb, var(--color-accent-tint), var(--color-surface)); }
 .ch-panel { animation: chPanelIn 260ms var(--gd-ease) both; }
 @keyframes chPanelIn { from { transform: translateX(100%); } to { transform: none; } }
 .ch-bar-rise { animation: chBarRise 160ms ease-out both; }

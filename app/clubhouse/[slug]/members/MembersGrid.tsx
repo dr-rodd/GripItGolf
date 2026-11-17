@@ -302,11 +302,12 @@ export default function MembersGrid() {
           </select>
         )}
         <div className="flex items-center gap-2">
-          <input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMin} onChange={e => setAgeMin(e.target.value)} placeholder="Age from"
-            aria-label="Aged from" className={`${FIELD} ch-focus w-28`} />
-          <span className="t-cap text-ink/65">to</span>
-          <input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Age to"
-            aria-label="Aged up to" className={`${FIELD} ch-focus w-28`} />
+          <span className="t-label text-ink/80">Aged</span>
+          <span className="w-24"><input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMin} onChange={e => setAgeMin(e.target.value)} placeholder="From"
+            aria-label="Aged from" className={`${FIELD} ch-focus`} /></span>
+          <span className="t-label text-ink/80">to</span>
+          <span className="w-24"><input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="To"
+            aria-label="Aged up to" className={`${FIELD} ch-focus`} /></span>
         </div>
       </div>
       <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to paste a list, upload a file, download the list or change many at once.</p>
@@ -334,7 +335,7 @@ export default function MembersGrid() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-line">
-                  <th scope="col" className="w-12 px-4">
+                  <th scope="col" className="ch-stick left-0 w-12 px-4">
                     <TickBox label="Tick every row on this page" on={allTicked} onChange={v => setTicked(v ? new Set(grid.map(r => r.id)) : new Set())} />
                   </th>
                   {FIELDS.map(f => {
@@ -342,7 +343,7 @@ export default function MembersGrid() {
                     const right = RIGHT.includes(f)
                     return (
                       <th key={f} scope="col" aria-sort={s && sort === s ? (desc ? 'descending' : 'ascending') : undefined}
-                        className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap ${right ? 'text-right' : ''}`}>
+                        className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap ${right ? 'text-right' : ''} ${f === 'name' ? 'ch-stick left-12' : ''}`}>
                         {s ? (
                           <button type="button" onClick={() => toggleSort(s)} className="ch-focus rounded-tile t-eyebrow">
                             {HEAD[f]}{sort === s ? (desc ? ' ↓' : ' ↑') : ''}
@@ -370,14 +371,14 @@ export default function MembersGrid() {
                 )}
                 {grid.map(r => (
                   <tr key={r.id} aria-selected={ticked.has(r.id)} className="ch-row ch-hover border-b border-line last:border-b-0 h-12">
-                    <td className="px-4">
+                    <td className="ch-stick left-0 px-4">
                       <TickBox label={`Tick ${r.name}`} on={ticked.has(r.id)} onChange={v => setTicked(s => { const n = new Set(s); if (v) n.add(r.id); else n.delete(r.id); return n })} />
                     </td>
                     {[...FIELDS, 'gender' as const, 'birthDate' as const, ...(cats.length ? ['categoryId' as const] : [])].map(f => {
                       if (f === 'gender') return (
                         <td key={f} className="px-1">
                           <select value={r.gender ?? ''} onChange={e => void choose(r, 'gender', e.target.value || null)} aria-label={`Gender for ${r.name}`}
-                            className={`ch-focus ch-hover h-9 px-2 rounded-tile bg-transparent text-[15px] ${r.gender ? 'text-ink/80' : 'text-ink/65'}`}>
+                            className={`ch-focus ch-hover h-9 px-1 w-[6.5rem] rounded-tile bg-transparent text-[15px] ${r.gender ? 'text-ink/80' : 'text-ink/65'}`}>
                             <option value="">{NOT_GIVEN}</option>
                             <option value="M">{GENDER_WORDS.M}</option>
                             <option value="F">{GENDER_WORDS.F}</option>
@@ -387,7 +388,7 @@ export default function MembersGrid() {
                       if (f === 'categoryId') return (
                         <td key={f} className="px-1">
                           <select value={r.categoryId ?? ''} onChange={e => void choose(r, 'categoryId', e.target.value || null)} aria-label={`Membership for ${r.name}`}
-                            className={`ch-focus ch-hover h-9 px-2 rounded-tile bg-transparent text-[15px] max-w-[11rem] ${r.categoryId ? 'text-ink/80' : 'text-ink/65'}`}>
+                            className={`ch-focus ch-hover h-9 px-1 w-[7.5rem] rounded-tile bg-transparent text-[15px] ${r.categoryId ? 'text-ink/80' : 'text-ink/65'}`}>
                             <option value="">None</option>
                             {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                           </select>
@@ -397,7 +398,7 @@ export default function MembersGrid() {
                       const right = RIGHT.includes(f)
                       const isEditing = editing?.id === r.id && editing.field === f
                       return (
-                        <td key={f} className={`px-1 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''}`}>
+                        <td key={f} className={`px-1 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''} ${f === 'name' ? 'ch-stick left-12' : ''}`}>
                           {isEditing ? (
                             <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => editKey(e, r, f)}
                               onBlur={() => void commit(r, f, draft)} aria-label={`${HEAD[f]} for ${r.name}`}
