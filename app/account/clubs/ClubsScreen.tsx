@@ -1,11 +1,11 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
 import BackButton from '@/app/components/BackButton'
 import { ButtonLink, EmptyState, FIELD, FIELD_LABEL, ListGroup, ListRow, Pill, buttonClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
-import { CLUB_STATUS_WORDS, INVITE_LENGTH, clubNameIssue, inviteCodeIssue } from '@/lib/clubs'
+import { CLUB_STATUS_WORDS, INVITE_LENGTH, inviteCodeIssue } from '@/lib/clubs'
+import { SITE } from '@/config/site'
 import { credentialLine } from '@/lib/clubMay'
 import { askClub, readAccount, type ClubSummary } from '@/lib/accountClient'
 
@@ -16,20 +16,16 @@ type State =
   | { kind: 'ready'; clubs: ClubSummary[] }
 
 /**
- * Clubs (stage (c)): the clubs this Green Dot member is on the list of,
- * joining one by the code it emailed, and setting one up. A club is checked
- * by Green Dot before it is verified; its list can be built meanwhile.
+ * Clubs (stage (c)): the clubs this Green Dot member is on the list of, and
+ * joining one by the code it emailed. **Clubs are set up by Green Dot, from
+ * /admin — a member can no longer set one up** (Ross, 17 Nov 2026).
  */
 export default function ClubsScreen() {
-  const router = useRouter()
   const [state, setState] = useState<State>({ kind: 'loading' })
   const [code, setCode] = useState('')
   const [codeError, setCodeError] = useState('')
   const [joined, setJoined] = useState('')
-  const [name, setName] = useState('')
-  const [yourName, setYourName] = useState('')
-  const [makeError, setMakeError] = useState('')
-  const [busy, setBusy] = useState<'code' | 'make' | null>(null)
+  const [busy, setBusy] = useState<'code' | null>(null)
 
   const load = useCallback(async () => {
     if (!(await readAccount())) { setState({ kind: 'signedOut' }); return }
@@ -51,17 +47,6 @@ export default function ClubsScreen() {
     // D179: a club index that differed from the account's is said once, here.
     setJoined(`${r.club ? `You’re linked to ${r.club.name}’s list.` : 'Linked.'}${r.note ? ` ${r.note}` : ''}`)
     await load()
-  }
-
-  async function make(e: React.FormEvent) {
-    e.preventDefault()
-    const issue = clubNameIssue(name) ?? (yourName.trim() ? null : 'Type your own name, as it goes on the club’s list.')
-    if (issue) { setMakeError(issue); return }
-    setBusy('make'); setMakeError('')
-    const r = await askClub('create', { name, yourName })
-    setBusy(null)
-    if (!r.ok || !r.club) { setMakeError(r.ok ? 'Could not set it up — try again.' : r.error); return }
-    router.push(`/account/club?id=${encodeURIComponent(r.club.id)}`)
   }
 
   return (
@@ -119,25 +104,9 @@ export default function ClubsScreen() {
               </form>
             </section>
 
-            <section className="mt-10">
-              <h2 className="t-h2 text-ink">Set up your club</h2>
-              <p className="text-ink/65 text-sm mt-1">
-                For the people who run a club. Green Dot checks each club before it’s verified; you can build its list meanwhile.
-              </p>
-              <form onSubmit={make} className="mt-4">
-                <label htmlFor="club-name" className={FIELD_LABEL}>Club name</label>
-                <input id="club-name" type="text" autoComplete="organization" value={name}
-                  onChange={e => { setName(e.target.value); setMakeError('') }} className={FIELD} />
-                <label htmlFor="club-your-name" className={`${FIELD_LABEL} mt-5`}>Your name</label>
-                <input id="club-your-name" type="text" autoComplete="name" value={yourName}
-                  onChange={e => { setYourName(e.target.value); setMakeError('') }} className={FIELD} />
-                <p className="t-cap text-ink/65 mt-2">You go on the list as its first owner.</p>
-                {makeError && <p className="t-cap text-rust-deep mt-2" role="alert">{makeError}</p>}
-                <button type="submit" disabled={busy !== null || !name.trim() || !yourName.trim()} className={`${buttonClass('secondary')} mt-6`}>
-                  {busy === 'make' ? 'Setting up…' : 'Set up the club'}
-                </button>
-              </form>
-            </section>
+            <p className="t-cap text-ink/65 mt-10">
+              Is your club not on Green Dot yet? Green Dot sets clubs up — write to {SITE.supportEmail}.
+            </p>
           </>
         )}
       </div>

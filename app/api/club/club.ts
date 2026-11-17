@@ -7,8 +7,9 @@
 // comes through here (D94).
 //
 // * `mine` — the clubs this account is on, its credentials in each.
-// * `create` — set up a club: unverified until Ross approves it in /admin,
-//   the maker its first owner, linked from the start.
+// * `create` — **refused to everybody** (Ross, 17 Nov 2026): clubs are set up
+//   by Green Dot from /admin (`provisionClub` below, the admin's action), its
+//   owner a Green Dot account named there, verified at once.
 // * `members` — the club's list, for its owners and admins: numbers shown
 //   partly hidden, never whole.
 // * `add` — rows typed or pasted, matched to the list by GUI number, then
@@ -40,7 +41,7 @@ import {
   type Asker, type ClubAct, type Credentials, type CredentialKey,
 } from '@/lib/clubMay'
 import {
-  INVITE_DAYS, INVITE_RESEND_MINUTES, INVITE_TRY_LIMIT, MAX_CLUBS_MADE, MAX_LIST_ROWS,
+  INVITE_DAYS, INVITE_RESEND_MINUTES, INVITE_TRY_LIMIT, MAX_LIST_ROWS,
   clubNameIssue, clubSlug, clubStatus, cleanRow, inviteCodeFrom, inviteCodeIssue, inviteEmail,
   listRowIssue, maskNumber, nextSlug, normaliseClubName,
   planList, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
@@ -122,10 +123,10 @@ export interface ClubStore extends ClubhouseStore {
   compPhases?(comps: { tripId: string; code: string }[]): Promise<Map<string, import('@/lib/compPhase').CompPhase>>
   /** The rows this account is linked to and not removed from, with their clubs. */
   clubsOf(userId: string): Promise<{ club: ClubRecord; row: MemberRecord }[]>
-  clubsMadeBy(userId: string): Promise<number>
   /** Slugs already taken that start with this one. */
   slugsLike(base: string): Promise<string[]>
-  createClub(c: { slug: string; name: string; createdBy: string }, owner: { name: string; email: string | null; userId: string }): Promise<ClubRecord>
+  /** `verified`: the club is verified as it is made — Green Dot's own doing, from /admin. */
+  createClub(c: { slug: string; name: string; createdBy: string; verified?: boolean }, owner: { name: string; email: string | null; userId: string }): Promise<ClubRecord>
   club(clubId: string): Promise<ClubRecord | null>
   /** Every row on a club's list, removed ones too. */
   rows(clubId: string): Promise<MemberRecord[]>
@@ -443,6 +444,32 @@ async function otherClubs(store: ClubStore, userId: string, here: string): Promi
   return mine.map((x, i) => ({ slug: x.club.slug, name: x.club.name, toSign: counts[i] }))
 }
 
+/**
+ * Setting up a club — **Green Dot's own act, from /admin** (Ross, 17 Nov
+ * 2026; a member can no longer do it): a name, the Green Dot account that
+ * owns it (named by the admin, so it goes on the list as its first owner,
+ * linked from the start) and, for a club the admin makes, verified at once.
+ * The address is the name's, made unique. Handed the store so `test:clubs`
+ * runs it on the stand-in.
+ */
+export async function provisionClub(
+  store: Pick<ClubStore, 'slugsLike' | 'createClub'>,
+  input: { name: string; owner: { userId: string; email: string | null; name: string }; verified: boolean },
+): Promise<{ ok: true; club: ClubRecord } | { ok: false; error: string }> {
+  const issue = clubNameIssue(input.name)
+  if (issue) return { ok: false, error: issue }
+  const ownerName = normaliseClubName(input.owner.name)
+  if (!ownerName) return { ok: false, error: 'Give the owner’s name as it goes on the club’s list.' }
+  const name = normaliseClubName(input.name)
+  const base = clubSlug(name)
+  const slug = nextSlug(base, await store.slugsLike(base))
+  const club = await store.createClub(
+    { slug, name, createdBy: input.owner.userId, verified: input.verified },
+    { name: ownerName.slice(0, 80), email: input.owner.email, userId: input.owner.userId },
+  )
+  return { ok: true, club }
+}
+
 export async function runClub(
   input: Record<string, unknown> & { token: string | null; action: unknown; address?: string },
   store: ClubStore,
@@ -459,19 +486,8 @@ export async function runClub(
     return { status: 200, body: { ok: true, clubs: mine.map(x => summary(x.club, x.row)) } }
   }
 
-  if (input.action === 'create') {
-    const issue = clubNameIssue(str(input.name))
-    if (issue) return fail(400, issue)
-    const yourName = normaliseClubName(str(input.yourName))
-    if (!yourName) return fail(400, 'Type your own name, as it goes on the club’s list.')
-    // D218, D223: an account may be on many clubs' lists — and set up more than one.
-    if ((await store.clubsMadeBy(user.id)) >= MAX_CLUBS_MADE) return fail(409, `One account sets up at most ${MAX_CLUBS_MADE} clubs.`)
-    const name = normaliseClubName(str(input.name))
-    const base = clubSlug(name)
-    const slug = nextSlug(base, await store.slugsLike(base))
-    const club = await store.createClub({ slug, name, createdBy: user.id }, { name: yourName.slice(0, 80), email: user.email, userId: user.id })
-    return { status: 200, body: { ok: true, club: summary(club, { owner: true, playsHere: true, officer: true, clubhouse: true }) } }
-  }
+  // Clubs are Green Dot's to set up, from /admin — never a member's (Ross, 17 Nov 2026).
+  if (input.action === 'create') return fail(403, 'Clubs are set up by Green Dot. Write to us to have yours added.')
 
   if (input.action === 'link') return runLink(input, user, store, now)
 

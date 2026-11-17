@@ -22,9 +22,6 @@
 
 export const CLUB_NAME_MIN = 3
 export const CLUB_NAME_MAX = 60
-/** How many clubs one account may set up, awaiting approval or not. */
-export const MAX_CLUBS_MADE = 5
-
 export type ClubRole = 'owner' | 'admin' | 'member'
 export const CLUB_ROLES: readonly ClubRole[] = ['owner', 'admin', 'member']
 

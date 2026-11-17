@@ -36,7 +36,7 @@ import { describeTime } from '../lib/itinerary'
 import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
 import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
-import { inviteHash, linkDetails, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
+import { inviteHash, linkDetails, provisionClub, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
@@ -214,10 +214,9 @@ class Stand implements ClubStore {
     return [...this.list.values()].filter(r => r.userId === userId && !r.removedAt)
       .map(row => ({ club: this.clubs.get(row.clubId)!, row })).sort((a, b) => a.club.name.localeCompare(b.club.name))
   }
-  async clubsMadeBy(userId: string) { return [...this.clubs.values()].filter(c => c.createdBy === userId).length }
   async slugsLike(base: string) { return [...this.clubs.values()].map(c => c.slug).filter(s => s.startsWith(base)) }
-  async createClub(c: { slug: string; name: string; createdBy: string }, owner: { name: string; email: string | null; userId: string }) {
-    const club = { id: `c${++this.n}`, slug: c.slug, name: c.name, verifiedAt: null, refusedAt: null, createdBy: c.createdBy }
+  async createClub(c: { slug: string; name: string; createdBy: string; verified?: boolean }, owner: { name: string; email: string | null; userId: string }) {
+    const club = { id: `c${++this.n}`, slug: c.slug, name: c.name, verifiedAt: c.verified ? NOW.toISOString() : null, refusedAt: null, createdBy: c.createdBy }
     this.clubs.set(club.id, club)
     const id = `m${++this.n}`
     this.list.set(id, { id, clubId: club.id, name: owner.name, memberNumber: null, guiNumber: null, email: owner.email, role: 'owner', userId: owner.userId, removedAt: null, onBoards: true })
@@ -405,6 +404,19 @@ class Stand implements ClubStore {
 
 const member = (id: string, email: string): AuthUser => ({ id, isAnonymous: false, email, emailConfirmed: true })
 
+/**
+ * A club set up the way Green Dot does it — from /admin, for a named owner
+ * (Ross, 17 Nov 2026: a member can no longer). Answers in the shape the old
+ * member's `create` did, so a section reads the club it made the same way.
+ */
+async function setUpClub(s: Stand, tok: string, body: { name: string; yourName?: string }, verified = false) {
+  const user = await s.userFromToken(tok)
+  const out = await provisionClub(s, { name: body.name, owner: { userId: user!.id, email: user!.email, name: body.yourName ?? '' }, verified })
+  if (!out.ok) return { status: 400, body: { ok: false as const, error: out.error, club: undefined as undefined } }
+  const mine = await runClub({ token: tok, action: 'mine', address: 'a' }, s, s.clock)
+  return { status: 200, body: { ok: true as const, error: '', club: mine.status === 200 ? mine.body.clubs?.find(c => c.id === out.club.id) : undefined } }
+}
+
 /** The code a stand-in emailed, read off the email's text. */
 const codeIn = (text: string) => /([A-Z2-9]{4}-[A-Z2-9]{4})/.exec(text)?.[1] ?? ''
 
@@ -421,13 +433,19 @@ async function routeTests() {
   eq((await ask('', 'mine')).status, 401, 'no sign-in: refused')
   eq((await ask('tok-phone', 'mine')).status, 403, 'a phone with no account: refused')
 
-  section('Setting up a club')
-  eq((await ask('tok-ross', 'create', { name: 'Lahinch Golf Club' })).status, 400, 'your own name is asked for')
-  const made = await ask('tok-ross', 'create', { name: 'Lahinch Golf Club', yourName: 'Ross O’Grady' })
+  section('Setting up a club is Green Dot\'s, from /admin — never a member\'s (Ross, 17 Nov 2026)')
+  eq((await ask('tok-ross', 'create', { name: 'Lahinch Golf Club', yourName: 'Ross' })).status, 403, 'a Green Dot member asking to set up a club is refused')
+  eq(s.clubs.size, 0, '…and no club was made')
+  eq((await setUpClub(s, 'tok-ross', { name: 'Lahinch Golf Club' })).status, 400, 'the owner\'s name is asked for')
+  eq((await setUpClub(s, 'tok-ross', { name: 'x', yourName: 'Ross' })).status, 400, '…and a real club name')
+  const verifiedClub = await setUpClub(s, 'tok-ross', { name: 'Test Club', yourName: 'Ross' }, true)
+  ok(verifiedClub.status === 200 && verifiedClub.body.club?.status === 'verified' && verifiedClub.body.club.credentials.owner, 'a club the admin makes is verified at once, its owner the account named')
+  for (const [id, c] of s.clubs) if (c.slug === 'test-club') { s.clubs.delete(id); for (const [mid, r] of s.list) if (r.clubId === id) s.list.delete(mid) }
+  const made = await setUpClub(s, 'tok-ross', { name: 'Lahinch Golf Club', yourName: 'Ross O’Grady' })
   ok(made.status === 200 && made.body.ok && made.body.club?.status === 'pending' && made.body.club.credentials.owner,
-    'made unverified, its maker the first owner')
+    'made (here unverified), its named owner the first owner on the list')
   const clubId = made.status === 200 ? made.body.club!.id : ''
-  const again = await ask('tok-eve', 'create', { name: 'Lahinch Golf Club', yourName: 'Eve' })
+  const again = await setUpClub(s, 'tok-eve', { name: 'Lahinch Golf Club', yourName: 'Eve' })
   ok(again.status === 200 && again.body.club?.slug === 'lahinch-golf-club-2', 'a second club of the same name gets its own address')
 
   section('The list is its Clubhouse holders’')
@@ -466,7 +484,7 @@ async function routeTests() {
   const annRow = list.find(r => r.name === 'Ann Lee')!
   // Ann's row gets Dave's GUI number by mistake: Ann's code must not link a number Dave holds.
   s.list.set(annRow.id, { ...s.list.get(annRow.id)!, guiNumber: '3110002X' })
-  const other = await ask('tok-fay', 'create', { name: 'Ballybunion', yourName: 'Fay' })
+  const other = await setUpClub(s, 'tok-fay', { name: 'Ballybunion', yourName: 'Fay' })
   const otherId = other.status === 200 ? other.body.club!.id : ''
   await ask('tok-fay', 'add', { clubId: otherId, rows: [{ name: 'Ann Lee', guiNumber: '3110002', email: 'ann@x.ie' }, { name: 'Dave Byrne', email: 'dave@x.ie' }] })
   const annOther = (await s.rows(otherId)).find(r => r.name === 'Ann Lee')!
@@ -482,8 +500,8 @@ async function routeTests() {
   ok(second.status === 200 && s.list.get(daveOther.id)!.userId === 'dave', 'a second club links')
   const both2 = await ask('tok-dave', 'mine')
   eq(both2.status === 200 ? both2.body.clubs?.map(c => c.name) : null, ['Ballybunion', 'Lahinch Golf Club'], '…and both are the account’s, by name')
-  const setUp = await ask('tok-dave', 'create', { name: 'Doonbeg', yourName: 'Dave' })
-  ok(setUp.status === 200 && !!setUp.body.club?.credentials.owner, 'setting up another club is allowed too')
+  const setUp = await setUpClub(s, 'tok-dave', { name: 'Doonbeg', yourName: 'Dave' })
+  ok(setUp.status === 200 && !!setUp.body.club?.credentials.owner, 'an account may own several clubs')
   // Undo the extra clubs for the sections that follow.
   s.list.set(daveOther.id, { ...s.list.get(daveOther.id)!, userId: null })
   for (const [id, r] of s.list) if (r.userId === 'dave' && r.clubId !== clubId) s.list.delete(id)
@@ -710,7 +728,7 @@ async function pageRouteTests() {
   const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie'), ann = member('ann', 'ann@x.ie')
   ;[ross, dave, ann].forEach(u => s.add(u))
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, NOW)
-  const made = await ask('tok-ross', 'create', { name: 'Portmarnock', yourName: 'Ross' })
+  const made = await setUpClub(s, 'tok-ross', { name: 'Portmarnock', yourName: 'Ross' })
   const clubId = made.status === 200 ? made.body.club!.id : ''
   await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Dave', email: 'dave@x.ie' }] })
   const daveRow = (await s.rows(clubId)).find(r => r.name === 'Dave')!
@@ -857,8 +875,8 @@ function wiringTests() {
   ok(/<CodeBox \/>/.test(view) && /href="\/create"/.test(view), 'the club area’s Home has the code box and Make an event')
   ok(/href=\{`\/clubhouse\/\$\{face\.slug\}`\}/.test(view) && /clubMay\('open_clubhouse'/.test(view) && /href="\/home\?tab=events"/.test(view),
     'its Club tab holds the way into the Clubhouse (Clubhouse holders) and Your events')
-  ok(/redirect\(`\/clubhouse\/\$\{slug\}\/members`\)/.test(read('app/club/[slug]/list/page.tsx')),
-    'the list moved to the Clubhouse’s Members (stage (k1)); the old address goes on there')
+  ok(/redirect\(`\/club\/\$\{slug\}`\)/.test(read('app/club/[slug]/list/page.tsx')) && !/redirect\(`\/clubhouse/.test(read('app/club/[slug]/list/page.tsx')),
+    'the old list address no longer sends anybody into the Clubhouse (Ross, 17 Nov 2026) — the club\'s own page, whose Club tab offers it to those who hold it')
   ok(/window\.location\.replace\(state\.list \? `\/clubhouse\/\$\{state\.club\.slug\}\/members`/.test(read('app/account/club/ClubScreen.tsx')),
     '  …as does /account/club for a verified club')
   ok(/owner_id', userId/.test(read('app/api/club/store.ts')), 'a member’s own events include the ones they made (D144)')
@@ -1037,7 +1055,7 @@ async function handicapTests() {
   ;[ross, dave].forEach(u => st.add(u))
   st.handicaps = new FakeHandicaps()
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, st, st.clock)
-  const made = await ask('tok-ross', 'create', { name: 'Index GC', yourName: 'Ross' })
+  const made = await setUpClub(st, 'tok-ross', { name: 'Index GC', yourName: 'Ross' })
   const clubId = made.status === 200 ? made.body.club!.id : ''
   await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Dave Byrne', email: 'dave@x.ie' }, { name: 'Ann Lee' }] })
   const listed = await ask('tok-ross', 'members', { clubId })
@@ -1806,7 +1824,7 @@ async function clubhouseTests() {
   const ross = member('ross', 'ross@x.ie'), dave = member('dave', 'dave@x.ie'), gd = member('gd', 'staff@greendot.live'), eve = member('eve', 'eve@x.ie')
   ;[ross, dave, gd, eve].forEach(u => s.add(u))
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
-  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const made = await setUpClub(s, 'tok-ross', { name: 'Pints Golf Club', yourName: 'Ross' })
   const clubId = made.status === 200 ? made.body.club!.id : ''
   s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
   await ask('tok-ross', 'add', { clubId, rows: Array.from({ length: 60 }, (_, i) => ({ name: `Player ${String(i).padStart(2, '0')}`, guiNumber: `31100${String(i).padStart(2, '0')}`, email: i % 10 === 0 ? '' : `p${i}@x.ie` })) })
@@ -2025,7 +2043,7 @@ async function membershipRouteTests() {
   const ross = member('ross', 'ross@x.ie'), ann = member('ann', 'ann@x.ie')
   ;[ross, ann].forEach(u => s.add(u))
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
-  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const made = await setUpClub(s, 'tok-ross', { name: 'Pints Golf Club', yourName: 'Ross' })
   const clubId = made.status === 200 ? made.body.club!.id : ''
   s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
   const sixId = await s.saveCategory(clubId, { name: '6 Day', code: '6DAY', days: [0, 1, 2, 3, 4, 6], position: 0 })
@@ -2038,7 +2056,7 @@ async function membershipRouteTests() {
   await linkDetails(s, 'ann', s.list.get(annRow.id)!)
   eq(s.details.get('ann'), { gender: 'F', birthDate: '1970-02-01' }, 'linking: the row’s details fill an empty account')
   // A second club's row for Ann carries the same value once changed (one value everywhere).
-  const otherClub = await ask('tok-ross', 'create', { name: 'Lahinch', yourName: 'Ross' })
+  const otherClub = await setUpClub(s, 'tok-ross', { name: 'Lahinch', yourName: 'Ross' })
   const otherId = otherClub.status === 200 ? otherClub.body.club!.id : ''
   await ask('tok-ross', 'add', { clubId: otherId, rows: [{ name: 'Ann Byrne', email: 'ann@x.ie' }] })
   const annThere = [...s.list.values()].find(r => r.clubId === otherId && r.name === 'Ann Byrne')!
@@ -2074,7 +2092,7 @@ async function calendarTests() {
   const ross = member('ross', 'ross@x.ie'), ann = member('ann', 'ann@x.ie'), ollie = member('ollie', 'ollie@x.ie')
   ;[ross, ann, ollie].forEach(u => s.add(u))
   const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
-  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const made = await setUpClub(s, 'tok-ross', { name: 'Pints Golf Club', yourName: 'Ross' })
   const clubId = made.status === 200 ? made.body.club!.id : ''
   s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
   await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Ann Byrne', email: 'ann@x.ie' }, { name: 'Ollie Officer', email: 'ollie@x.ie' }] })
@@ -2378,6 +2396,16 @@ async function teeTimesTests() {
     const out = walkCh('app/clubhouse').filter(f => !f.endsWith('ClubhouseShell.tsx')).filter(f => /href=\{?`\/club\/|'\/club\/\$\{/.test(read(f)))
     eq(out, [], 'nothing in the Clubhouse links into the members app but the shell\'s own "The members app" (Ross, 17 Nov 2026)')
     ok(/events\/\$\{e\.code\}/.test(read('lib/clubhouse.ts')) && !/\/club\/\$\{o\.clubSlug\}/.test(read('lib/clubhouse.ts')), 'a competition opens on the Clubhouse\'s own page, from Events, the Calendar and Needs you')
+  }
+  {
+    // No link or redirect into the Clubhouse from anywhere but the two places that ask the account first (Ross, 17 Nov 2026).
+    const walkApp = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? (['clubhouse', 'admin', 'api'].includes(e.name) && d === 'app' ? [] : walkApp(path.join(d, e.name))) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : [])
+    const linking = walkApp('app').filter(f => /[`'"]\/clubhouse/.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
+    eq(linking.sort(), ['app/account/club/ClubScreen.tsx', 'app/club/[slug]/ClubView.tsx'], 'only two places outside the Clubhouse mention it at all')
+    ok(/clubMay\('open_clubhouse', \{ row: m\.credentials[^}]*\}\) && \(\s*<ListRow href=\{`\/clubhouse\//.test(read('app/club/[slug]/ClubView.tsx')), '…the Club tab\'s link only for an account that holds Clubhouse')
+    ok(/clubMay\('keep_list'/.test(read('app/account/club/ClubScreen.tsx')) && /state\.list \? `\/clubhouse/.test(read('app/account/club/ClubScreen.tsx')), '…and the list\'s way in only for one that may keep the list')
+    ok(!read('app/account/clubs/ClubsScreen.tsx').includes("askClub('create'") && !read('app/account/clubs/ClubsScreen.tsx').includes('Set up the club'), 'members have no Set up your club')
+    ok(/makeClub/.test(read('app/admin/clubs/actions.ts')) && /requireAdmin\(\)/.test(read('app/admin/clubs/actions.ts').slice(read('app/admin/clubs/actions.ts').indexOf('export async function makeClub'))) && /provisionClub/.test(read('app/admin/clubs/actions.ts')), 'clubs are set up from /admin, behind the admin session')
   }
   eq(sectionAt('/clubhouse/pints/tee-sheet', 'pints'), 'teesheet', 'the Clubhouse has a Tee sheet section')
   const ts = read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')

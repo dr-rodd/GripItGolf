@@ -345,18 +345,15 @@ export function clubStore(db: Db): ClubStore {
       return rows.filter(r => byId.has(r.club_id)).map(r => ({ club: byId.get(r.club_id)!, row: asRow(r) }))
         .sort((a, b) => a.club.name.localeCompare(b.club.name))
     },
-    async clubsMadeBy(userId) {
-      const { count, error } = await db.from('clubs').select('id', { count: 'exact', head: true }).eq('created_by', userId)
-      if (error) throw error
-      return count ?? 0
-    },
     async slugsLike(base) {
       const { data, error } = await db.from('clubs').select('slug').like('slug', `${base}%`)
       if (error) throw error
       return ((data ?? []) as { slug: string }[]).map(r => r.slug)
     },
     async createClub(c, owner) {
-      const { data, error } = await db.from('clubs').insert({ slug: c.slug, name: c.name, created_by: c.createdBy }).select(CLUB_COLS).single()
+      const now0 = new Date().toISOString()
+      const { data, error } = await db.from('clubs')
+        .insert({ slug: c.slug, name: c.name, created_by: c.createdBy, ...(c.verified ? { verified_at: now0 } : {}) }).select(CLUB_COLS).single()
       if (error || !data) throw error ?? new Error('No club came back.')
       const club = asClub(data as ClubRow)
       const now = new Date().toISOString()

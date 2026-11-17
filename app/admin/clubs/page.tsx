@@ -5,6 +5,7 @@ import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
 import ClubDecision from './ClubDecision'
+import NewClub from './NewClub'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,7 +17,8 @@ export const metadata = {
 type ClubRow = { id: string; slug: string; name: string; created_by: string | null; verified_at: string | null; refused_at: string | null; created_at: string }
 
 /**
- * Clubs waiting to be checked, first; then every other club. Verifying a
+ * Setting a club up (only here — members no longer can), then clubs waiting
+ * to be checked, first; then every other club. Verifying a
  * club gives its owners and admins its events and its people their list
  * of them (stage (c)). Who set it up is shown by email so it can be checked
  * against the club — never anything from its list.
@@ -40,6 +42,7 @@ export default async function AdminClubsPage() {
 
   return (
     <AdminShell active="clubs" subtitle={error ? 'Could not read the clubs (is migration 086 in?)' : `${clubs.length} clubs`}>
+      <NewClub />
       {rows.length === 0 && <p className="text-ink/65">No club has been set up yet.</p>}
       <div className="space-y-3">
         {rows.map(({ c, status, listed, maker }) => (
