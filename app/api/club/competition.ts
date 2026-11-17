@@ -23,7 +23,9 @@ import { NO_FORMATS } from '@/lib/formats'
 import { toItemRow } from '@/lib/itinerarySync'
 import { unheldPin } from '@/lib/pinHash'
 import { entryRulesIssue, type Category, type EntryRules } from '@/lib/clubMembership'
-import { matchPlayBoard, matchPlayDates, matchPlayFormIssue, matchPlayPermissions, matchPlaySeed, readMatchPlayForm } from '@/lib/clubMatchPlay'
+import { matchPlayBoard, matchPlayDates, matchPlayFormIssue, matchPlayLine, matchPlayPermissions, matchPlayPhase, matchPlayRules, matchPlaySeed, readMatchPlayForm } from '@/lib/clubMatchPlay'
+import { PHASE_WORDS } from '@/lib/compPhase'
+import { formatLine } from '@/lib/clubhouse'
 import { runCreate, type CreateStore } from '../trip/create/create'
 import type { ClubRecord, MemberRecord } from './club'
 
@@ -499,4 +501,35 @@ export async function runNewMatchPlay(
     }]).catch(e => console.error('club activity not logged:', e))
   }
   return { status: 200, body: { ok: true, code: made.code, slug: who.club.slug }, doorCookie: made.doorCookie }
+}
+
+export type MatchPlayReadOutcome =
+  | { status: 200; body: { ok: true; name: string; format: string; phase: string; line: string; entered: number; cap: number | null; rules: ReturnType<typeof matchPlayRules> } }
+  | { status: 400 | 401 | 403 | 404 | 503; body: { ok: false; error: string } }
+
+/** A club match play as the Clubhouse reads it (Ross, 17 Nov 2026): where it stands, its rules and its dates — the office's (`keep_calendar`). */
+export async function runReadMatchPlay(
+  input: { token: string | null; clubId: unknown; code: unknown },
+  store: CompetitionStore & { matchPlayComp?(code: string): Promise<import('./matchPlayStore').MatchPlayComp | null> },
+  now: Date,
+): Promise<MatchPlayReadOutcome> {
+  const no = (status: 400 | 401 | 403 | 404 | 503, error: string): MatchPlayReadOutcome => ({ status, body: { ok: false, error } })
+  if (!input.token) return no(401, 'Sign in first.')
+  const user = await store.userFromToken(input.token)
+  if (!user || !isAccount(user)) return no(403, 'Sign in to your Green Dot account first.')
+  const who = await competitionAsker(store, user.id, input.clubId, 'clubhouse')
+  if (!who.ok) return no(403, who.error)
+  const mp = store.matchPlayComp && typeof input.code === 'string' ? await store.matchPlayComp(input.code.trim().toUpperCase()) : null
+  if (!mp || mp.clubId !== who.club.id) return no(404, 'No such match play at this club.')
+  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now)
+  return {
+    status: 200,
+    body: {
+      ok: true, name: mp.name,
+      format: formatLine({ scoring: 'stableford', allowance: mp.allowance, matchPlay: { format: mp.setup.format } }),
+      phase: PHASE_WORDS[phase], line: matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName }),
+      entered: mp.entered, cap: mp.setup.maxField,
+      rules: matchPlayRules(mp.setup, { allowance: mp.allowance, qualifierName: mp.qualifierName, entryLine: mp.entryLine }),
+    },
+  }
 }

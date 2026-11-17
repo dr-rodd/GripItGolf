@@ -25,6 +25,7 @@ import { describeTime } from './itinerary'
 import { clubEventDates } from './clubs'
 import { COMP_NAME_MAX, type CompWatch } from './clubComp'
 import type { DrawPlan } from './bracketDraw'
+import type { CompPhase } from './compPhase'
 import { FULL_ALLOWANCE, MIN_ALLOWANCE } from './handicapAllowance'
 
 // ─── The answers ───────────────────────────────────────────────
@@ -315,15 +316,8 @@ export function matchPlayKeyDates(m: ClubMatchPlay): string[] {
 
 // ─── Where it stands ───────────────────────────────────────────
 
-export type MatchPlayPhase = 'entries_open' | 'entries_closed' | 'qualifier' | 'in_play' | 'finished'
-
-export const MATCH_PHASE_WORDS: Record<MatchPlayPhase, string> = {
-  entries_open: 'Entries open',
-  entries_closed: 'Entries closed',
-  qualifier: 'Qualifier to come',
-  in_play: 'In play',
-  finished: 'Finished',
-}
+/** Where it stands — the platform's competition phases (lib/compPhase.ts), so every list says it one way. */
+export type MatchPlayPhase = Extract<CompPhase, 'entries' | 'draw_pending' | 'qualifier' | 'in_play' | 'finished'>
 
 /** The facts it is read from: the setup, whether a draw exists, and whether it has a winner. */
 export function matchPlayPhase(m: ClubMatchPlay, facts: { drawn: boolean; won: boolean }, now: Date): MatchPlayPhase {
@@ -331,7 +325,7 @@ export function matchPlayPhase(m: ClubMatchPlay, facts: { drawn: boolean; won: b
   if (facts.drawn) return 'in_play'
   if (m.field === 'qualifier') return 'qualifier'
   const at = m.closes ? irishInstant(m.closes.date, m.closes.time) : null
-  return at && now.getTime() < at.getTime() ? 'entries_open' : 'entries_closed'
+  return at && now.getTime() < at.getTime() ? 'entries' : 'draw_pending'
 }
 
 /** "The top 16 from the Spring Medal". */
@@ -345,8 +339,8 @@ const whenOf = (date: string, time: string | null) => `${dayOf(date)}${time ? `,
 /** The phase's one line — "Entries close Fri 5 Jun, 8:00 pm". */
 export function matchPlayLine(m: ClubMatchPlay, phase: MatchPlayPhase, opts: { qualifierName?: string | null } = {}): string {
   switch (phase) {
-    case 'entries_open': return m.closes ? `Entries close ${whenOf(m.closes.date, m.closes.time)}` : 'Entries are open'
-    case 'entries_closed':
+    case 'entries': return m.closes ? `Entries close ${whenOf(m.closes.date, m.closes.time)}` : 'Entries are open'
+    case 'draw_pending':
       return m.drawWhen === 'manual' ? 'The club makes the draw'
         : m.drawOn ? `The draw is made ${whenOf(m.drawOn.date, m.drawOn.time)}` : 'The draw is to come'
     case 'qualifier': return qualifierLine(m, opts.qualifierName)

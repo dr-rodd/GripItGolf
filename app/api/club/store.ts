@@ -1,6 +1,7 @@
 // The service-role store behind /api/club (./club.ts). Every club table is
 // closed to phones (migration 086); only this reaches them.
 
+import { matchPlayKeyDates, matchPlayPhase, readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
 import { handicapStore } from '../handicaps/store'
@@ -136,6 +137,26 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
       cardsStarted: started.has(r.id), certifiedAt: certifiedOf.get(r.id) ?? null,
     }, now))
   }
+  // A club match play has no round (Ross, 17 Nov 2026): its phase is read
+  // off its setup and its draw — drawn once a match exists, finished once
+  // the Final (the match that feeds nothing) has a winner.
+  const rest = tripIds.filter(id => !out.has(id))
+  if (rest.length) {
+    const [{ data: setups }, { data: matches }] = await Promise.all([
+      db.from('trips').select('id, bracket_setup').in('id', rest),
+      db.from('matchplay_matches').select('trip_id, next_match_id, winner_player_id, winner_team_id').in('trip_id', rest),
+    ])
+    const drawn = new Set<string>()
+    const won = new Set<string>()
+    for (const m of (matches ?? []) as { trip_id: string; next_match_id: string | null; winner_player_id: string | null; winner_team_id?: string | null }[]) {
+      drawn.add(m.trip_id)
+      if (!m.next_match_id && (m.winner_player_id || m.winner_team_id)) won.add(m.trip_id)
+    }
+    for (const t of (setups ?? []) as { id: string; bracket_setup: unknown }[]) {
+      const mp = readClubMatchPlay(t.bracket_setup)
+      if (mp) out.set(t.id, matchPlayPhase(mp, { drawn: drawn.has(t.id), won: won.has(t.id) }, new Date(now)))
+    }
+  }
   return out
 }
 
@@ -245,8 +266,15 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
   const comps = events.filter(e => e.competition)
   const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null })
   if (!comps.length) return events.map(base)
-  const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards').in('trip_code', comps.map(c => c.code))
-  const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown }[]
+  const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards, bracket_setup').in('trip_code', comps.map(c => c.code))
+  const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown; bracket_setup?: unknown }[]
+  // A club match play (Ross, 17 Nov 2026): no round, its own facts, and how many have entered.
+  const matchPlayOf = new Map(tripRows.flatMap(t => { const m = readClubMatchPlay(t.bracket_setup); return m ? [[t.id, m] as const] : [] }))
+  const entrants = matchPlayOf.size
+    ? await db.from('players').select('trip_id').in('trip_id', [...matchPlayOf.keys()])
+    : { data: [] }
+  const enteredOf = new Map<string, number>()
+  for (const p of (entrants.data ?? []) as { trip_id: string }[]) enteredOf.set(p.trip_id, (enteredOf.get(p.trip_id) ?? 0) + 1)
   const { data: rounds } = tripRows.length ? await db.from('rounds').select('id, trip_id, course_id, tee_sheet').in('trip_id', tripRows.map(t => t.id)) : { data: [] }
   const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string; tee_sheet?: unknown }[]
   const [courses, seats, entries, cats] = await Promise.all([
@@ -266,7 +294,8 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
     if (!e.competition) return base(e)
     const trip = tripRows.find(t => t.trip_code === e.code)
     const round = trip ? roundRows.find(r => r.trip_id === trip.id) : undefined
-    const board = (Array.isArray(trip?.leaderboards) ? trip!.leaderboards : []).find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: string; handicapAllowance?: number } | undefined
+    const mp = trip ? matchPlayOf.get(trip.id) : undefined
+    const board = (Array.isArray(trip?.leaderboards) ? trip!.leaderboards : []).find(b => mp ? (b as { competition?: string }).competition === 'matchplay' : (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: string; handicapAllowance?: number } | undefined
     const rules = parseTeeRules(round?.tee_sheet)
     return {
       ...base(e),
@@ -279,6 +308,7 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
         capacity: rules ? sheetCapacity(rules) : 0,
         membersOnly: e.competition.membersOnly,
         ...(trip && entryOf.get(trip.id) ? { entry: entryOf.get(trip.id)! } : {}),
+        ...(trip && mp ? { matchPlay: { format: mp.format, cap: mp.maxField, entered: enteredOf.get(trip.id) ?? 0, keyDates: matchPlayKeyDates(mp) } } : {}),
       },
     }
   })

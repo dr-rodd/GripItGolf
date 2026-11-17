@@ -10,7 +10,7 @@ import { formatHandicap } from '@/lib/handicap'
 import { courseLabel } from '@/lib/courseDirectory'
 import type { Preset } from '@/lib/clubPresets'
 import type { OfficeBody, OfficeSlot } from '@/app/api/club/booking'
-import { askCompOffice } from '../../../clubhouseClient'
+import { askCompOffice, readClubMatchPlay, type MatchPlayOfficeBody } from '../../../clubhouseClient'
 import { useShell } from '../../ShellContext'
 import { useCategories } from '../../useCategories'
 import CompPanel from '../CompPanel'
@@ -41,17 +41,24 @@ export default function CompOffice({ code }: { code: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [presets, setPresets] = useState<Preset[]>([])
+  const [mp, setMp] = useState<({ ok: true } & MatchPlayOfficeBody) | null>(null)
   const { categories, ageDate } = useCategories(club.id)
 
   useEffect(() => {
     let live = true
-    askCompOffice<OfficeBody>('sheet', code).then(r => {
+    askCompOffice<OfficeBody>('sheet', code).then(async r => {
       if (!live) return
-      if (!r.ok) { setLost(r.error); return }
+      if (!r.ok) {
+        // A club match play has no tee sheet (Ross, 17 Nov 2026): its own page.
+        const m = await readClubMatchPlay(club.id, code)
+        if (!live) return
+        if (m.ok) { setLost(null); setMp(m); return }
+        setLost(r.error); return
+      }
       setLost(null); setSheet(r)
     })
     return () => { live = false }
-  }, [code, n])
+  }, [code, n, club.id])
   useEffect(() => {
     let live = true
     void askClub('presets', { clubId: club.id }).then(r => { if (live && r.ok) setPresets(r.presets ?? []) })
@@ -87,7 +94,8 @@ export default function CompOffice({ code }: { code: string }) {
           <button type="button" onClick={again} className={`${buttonClass('secondary', false)} ch-focus mt-3`}>Try again</button>
         </div>
       )}
-      {!sheet && !lost && <div className="skeleton h-96 rounded-card mt-4" />}
+      {mp && <MatchPlayOffice mp={mp} />}
+      {!sheet && !lost && !mp && <div className="skeleton h-96 rounded-card mt-4" />}
       {sheet && (
         <>
           <div className="flex flex-wrap items-start gap-3 mt-2">
@@ -272,5 +280,46 @@ function BookPanel({ code, slot, onClose, onBooked }: { code: string; slot: Offi
         </div>
       </form>
     </div>
+  )
+}
+
+/** A club match play from the office (Ross, 17 Nov 2026): where it stands, its rules and play-by dates. The draw and the matches come in later stages. */
+function MatchPlayOffice({ mp }: { mp: MatchPlayOfficeBody }) {
+  return (
+    <>
+      <div className="mt-2">
+        <h1 className="t-h1 text-ink break-words">{mp.name}</h1>
+        <p className="text-ink/80 text-[15px] mt-1">{mp.format}</p>
+      </div>
+      <div className={`${cardClass('floating')} p-4 mt-5 max-w-xl`}>
+        <p className="t-label text-ink">{mp.phase}</p>
+        <p className="text-ink/80 text-[15px] mt-1">{mp.line}</p>
+        <p className="t-cap text-ink/65 mt-2">{mp.entered} entered{mp.cap ? ` of ${mp.cap}` : ''}</p>
+      </div>
+      <div className="grid md:grid-cols-2 gap-5 mt-5 max-w-4xl">
+        <section>
+          <h2 className="t-h2 text-ink">Rules</h2>
+          <dl className={`${cardClass()} mt-3 divide-y divide-line`}>
+            {mp.rules.lines.map(l => (
+              <div key={l.label} className="px-4 py-2.5">
+                <dt className="t-cap text-ink/65">{l.label}</dt>
+                <dd className="text-ink text-[15px]">{l.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <section>
+          <h2 className="t-h2 text-ink">Play-by dates</h2>
+          <ol className={`${cardClass()} mt-3 divide-y divide-line`}>
+            {mp.rules.deadlines.map(d => (
+              <li key={d.round} className="flex items-baseline gap-3 px-4 py-2.5">
+                <span className="flex-1 text-ink text-[15px]">{d.round}</span>
+                <span className="text-ink text-[15px] tabular-nums">{d.date}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+    </>
   )
 }

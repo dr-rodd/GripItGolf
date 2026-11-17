@@ -228,6 +228,26 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 1 as built (17 Nov 2026)
+
+Made in the Clubhouse: Events → New competition asks **Stroke play** or
+**Match play**; `MatchPlayPanel` asks the name, format and allowance (WHS's
+100 / 90 / 50), who can watch and enter, how the field is made, the biggest
+field (or no limit), when and how the draw is made, the play-by dates and
+the three rules. `runNewMatchPlay` makes it (Clubhouse only, a qualifier
+only one of the club's own competitions played before the first round is
+due); `lib/clubMatchPlay.ts` holds every rule. Its row on Events shows its
+format, entries of the cap and phase, with no Change or Copy yet; the
+calendar marks entries closing, the draw and each play-by date; Comps lists
+it as upcoming until it is drawn; its Summary shows the rules and dates,
+and says entering opens soon. **No migration.** Not yet: entering (stage
+2), the club area's draw and matches (3), partners (4), the qualifier acted
+on (5), Golfer of the Year (6), and changing a match play after it is made.
+**Watch for in stage 2:** the platform's draw job will try a club match
+play's dated draw at entries close and, with nobody entered, let it go
+(logged nightly) — stage 2 makes the draw from the entries and seeds it by
+the account's index (players' `handicap` today).
+
 ### Ross's answers (17 Nov 2026) — D264–D271
 
 - **D264 — no biggest field is an answer too.** "No limit" beside 8 · 16 ·

@@ -265,6 +265,8 @@ export interface SeasonEvent {
     membersOnly: boolean
     /** Stage (m): who may enter, said short — absent, everybody. */
     entry?: string
+    /** A club match play (Ross, 17 Nov 2026): its format, biggest field, entries so far, and the days the calendar marks. */
+    matchPlay?: { format: import('./clubMatchPlay').MatchPlayFormat; cap: number | null; entered: number; keyDates: string[] }
   } | null
 }
 
@@ -284,7 +286,11 @@ export function isOfficeOnly(e: Pick<SeasonEvent, 'note'>): boolean {
 }
 
 /** The format as the table says it: "Stableford · 95%". */
-export function formatLine(c: { scoring: 'stableford' | 'strokes'; allowance: number }): string {
+export function formatLine(c: { scoring: 'stableford' | 'strokes'; allowance: number; matchPlay?: { format: string } }): string {
+  if (c.matchPlay) {
+    const f = c.matchPlay.format
+    return `${f === 'singles' ? 'Singles' : f === 'fourball' ? 'Fourball' : 'Foursomes'} match play${c.allowance !== 100 ? ` · ${c.allowance}%` : ''}`
+  }
   return `${c.scoring === 'strokes' ? 'Strokes' : 'Stableford'}${c.allowance !== 100 ? ` · ${c.allowance}%` : ''}`
 }
 
@@ -317,7 +323,10 @@ export function monthGrid(year: number, month: number): (string | null)[][] {
 
 /** The events on a day: starting on it, or running across it. */
 export function eventsOn(events: SeasonEvent[], day: string): SeasonEvent[] {
-  return events.filter(e => e.startDate && e.startDate <= day && (e.endDate ?? e.startDate) >= day)
+  // A match play runs for months: the calendar marks only its own days — entries closing, the draw, each play-by date.
+  return events.filter(e => e.competition?.matchPlay
+    ? e.competition.matchPlay.keyDates.includes(day)
+    : e.startDate && e.startDate <= day && (e.endDate ?? e.startDate) >= day)
 }
 
 /** The month after or before, as [year, month]. */

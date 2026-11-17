@@ -14,7 +14,15 @@
 // cards still open and sign, void or mark No return (d4). That is the rule
 // as written: scoring closes only when every booked player is accounted for.
 
-export type CompPhase = 'announced' | 'booking' | 'in_play' | 'awaiting' | 'certified'
+export type CompPhase = 'announced' | 'booking' | 'in_play' | 'awaiting' | 'certified' | MatchPlayOnlyPhase
+
+/**
+ * A club match play's own phases (Ross, 17 Nov 2026; lib/clubMatchPlay.ts):
+ * entries open, waiting for the draw, waiting for its qualifier, and
+ * finished. Once drawn it is In play, like any competition. Never reached by
+ * `compPhase`, which reads a stroke competition's one round.
+ */
+export type MatchPlayOnlyPhase = 'entries' | 'draw_pending' | 'qualifier' | 'finished'
 
 export interface CompFacts {
   /** When booking opens (an instant, ms) — null when it is open from the start. */
@@ -46,6 +54,10 @@ export const PHASE_WORDS: Record<CompPhase, string> = {
   in_play: 'In play',
   awaiting: 'Awaiting sign-off',
   certified: 'Certified',
+  entries: 'Entries open',
+  draw_pending: 'Waiting for the draw',
+  qualifier: 'Qualifier to come',
+  finished: 'Finished',
 }
 
 export type CompSection = 'tee' | 'scoring' | 'board'
@@ -56,7 +68,7 @@ export type CompSection = 'tee' | 'scoring' | 'board'
  * still in the bar, as one line saying when it starts.
  */
 export function sectionLive(section: CompSection, phase: CompPhase): boolean {
-  if (section === 'tee') return phase !== 'announced'
+  if (section === 'tee') return phase === 'booking' || phase === 'in_play' || phase === 'awaiting' || phase === 'certified'
   return phase === 'in_play' || phase === 'awaiting' || phase === 'certified'
 }
 
@@ -94,6 +106,10 @@ export function summaryLine(phase: CompPhase, f: { bookingOpensAt: number | null
     case 'in_play': return 'Cards are out on the course'
     case 'awaiting': return 'Provisional: every card is in, waiting for the club to certify'
     case 'certified': return 'The result is final'
+    case 'entries': return 'Entries are open'
+    case 'draw_pending': return 'Entries are closed — the draw is to come'
+    case 'qualifier': return 'The field comes from the qualifier'
+    case 'finished': return 'The final is played'
   }
 }
 

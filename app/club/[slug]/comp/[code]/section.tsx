@@ -8,6 +8,7 @@ import { CardsToSign, CompPlay } from './CompSigning'
 import CompAdmin from './CompAdmin'
 import CompShell, { SectionTitle } from './CompShell'
 import { readCompPage } from './read'
+import { redirect } from 'next/navigation'
 
 /**
  * One of a competition's three sections (D186, D181) — Tee times, Scoring
@@ -21,6 +22,8 @@ export default async function CompSectionPage({ params, section }: {
   const { slug, code: rawCode } = await params
   const page = await readCompPage(slug, rawCode)
   if (page.door) return <CompShell page={page} />
+  // A club match play's own sections come with its draw (stage 3): until then, its Summary.
+  if (page.kind === 'matchplay') redirect(page.here)
 
   const { code, sheet, phase, slots, bookingOpensAt, firstTeeAt, sun } = page
   const live = sectionLive(section, phase)

@@ -443,7 +443,12 @@ export interface ClubEvent {
 export type ClubEventWhen = 'now' | 'upcoming' | 'past'
 
 /** Whether an event is on now, still to come, or done — by its dates against today (an Irish date). */
-export function clubEventWhen(e: Pick<ClubEvent, 'startDate' | 'endDate'>, today: string): ClubEventWhen {
+export function clubEventWhen(e: Pick<ClubEvent, 'startDate' | 'endDate'> & { competition?: ClubEvent['competition'] }, today: string): ClubEventWhen {
+  // A club match play runs for months (Ross, 17 Nov 2026): on now only once
+  // drawn — before, it is still to come; with its Final played, done.
+  const phase = e.competition?.phase
+  if (phase === 'entries' || phase === 'draw_pending' || phase === 'qualifier') return 'upcoming'
+  if (phase === 'finished') return 'past'
   const start = e.startDate ?? e.endDate
   const end = e.endDate ?? e.startDate
   if (end && end < today) return 'past'
@@ -461,7 +466,7 @@ export function irishToday(now: Date): string {
  * Events in the members area's order (D159) — a club's, or a Dot member's own on the personal page: on now, then upcoming
  * soonest first, then results newest first.
  */
-export function groupClubEvents<E extends Pick<ClubEvent, 'startDate' | 'endDate' | 'name'>>(events: readonly E[], today: string): Record<ClubEventWhen, E[]> {
+export function groupClubEvents<E extends Pick<ClubEvent, 'startDate' | 'endDate' | 'name'> & { competition?: ClubEvent['competition'] }>(events: readonly E[], today: string): Record<ClubEventWhen, E[]> {
   const out: Record<ClubEventWhen, E[]> = { now: [], upcoming: [], past: [] }
   for (const e of events) out[clubEventWhen(e, today)].push(e)
   const by = (k: 'startDate' | 'endDate', dir: 1 | -1) => (a: E, b: E) =>

@@ -75,6 +75,13 @@ export async function makeClubMatchPlay(clubId: string, form: MatchPlayForm): Pr
   return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
 }
 
+/** A club match play as the office reads it: where it stands, its rules and dates. */
+export type MatchPlayOfficeBody = { name: string; format: string; phase: string; line: string; entered: number; cap: number | null; rules: { lines: { label: string; value: string }[]; deadlines: { round: string; date: string }[] } }
+export async function readClubMatchPlay(clubId: string, code: string): Promise<({ ok: true } & MatchPlayOfficeBody) | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'matchplay.read', clubId, code })
+  return r.status === 200 ? { ok: true, ...(r.body as unknown as MatchPlayOfficeBody) } : { ok: false, error: errorOf(r.body) }
+}
+
 /** Stage c1, M11: a competition as its form, for the Clubhouse's panel. */
 export async function readCompetitionForm(clubId: string, code: string): Promise<{ ok: true; form: CompForm; booked: number; started: boolean; certified: boolean } | { ok: false; error: string }> {
   const r = await askCompetition({ action: 'read', clubId, code })

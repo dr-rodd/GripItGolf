@@ -1934,11 +1934,11 @@ async function matchPlayTests() {
   eq(readClubMatchPlay({ format: 'match_play', schedule: 'continuous' }), null, 'a knockout that is not a club’s is not one')
   eq(matchPlayKeyDates(back!), ['2027-03-31', '2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'], 'its calendar marks: entries closing and the draw, then each play-by date')
 
-  eq(matchPlayPhase(back!, { drawn: false, won: false }, NOW), 'entries_open', 'before entries close: open')
-  eq(matchPlayPhase(back!, { drawn: false, won: false }, new Date('2027-04-01T00:00:00Z')), 'entries_closed', 'after: closed, waiting for the draw')
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, NOW), 'entries', 'before entries close: open')
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, new Date('2027-04-01T00:00:00Z')), 'draw_pending', 'after: closed, waiting for the draw')
   eq(matchPlayPhase(back!, { drawn: true, won: false }, NOW), 'in_play', 'drawn: in play')
   eq(matchPlayPhase(readClubMatchPlay(matchPlaySeed(qual))!, { drawn: false, won: false }, NOW), 'qualifier', 'a qualifier’s field waits for it')
-  eq(matchPlayLine(back!, 'entries_open'), `Entries close ${clubEventDates('2027-03-31', '2027-03-31')}, 8:00 pm`, 'the line says when entries close, Irish time')
+  eq(matchPlayLine(back!, 'entries'), `Entries close ${clubEventDates('2027-03-31', '2027-03-31')}, 8:00 pm`, 'the line says when entries close, Irish time')
   const rules = matchPlayRules(back!, { allowance: 90 })
   ok(rules.lines[0].value === 'Fourball match play · 90% handicap' && rules.lines.some(l => l.value === 'Your index on the day you play'),
     'the rules as members read them, the handicap on the day (D269)')

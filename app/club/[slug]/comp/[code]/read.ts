@@ -12,6 +12,7 @@ import { teeInstant } from '@/lib/clubComp'
 import { compHome } from '@/lib/clubBar'
 import { readCompSheet, readCompetition } from '@/app/api/club/bookingStore'
 import { readFace } from '../../face'
+import { readMatchPlayComp } from '@/app/api/club/matchPlayStore'
 import type { CompSlot } from './CompTeeSheet'
 
 /**
@@ -28,10 +29,20 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const code = rawCode.trim().toUpperCase()
   const db = createAdminClient()
   const [face, comp, jar] = await Promise.all([readFace(slug, { events: false }), readCompetition(db, code), cookies()])
-  if (!face || !comp || comp.clubId !== face.id) notFound()
+  if (!face) notFound()
   const { id: _id, ...clubFace } = face
   const here = compHome(slug, code)
-  const base = { slug, code, clubFace, comp, here }
+
+  // A club match play has no round (Ross, 17 Nov 2026): its own Summary, behind the same door.
+  if (!comp) {
+    const mp = await readMatchPlayComp(db, code)
+    if (!mp || mp.clubId !== face.id) notFound()
+    const mpBase = { slug, code, clubFace, here, kind: 'matchplay' as const, mp }
+    if (!entryAllowed(mp.publicHash, jar.get(entryCookie(code))?.value, code)) return { ...mpBase, door: true as const }
+    return { ...mpBase, door: false as const }
+  }
+  if (comp.clubId !== face.id) notFound()
+  const base = { slug, code, clubFace, comp, here, kind: 'stroke' as const }
 
   // The members-only door: nothing of the competition without it.
   if (!entryAllowed(comp.publicHash, jar.get(entryCookie(code))?.value, code)) {
@@ -78,4 +89,5 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
 })
 
 export type CompPage = Awaited<ReturnType<typeof readCompPage>>
-export type OpenCompPage = Extract<CompPage, { door: false }>
+export type OpenCompPage = Extract<CompPage, { door: false; kind: 'stroke' }>
+export type MatchPlayPage = Extract<CompPage, { door: false; kind: 'matchplay' }>

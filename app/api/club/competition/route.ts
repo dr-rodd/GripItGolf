@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
+import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
 import { parseTeeRules } from '@/lib/teeSheet'
 import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
@@ -14,6 +14,7 @@ import { runCalendarImport, type ImportStore } from '../calendarImport'
 import { compFormFrom, type CompForm } from '@/lib/clubComp'
 import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
+import { readMatchPlayComp } from '../matchPlayStore'
 
 // POST /api/club/competition — `{ clubId, form }` with a Green Dot member's
 // token: a verified club's owner or admin makes a competition (D162). The
@@ -103,6 +104,10 @@ export async function POST(req: NextRequest) {
     // Stage c1, M10–M11: a competition read into the Clubhouse's panel, and changed there.
     if (body?.action === 'read') {
       const read = await runReadCompetition({ token, clubId: body.clubId, code: body.code }, store)
+      return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
+    }
+    if (body?.action === 'matchplay.read') {
+      const read = await runReadMatchPlay({ token, clubId: body.clubId, code: body.code }, { ...store, matchPlayComp: code => readMatchPlayComp(db, code) }, new Date())
       return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
     }
     if (body?.action === 'change') {
