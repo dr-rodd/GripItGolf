@@ -25,8 +25,14 @@ const HEAD: Record<Field, string> = { name: 'Name', email: 'Email', memberNumber
 
 /** A cell's text as the grid shows and edits it. */
 function shown(r: GridRow, f: Field): string {
-  if (f === 'handicapIndex') return r.handicapIndex === null ? '' : indexLabel(r.handicapIndex)
+  if (f === 'handicapIndex') return r.handicapIndex === null ? '' : indexCell(r.handicapIndex)
   return r[f] ?? ''
+}
+
+/** An index in the grid, always to one decimal so the column lines up — a plus index with its sign. */
+function indexCell(v: number): string {
+  const r = Math.round(v * 10) / 10
+  return r < 0 ? `+${(-r).toFixed(1)}` : r.toFixed(1)
 }
 
 type Toast = { text: string; tone: 'ok' | 'error'; undo?: () => void; skipped?: { name: string; why: string }[] }
@@ -204,7 +210,7 @@ export default function MembersGrid() {
   }
 
   return (
-    <>
+    <div className={ticked.size > 0 ? 'md:pb-28' : ''}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-0">
           <h1 className="t-h1 text-ink">Members</h1>
@@ -261,17 +267,17 @@ export default function MembersGrid() {
                     const right = f === 'memberNumber' || f === 'guiNumber' || f === 'handicapIndex'
                     return (
                       <th key={f} scope="col" aria-sort={s && sort === s ? (desc ? 'descending' : 'ascending') : undefined}
-                        className={`t-eyebrow text-ink/65 font-normal px-4 py-3 whitespace-nowrap ${right ? 'text-right' : ''}`}>
+                        className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap ${right ? 'text-right' : ''}`}>
                         {s ? (
-                          <button type="button" onClick={() => toggleSort(s)} className="ch-focus rounded-tile">
+                          <button type="button" onClick={() => toggleSort(s)} className="ch-focus rounded-tile t-eyebrow">
                             {HEAD[f]}{sort === s ? (desc ? ' ↓' : ' ↑') : ''}
                           </button>
                         ) : HEAD[f]}
                       </th>
                     )
                   })}
-                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-4 py-3">Standing</th>
-                  {TICKS.map(t => <th key={t.key} scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3 text-center whitespace-nowrap">{t.label}</th>)}
+                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Standing</th>
+                  {TICKS.map(t => <th key={t.key} scope="col" className="t-eyebrow text-ink/65 font-normal px-2 py-3 text-center whitespace-nowrap">{t.label}</th>)}
                   <th scope="col" className="px-4"><span className="sr-only">Details</span></th>
                 </tr>
               </thead>
@@ -294,7 +300,7 @@ export default function MembersGrid() {
                       const right = f === 'memberNumber' || f === 'guiNumber' || f === 'handicapIndex'
                       const isEditing = editing?.id === r.id && editing.field === f
                       return (
-                        <td key={f} className={`px-2 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''}`}>
+                        <td key={f} className={`px-1 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''}`}>
                           {isEditing ? (
                             <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => editKey(e, r, f)}
                               onBlur={() => void commit(r, f, draft)} aria-label={`${HEAD[f]} for ${r.name}`}
@@ -303,23 +309,23 @@ export default function MembersGrid() {
                           ) : (
                             <button type="button" onClick={() => { setEditing({ id: r.id, field: f }); setDraft(shown(r, f)) }}
                               aria-label={`${HEAD[f]} for ${r.name}: ${shown(r, f) || 'empty'}. Change`}
-                              className={`ch-focus w-full min-h-9 px-2 rounded-tile text-[15px] ${right ? 'text-right tabular-nums' : 'text-left'} ${failedCell === key ? 'border border-rust text-rust-deep' : ''} ${f === 'name' ? 'text-ink font-medium' : 'text-ink/80'} ${r.removed ? 'line-through text-ink/50' : ''} ${f === 'email' ? 'break-all' : 'whitespace-nowrap'}`}>
+                              className={`ch-focus w-full min-h-9 px-2 rounded-tile text-[15px] ${right ? 'text-right tabular-nums' : 'text-left'} ${failedCell === key ? 'border border-rust text-rust-deep' : ''} ${f === 'name' ? 'text-ink font-medium' : 'text-ink/80'} ${r.removed ? 'line-through text-ink/50' : ''} whitespace-nowrap`}>
                               {shown(r, f) || <span className="text-ink/65">—</span>}
                             </button>
                           )}
                         </td>
                       )
                     })}
-                    <td className="px-4 whitespace-nowrap"><StandingPill s={standingOf(r)} /></td>
+                    <td className="px-3 whitespace-nowrap"><StandingPill s={standingOf(r)} /></td>
                     {TICKS.map(t => {
                       const why = tickWhy(asker, r, t.key)
                       return (
-                        <td key={t.key} className="px-3 text-center">
+                        <td key={t.key} className="px-2 text-center">
                           <TickBox label={`${t.label}: ${r.name}`} on={r.credentials[t.key]} disabled={!!why} title={why ?? undefined} onChange={v => void tick(r, t.key, v)} />
                         </td>
                       )
                     })}
-                    <td className="px-4 text-right">
+                    <td className="px-2 text-right">
                       <button type="button" onClick={() => setPanel({ row: r })} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9 whitespace-nowrap">Details</button>
                     </td>
                   </tr>
@@ -411,7 +417,7 @@ export default function MembersGrid() {
         <PasteSheet clubId={club.id} startText={paste} onClose={() => setPaste(null)}
           onDone={(note, skipped) => { setPaste(null); setReload(n => n + 1); say({ text: note, tone: skipped.length ? 'error' : 'ok', skipped }) }} />
       )}
-    </>
+    </div>
   )
 }
 

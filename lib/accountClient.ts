@@ -118,7 +118,7 @@ function keepPending(p: Pending) {
   try { window.sessionStorage.setItem(PENDING_KEY, JSON.stringify(p)) } catch { /* unavailable — the code still works this load */ }
 }
 
-async function askServer(token: string, body: Record<string, unknown>, url = '/api/account'): Promise<{ status: number; body: Record<string, unknown> } | null> {
+export async function askServer(token: string, body: Record<string, unknown>, url = '/api/account'): Promise<{ status: number; body: Record<string, unknown> } | null> {
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -246,7 +246,7 @@ export function passwordOwed(): boolean {
 
 // ─── Username and password (D128–D132) ─────────────────────────
 
-async function accountToken(): Promise<string | null> {
+export async function accountToken(): Promise<string | null> {
   try {
     const { data } = await (await client()).auth.getSession()
     return data.session && !data.session.user.is_anonymous ? data.session.access_token : null
@@ -595,20 +595,6 @@ export async function makeCompetition(clubId: string, form: Record<string, unkno
   return { ok: true, code: String(r.body.code), slug: String(r.body.slug) }
 }
 
-/**
- * Stage (k2), D214: a competition copied to other dates — Copy to another
- * date (one) or Repeat weekly (a run). Each made as New competition makes
- * one; a date that could not be made comes back with why. Never throws.
- */
-export async function copyCompetition(clubId: string, code: string, dates: string[]): Promise<{ ok: true; made: { code: string; date: string }[]; refused: { date: string; why: string }[] } | { ok: false; error: string }> {
-  const token = await accountToken()
-  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
-  const r = await askServer(token, { action: 'copy', clubId, code, dates }, '/api/club/competition')
-  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
-  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
-  const b = r.body as { made?: { code: string; date: string }[]; refused?: { date: string; why: string }[] }
-  return { ok: true, made: b.made ?? [], refused: b.refused ?? [] }
-}
 
 export interface BookingAnswer {
   myPlayerId?: string | null

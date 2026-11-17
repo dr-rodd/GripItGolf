@@ -3,6 +3,7 @@ import { createAdminClient } from "@/lib/supabase-admin"
 import { ATTEMPT_KEEP_HOURS, FORGET_ANONYMOUS_PHONES, FORGET_PER_NIGHT, FORGET_WEEKDAY } from "@/lib/membership"
 import { RESET_KEEP_HOURS } from "@/lib/pinReset"
 import { ACCOUNT_ATTEMPT_KEEP_HOURS } from "@/lib/account"
+import { ACTIVITY_KEEP_MONTHS } from "@/lib/clubhouse"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import { fillSummaries } from "@/app/api/stats/store"
@@ -238,6 +239,23 @@ export async function GET(req: NextRequest) {
     console.error("account attempts cleanup failed:", e)
   }
 
+  // ── 4a2. A club's activity log past its keeping (stage (k1), 092, D210) ──
+  // Kept ACTIVITY_KEEP_MONTHS — long enough to answer "who changed this"
+  // across a season and the next — then gone, as the privacy notice says.
+  // Its own try: before 092 the table does not exist.
+  let staleActivity = 0
+  try {
+    const cutoff = new Date(Date.now() - ACTIVITY_KEEP_MONTHS * 30.44 * 24 * 60 * 60 * 1000).toISOString()
+    const q = dryRun
+      ? supabaseAdmin.from("club_activity").select("id", { count: "exact", head: true }).lt("at", cutoff)
+      : supabaseAdmin.from("club_activity").delete({ count: "exact" }).lt("at", cutoff)
+    const { count, error } = await q
+    if (error) throw error
+    staleActivity = count ?? 0
+  } catch (e) {
+    console.error("club activity cleanup failed:", e)
+  }
+
   // ── 4b. PIN reset links a day old (D67, migration 072) ──
   // A link works for 30 minutes and the limit counts an hour of them, so a
   // day is plenty. Its own try: before 072 the table does not exist.
@@ -305,6 +323,7 @@ export async function GET(req: NextRequest) {
     draws,
     staleAttempts,
     staleAccountAttempts,
+    staleActivity,
     staleResets,
     cardSummaries,
     anonymousPhones,

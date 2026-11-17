@@ -2,7 +2,8 @@
 // may open it at, and the one it last used here. Never imported by
 // app/club or app/home — the members app stays as lean as it was.
 
-import { askClub, readAccount, type ClubSummary } from '@/lib/accountClient'
+import { ACCOUNT_WORDS } from '@/lib/account'
+import { accountToken, askClub, askServer, readAccount, type ClubSummary } from '@/lib/accountClient'
 import { clubMay } from '@/lib/clubMay'
 
 /** The club this device last opened the Clubhouse at — a convenience, never authorising. */
@@ -34,4 +35,19 @@ export async function knock(): Promise<Door> {
 /** Where the door opens: the club last used here, if this account still has it, else the first. */
 export function doorClub(clubs: ClubSummary[], last: string | null): ClubSummary {
   return clubs.find(c => c.slug === last) ?? clubs[0]
+}
+
+/**
+ * Stage (k2), D214: a competition copied to other dates — Copy to another
+ * date (one) or Repeat weekly (a run). Each made as New competition makes
+ * one; a date that could not be made comes back with why. Never throws.
+ */
+export async function copyCompetition(clubId: string, code: string, dates: string[]): Promise<{ ok: true; made: { code: string; date: string }[]; refused: { date: string; why: string }[] } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { action: 'copy', clubId, code, dates }, '/api/club/competition')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  const b = r.body as { made?: { code: string; date: string }[]; refused?: { date: string; why: string }[] }
+  return { ok: true, made: b.made ?? [], refused: b.refused ?? [] }
 }

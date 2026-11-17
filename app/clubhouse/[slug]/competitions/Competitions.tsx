@@ -3,8 +3,10 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { IconX } from '@/app/components/icons'
+import CourseName from '@/app/components/CourseName'
+import { splitCourseName } from '@/lib/courseDirectory'
 import { FIELD, FIELD_LABEL, Pill, Segmented, buttonClass, cardClass } from '@/app/components/ui'
-import { copyCompetition } from '@/lib/accountClient'
+import { copyCompetition } from '../../clubhouseClient'
 import { MAX_COPIES, formatLine, seasonOfYear, seasonYears, weeklyFrom, type SeasonEvent } from '@/lib/clubhouse'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
@@ -79,7 +81,7 @@ export default function Competitions() {
                     <tr key={e.code} className="ch-hover border-b border-line last:border-b-0 h-12">
                       <td className="px-4 text-ink/80 text-[15px] whitespace-nowrap tabular-nums">{clubEventDates(e.startDate, e.endDate)}</td>
                       <td className="px-4 text-ink text-[15px] font-medium">{e.name}</td>
-                      <td className="px-4 text-ink/80 text-[15px]">{c.courseName ?? '—'}</td>
+                      <td className="px-4 text-ink/80 text-[15px]">{c.courseName ? <CourseName name={c.courseName} /> : '—'}</td>
                       <td className="px-4 text-ink/80 text-[15px] whitespace-nowrap">{formatLine(c)}</td>
                       <td className="px-4 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c.capacity ? `${c.booked} of ${c.capacity}` : c.booked}</td>
                       <td className="px-4 whitespace-nowrap"><Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill></td>
@@ -101,7 +103,7 @@ export default function Competitions() {
                 <Link href={`/club/${face.slug}/comp/${e.code}`} className="flex items-center gap-3 min-h-14 px-4 py-3 press">
                   <span className="flex-1 min-w-0">
                     <span className="block text-[17px] font-medium text-ink leading-snug">{e.name}</span>
-                    <span className="block t-cap text-ink/65 mt-0.5">{[clubEventDates(e.startDate, e.endDate), e.competition!.courseName].filter(Boolean).join(' · ')}</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">{[clubEventDates(e.startDate, e.endDate), e.competition!.courseName ? splitCourseName(e.competition!.courseName).club : null].filter(Boolean).join(' · ')}</span>
                   </span>
                   <Pill live={e.competition!.phase === 'in_play'}>{PHASE_WORDS[e.competition!.phase]}</Pill>
                 </Link>

@@ -215,7 +215,7 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
 /**
  * Every event under the club with what the Clubhouse's Competitions table
  * and Calendar show (stage (k2), D214, D215): a competition's course, format,
- * phase and how many are booked of how many places. Reads the events, then
+ * phase and how many are booked of how many places. The events first, then
  * their trips' boards and rounds together, then the courses and the
  * bookings (past 1,000 rows) together.
  */

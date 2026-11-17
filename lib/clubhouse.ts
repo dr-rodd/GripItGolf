@@ -203,6 +203,9 @@ export function sectionAt(pathname: string, slug: string): SectionKey {
   return SECTIONS.find(s => s.path && (rest === s.path || rest.startsWith(`${s.path}/`)))?.key ?? 'overview'
 }
 
+/** How long a club's activity log keeps a change (D210): two seasons. The nightly cleanup and the privacy notice both read it. */
+export const ACTIVITY_KEEP_MONTHS = 24
+
 /** "Green Dot staff" — what a club is shown for a staff change (D222), never who. */
 export const STAFF_NAME = 'Green Dot staff'
 
