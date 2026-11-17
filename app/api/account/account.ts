@@ -40,6 +40,7 @@ import { checkPin, type AttemptStore } from '../entry/entry'
 import { irishToday } from '@/lib/clubs'
 import type { SeasonRow } from '@/lib/cardSummary'
 import { readIndex } from '@/lib/handicapIndex'
+import type { MyDetails } from '@/lib/clubMembership'
 import { setIndex, type HandicapStore } from '../handicaps/handicaps'
 
 export interface AccountStore {
@@ -94,6 +95,10 @@ export interface AccountStore {
 
   // Stage (d1) — the handicap index on the account (D179, migration 089).
   handicaps?: HandicapStore
+
+  // Stage (m) — a person's gender and date of birth, set by their club (094).
+  /** This account's details and its membership at each verified club — null before 094. */
+  detailsOf?(userId: string): Promise<MyDetails | null>
 }
 
 export type AccountBody = {
@@ -114,6 +119,8 @@ export type AccountBody = {
   courses?: Record<string, string>
   /** D179: this account's handicap index — one value, shown and changed on Me. */
   handicapIndex?: number | null
+  /** Stage (m): what the account's clubs have recorded of them — read only. */
+  details?: MyDetails | null
 }
 
 export type AccountOutcome =
@@ -255,18 +262,26 @@ export async function runAccount(
       await store.syncLinks(user.id)
     }
     const year = Number(irishToday(now).slice(0, 4))
-    const [username, events, clubs, season, handicapIndex] = await Promise.all([
+    const [username, events, clubs, season, handicapIndex, details] = await Promise.all([
       store.usernameOf(user.id),
       store.eventsFor(user.id),
       store.homeClubs ? store.homeClubs(user.id) : Promise.resolve([]),
       store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [], courses: {} }),
       store.handicaps ? store.handicaps.accountIndex(user.id) : Promise.resolve(null),
+      store.detailsOf ? store.detailsOf(user.id).catch(() => null) : Promise.resolve(null),
     ])
     return {
       status: 200,
-      body: { ok: true, username, events: sortMyEvents(events), club: clubs[0] ?? null, clubs, season: season.rows, courses: season.courses, handicapIndex },
+      body: { ok: true, username, events: sortMyEvents(events), club: clubs[0] ?? null, clubs, season: season.rows, courses: season.courses, handicapIndex, details },
       after: tidy,
     }
+  }
+
+  // Stage (m): what the account's clubs have recorded — read only; a club
+  // changes it (Ross, 17 Nov 2026).
+  if (input.action === 'details') {
+    if (!isAccount(user)) return fail(403, 'This phone is not signed in.')
+    return { status: 200, body: { ok: true, details: store.detailsOf ? await store.detailsOf(user.id).catch(() => null) : null } }
   }
 
   // D179: the account's handicap index, read or set from Me — through the

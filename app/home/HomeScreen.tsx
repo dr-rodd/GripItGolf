@@ -9,6 +9,7 @@ import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { IconChevronRight } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
+import YourDetailsCard from '@/app/components/YourDetailsCard'
 import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import type { MyEvent } from '@/lib/account'
@@ -229,6 +230,7 @@ function MeTab({ home }: { home: HomeData | null }) {
       <h1 className="t-h1 text-ink">Me</h1>
       {home?.username && <p className="text-ink/80 text-[15px] mt-2">Signed in as {home.username}.</p>}
       {home && <HandicapIndexCard initial={home.handicapIndex} className="mt-6" />}
+      {home && (home.clubs.length > 0 || home.details?.gender || home.details?.birthDate) && <YourDetailsCard initial={home.details} className="mt-4" />}
       <ListGroup className="mt-6">
         {(home?.clubs ?? []).map(c => <ListRow key={c.slug} href={`/club/${c.slug}`} label={c.name} hint="Your club’s area" />)}
         <ListRow href="/account" label="Your account" hint="Username, password, sign out, delete" />

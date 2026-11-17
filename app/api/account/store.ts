@@ -145,6 +145,31 @@ export function accountStore(db: Db): AccountStore {
       return ((data ?? []) as { slug: string; name: string }[]).map(c => ({ slug: c.slug, name: c.name }))
     },
     handicaps: handicapStore(db),
+    // Stage (m): the account's gender and date of birth (094's
+    // account_details, else a linked row's own) and its membership at each
+    // verified club — null before 094.
+    async detailsOf(userId) {
+      const [acct, rows] = await Promise.all([
+        db.from('account_details').select('gender, birth_date').eq('user_id', userId).maybeSingle(),
+        db.from('club_members').select('club_id, category_id, gender, birth_date').eq('user_id', userId).is('removed_at', null),
+      ])
+      if (rows.error) return null
+      const list = (rows.data ?? []) as { club_id: string; category_id: string | null; gender: 'M' | 'F' | null; birth_date: string | null }[]
+      const a = acct.error ? null : acct.data as { gender: 'M' | 'F' | null; birth_date: string | null } | null
+      const catIds = [...new Set(list.map(r => r.category_id).filter((x): x is string => !!x))]
+      const [clubs, cats] = await Promise.all([
+        list.length ? db.from('clubs').select('id, name').in('id', list.map(r => r.club_id)).not('verified_at', 'is', null) : Promise.resolve({ data: [] }),
+        catIds.length ? db.from('club_categories').select('id, name, days').in('id', catIds) : Promise.resolve({ data: [] }),
+      ])
+      const clubName = new Map(((clubs.data ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]))
+      const cat = new Map(((cats.data ?? []) as { id: string; name: string; days: number[] }[]).map(c => [c.id, c]))
+      return {
+        gender: a?.gender ?? list.find(r => r.gender)?.gender ?? null,
+        birthDate: a?.birth_date ?? list.find(r => r.birth_date)?.birth_date ?? null,
+        memberships: list.filter(r => clubName.has(r.club_id) && r.category_id && cat.has(r.category_id))
+          .map(r => ({ club: clubName.get(r.club_id)!, name: cat.get(r.category_id!)!.name, days: cat.get(r.category_id!)!.days ?? [] })),
+      }
+    },
     async seasonFor(userId, year) {
       return readSeason(db, userId, year)
     },

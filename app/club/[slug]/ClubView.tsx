@@ -7,6 +7,7 @@ import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
+import YourDetailsCard from '@/app/components/YourDetailsCard'
 import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
@@ -596,6 +597,7 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
       <h1 className="t-h1 text-ink">Club</h1>
       <p className="text-ink/80 text-[15px] mt-2">You’re on {face.name}’s list: {credentialLine(m.credentials ?? NOTHING_HELD, face.name)}.</p>
       <HandicapIndexCard className="mt-6" />
+      <YourDetailsCard club={face.name} className="mt-4" />
       <ListGroup className="mt-6">
         {clubMay('open_clubhouse', { row: m.credentials ?? null }) && (
           <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"

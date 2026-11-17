@@ -27,7 +27,7 @@
 
 import type { ClubEvent } from './clubs'
 import type { Credentials } from './clubMay'
-import type { Category } from './clubMembership'
+import type { Category, MyDetails } from './clubMembership'
 import type { GridRow, ListCounts, Need, SeasonEvent } from './clubhouse'
 import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
@@ -370,6 +370,8 @@ export interface HomeData {
   courses: Record<string, string>
   /** D179: the account's handicap index, shown and changed on Me. */
   handicapIndex: number | null
+  /** Stage (m): what the account's clubs have recorded — read only. */
+  details: MyDetails | null
 }
 
 /**
@@ -405,6 +407,7 @@ export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: f
       season: Array.isArray(b.season) ? b.season as SeasonRow[] : [],
       courses: b.courses && typeof b.courses === 'object' ? b.courses as Record<string, string> : {},
       handicapIndex: typeof b.handicapIndex === 'number' ? b.handicapIndex : null,
+      details: b.details && typeof b.details === 'object' ? b.details as MyDetails : null,
     },
   }
 }
@@ -421,6 +424,16 @@ export async function accountIndex(index?: string): Promise<{ ok: true; index: n
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, index: typeof r.body.handicapIndex === 'number' ? r.body.handicapIndex : null }
+}
+
+/** Stage (m): what this account's clubs have recorded of them — read only. Never throws. */
+export async function accountDetails(): Promise<{ ok: true; details: MyDetails | null } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { action: 'details' })
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, details: (r.body.details as MyDetails | null) ?? null }
 }
 
 /** "Add an event you run": its code and organiser PIN make it this account's. */

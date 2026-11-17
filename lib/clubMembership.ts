@@ -325,6 +325,13 @@ export function refusalWords(f: EntryRefusal, who: string | null = null): string
   }
 }
 
+/** What a member's clubs have recorded of them (stage (m)) — shown on their account, changed only by a club. */
+export interface MyDetails {
+  gender: Gender | null
+  birthDate: string | null
+  memberships: { club: string; name: string; days: number[] }[]
+}
+
 // ─── A pasted row's three cells ────────────────────────────────
 
 /** What a pasted row's gender, date of birth and membership code become — each absent when its cell was empty. */

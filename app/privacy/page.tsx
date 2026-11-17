@@ -169,6 +169,20 @@ export default function PrivacyPage() {
           see a change made on the day; the record is kept with the account, and goes when it does.
         </p>
         <p className="mt-3">
+          <B>Gender, date of birth and membership.</B> A club may also record each person&apos;s{' '}
+          <B>gender</B> (male, female or not given), <B>date of birth</B> (or not given) and{' '}
+          <B>membership</B> — Full, 6 Day, Junior and the like, with the days each may play — so that a
+          competition can be kept to men or ladies, to an age band or to some memberships, and so that
+          players are given their own tees. They are one value for you everywhere: recorded by a club,
+          kept on your Green Dot account and shown on every club list you are on. You see them on your
+          account and cannot change them yourself; ask your club. Only the club&apos;s Clubhouse staff and
+          owners, and Green Dot staff helping the club, see them; nobody else on the list does. A
+          competition&apos;s booking says only whether somebody may enter and why, never their date of birth.
+          The record of changes to a list notes that a gender or date of birth changed, never what it was.
+          A junior&apos;s details are the club&apos;s to record, as anybody&apos;s are; Green Dot holds nothing
+          more about a junior, and a junior needs their own account to play in a competition.
+        </p>
+        <p className="mt-3">
           <B>Club competitions.</B> To book a club&apos;s competition together, people on its list can find
           each other by name — the name only, never a number or an email — and see who is on each tee
           time. Every player in a club competition needs their own Green Dot account. Every member on
