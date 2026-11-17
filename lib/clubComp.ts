@@ -8,7 +8,9 @@
 import type { Leaderboard } from './leaderboards'
 import { defaultPermissions, type EventPermissions } from './eventPermissions'
 import { irishInstant } from './irishTime'
-import { MAX_BATCHES, batchGroupSize, opensAt, parseTeeRules, rulesIssue, slotGroupSize, teeClocks, type TeeRules } from './teeSheet'
+import { MAX_BATCHES, batchGroupSize, clockMins, opensAt, parseTeeRules, rulesIssue, slotGroupSize, teeClocks, type TeeRules } from './teeSheet'
+import { sunriseTee } from './sun'
+import { describeTime } from './itinerary'
 import { readEntryRules, type EntryRules } from './clubMembership'
 
 export type CompScoring = 'stableford' | 'strokes'
@@ -302,4 +304,26 @@ export function planSheetChange(o: {
 const say = (clock: string) => {
   const [h, m] = clock.split(':').map(Number)
   return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
+}
+
+// ─── The first tee time and the sun (Ross, 17 Nov 2026) ───────────
+
+/**
+ * A new competition's first tee time: the first on the interval's grid at
+ * or after sunrise, the grid counted back from the next full hour — sunrise
+ * 08:12 at fifteen minutes is 08:15, then 08:30, 08:45 and 09:00 on the
+ * hour. Null without a sunrise to go by.
+ */
+export function sunriseFirstTee(sun: { sunrise: string | null } | null, interval: number): string | null {
+  return sun?.sunrise ? sunriseTee(sun.sunrise, interval) : null
+}
+
+/** Said under the tee times when the first is before sunrise — never a refusal. */
+export function beforeSunriseLine(batches: readonly Pick<CompBatch, 'start' | 'interval'>[], sun: { sunrise: string | null } | null): string | null {
+  const first = batches[0]
+  if (!first || !sun?.sunrise) return null
+  const a = clockMins(first.start), s = clockMins(sun.sunrise)
+  if (a === null || s === null || a >= s) return null
+  const after = sunriseFirstTee(sun, first.interval)
+  return `${describeTime(first.start)} is before sunrise (${describeTime(sun.sunrise)})${after ? ` — the first time after it is ${describeTime(after)}` : ''}.`
 }

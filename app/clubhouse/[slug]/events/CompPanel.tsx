@@ -8,7 +8,8 @@ import CompBatches from '@/app/components/CompBatches'
 import EntryRulesFields from '@/app/components/EntryRulesFields'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
-import { compFormIssue, type CompForm } from '@/lib/clubComp'
+import { beforeSunriseLine, compFormIssue, type CompForm } from '@/lib/clubComp'
+import { useSunriseStart } from '@/app/components/useSunriseStart'
 import { entryRulesIssue, readEntryRules, type Category } from '@/lib/clubMembership'
 import { applyPreset, type Preset } from '@/lib/clubPresets'
 import { irishToday } from '@/lib/clubs'
@@ -85,6 +86,8 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   }
 
   const set = <K extends keyof CompForm>(k: K, v: CompForm[K]) => setForm(f => (f ? { ...f, [k]: v } : f))
+  // A new one from scratch: the first tee time follows sunrise until one is typed (Ross, 17 Nov 2026).
+  const setBatches = useSunriseStart(form, sun, !code && !preset, setForm)
   const issue = form ? compFormIssue(form, today) ?? entryRulesIssue(readEntryRules(form.entry), cats.map(c => c.id)) : null
   const locked = !!state && (state.started || state.certified)
 
@@ -171,7 +174,8 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
 
             <h3 className="t-card text-ink pt-1">Tee times</h3>
             {sun && sunWords(sun) && <p className="t-cap text-ink/65 -mt-3">{sunWords(sun)}</p>}
-            <CompBatches batches={form.batches} onChange={b => set('batches', b)} idPrefix="cp" />
+            <CompBatches batches={form.batches} onChange={setBatches} idPrefix="cp" />
+            {beforeSunriseLine(form.batches, sun) && <p className="t-cap text-ink/80 -mt-2">{beforeSunriseLine(form.batches, sun)}</p>}
             <div>
               <p className={FIELD_LABEL}>Booking opens</p>
               <Segmented label="Booking opens" value={form.opens ? 'later' : 'now'}

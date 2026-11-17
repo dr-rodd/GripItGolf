@@ -9,10 +9,11 @@ import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
 import { askClub, makeCompetition } from '@/lib/accountClient'
 import { entryRulesIssue, readEntryRules, type Category, type EntryRules } from '@/lib/clubMembership'
 import EntryRulesFields from '@/app/components/EntryRulesFields'
-import { compFormIssue, type CompForm } from '@/lib/clubComp'
+import { beforeSunriseLine, compFormIssue, type CompForm } from '@/lib/clubComp'
+import { useSunriseStart } from '@/app/components/useSunriseStart'
 import { irishToday } from '@/lib/clubs'
 import { applyPreset, type Preset } from '@/lib/clubPresets'
-import { sunDay } from '@/lib/sun'
+import { sunDay, sunWords } from '@/lib/sun'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 /**
@@ -60,8 +61,11 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
   const preset = presets.find(p => p.id === presetId) ?? null
   const course = courses.find(c => c.id === form.courseId)
   const presetKey = `${presetId}|${form.date}|${form.courseId}|${course ? 'c' : ''}`
+  const sun = form.date ? sunDay(form.date, course ? { lat: course.latitude ?? NaN, lng: course.longitude ?? NaN } : null) : null
+  // From scratch, the first tee time follows sunrise until one is typed (Ross, 17 Nov 2026).
+  const setBatches = useSunriseStart(form, sun, !preset, fn => setForm(f => fn(f) ?? f))
   if (preset && laid !== presetKey) {
-    const out = applyPreset(form, preset, form.date ? sunDay(form.date, course ? { lat: course.latitude ?? NaN, lng: course.longitude ?? NaN } : null) : null)
+    const out = applyPreset(form, preset, sun)
     setLaid(presetKey); setForm(out.form); setPresetWhy(out.why)
   }
   const setEntry = (e: EntryRules) => setForm(f => ({ ...f, entry: e }))
@@ -130,7 +134,9 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
       <EntryRulesFields entry={form.entry} onChange={setEntry} cats={cats} date={form.date} ageDate={ageDate} />
 
       <h2 className="t-h2 text-ink pt-2">Tee times</h2>
-      <CompBatches batches={form.batches} onChange={b => set('batches', b)} />
+      {sun && sunWords(sun) && <p className="t-cap text-ink/65 -mt-3">{sunWords(sun)}</p>}
+      <CompBatches batches={form.batches} onChange={setBatches} />
+      {beforeSunriseLine(form.batches, sun) && <p className="t-cap text-ink/80 -mt-2">{beforeSunriseLine(form.batches, sun)}</p>}
       <div>
         <p className={FIELD_LABEL}>Booking opens</p>
         <Segmented label="Booking opens" value={form.opens ? 'later' : 'now'}

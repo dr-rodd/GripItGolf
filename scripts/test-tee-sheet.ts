@@ -31,6 +31,7 @@ import {
   bookingName, readGuestName, type CasualBooking, type BookerFacts, type Overlay,
 } from '../lib/clubTeeSheet'
 import { noteIssue, readClubNote } from '../lib/clubEvents'
+import { beforeSunriseLine, sunriseFirstTee } from '../lib/clubComp'
 import { teeSheetAccess } from '../lib/eventPermissions'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
@@ -1043,6 +1044,17 @@ section('Casual tee sheet (lib/clubTeeSheet.ts)')
   eq(ev({ type: 'COURSE' }), null, '  …and a Course event')
   eq(ev({ type: 'SOCIAL' }), 'Only a Golf or Course event takes the tee sheet.', '  …never a Social one')
   ok(!read('lib/clubTeeSheet.ts').includes('supabase'), 'the rules are pure')
+
+  // A new competition's first tee time (Ross, 17 Nov 2026: sunrise 08:12, fifteen minutes — 08:15, 08:30, 08:45, 09:00).
+  eq(sunriseFirstTee({ sunrise: '08:12' }, 15), '08:15', 'a new competition starts on the first time after sunrise, on the hour\'s grid')
+  eq(sunriseFirstTee({ sunrise: '08:12' }, 10), '08:20', '  …at ten minutes, 08:20')
+  eq(sunriseFirstTee({ sunrise: '08:00' }, 15), '08:00', '  …sunrise on the grid is itself')
+  eq(sunriseFirstTee(null, 10), null, '  …no day chosen, no guess')
+  eq(beforeSunriseLine([{ start: '08:00', interval: 15 }], { sunrise: '08:12' }), '8:00 am is before sunrise (8:12 am) — the first time after it is 8:15 am.', 'a first time before sunrise is said')
+  eq(beforeSunriseLine([{ start: '08:15', interval: 15 }], { sunrise: '08:12' }), null, '  …one after it says nothing')
+  for (const f of ['app/club/[slug]/NewCompetition.tsx', 'app/clubhouse/[slug]/events/CompPanel.tsx']) {
+    ok(read(f).includes('useSunriseStart(') && read(f).includes('beforeSunriseLine('), `${f.split('/').pop()}: the first tee time follows sunrise until one is typed`)
+  }
 }
 
 // ─── Result ────────────────────────────────────────────────────
