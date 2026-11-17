@@ -23,6 +23,7 @@ import {
   type GridRow, type ListCounts, type ListFilter, type ListSort, type SeasonEvent,
 } from '@/lib/clubhouse'
 import { INVITE_DAYS, INVITE_RESEND_MINUTES, inviteCodeFrom, inviteEmail, irishToday, maskNumber } from '@/lib/clubs'
+import { AGE_MAX, AGE_MIN, ageCountedOn, categoryCodeFrom, categoryIssue, cleanDays, daysLine, normaliseCode, readAgeDate, uniqueCode } from '@/lib/clubMembership'
 import { severIndex } from '../handicaps/handicaps'
 import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
@@ -38,6 +39,13 @@ export interface ListQuery {
   desc: boolean
   page: number
   size: number
+  /** Stage (m): a gender ('none' for not given), a membership ('none' for none), an age band counted on `ageOn`. */
+  gender?: 'M' | 'F' | 'none'
+  category?: string
+  ageMin?: number
+  ageMax?: number
+  /** The day ages are counted on — the club's age date this season. */
+  ageOn: string
 }
 
 /** What the Clubhouse asks of the store beyond the club route's own (all optional: absent, the Clubhouse says it is not set up). */
@@ -63,7 +71,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -84,6 +92,20 @@ export function gridRow(r: PageRecord, accountIndex: number | null): GridRow {
     id: r.id, name: r.name, email: r.email, memberNumber: r.memberNumber, guiNumber: r.guiNumber,
     handicapIndex: r.userId ? accountIndex : r.ownIndex,
     credentials: credentialsOf(r), linked: !!r.userId, removed: !!r.removedAt, invitedAt: r.invitedAt, onBoards: r.onBoards,
+    gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null,
+  }
+}
+
+/** A list read's stage (m) narrowing, as asked: a gender, a membership, an age band — counted on the club's age date this season. */
+function peopleQuery(input: Record<string, unknown>, club: ClubRecord, today: string): Pick<ListQuery, 'gender' | 'category' | 'ageMin' | 'ageMax' | 'ageOn'> {
+  const age = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= AGE_MIN && v <= AGE_MAX ? v : undefined)
+  const g = input.gender
+  return {
+    ...(g === 'M' || g === 'F' || g === 'none' ? { gender: g } : {}),
+    ...(typeof input.category === 'string' && input.category ? { category: input.category } : {}),
+    ...(age(input.ageMin) !== undefined ? { ageMin: age(input.ageMin) } : {}),
+    ...(age(input.ageMax) !== undefined ? { ageMax: age(input.ageMax) } : {}),
+    ageOn: ageCountedOn(today, readAgeDate(club.ageDate)),
   }
 }
 
@@ -138,6 +160,16 @@ export async function runClubhouse(
   const club = clubId ? await store.club(clubId) : null
   if (!club) return fail(404, 'No such club.')
   const { row: mine, asker } = await clubhouseAsker(store, club.id, user.id)
+  // Stage (m): the memberships are read by the office and by Officers making
+  // a competition (its entry rules) in the members app.
+  if (action === 'categories') {
+    if (!clubMay('open_clubhouse', asker) && !clubMay('run_events', asker)) return fail(403, 'Only the club’s Officers and office see its memberships.')
+    const [list, counts] = await Promise.all([
+      store.categories ? store.categories(club.id) : Promise.resolve([]),
+      store.categoryCounts ? store.categoryCounts(club.id).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
+    ])
+    return { status: 200, body: { ok: true, categories: list.map(c => ({ ...c, count: counts.get(c.id) ?? 0 })), ageDate: readAgeDate(club.ageDate) } }
+  }
   if (!clubMay('open_clubhouse', asker)) return fail(403, 'You haven’t been given access to the Clubhouse.')
   const byName = mine?.name ?? STAFF_NAME
   const line = (act: string, target: MemberRecord | null, changes: Record<string, [unknown, unknown]>, batchId: string | null = null): ActivityEntry => ({
@@ -150,22 +182,63 @@ export async function runClubhouse(
 
   if (action === 'overview') {
     if (!store.listCounts) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
-    const [counts, events] = await Promise.all([store.listCounts(club.id), store.clubEvents(club.id).catch(() => [])])
+    const [counts, events, cats, byCat] = await Promise.all([
+      store.listCounts(club.id), store.clubEvents(club.id).catch(() => []),
+      store.categories ? store.categories(club.id).catch(() => []) : Promise.resolve([]),
+      store.categoryCounts ? store.categoryCounts(club.id).catch(() => new Map<string, number>()) : Promise.resolve(new Map<string, number>()),
+    ])
+    counts.byCategory = Object.fromEntries(cats.map(c => [c.name, byCat.get(c.id) ?? 0]))
     const comps = events.filter(e => e.competition)
     const year = irishToday(now).slice(0, 4)
     const phases = comps.map(e => ({ code: e.code, name: e.name, phase: e.competition!.phase, date: e.startDate }))
     const byPhase: Record<string, number> = {}
     for (const p of phases) if (p.phase !== 'certified' || (p.date ?? '').startsWith(year)) byPhase[p.phase] = (byPhase[p.phase] ?? 0) + 1
-    const needs = needsYou({ base: `/clubhouse/${club.slug}`, counts, phases, clubSlug: club.slug, officer: clubMay('run_events', asker) })
+    const needs = needsYou({ base: `/clubhouse/${club.slug}`, counts, phases, clubSlug: club.slug, officer: clubMay('run_events', asker), hasCategories: cats.length > 0 })
     return { status: 200, body: { ok: true, counts, byPhase, needs } }
   }
 
   if (action === 'page') {
     if (!store.listPage) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
     const page = Math.max(0, Math.min(1000, Math.floor(Number(input.page) || 0)))
-    const query: ListQuery = { q: cleanSearch(input.q), filter: readFilter(input.filter), sort: readSort(input.sort), desc: input.desc === true, page, size: PAGE_SIZE }
+    const query: ListQuery = { q: cleanSearch(input.q), filter: readFilter(input.filter), sort: readSort(input.sort), desc: input.desc === true, page, size: PAGE_SIZE, ...peopleQuery(input, club, irishToday(now)) }
     const { rows, total } = await store.listPage(club.id, query)
     return { status: 200, body: { ok: true, grid: await gridRows(store, rows), total } }
+  }
+
+  // Stage (m): a membership saved or deleted, and the club's age date — the office's.
+  if (action === 'category.save' || action === 'category.delete' || action === 'age-date') {
+    if (!clubMay('keep_list', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s memberships.')
+    if (!store.categories || !store.saveCategory || !store.deleteCategory) return fail(503, 'Memberships aren’t set up yet — try again later.')
+    const list = await store.categories(club.id)
+    if (action === 'age-date') {
+      const raw = str(input.ageDate)
+      const value = /^\d{2}-\d{2}$/.test(raw) ? readAgeDate(raw) : null
+      if (!value || value !== raw) return fail(400, 'Choose a day and a month.')
+      try { await store.updateClub(club.id, { age_date: value === '01-01' ? null : value }) } catch { return fail(503, 'Memberships aren’t set up yet — try again later.') }
+      await logged([line('age_date', null, { ageDate: [readAgeDate(club.ageDate), value] })])
+      return { status: 200, body: { ok: true, ageDate: value } }
+    }
+    const id = str(input.id) || undefined
+    const before = id ? list.find(c => c.id === id) : undefined
+    if (id && !before) return fail(404, 'That membership isn’t the club’s.')
+    if (action === 'category.delete') {
+      const counts = store.categoryCounts ? await store.categoryCounts(club.id) : new Map<string, number>()
+      if ((counts.get(id!) ?? 0) > 0) return fail(409, 'People are in this membership — move them to another first.')
+      await store.deleteCategory(club.id, id!)
+      await logged([line('category.delete', null, { [before!.code]: [before!.name, null] })])
+      return { status: 200, body: { ok: true, categories: list.filter(c => c.id !== id).map(c => ({ ...c, count: 0 })) } }
+    }
+    const name = str(input.name).trim().replace(/\s+/g, ' ')
+    const code = normaliseCode(input.code) || uniqueCode(categoryCodeFrom(name), list.filter(c => c.id !== id).map(c => c.code))
+    const days = cleanDays(input.days)
+    const why = categoryIssue({ name, code, days }, list.filter(c => c.id !== id))
+    if (why) return fail(400, why)
+    const saved = await store.saveCategory(club.id, { id, name, code, days, position: before ? list.indexOf(before) : list.length })
+    if (saved === 'clash') return fail(409, 'Another membership already uses that name or code.')
+    await logged([line(before ? 'category.update' : 'category.add', null, { [code]: [before ? `${before.name} · ${daysLine(before.days)}` : null, `${name} · ${daysLine(days)}`] })])
+    const after = await store.categories(club.id)
+    const counts = store.categoryCounts ? await store.categoryCounts(club.id).catch(() => new Map<string, number>()) : new Map<string, number>()
+    return { status: 200, body: { ok: true, categories: after.map(c => ({ ...c, count: counts.get(c.id) ?? 0 })) } }
   }
 
   // Stage (k2), D214, D215: the season table and the calendar read one list.
@@ -178,13 +251,14 @@ export async function runClubhouse(
     if (!store.listPage) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
     const out: PageRecord[] = []
     for (let p = 0; p < 20; p++) {
-      const { rows } = await store.listPage(club.id, { q: '', filter: readFilter(input.filter ?? 'all'), sort: 'name', desc: false, page: p, size: 1000 })
+      const { rows } = await store.listPage(club.id, { q: '', filter: readFilter(input.filter ?? 'all'), sort: 'name', desc: false, page: p, size: 1000, ageOn: irishToday(now) })
       out.push(...rows)
       if (rows.length < 1000) break
     }
     const grid = await gridRows(store, out)
     await logged([line('list.download', null, { rows: [null, grid.length] })])
-    return { status: 200, body: { ok: true, csv: listCsv(grid), total: grid.length } }
+    const cats = store.categories ? await store.categories(club.id).catch(() => []) : []
+    return { status: 200, body: { ok: true, csv: listCsv(grid, cats), total: grid.length } }
   }
 
   if (action === 'bulk') {

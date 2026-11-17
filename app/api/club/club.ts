@@ -24,11 +24,13 @@
 //   account may be on many clubs' lists (D218, D223).
 
 import { readIndex } from '@/lib/handicapIndex'
+import { readBirthDate, resolveExtras } from '@/lib/clubMembership'
 import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../handicaps/handicaps'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cleanHex } from '@/lib/clubColour'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { ListCounts, GridRow, Need, SeasonEvent } from '@/lib/clubhouse'
+import type { Category, Gender, RowExtras } from '@/lib/clubMembership'
 import { STAFF_NAME } from '@/lib/clubhouse'
 import { isClubhouseAction, runClubhouse, type ClubhouseStore } from './clubhouse'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
@@ -54,6 +56,8 @@ export interface ClubRecord {
   artDarkPath?: string | null
   /** Stage (d1), D161: the club's home course (089) — absent before it, or unset. */
   homeCourseId?: string | null
+  /** Stage (m): the day each year ages are counted on, 'MM-DD' (094) — absent or null is 1 January. */
+  ageDate?: string | null
 }
 
 export interface MemberRecord {
@@ -71,12 +75,17 @@ export interface MemberRecord {
   playsHere?: boolean
   officer?: boolean
   clubhouse?: boolean
+  /** Migration 094: the row's membership, and the person's gender and date of birth (the account's, copied; or the row's own). */
+  categoryId?: string | null
+  gender?: Gender | null
+  birthDate?: string | null
 }
 
 export type RowPatch = Partial<{
   name: string; member_number: string | null; gui_number: string | null; email: string | null
   role: ClubRole; user_id: string | null; linked_at: string | null; removed_at: string | null; on_boards: boolean
   plays_here: boolean; officer: boolean; clubhouse: boolean
+  category_id: string | null; gender: Gender | null; birth_date: string | null
 }>
 
 /** One line of the club's activity log (092, D210). */
@@ -119,7 +128,7 @@ export interface ClubStore extends ClubhouseStore {
   club(clubId: string): Promise<ClubRecord | null>
   /** Every row on a club's list, removed ones too. */
   rows(clubId: string): Promise<MemberRecord[]>
-  insertRows(clubId: string, rows: ListRow[]): Promise<number>
+  insertRows(clubId: string, rows: ListRow[], extras?: RowExtras[]): Promise<number>
   /** 'clash' when a number is already another row's in this club. */
   updateRow(id: string, patch: RowPatch): Promise<'ok' | 'clash'>
   lastInviteAt(memberId: string): Promise<string | null>
@@ -145,7 +154,7 @@ export interface ClubStore extends ClubhouseStore {
   assetBase(): string | undefined
   clubBySlug(slug: string): Promise<ClubRecord | null>
   /** The club's look changed: its colour, or an image's stored path. */
-  updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null; home_course_id: string | null }>): Promise<void>
+  updateClub(clubId: string, patch: Partial<{ colour: string | null; crest_path: string | null; art_path: string | null; art_dark_path: string | null; home_course_id: string | null; age_date: string | null }>): Promise<void>
   /** Every event under the club, with who changes it. */
   clubEvents(clubId: string): Promise<ClubEvent[]>
   /** Of those events, the ones this account is linked to a player in (D134). */
@@ -173,6 +182,16 @@ export interface ClubStore extends ClubhouseStore {
 
   // Stage (k0) — the activity log (092). Fail-soft: never in the way of a change.
   logActivity?(entries: ActivityEntry[]): Promise<void>
+
+  // Stage (m) — memberships, and a person's gender and date of birth (094).
+  categories?(clubId: string): Promise<Category[]>
+  categoryCounts?(clubId: string): Promise<Map<string, number>>
+  /** The category's id, or 'clash' when its name or code is another's. */
+  saveCategory?(clubId: string, c: { id?: string; name: string; code: string; days: number[]; position: number }): Promise<string>
+  deleteCategory?(clubId: string, id: string): Promise<void>
+  accountDetails?(userId: string): Promise<{ gender: Gender | null; birthDate: string | null } | null>
+  /** One value everywhere: the account's, copied onto every list row of theirs. */
+  saveDetails?(userId: string, patch: { gender?: Gender | null; birthDate?: string | null }): Promise<void>
 }
 
 /** Reading and resizing an uploaded image (sharp, on the server — D156), handed in so tests need no images. */
@@ -250,6 +269,9 @@ export type ClubBody = {
   csv?: string
   /** Stage (k2): every event under the club, with a competition's facts. */
   calendar?: SeasonEvent[]
+  /** Stage (m): the club's memberships with their head counts, and its age date ('MM-DD'). */
+  categories?: (Category & { count: number })[]
+  ageDate?: string
 }
 
 export type ClubOutcome =
@@ -323,7 +345,37 @@ function loggable(r: MemberRecord): Record<string, unknown> {
   return {
     name: r.name, memberNumber: maskNumber(r.memberNumber), guiNumber: maskNumber(r.guiNumber), email: r.email,
     onBoards: r.onBoards, playsHere: c.playsHere, officer: c.officer, clubhouse: c.clubhouse, owner: c.owner,
+    // Stage (m): the log keeps that the gender or date of birth changed, never what it was.
+    gender: r.gender ? 'set' : null, birthDate: r.birthDate ? 'set' : null, categoryId: r.categoryId ?? null,
   }
+}
+
+/**
+ * A person's gender and date of birth changed from a club's list: one value
+ * everywhere (Ross, 17 Nov 2026) — a linked row's go to the account and
+ * every list row of theirs; a row nobody has linked holds its own.
+ */
+export async function setDetails(store: ClubStore, row: MemberRecord, patch: { gender?: Gender | null; birthDate?: string | null }) {
+  if (patch.gender === undefined && patch.birthDate === undefined) return
+  if (row.userId && store.saveDetails) return store.saveDetails(row.userId, patch)
+  const p: RowPatch = {}
+  if (patch.gender !== undefined) p.gender = patch.gender
+  if (patch.birthDate !== undefined) p.birth_date = patch.birthDate
+  await store.updateRow(row.id, p)
+}
+
+/**
+ * A row just linked to an account (stage (m)): the account's gender and date
+ * of birth stand where it has them, the row's fill what it lacks — and then
+ * every list row of theirs carries the result (D179's rule for the index).
+ */
+export async function linkDetails(store: ClubStore, userId: string, row: MemberRecord) {
+  if (!store.accountDetails || !store.saveDetails) return
+  const acct = await store.accountDetails(userId)
+  const gender = acct?.gender ?? row.gender ?? null
+  const birthDate = acct?.birthDate ?? row.birthDate ?? null
+  if (gender === null && birthDate === null) return
+  await store.saveDetails(userId, { gender, birthDate })
 }
 
 function diff(before: Record<string, unknown>, after: Record<string, unknown>): Record<string, [unknown, unknown]> {
@@ -336,7 +388,10 @@ function asRows(v: unknown): ListRow[] | null {
   if (!Array.isArray(v) || v.length === 0 || v.length > MAX_LIST_ROWS) return null
   return v.map(x => {
     const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>
-    return cleanRow({ name: str(o.name), memberNumber: str(o.memberNumber), guiNumber: str(o.guiNumber), email: str(o.email) })
+    return cleanRow({
+      name: str(o.name), memberNumber: str(o.memberNumber), guiNumber: str(o.guiNumber), email: str(o.email),
+      gender: str(o.gender), birthDate: str(o.birthDate), category: str(o.category),
+    })
   })
 }
 
@@ -509,10 +564,17 @@ export async function runClub(
   if (input.action === 'add') {
     const incoming = asRows(input.rows)
     if (!incoming) return fail(400, `Add between 1 and ${MAX_LIST_ROWS} rows at a time.`)
-    const bad = incoming.map(r => ({ r, why: listRowIssue(r) })).filter(x => x.why)
+    // Stage (m): a gender, a date of birth and a membership code, read
+    // against the club's memberships — a row with one that will not read is
+    // held back with why, as a bad number is.
+    const cats = incoming.some(r => r.category !== undefined) && store.categories ? await store.categories(clubId) : []
+    const today = irishToday(now)
+    const extrasWhy = (r: ListRow) => { const x = resolveExtras(r, cats, today); return x.ok ? null : x.why }
+    const extrasOf = (r: ListRow) => { const x = resolveExtras(r, cats, today); return x.ok ? x.extras : {} }
+    const bad = incoming.map(r => ({ r, why: listRowIssue(r) ?? extrasWhy(r) })).filter(x => x.why)
     const plan = planList(rows.map(r => ({
       id: r.id, name: r.name, memberNumber: r.memberNumber, guiNumber: r.guiNumber, email: r.email, removed: !!r.removedAt,
-    })), incoming.filter(r => !listRowIssue(r)))
+    })), incoming.filter(r => !listRowIssue(r) && !extrasWhy(r)))
     const skipped = [...bad.map(x => ({ name: x.r.name || '(no name)', why: x.why! })), ...plan.skipped.map(s => ({ name: s.row.name, why: s.why }))]
     let updated = 0
     const batchId = uuidFrom(store.randomBytes(16))
@@ -525,7 +587,23 @@ export async function runClub(
       if (u.patch.email !== undefined) patch.email = u.patch.email
       if (u.restore) patch.removed_at = null
       const was = rows.find(r => r.id === u.id) ?? null
-      if ((await store.updateRow(u.id, patch)) === 'clash') skipped.push({ name: u.patch.name ?? was?.name ?? '', why: 'A number is already another person’s on the list.' })
+      const x = extrasOf(u.row)
+      if (x.categoryId !== undefined && x.categoryId !== (was?.categoryId ?? null)) patch.category_id = x.categoryId
+      const details = {
+        ...(x.gender !== undefined && x.gender !== (was?.gender ?? null) ? { gender: x.gender } : {}),
+        ...(x.birthDate !== undefined && x.birthDate !== (was?.birthDate ?? null) ? { birthDate: x.birthDate } : {}),
+      }
+      if (!Object.keys(patch).length && !Object.keys(details).length) continue
+      let result: 'ok' | 'clash' = 'ok'
+      try {
+        if (Object.keys(patch).length) result = await store.updateRow(u.id, patch)
+        if (result === 'ok' && was) await setDetails(store, was, details)
+      } catch (e) {
+        if ((e as Error)?.name !== 'TicksNotReady') throw e
+        skipped.push({ name: was?.name ?? '', why: 'Memberships, genders and dates of birth aren’t set up yet — try again later.' })
+        continue
+      }
+      if (result === 'clash') skipped.push({ name: u.patch.name ?? was?.name ?? '', why: 'A number is already another person’s on the list.' })
       else {
         updated++
         if (was) {
@@ -533,12 +611,15 @@ export async function runClub(
             ...(u.patch.memberNumber !== undefined ? { memberNumber: u.patch.memberNumber } : {}),
             ...(u.patch.guiNumber !== undefined ? { guiNumber: u.patch.guiNumber } : {}),
             ...(u.patch.email !== undefined ? { email: u.patch.email } : {}),
-            ...(u.restore ? { removedAt: null } : {}) }
+            ...(u.restore ? { removedAt: null } : {}),
+            ...(patch.category_id !== undefined ? { categoryId: patch.category_id } : {}),
+            ...(details.gender !== undefined ? { gender: details.gender } : {}),
+            ...(details.birthDate !== undefined ? { birthDate: details.birthDate } : {}) }
           lines.push(line(u.restore ? 'row.restore' : 'row.update', was, diff(loggable(was), loggable(now2)), batchId))
         }
       }
     }
-    const added = plan.inserts.length ? await store.insertRows(clubId, plan.inserts) : 0
+    const added = plan.inserts.length ? await store.insertRows(clubId, plan.inserts, plan.inserts.map(extrasOf)) : 0
     const after = await store.rows(clubId)
     for (const r of plan.inserts) {
       const made = after.find(a => a.name === r.name && a.memberNumber === r.memberNumber && a.guiNumber === r.guiNumber && a.email === r.email)
@@ -585,6 +666,36 @@ export async function runClub(
       }
     }
     if (typeof input.onBoards === 'boolean') patch.on_boards = input.onBoards
+    // Stage (m): the row's membership, and the person's gender and date of
+    // birth — one value everywhere (Ross, 17 Nov 2026), so a linked row's go
+    // to the account and every list row of theirs.
+    const details: { gender?: Gender | null; birthDate?: string | null } = {}
+    if (input.gender !== undefined) {
+      const g = input.gender === null || input.gender === '' ? null : input.gender
+      if (g !== null && g !== 'M' && g !== 'F') return fail(400, 'Male, Female or not given.')
+      details.gender = g
+    }
+    if (input.birthDate !== undefined) {
+      if (input.birthDate === null || input.birthDate === '') details.birthDate = null
+      else {
+        const b = readBirthDate(str(input.birthDate), irishToday(now))
+        if (!b.ok) return fail(400, b.why)
+        details.birthDate = b.value ?? null
+      }
+    }
+    if (input.categoryId !== undefined) {
+      const id = input.categoryId === null || input.categoryId === '' ? null : str(input.categoryId)
+      if (id && !(store.categories ? await store.categories(clubId) : []).some(c => c.id === id)) return fail(404, 'That membership isn’t the club’s.')
+      patch.category_id = id
+    }
+    if (details.gender !== undefined || details.birthDate !== undefined) {
+      try {
+        await setDetails(store, target, details)
+      } catch (e) {
+        if ((e as Error)?.name === 'TicksNotReady') return fail(503, TICKS_LATER)
+        throw e
+      }
+    }
     // D179: the one index — a linked row's is the account's, an unlinked
     // row's its own — through the one writer, logged as the list's.
     if (input.handicapIndex !== undefined) {
@@ -597,12 +708,13 @@ export async function runClub(
         return fail(503, 'Could not save the index — try again.')
       }
     }
-    if (Object.keys(patch).length === 0) return await fresh()
-    try {
-      if ((await store.updateRow(target.id, patch)) === 'clash') return fail(409, 'That number is already another person’s on the list.')
-    } catch (e) {
-      if ((e as Error)?.name === 'TicksNotReady') return fail(503, TICKS_LATER)
-      throw e
+    if (Object.keys(patch).length > 0) {
+      try {
+        if ((await store.updateRow(target.id, patch)) === 'clash') return fail(409, 'That number is already another person’s on the list.')
+      } catch (e) {
+        if ((e as Error)?.name === 'TicksNotReady') return fail(503, TICKS_LATER)
+        throw e
+      }
     }
     const after: MemberRecord = {
       ...target,
@@ -612,6 +724,9 @@ export async function runClub(
       ...(patch.email !== undefined ? { email: patch.email } : {}),
       ...(patch.on_boards !== undefined ? { onBoards: patch.on_boards } : {}),
       ...(patch.role !== undefined ? { role: patch.role, playsHere: patch.plays_here, officer: patch.officer, clubhouse: patch.clubhouse } : {}),
+      ...(patch.category_id !== undefined ? { categoryId: patch.category_id } : {}),
+      ...(details.gender !== undefined ? { gender: details.gender } : {}),
+      ...(details.birthDate !== undefined ? { birthDate: details.birthDate } : {}),
     }
     const changes = diff(loggable(target), loggable(after))
     if (Object.keys(changes).length) await logged(store, [line(patch.role !== undefined ? 'credentials' : 'row.update', target, changes)])
@@ -708,6 +823,8 @@ async function runLink(input: Record<string, unknown> & { address?: string }, us
   }
   // D179: one index — the account's stands, the row's goes, a difference said once.
   const note = store.handicaps ? await linkIndex(store.handicaps, user.id, row.id, club.name).catch(() => null) : null
+  // Stage (m): the same for the gender and date of birth — the account's stand.
+  await linkDetails(store, user.id, row).catch(e => console.error('details link failed:', e))
   return { status: 200, body: { ok: true, club: summary(club, row), ...(note ? { note } : {}) } }
 }
 

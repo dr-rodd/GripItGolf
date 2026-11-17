@@ -19,7 +19,8 @@ import type { ListQuery, PageRecord } from './clubhouse'
 import { SORT_COLUMN, type ListCounts, type SeasonEvent } from '@/lib/clubhouse'
 import { readAllRows } from '@/lib/allRows'
 import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
-import { TicksNotReady, asRow, isMissingColumn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
+import { TicksNotReady, asRow, isMissingColumn, missingSet, peopleMissing, peopleOn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
+import { birthRange, cleanDays, type Category, type RowExtras } from '@/lib/clubMembership'
 
 export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow }
 
@@ -147,8 +148,8 @@ const invitedOn = () => Date.now() - invitedMissingAt > 60_000
  * went, for those rows alone. Every part fail-soft before 092 and 093.
  */
 export async function readListPage(db: Db, clubId: string, o: ListQuery): Promise<{ rows: PageRecord[]; total: number }> {
-  const run = (ticks: boolean, invited: boolean) => {
-    let q = db.from('club_members').select(`${rowCols(ticks)}${invited ? ', invited_at' : ''}`, { count: 'exact' }).eq('club_id', clubId)
+  const run = (ticks: boolean, invited: boolean, people: boolean) => {
+    let q = db.from('club_members').select(`${rowCols(ticks, people)}${invited ? ', invited_at' : ''}`, { count: 'exact' }).eq('club_id', clubId)
     if (o.q) {
       const like = `%${o.q}%`
       q = q.or(`name.ilike.${like},email.ilike.${like},member_number.ilike.${like},gui_number.ilike.${like}`)
@@ -165,16 +166,31 @@ export async function readListPage(db: Db, clubId: string, o: ListQuery): Promis
       case 'clubhouse': q = ticks ? live().eq('clubhouse', true) : live().in('role', LEGACY_RUNNING_ROLES); break
       default: q = live()
     }
+    // Stage (m): gender, membership and age (094). Before it, asking for any
+    // of them finds nobody — nobody has one yet.
+    const nobody = () => q.eq('id', '00000000-0000-0000-0000-000000000000')
+    if (o.gender) q = !people ? nobody() : o.gender === 'none' ? q.is('gender', null) : q.eq('gender', o.gender)
+    if (o.category) q = !people ? (o.category === 'none' ? q : nobody()) : o.category === 'none' ? q.is('category_id', null) : q.eq('category_id', o.category)
+    if (o.ageMin !== undefined || o.ageMax !== undefined) {
+      if (!people) q = nobody()
+      else {
+        const { latest, earliest } = birthRange(o.ageOn, o.ageMin ?? null, o.ageMax ?? null)
+        if (latest) q = q.lte('birth_date', latest)
+        if (earliest) q = q.gt('birth_date', earliest)
+      }
+    }
     return q.order(SORT_COLUMN[o.sort], { ascending: !o.desc, nullsFirst: false }).order('id').range(o.page * o.size, o.page * o.size + o.size - 1)
   }
-  // Two columns may be missing (092's ticks, 093's invited_at): the error says which.
-  let ticks = ticksOn(), invited = invitedOn()
-  let r = await run(ticks, invited)
-  for (let i = 0; i < 2 && r.error && isMissingColumn(r.error); i++) {
-    if (invited && /invited_at/.test((r.error as { message?: string }).message ?? '')) { invited = false; invitedMissingAt = Date.now() }
+  // Three sets may be missing (092's ticks, 093's invited_at, 094's people): the error says which.
+  let ticks = ticksOn(), invited = invitedOn(), people = peopleOn()
+  let r = await run(ticks, invited, people)
+  for (let i = 0; i < 3 && r.error && isMissingColumn(r.error); i++) {
+    const msg = (r.error as { message?: string }).message ?? ''
+    if (invited && /invited_at/.test(msg)) { invited = false; invitedMissingAt = Date.now() }
+    else if (people && missingSet(r.error as { message?: string }) === 'people') { people = false; peopleMissing() }
     else if (ticks) { ticks = false; ticksMissing() }
     else break
-    r = await run(ticks, invited)
+    r = await run(ticks, invited, people)
   }
   if (r.error) throw r.error
   const raw = (r.data ?? []) as unknown as (RowRow & { invited_at?: string | null })[]
@@ -196,12 +212,14 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
     const r = await q
     return r.error ? null : r.count ?? 0
   }
-  const [onList, joined, invited, off, playsHere, officer, clubhouse, noEmail] = await Promise.all([
+  const [onList, joined, invited, off, playsHere, officer, clubhouse, noEmail, noGender, noCategory] = await Promise.all([
     n(live()), n(live().not('user_id', 'is', null)),
     n(live().is('user_id', null).not('invited_at', 'is', null)),
     n(base().not('removed_at', 'is', null)),
     n(live().eq('plays_here', true)), n(live().eq('officer', true)), n(live().eq('clubhouse', true)),
     n(live().is('user_id', null).is('email', null)),
+    // Stage (m), 094 — null before it.
+    n(live().is('gender', null)), n(live().is('category_id', null)),
   ])
   // Before 092 the ticks are read off the role.
   const [legacyRun] = officer === null ? await Promise.all([n(live().in('role', LEGACY_RUNNING_ROLES))]) : [null]
@@ -209,6 +227,7 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
   return {
     onList: on, joined: j, invited, notJoined: Math.max(0, on - j), off: off ?? 0,
     playsHere: playsHere ?? on, officer: officer ?? legacyRun ?? 0, clubhouse: clubhouse ?? legacyRun ?? 0, noEmail: noEmail ?? 0,
+    noGender, noCategory,
   }
 }
 
@@ -256,6 +275,13 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
       },
     }
   })
+}
+
+/** A club's memberships in their order (094 — none before it). */
+export async function readCategories(db: Db, clubId: string): Promise<Category[]> {
+  const { data, error } = await db.from('club_categories').select('id, name, code, days, position').eq('club_id', clubId).order('position').order('name')
+  if (error) return []
+  return ((data ?? []) as { id: string; name: string; code: string; days: number[] | null }[]).map(c => ({ id: c.id, name: c.name, code: c.code, days: cleanDays(c.days ?? []) }))
 }
 
 export function clubStore(db: Db): ClubStore {
@@ -344,9 +370,17 @@ export function clubStore(db: Db): ClubStore {
       }
       if (!data) return null
       const [club] = await withArt(db, [asClub(data as ClubRow)])
-      // D161: its home course (089), in a query of its own — none before it.
-      const home = await db.from('clubs').select('home_course_id').eq('id', clubId).maybeSingle()
-      return { ...club, homeCourseId: home.error ? null : (home.data as { home_course_id: string | null } | null)?.home_course_id ?? null }
+      // D161: its home course (089) and stage (m)'s age date (094), each in a
+      // query of its own — none before its migration.
+      const [home, age] = await Promise.all([
+        db.from('clubs').select('home_course_id').eq('id', clubId).maybeSingle(),
+        db.from('clubs').select('age_date').eq('id', clubId).maybeSingle(),
+      ])
+      return {
+        ...club,
+        homeCourseId: home.error ? null : (home.data as { home_course_id: string | null } | null)?.home_course_id ?? null,
+        ageDate: age.error ? null : (age.data as { age_date: string | null } | null)?.age_date ?? null,
+      }
     },
     async rows(clubId) {
       // A club's list can pass Supabase's 1,000-row page: read in pages.
@@ -361,22 +395,30 @@ export function clubStore(db: Db): ClubStore {
       }
       return out
     },
-    async insertRows(clubId, rows: ListRow[]) {
+    async insertRows(clubId, rows: ListRow[], extras?: RowExtras[]) {
       let n = 0
       for (let i = 0; i < rows.length; i += 500) {
-        const chunk = rows.slice(i, i + 500).map(r => ({
+        const base = rows.slice(i, i + 500).map(r => ({
           club_id: clubId, name: r.name, member_number: r.memberNumber, gui_number: r.guiNumber, email: r.email,
         }))
-        const { error } = await db.from('club_members').insert(chunk)
+        // Stage (m)'s cells go in beside them while 094 is in; before it, without.
+        const full = base.map((b, j) => {
+          const e = extras?.[i + j]
+          return e && peopleOn()
+            ? { ...b, ...(e.gender !== undefined ? { gender: e.gender } : {}), ...(e.birthDate !== undefined ? { birth_date: e.birthDate } : {}), ...(e.categoryId !== undefined ? { category_id: e.categoryId } : {}) }
+            : b
+        })
+        let { error } = await db.from('club_members').insert(full)
+        if (isMissingColumn(error) && missingSet(error) === 'people') { peopleMissing(); ({ error } = await db.from('club_members').insert(base)) }
         if (error) throw error
-        n += chunk.length
+        n += base.length
       }
       return n
     },
     async updateRow(id, patch) {
       const { error } = await db.from('club_members').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
       if (error?.code === '23505') return 'clash'
-      if (isMissingColumn(error) && ('plays_here' in patch || 'officer' in patch || 'clubhouse' in patch)) throw new TicksNotReady()
+      if (isMissingColumn(error) && ['plays_here', 'officer', 'clubhouse', 'category_id', 'gender', 'birth_date'].some(k => k in patch)) throw new TicksNotReady()
       if (error) throw error
       return 'ok'
     },
@@ -590,6 +632,45 @@ export function clubStore(db: Db): ClubStore {
       return readListCounts(db, clubId)
     },
     seasonEvents: clubId => readClubSeason(db, clubId),
+    categories: clubId => readCategories(db, clubId),
+    async categoryCounts(clubId) {
+      const { data, error } = await db.from('club_members').select('category_id').eq('club_id', clubId).is('removed_at', null).not('category_id', 'is', null)
+      const out = new Map<string, number>()
+      if (error) return out
+      for (const r of (data ?? []) as { category_id: string }[]) out.set(r.category_id, (out.get(r.category_id) ?? 0) + 1)
+      return out
+    },
+    async saveCategory(clubId, c) {
+      const row = { club_id: clubId, name: c.name, code: c.code, days: c.days, position: c.position, updated_at: new Date().toISOString() }
+      const { data, error } = c.id
+        ? await db.from('club_categories').update(row).eq('id', c.id).eq('club_id', clubId).select('id').maybeSingle()
+        : await db.from('club_categories').insert(row).select('id').single()
+      if (error?.code === '23505') return 'clash'
+      if (error) throw error
+      return (data as { id: string } | null)?.id ?? 'clash'
+    },
+    async deleteCategory(clubId, id) {
+      const { error } = await db.from('club_categories').delete().eq('id', id).eq('club_id', clubId)
+      if (error) throw error
+    },
+    async accountDetails(userId) {
+      const { data, error } = await db.from('account_details').select('gender, birth_date').eq('user_id', userId).maybeSingle()
+      if (error || !data) return null
+      const d = data as { gender: 'M' | 'F' | null; birth_date: string | null }
+      return { gender: d.gender, birthDate: d.birth_date }
+    },
+    async saveDetails(userId, patch) {
+      // One value everywhere (Ross, 17 Nov 2026): the account's, then every
+      // list row of theirs carrying the same copy.
+      const cols: Record<string, unknown> = {}
+      if (patch.gender !== undefined) cols.gender = patch.gender
+      if (patch.birthDate !== undefined) cols.birth_date = patch.birthDate
+      if (!Object.keys(cols).length) return
+      const up = await db.from('account_details').upsert({ user_id: userId, ...cols, updated_at: new Date().toISOString() }, { onConflict: 'user_id' })
+      if (up.error) { if (isMissingColumn(up.error) || up.error.code === '42P01' || up.error.code === 'PGRST205') throw new TicksNotReady(); throw up.error }
+      const rows = await db.from('club_members').update(cols).eq('user_id', userId)
+      if (rows.error) throw rows.error
+    },
     async markInvited(memberId, at) {
       // Before 093 there is no column: the standing simply says Not joined.
       await db.from('club_members').update({ invited_at: at }).eq('id', memberId)

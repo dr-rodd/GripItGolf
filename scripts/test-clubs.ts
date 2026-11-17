@@ -28,7 +28,7 @@ import { MAX_COPIES, eventsOn, formatLine, monthGrid, stepMonth, weeklyFrom, typ
 import { compFormFrom } from '../lib/clubComp'
 import { runCopyCompetition } from '../app/api/club/competition'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
-import { inviteHash, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
+import { inviteHash, linkDetails, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
@@ -49,6 +49,11 @@ import { parseLeaderboards } from '../lib/leaderboards'
 import { RESERVED_CLUB_SLUGS } from '../lib/clubs'
 import { hashPin as hashPinForDoor, unheldPin, entryToken } from '../lib/pinHash'
 import { verifyPin } from '../lib/pinHash'
+import {
+  ageBandLine, ageCountedOn, ageOn, birthRange, categoryCodeFrom, categoryIssue, entryLine, entryRefusal, entryRulesIssue, playsOn,
+  readAgeDate, readBirthDate, readEntryRules, readGender, refusalWords, resolveExtras, uniqueCode, daysLine,
+  type Category, type Gender, type RowExtras,
+} from '../lib/clubMembership'
 import { INDEX_MAX, INDEX_MIN, indexLabel, linkPlan, readIndex, sameIndex } from '../lib/handicapIndex'
 import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../app/api/handicaps/handicaps'
 
@@ -146,8 +151,9 @@ function ruleTests() {
     row({ name: 'Newcomer again', guiNumber: 'G9' }),
     row({ name: 'Crossed', guiNumber: 'G1', memberNumber: '2' }),
   ])
-  eq(plan.updates.find(u => u.id === 'r1'), { id: 'r1', patch: { name: 'Ross O’Grady', email: 'new@x.ie' }, restore: false }, 'found by GUI number: brought up to date')
-  eq(plan.updates.find(u => u.id === 'r2'), { id: 'r2', patch: {}, restore: true }, 'a removed row on the new list comes back')
+  const upd = (id: string) => { const u = plan.updates.find(x => x.id === id); return u && { id: u.id, patch: u.patch, restore: u.restore } }
+  eq(upd('r1'), { id: 'r1', patch: { name: 'Ross O’Grady', email: 'new@x.ie' }, restore: false }, 'found by GUI number: brought up to date')
+  eq(upd('r2'), { id: 'r2', patch: {}, restore: true }, 'a removed row on the new list comes back')
   ok(!plan.updates.some(u => u.id === 'r3'), 'nothing new about a row: left alone')
   eq(plan.inserts.map(r => r.name), ['Newcomer'], 'a new person is added once')
   eq(plan.skipped.map(s => s.why), ['On the list twice.', 'On the list twice.'], 'the same number twice, or numbers pointing at two people, held back')
@@ -211,10 +217,12 @@ class Stand implements ClubStore {
   }
   async club(id: string) { return this.clubs.get(id) ?? null }
   async rows(clubId: string) { return [...this.list.values()].filter(r => r.clubId === clubId).sort((a, b) => a.name.localeCompare(b.name)) }
-  async insertRows(clubId: string, rows: ListRow[]) {
-    for (const r of rows) {
+  async insertRows(clubId: string, rows: ListRow[], extras?: RowExtras[]) {
+    for (const [i, r] of rows.entries()) {
       const id = `m${++this.n}`
-      this.list.set(id, { id, clubId, ...r, role: 'member', userId: null, removedAt: null, onBoards: true })
+      const x = extras?.[i] ?? {}
+      this.list.set(id, { id, clubId, name: r.name, memberNumber: r.memberNumber, guiNumber: r.guiNumber, email: r.email, role: 'member', userId: null, removedAt: null, onBoards: true,
+        ...(x.categoryId !== undefined ? { categoryId: x.categoryId } : {}), ...(x.gender !== undefined ? { gender: x.gender } : {}), ...(x.birthDate !== undefined ? { birthDate: x.birthDate } : {}) })
     }
     return rows.length
   }
@@ -233,6 +241,9 @@ class Stand implements ClubStore {
       ...(p.plays_here !== undefined ? { playsHere: p.plays_here } : {}),
       ...(p.officer !== undefined ? { officer: p.officer } : {}),
       ...(p.clubhouse !== undefined ? { clubhouse: p.clubhouse } : {}),
+      ...(p.category_id !== undefined ? { categoryId: p.category_id } : {}),
+      ...(p.gender !== undefined ? { gender: p.gender } : {}),
+      ...(p.birth_date !== undefined ? { birthDate: p.birth_date } : {}),
     }
     const others = [...this.list.values()].filter(o => o.clubId === r.clubId && o.id !== id)
     if ((next.memberNumber && others.some(o => o.memberNumber === next.memberNumber))
@@ -325,6 +336,31 @@ class Stand implements ClubStore {
       })
       .sort((a, b) => String(a[o.sort] ?? '').localeCompare(String(b[o.sort] ?? '')) * (o.desc ? -1 : 1))
     return { rows: all.slice(o.page * o.size, o.page * o.size + o.size).map(r => ({ ...r, invitedAt: this.invitedAt.get(r.id) ?? null, ownIndex: null })), total: all.length }
+  }
+  // Stage (m): memberships and a person's details.
+  cats = new Map<string, Category>()
+  details = new Map<string, { gender: Gender | null; birthDate: string | null }>()
+  async categories(clubId: string) { return [...this.cats.values()].filter(c => (c as Category & { clubId?: string }).clubId === clubId) }
+  async categoryCounts(clubId: string) {
+    const m = new Map<string, number>()
+    for (const r of this.list.values()) if (r.clubId === clubId && !r.removedAt && r.categoryId) m.set(r.categoryId, (m.get(r.categoryId) ?? 0) + 1)
+    return m
+  }
+  async saveCategory(clubId: string, c: { id?: string; name: string; code: string; days: number[]; position: number }) {
+    const id = c.id ?? `cat${++this.n}`
+    this.cats.set(id, { id, name: c.name, code: c.code, days: c.days, clubId } as Category)
+    return id
+  }
+  async deleteCategory(_clubId: string, id: string) {
+    this.cats.delete(id)
+    for (const r of this.list.values()) if (r.categoryId === id) this.list.set(r.id, { ...r, categoryId: null })
+  }
+  async accountDetails(userId: string) { return this.details.get(userId) ?? null }
+  async saveDetails(userId: string, patch: { gender?: Gender | null; birthDate?: string | null }) {
+    const was = this.details.get(userId) ?? { gender: null, birthDate: null }
+    const next = { gender: patch.gender !== undefined ? patch.gender : was.gender, birthDate: patch.birthDate !== undefined ? patch.birthDate : was.birthDate }
+    this.details.set(userId, next)
+    for (const r of this.list.values()) if (r.userId === userId) this.list.set(r.id, { ...r, gender: next.gender, birthDate: next.birthDate })
   }
   async listCounts(clubId: string): Promise<ListCounts> {
     const rows = [...this.list.values()].filter(r => r.clubId === clubId)
@@ -1624,11 +1660,12 @@ async function clubhouseTests() {
   eq([clubhouseHref('pints'), clubhouseHref('pints', 'members'), sectionAt('/clubhouse/pints/members', 'pints'), sectionAt('/clubhouse/pints', 'pints')],
     ['/clubhouse/pints', '/clubhouse/pints/members', 'members', 'overview'], 'the sections’ addresses')
   const csv = listCsv([{ id: '1', name: '=HYPERLINK("x")', email: 'a@b.ie', memberNumber: '12', guiNumber: '3110002', handicapIndex: -1.5,
-    credentials: { owner: false, playsHere: true, officer: true, clubhouse: false }, linked: true, removed: false, invitedAt: null, onBoards: true }])
-  ok(csv.startsWith('Name,Email,Member number,GUI number,Handicap index,Standing,Plays here,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
+    credentials: { owner: false, playsHere: true, officer: true, clubhouse: false }, linked: true, removed: false, invitedAt: null, onBoards: true, gender: 'M', birthDate: '1980-04-03', categoryId: null }])
+  ok(csv.startsWith('Name,Email,Member number,GUI number,Gender,Date of birth,Category,Handicap index,Standing,Plays here,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
     'the download: headed for pasting back, numbers whole, a plus index as +, a formula defused')
   const pasted = parseMemberList(csv)
   ok(pasted.rows.length === 1 && pasted.rows[0].guiNumber === '3110002' && pasted.rows[0].email === 'a@b.ie', '…and pasting it back reads it')
+  ok(pasted.rows[0].gender === 'Male' && pasted.rows[0].birthDate === '03/04/1980', '…its gender and date of birth with it')
   const counts: ListCounts = { onList: 10, joined: 4, invited: 2, notJoined: 6, off: 1, playsHere: 9, officer: 2, clubhouse: 1, noEmail: 1 }
   const needs = needsYou({ base: '/clubhouse/p', counts, phases: [{ code: 'AB12CD', name: 'Medal', phase: 'awaiting' }], clubSlug: 'p', officer: true })
   eq(needs.map(n => n.key), ['certify-AB12CD', 'not-invited', 'no-email'], 'Needs you: a competition to certify, people never sent a code, people with no email')
@@ -1719,9 +1756,97 @@ async function copyTests() {
   eq((await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'NOPE01', dates: ['2026-11-28'] }, compStore2('member', true), NOW)).status, 404, 'a competition not of this club: not found')
 }
 
+function membershipRuleTests() {
+  section('Stage (m): memberships, gender and age (lib/clubMembership.ts)')
+  eq(['M', 'male', 'Female', 'f', 'Lady', 'n/a', 'N/A', '', 'Q'].map(readGender), ['M', 'M', 'F', 'F', 'F', null, null, undefined, 'bad'],
+    'gender read from a cell: Male, Female, N/A clears, empty changes nothing, anything else refused')
+  const today = '2026-11-17'
+  const b = (raw: string) => { const r = readBirthDate(raw, today); return r.ok ? r.value : 'bad' }
+  eq([b('03/04/1980'), b('3/4/1980'), b('1980-04-03'), b('n/a'), b(''), b('03/04/80'), b('31/02/1980'), b('01/01/2030'), b('01/01/1900')],
+    ['1980-04-03', '1980-04-03', '1980-04-03', null, undefined, 'bad', 'bad', 'bad', 'bad'],
+    'a date of birth: day first, a four-digit year, N/A clears, never in the future or 110 years gone')
+  eq([readAgeDate(null), readAgeDate('02-01'), readAgeDate('13-01'), readAgeDate('xx')], ['01-01', '02-01', '01-01', '01-01'], 'the age date: 1 January unless the club says otherwise')
+  eq([ageCountedOn('2026-11-17', '01-01'), ageCountedOn('2026-01-15', '02-01'), ageCountedOn('2026-02-01', '02-01')], ['2026-01-01', '2025-02-01', '2026-02-01'],
+    'ages count on the most recent age date on or before the day')
+  eq([ageOn('2008-06-10', '2026-01-01'), ageOn('2008-01-01', '2026-01-01'), ageOn('2008-01-02', '2026-01-01')], [17, 18, 17], 'age on a day')
+  eq(birthRange('2026-01-01', 18, 25), { latest: '2008-01-01', earliest: '2000-01-01' }, 'an age band as a range of birth dates, for the filter')
+  const six: Category = { id: 'six', name: '6 Day', code: '6DAY', days: [0, 1, 2, 3, 4, 6] }
+  const full: Category = { id: 'full', name: 'Full', code: 'FULL', days: [0, 1, 2, 3, 4, 5, 6] }
+  const junior: Category = { id: 'jun', name: 'Junior', code: 'JUN', days: [0, 1, 2, 3, 4, 5, 6] }
+  const cats = [full, six, junior]
+  ok(playsOn(six, '2026-11-20') && !playsOn(six, '2026-11-21'), 'a 6-day member plays Friday, not Saturday')
+  eq([daysLine([0, 1, 2, 3, 4, 5, 6]), daysLine([0, 1, 2, 3, 4, 6]), daysLine([0, 1, 2, 3, 4])], ['Every day', '6 days: not Saturday', '5 days: not Saturday or Sunday'], 'the days as words')
+  eq([categoryCodeFrom('6 Day Ladies'), categoryCodeFrom('Full'), uniqueCode('FULL', ['FULL', 'FULL2'])], ['6DAYLADIES', 'FULL', 'FULL3'], 'a code for the spreadsheet, unique in the club')
+  ok(categoryIssue({ name: 'Full', code: 'F2', days: [0] }, cats) !== null && categoryIssue({ name: 'Senior', code: 'FULL', days: [0] }, cats) !== null
+    && categoryIssue({ name: 'Senior', code: 'SEN', days: [] }, cats) !== null && categoryIssue({ name: 'Senior', code: 'SEN', days: [0] }, cats) === null,
+    'a membership: a name and a code of its own, at least one day')
+  eq(readEntryRules({ genders: ['M', 'F'], categories: [], minAge: 'x' }), null, 'both genders ticked is no filter; nothing set is no rules')
+  eq(readEntryRules({ genders: ['F', 'F'], categories: ['six', 'six'], minAge: 50 }), { genders: ['F'], categories: ['six'], minAge: 50 }, 'rules cleaned')
+  eq(entryRulesIssue({ categories: ['gone'] }, ['full']) !== null && entryRulesIssue({ minAge: 30, maxAge: 20 }, []) !== null, true, 'a membership not the club’s, or a band upside down, refused')
+  eq([ageBandLine(50), ageBandLine(undefined, 17), ageBandLine(18, 25)], ['Aged 50 and over', 'Under 18', 'Aged 18 to 25'], 'an age band as words')
+  eq(entryLine({ genders: ['F'], categories: ['full', 'six'], minAge: 50 }, cats), 'Ladies’ · Full and 6 Day members · Aged 50 and over', 'who may enter, said short')
+  const saturday = '2026-11-21'
+  const man = { gender: 'M' as Gender, birthDate: '1980-04-03', categoryId: 'full' }
+  const woman6 = { gender: 'F' as Gender, birthDate: '1975-01-01', categoryId: 'six' }
+  const enter = (rules: Parameters<typeof readEntryRules>[0], person: typeof man, day = saturday) =>
+    entryRefusal({ rules: readEntryRules(rules), person, category: cats.find(c => c.id === person.categoryId) ?? null, day, ageDate: '01-01', categories: cats })?.code ?? null
+  eq(enter({ genders: ['M'] }, man), null, 'a full man enters the men’s Saturday competition')
+  eq(enter({ genders: ['M'] }, woman6), 'gender', '…a woman does not')
+  eq(enter({ genders: ['F'] }, woman6), 'day', 'a 6-day lady cannot play a ladies’ competition on Saturday')
+  eq(enter({ genders: ['F'] }, woman6, '2026-11-20'), null, '…but can on Friday')
+  eq(enter({ genders: ['F'], categories: ['six'] }, woman6), null, 'a membership ticked on the competition enters whatever its days say (Ross)')
+  eq(enter({ categories: ['jun'] }, man), 'category', 'a full man may not book a junior competition, even on Saturday')
+  eq(enter({ genders: ['M'] }, { ...man, gender: null as unknown as Gender }), 'no_gender', 'no gender recorded blocks a men’s competition')
+  eq(enter(null, { ...man, categoryId: null as unknown as string }), null, 'no membership plays any day')
+  eq(enter({ minAge: 50 }, man), 'age', 'a 46-year-old is not a senior')
+  eq(enter({ minAge: 50 }, { ...man, birthDate: null as unknown as string }), 'no_birth', '…and no date of birth blocks an age band')
+  eq(enter({ minAge: 50 }, woman6, '2026-11-20'), null, '…a 51-year-old is')
+  ok(/ask the club/.test(refusalWords({ code: 'no_gender' })) && /Saturday isn’t one of Dave’s/.test(refusalWords({ code: 'day', day: 'Saturday' }, 'Dave')),
+    'refusals in a sentence, to the person or about them')
+  const x = (row: Record<string, string>) => resolveExtras(row, cats, today)
+  eq(x({ gender: 'Female', birthDate: '01/02/1990', category: '6day' }), { ok: true, extras: { gender: 'F', birthDate: '1990-02-01', categoryId: 'six' } }, 'a pasted row’s three cells read against the club')
+  eq(x({ category: 'N/A' }), { ok: true, extras: { categoryId: null } }, '…N/A clears a membership')
+  ok(!x({ category: 'GOLD' }).ok && !x({ gender: 'Q' }).ok && !x({ birthDate: '99/99/1990' }).ok, '…an unknown code, gender or date refuses the row, said before saving')
+  const parsed = parseMemberList('Name,Gender,DOB,Membership type\r\nAnn Byrne,F,01/02/1990,6DAY\r\n')
+  ok(parsed.rows[0]?.gender === 'F' && parsed.rows[0]?.birthDate === '01/02/1990' && parsed.rows[0]?.category === '6DAY', 'a list’s Gender, DOB and Membership type columns are read')
+}
+
+async function membershipRouteTests() {
+  section('Stage (m): memberships on the server (/api/club)')
+  const s = new Stand()
+  const ross = member('ross', 'ross@x.ie'), ann = member('ann', 'ann@x.ie')
+  ;[ross, ann].forEach(u => s.add(u))
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
+  const made = await ask('tok-ross', 'create', { name: 'Pints Golf Club', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
+  const sixId = await s.saveCategory(clubId, { name: '6 Day', code: '6DAY', days: [0, 1, 2, 3, 4, 6], position: 0 })
+  const r1 = await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Ann Byrne', email: 'ann@x.ie', gender: 'F', birthDate: '01/02/1970', category: '6day' }, { name: 'Bad Row', gender: 'Q' }] })
+  const annRow = [...s.list.values()].find(r => r.name === 'Ann Byrne')!
+  ok(r1.status === 200 && annRow.gender === 'F' && annRow.birthDate === '1970-02-01' && annRow.categoryId === sixId, 'a pasted row brings its gender, date of birth and membership')
+  ok(r1.status === 200 && (r1.body.skipped ?? []).some((k: { why: string }) => /isn’t a gender/.test(k.why)), '…a row with a bad cell is set aside with why')
+  // Linking: the account has nothing yet, so the row's details fill it.
+  s.list.set(annRow.id, { ...annRow, userId: 'ann' })
+  await linkDetails(s, 'ann', s.list.get(annRow.id)!)
+  eq(s.details.get('ann'), { gender: 'F', birthDate: '1970-02-01' }, 'linking: the row’s details fill an empty account')
+  // A second club's row for Ann carries the same value once changed (one value everywhere).
+  const otherClub = await ask('tok-ross', 'create', { name: 'Lahinch', yourName: 'Ross' })
+  const otherId = otherClub.status === 200 ? otherClub.body.club!.id : ''
+  await ask('tok-ross', 'add', { clubId: otherId, rows: [{ name: 'Ann Byrne', email: 'ann@x.ie' }] })
+  const annThere = [...s.list.values()].find(r => r.clubId === otherId && r.name === 'Ann Byrne')!
+  s.list.set(annThere.id, { ...annThere, userId: 'ann' })
+  const upd = await ask('tok-ross', 'update', { clubId, memberId: annRow.id, birthDate: '02/02/1970' })
+  ok(upd.status === 200 && s.details.get('ann')?.birthDate === '1970-02-02' && s.list.get(annThere.id)?.birthDate === '1970-02-02',
+    'a club changes a linked person’s date of birth: the account and every list row of theirs carry it')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: annRow.id, birthDate: '2099-01-01' })).status, 400, 'a date of birth in the future is refused')
+  eq((await ask('tok-ann', 'update', { clubId, memberId: annRow.id, gender: 'M' })).status, 403, 'a member cannot change their own gender — the club sets it')
+}
+
 async function main() {
   ruleTests()
   await clubhouseTests()
+  membershipRuleTests()
+  await membershipRouteTests()
   await copyTests()
   await routeTests()
   await eventTests()

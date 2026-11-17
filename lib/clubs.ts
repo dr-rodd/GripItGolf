@@ -103,6 +103,15 @@ export interface ListRow {
   memberNumber: string | null
   guiNumber: string | null
   email: string | null
+  /**
+   * Stage (m): the gender, date of birth and membership code as the cell
+   * held them — read by lib/clubMembership.ts against the club's
+   * memberships and today. Absent: the paste had no such column, or the
+   * cell was empty (an empty cell never changes a stored value).
+   */
+  gender?: string
+  birthDate?: string
+  category?: string
 }
 
 /** A number as kept: spaces gone, upper case. Null when empty. */
@@ -135,11 +144,16 @@ export function listRowIssue(r: ListRow): string | null {
 
 /** A row tidied as it would be stored. */
 export function cleanRow(r: Partial<ListRow> & { name?: string }): ListRow {
+  const text = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : undefined)
+  const gender = text(r.gender), birthDate = text(r.birthDate), category = text(r.category)
   return {
     name: normaliseClubName(r.name ?? ''),
     memberNumber: normaliseNumber(r.memberNumber),
     guiNumber: normaliseNumber(r.guiNumber),
     email: normaliseListEmail(r.email),
+    ...(gender !== undefined ? { gender } : {}),
+    ...(birthDate !== undefined ? { birthDate } : {}),
+    ...(category !== undefined ? { category } : {}),
   }
 }
 
@@ -148,6 +162,10 @@ const HEADER_WORDS: [RegExp, Column][] = [
   [/gui|golf ?ireland|national|union|cgi|ilgu/i, 'guiNumber'],
   [/e-?mail/i, 'email'],
   [/member(ship)? ?(no|num|number|#|id)|club ?(no|number)|^no\.?$|^number$/i, 'memberNumber'],
+  // Stage (m): read only from a headed list — never guessed from position.
+  [/gender|^sex$/i, 'gender'],
+  [/birth|^dob$|d\.o\.b|^born$/i, 'birthDate'],
+  [/categor|^membership$|member(ship)? ?(type|class)|^type$|^class$/i, 'category'],
   [/name/i, 'name'],
 ]
 const DEFAULT_ORDER: Column[] = ['name', 'memberNumber', 'guiNumber', 'email']
@@ -187,7 +205,7 @@ export function parseMemberList(text: string): ParsedList {
   const firstNonEmpty = lines.findIndex(l => l.length > 0)
   if (firstNonEmpty >= 0) {
     const cells = splitLine(lines[firstNonEmpty])
-    const looksLikeHeader = !cells.some(c => /@/.test(c)) && cells.some(c => /name|number|email|gui/i.test(c))
+    const looksLikeHeader = !cells.some(c => /@/.test(c)) && cells.some(c => /name|number|email|gui|gender|birth|categor/i.test(c))
     if (looksLikeHeader) {
       order = cells.map(c => {
         if (/first|forename|given/i.test(c)) return 'first'
@@ -230,10 +248,15 @@ export interface StoredRow {
   removed: boolean
 }
 
+/** Whether a pasted row carries any of stage (m)'s cells — a found row is then handed back to be brought up to date. */
+export function hasExtras(r: ListRow): boolean {
+  return r.gender !== undefined || r.birthDate !== undefined || r.category !== undefined
+}
+
 export interface ListPlan {
   inserts: ListRow[]
   /** Rows found by number or email: the new details, and back on the list if they had been removed. */
-  updates: { id: string; patch: Partial<ListRow>; restore: boolean }[]
+  updates: { id: string; patch: Partial<ListRow>; restore: boolean; row: ListRow }[]
   /** The same person twice in what was pasted, or a number pointing at two rows. */
   skipped: { row: ListRow; why: string }[]
 }
@@ -274,7 +297,7 @@ export function planList(existing: readonly StoredRow[], incoming: readonly List
     if (row.memberNumber && row.memberNumber !== found.memberNumber) patch.memberNumber = row.memberNumber
     if (row.guiNumber && row.guiNumber !== found.guiNumber) patch.guiNumber = row.guiNumber
     if (row.email && row.email !== found.email) patch.email = row.email
-    if (Object.keys(patch).length > 0 || found.removed) plan.updates.push({ id: found.id, patch, restore: found.removed })
+    if (Object.keys(patch).length > 0 || found.removed || hasExtras(row)) plan.updates.push({ id: found.id, patch, restore: found.removed, row })
   }
   return plan
 }

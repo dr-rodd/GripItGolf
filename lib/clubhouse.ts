@@ -12,6 +12,7 @@
 import { indexLabel } from './handicapIndex'
 import type { Credentials } from './clubMay'
 import type { CompPhase } from './compPhase'
+import { GENDER_WORDS, birthDateLabel, type Category, type Gender } from './clubMembership'
 
 /** Rows a page of the grid (D207). */
 export const PAGE_SIZE = 50
@@ -95,6 +96,10 @@ export interface GridRow {
   removed: boolean
   invitedAt: string | null
   onBoards: boolean
+  /** Stage (m): the person's gender and date of birth, and the row's membership. */
+  gender: Gender | null
+  birthDate: string | null
+  categoryId: string | null
 }
 
 /** A cell as a spreadsheet would read it back: formulas defused, quoted where it must be. */
@@ -109,11 +114,12 @@ function csvCell(v: string): string {
  * brings the list up to date (Name, Email, Member number and GUI number are
  * the columns the paste reads; the rest are for reading).
  */
-export function listCsv(rows: GridRow[]): string {
-  const head = ['Name', 'Email', 'Member number', 'GUI number', 'Handicap index', 'Standing', 'Plays here', 'Officer', 'Clubhouse']
+export function listCsv(rows: GridRow[], categories: Pick<Category, 'id' | 'code'>[] = []): string {
+  const head = ['Name', 'Email', 'Member number', 'GUI number', 'Gender', 'Date of birth', 'Category', 'Handicap index', 'Standing', 'Plays here', 'Officer', 'Clubhouse']
   const yes = (b: boolean) => (b ? 'Yes' : 'No')
   const lines = rows.map(r => [
     r.name, r.email ?? '', r.memberNumber ?? '', r.guiNumber ?? '',
+    r.gender ? GENDER_WORDS[r.gender] : '', birthDateLabel(r.birthDate), categories.find(c => c.id === r.categoryId)?.code ?? '',
     r.handicapIndex === null ? '' : indexLabel(r.handicapIndex),
     STANDING_WORDS[standingOf(r)],
     yes(r.credentials.playsHere), yes(r.credentials.officer), yes(r.credentials.clubhouse || r.credentials.owner),
@@ -137,6 +143,10 @@ export interface ListCounts {
   officer: number
   clubhouse: number
   noEmail: number
+  /** Stage (m): people with no gender recorded, and each membership's head count (null before 094). */
+  noGender?: number | null
+  noCategory?: number | null
+  byCategory?: Record<string, number>
 }
 
 /** One line of "Needs you", and where it goes. */
@@ -154,6 +164,8 @@ export function needsYou(o: {
   phases: { code: string; name: string; phase: CompPhase }[]
   clubSlug: string
   officer: boolean
+  /** Stage (m): whether the club has any memberships yet. */
+  hasCategories?: boolean
 }): Need[] {
   const out: Need[] = []
   for (const c of o.phases.filter(p => p.phase === 'awaiting')) {
@@ -169,6 +181,21 @@ export function needsYou(o: {
       key: 'not-invited',
       line: `${neverAsked} ${neverAsked === 1 ? 'person has' : 'people have'} an email and no code yet.`,
       href: `${o.base}/members?filter=not_invited`,
+    })
+  }
+  // Stage (m): only once the club has memberships is anybody "without" one.
+  if (o.hasCategories && o.counts.noCategory) {
+    out.push({
+      key: 'no-category',
+      line: `${o.counts.noCategory} ${o.counts.noCategory === 1 ? 'person has' : 'people have'} no membership, so they play any day.`,
+      href: `${o.base}/members?category=none`,
+    })
+  }
+  if (o.counts.noGender) {
+    out.push({
+      key: 'no-gender',
+      line: `${o.counts.noGender} ${o.counts.noGender === 1 ? 'person has' : 'people have'} no gender recorded, so they can’t enter men’s or ladies’ competitions.`,
+      href: `${o.base}/members?gender=none`,
     })
   }
   if (o.counts.noEmail > 0) {
