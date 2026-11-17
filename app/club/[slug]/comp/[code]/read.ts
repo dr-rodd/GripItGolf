@@ -4,7 +4,8 @@ import { notFound } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { entryCookie } from '@/lib/publicPin'
 import { entryAllowed } from '@/lib/pinHash'
-import { opensAt, teeClocks } from '@/lib/teeSheet'
+import { opensAt, slotGroupSizes, teeClocks } from '@/lib/teeSheet'
+import { sunDay } from '@/lib/sun'
 import { describeTime } from '@/lib/itinerary'
 import { compPhase } from '@/lib/compPhase'
 import { teeInstant } from '@/lib/clubComp'
@@ -37,7 +38,13 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
     return { ...base, door: true as const }
   }
 
-  const sheet = await readCompSheet(db, comp)
+  // The sun on the day (Ross, 17 Nov 2026: sunrise at the head of the sheet, sunset at its foot).
+  const [sheet, place] = await Promise.all([
+    readCompSheet(db, comp),
+    db.from('courses').select('latitude, longitude').eq('id', comp.courseId).maybeSingle().then(r => r.data as { latitude: number | null; longitude: number | null } | null),
+  ])
+  const sun = sunDay(comp.date, place ? { lat: place.latitude ?? NaN, lng: place.longitude ?? NaN } : null)
+  const sizes = slotGroupSizes(comp.rules)
   const clocks = teeClocks(comp.rules)
   const now = Date.now()
   const firstTeeAt = clocks[0] ? teeInstant(comp.date, clocks[0]) : null
@@ -55,7 +62,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const slots: CompSlot[] = clocks.map((clock, index) => {
     const at = teeInstant(comp.date, clock)
     return {
-      index, clock: describeTime(clock),
+      index, clock: describeTime(clock), size: sizes[index] ?? comp.rules.groupSize,
       gone: at !== null && now >= at,
       seats: sheet.seats.filter(s => s.slot === index)
         .map(s => ({ rowId: s.rowId, playerId: s.playerId, name: s.name, handicap: s.handicap, bookedBy: s.bookedBy })),
@@ -65,6 +72,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   return {
     ...base, door: false as const,
     sheet, phase, slots, firstTeeAt, bookingOpensAt,
+    sun: { sunrise: sun.sunrise ? describeTime(sun.sunrise) : null, sunset: sun.sunset ? describeTime(sun.sunset) : null },
     firstTee: clocks[0] ? describeTime(clocks[0]) : null,
   }
 })

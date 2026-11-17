@@ -10,7 +10,7 @@ import { formatHandicap } from '@/lib/handicap'
 import { rememberPlayer } from '@/lib/playerCookie'
 
 export interface CompSeat { rowId: string | null; playerId: string; name: string; handicap: number | null; bookedBy: string | null }
-export interface CompSlot { index: number; clock: string; seats: CompSeat[]; gone: boolean }
+export interface CompSlot { index: number; clock: string; seats: CompSeat[]; gone: boolean; /** Players this tee time takes — its run's. */ size: number }
 
 type Me = Pick<BookingAnswer, 'myRowId' | 'myPlayerId' | 'admin' | 'entry' | 'myRefusal'> | null
 
@@ -21,10 +21,11 @@ type Me = Pick<BookingAnswer, 'myRowId' | 'myPlayerId' | 'admin' | 'entry' | 'my
  * server's (`/api/club/booking`), which makes a player for a list row the
  * first time it is booked; the sheet is read again after each.
  */
-export default function CompTeeSheet({ code, slots, groupSize, bookingOpen, waitLine }: {
+export default function CompTeeSheet({ code, slots, sun, bookingOpen, waitLine }: {
   code: string
   slots: CompSlot[]
-  groupSize: number
+  /** Sunrise and sunset on the day, "7:42 am" — said above the first time and below the last. */
+  sun: { sunrise: string | null; sunset: string | null }
   /** Booking open to the field now (the club's admins may place people before). */
   bookingOpen: boolean
   /** Said while booking is not open yet. */
@@ -70,9 +71,10 @@ export default function CompTeeSheet({ code, slots, groupSize, bookingOpen, wait
       {me?.myRefusal && !iAmBooked && <p className="text-ink/80 text-[15px] mt-1">{me.myRefusal}</p>}
       {waitLine && <p className="text-ink/80 text-[15px] mt-2">{waitLine}</p>}
       {!bookingOpen && me?.admin && <p className="t-cap text-ink/65 mt-1">Until then, only the club’s admins place people.</p>}
-      <ul className="mt-5 space-y-3">
+      {sun.sunrise && <p className="t-cap text-ink/65 mt-5">Sunrise {sun.sunrise}</p>}
+      <ul className={`${sun.sunrise ? 'mt-2' : 'mt-5'} space-y-3`}>
         {slots.map(slot => {
-          const free = groupSize - slot.seats.length
+          const free = slot.size - slot.seats.length
           return (
             <li key={slot.index} className={`${cardClass()} p-3`}>
               <div className="flex items-start gap-3">
@@ -127,6 +129,7 @@ export default function CompTeeSheet({ code, slots, groupSize, bookingOpen, wait
           )
         })}
       </ul>
+      {sun.sunset && <p className="t-cap text-ink/65 mt-2">Sunset {sun.sunset}</p>}
     </section>
   )
 }

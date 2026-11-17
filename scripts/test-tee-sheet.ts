@@ -21,7 +21,9 @@ import {
   roundSheet, sheetClock, sheetSlots, sheetGroupSize, draftRules,
   opensAt, sheetIsOpen, describeOpening, teeSheetSummary, mayRemoveBooking,
   seatGrid, seatCorners, type SlotGroup, type SeatCell,
+  slotGroupSizes, slotGroupSize, batchGroupSize,
 } from '../lib/teeSheet'
+import { sunDay, sunriseTee, countUntil, clockLess, COMP_LAST_TEE_BEFORE_SUNSET_MINS, CASUAL_LAST_TEE_BEFORE_SUNSET_MINS, FALLBACK_PLACE } from '../lib/sun'
 import { irishInstant, daysBefore } from '../lib/irishTime'
 import { teeSheetAccess } from '../lib/eventPermissions'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
@@ -880,6 +882,49 @@ section('A tee time is seats, two across — partners one ticket (Ross, 31 Oct 2
     '  …on a card, as the sheet always was')
   const page = read('app/golf/[root]/[tripCode]/teesheet/page.tsx')
   ok(page.includes("select('id, name, claimed, handicap, gender')"), 'each seat carries its player\'s handicap (and gender, for a Matches session\'s tees)')
+}
+
+// ─── Players a time per batch, and the sun (Ross, 17 Nov 2026) ──
+
+section('Each run of tee times its own players a time (M8)')
+{
+  const old: TeeRules = { batches: [{ start: '08:00', interval: 10, count: 6 }, { start: '13:00', interval: 10, count: 3 }], groupSize: 4 }
+  eq([teeClocks(old), sheetCapacity(old), slotGroupSizes(old)],
+    [['08:00', '08:10', '08:20', '08:30', '08:40', '08:50', '13:00', '13:10', '13:20'], 36, [4, 4, 4, 4, 4, 4, 4, 4, 4]],
+    'a sheet saved before runs had sizes reads exactly as it did — the same clocks, nine fours')
+  eq(parseTeeRules(JSON.parse(JSON.stringify(old))), old, '  …and parses back unchanged, with no size on any run')
+  eq(describeRules(old), '9 tee times, 8:00 am to 8:50 am and 1:00 pm to 1:20 pm, in fours', '  …and says itself as before')
+  const mixed: TeeRules = { batches: [{ start: '08:00', interval: 10, count: 30 }, { start: '13:00', interval: 15, count: 8, groupSize: 4 }], groupSize: 3 }
+  eq(rulesIssue(mixed), null, 'threes at ten until one, then fours at fifteen: valid')
+  eq(sheetCapacity(mixed), 30 * 3 + 8 * 4, '  …room for 90 in threes and 32 in fours')
+  eq([teeClocks(mixed)[29], teeClocks(mixed)[30], teeClocks(mixed)[31], teeClocks(mixed).length], ['12:50', '13:00', '13:15', 38], '  …the clocks run straight through')
+  eq([slotGroupSize(mixed, 29), slotGroupSize(mixed, 30), batchGroupSize(mixed, mixed.batches[0])], [3, 4, 3], '  …a three-ball time, then a fourball')
+  eq(parseTeeRules(JSON.parse(JSON.stringify(mixed))), mixed, '  …and the sizes survive being stored')
+  eq(describeRules(mixed), '38 tee times, 8:00 am to 12:50 pm in threes and 1:00 pm to 2:45 pm in fours', '  …said run by run')
+  ok(!!rulesIssue({ ...mixed, batches: [mixed.batches[0], { ...mixed.batches[1], groupSize: 5 }] }), 'five a time is refused on a run, as on a sheet')
+  eq(MAX_SLOTS, 120, 'a summer Saturday from sunrise fits on one sheet')
+}
+
+section('Sunrise and sunset (M9, lib/sun.ts)')
+{
+  eq(sunriseTee('06:42', 10), '06:50', 'sunrise 06:42 at ten minutes: the first time is 06:50 (then 07:00)')
+  eq(sunriseTee('06:42', 8), '06:44', 'at eight: 06:44 (then 06:52, back from 07:00)')
+  eq(sunriseTee('07:00', 10), '07:00', 'a sunrise on the hour starts on it')
+  eq(countUntil('06:50', 10, '07:00'), 2, 'from 06:50 at ten until 07:00: two times')
+  eq(countUntil('08:00', 10, '07:00'), 0, '  …none when the limit is before the first')
+  eq(clockLess('16:08', COMP_LAST_TEE_BEFORE_SUNSET_MINS), '11:38', 'a competition\'s last time is 4h30 before sunset')
+  eq([COMP_LAST_TEE_BEFORE_SUNSET_MINS, CASUAL_LAST_TEE_BEFORE_SUNSET_MINS], [270, 60], '  …casual golf\'s an hour (Ross, 17 Nov 2026)')
+  const june = sunDay('2026-06-21', { lat: 53.35, lng: -6.26 }), dec = sunDay('2026-12-21', { lat: 53.35, lng: -6.26 })
+  const near = (got: string | null, want: string) => !!got && Math.abs((clockMins(got) ?? 0) - (clockMins(want) ?? 0)) <= 2
+  ok(near(june.sunrise, '04:57') && near(june.sunset, '21:57') && june.located, 'Dublin, midsummer: 04:57 and 21:57, Irish summer time')
+  ok(near(dec.sunrise, '08:39') && near(dec.sunset, '16:08'), 'Dublin, midwinter: 08:39 and 16:08')
+  const nowhere = sunDay('2026-12-21', null)
+  ok(!nowhere.located && near(nowhere.sunrise, '08:04') && near(nowhere.sunset, '15:53'), `a course with no location: ${FALLBACK_PLACE.name}'s sun, never a refusal (Ross)`)
+  eq(sunDay('2026-12-21', { lat: NaN, lng: NaN }).located, false, '  …a location that is not a number is no location')
+  const libSrc = read('lib/sun.ts')
+  ok(!/fetch\(|import .*supabase/.test(libSrc), 'worked out here, never asked of a service')
+  const sheet = read('app/club/[slug]/comp/[code]/CompTeeSheet.tsx')
+  ok(sheet.includes('Sunrise {sun.sunrise}') && sheet.includes('Sunset {sun.sunset}'), 'a competition\'s tee sheet says sunrise at its head and sunset at its foot')
 }
 
 // ─── Result ────────────────────────────────────────────────────

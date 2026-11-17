@@ -12,7 +12,7 @@
 // handicap the account's (D179). Handed its store, so `test:clubs` runs it.
 
 import { isAccount, type AuthUser } from '@/lib/account'
-import { compBoard, compFormFrom, compFormIssue, compPermissions, compTeeRules, readCompForm, type CompForm } from '@/lib/clubComp'
+import { compBoard, compFirstTee, compFormFrom, compFormIssue, compPermissions, compTeeRules, readCompForm, type CompForm } from '@/lib/clubComp'
 import { MAX_COPIES } from '@/lib/clubhouse'
 import { irishToday } from '@/lib/clubs'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
@@ -99,7 +99,7 @@ async function makeOne(
 
   try {
     const itemId = await store.insertItem(toItemRow(made.tripId, {
-      id: 'tmp-golf', dayIndex: 0, position: 0, kind: 'golf', courseId: form.courseId, teeTime: form.first, teeCount: 1,
+      id: 'tmp-golf', dayIndex: 0, position: 0, kind: 'golf', courseId: form.courseId, teeTime: compFirstTee(form), teeCount: 1,
     }))
     await store.insertRound({
       id: roundId,
@@ -192,7 +192,7 @@ export async function runCopyCompetition(
   const refused: { date: string; why: string }[] = []
   for (const date of dates.sort()) {
     const form = compFormFrom({ ...source, date })
-    if (!form) return no(400, 'This competition’s tee sheet is not one run of times — make the copy from New competition.')
+    if (!form) return no(400, 'This competition’s tee sheet could not be read — make the copy from New competition.')
     const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, mine.club.id, form)
     if (issue) { refused.push({ date, why: issue }); continue }
     const out = await makeOne(store, input.token, mine.club.id, form, now)

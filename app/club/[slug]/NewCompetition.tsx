@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
+import CompBatches from '@/app/components/CompBatches'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass, chipClass } from '@/app/components/ui'
 import { askClub, makeCompetition } from '@/lib/accountClient'
@@ -13,8 +14,6 @@ import {
 import { compFormIssue, type CompForm } from '@/lib/clubComp'
 import { irishToday } from '@/lib/clubs'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
-
-const INTERVALS = [8, 9, 10, 12] as const
 
 /**
  * "New competition" (D162), for a verified club's owners and admins, on
@@ -33,7 +32,7 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
   const [added, setAdded] = useState<DirectoryCourse[]>([])
   const [form, setForm] = useState<CompForm>({
     name: '', date: '', courseId: homeCourseId ?? '', scoring: 'stableford', allowance: 95, watch: 'members',
-    first: '08:00', interval: 10, perTime: 4, times: 20, opens: { daysBefore: 7, time: '20:00' },
+    batches: [{ start: '08:00', interval: 10, perTime: 4, times: 20 }], opens: { daysBefore: 7, time: '20:00' },
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -152,33 +151,7 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
       <p className="t-label text-ink">Open to: {entryLine(readEntryRules(form.entry), cats) ?? 'everybody on the club’s list who plays here'}</p>
 
       <h2 className="t-h2 text-ink pt-2">Tee times</h2>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label htmlFor="comp-first" className={FIELD_LABEL}>First tee time</label>
-          <input id="comp-first" type="time" className={FIELD} value={form.first} onChange={e => set('first', e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor="comp-times" className={FIELD_LABEL}>How many</label>
-          <input id="comp-times" className={FIELD} inputMode="numeric" value={String(form.times)}
-            onChange={e => set('times', Number(e.target.value.replace(/\D/g, '') || 0))} />
-        </div>
-      </div>
-      <div>
-        <p className={FIELD_LABEL}>Minutes between</p>
-        <div className="flex flex-wrap gap-2">
-          {INTERVALS.map(n => (
-            <button key={n} type="button" className={chipClass(form.interval === n)} onClick={() => set('interval', n)}>{n}</button>
-          ))}
-        </div>
-      </div>
-      <div>
-        <p className={FIELD_LABEL}>Players a tee time</p>
-        <div className="flex flex-wrap gap-2">
-          {[2, 3, 4].map(n => (
-            <button key={n} type="button" className={chipClass(form.perTime === n)} onClick={() => set('perTime', n)}>{n}</button>
-          ))}
-        </div>
-      </div>
+      <CompBatches batches={form.batches} onChange={b => set('batches', b)} />
       <div>
         <p className={FIELD_LABEL}>Booking opens</p>
         <Segmented label="Booking opens" value={form.opens ? 'later' : 'now'}

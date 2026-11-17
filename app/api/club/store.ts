@@ -9,7 +9,7 @@ import { SITE } from '@/config/site'
 import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
 import { compPhase, type CompPhase } from '@/lib/compPhase'
 import { teeInstant } from '@/lib/clubComp'
-import { opensAt, parseTeeRules, teeClocks } from '@/lib/teeSheet'
+import { opensAt, parseTeeRules, sheetCapacity, teeClocks } from '@/lib/teeSheet'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
@@ -274,7 +274,7 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
         scoring: board?.scoring === 'strokes' ? 'strokes' as const : 'stableford' as const,
         allowance: typeof board?.handicapAllowance === 'number' ? board.handicapAllowance : 100,
         booked: round ? booked.get(round.id) ?? 0 : 0,
-        capacity: rules ? teeClocks(rules).length * rules.groupSize : 0,
+        capacity: rules ? sheetCapacity(rules) : 0,
         membersOnly: e.competition.membersOnly,
         ...(trip && entryOf.get(trip.id) ? { entry: entryOf.get(trip.id)! } : {}),
       },

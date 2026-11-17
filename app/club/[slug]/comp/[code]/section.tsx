@@ -22,7 +22,7 @@ export default async function CompSectionPage({ params, section }: {
   const page = await readCompPage(slug, rawCode)
   if (page.door) return <CompShell page={page} />
 
-  const { code, comp, sheet, phase, slots, bookingOpensAt, firstTeeAt } = page
+  const { code, sheet, phase, slots, bookingOpensAt, firstTeeAt, sun } = page
   const live = sectionLive(section, phase)
 
   return (
@@ -35,13 +35,13 @@ export default async function CompSectionPage({ params, section }: {
         </p>
       )}
       {live && section === 'tee' && (
-        <CompTeeSheet code={code} slots={slots} groupSize={comp.rules.groupSize}
+        <CompTeeSheet code={code} slots={slots} sun={sun}
           bookingOpen={phase === 'booking'}
           waitLine={phase === 'booking' ? null : phase === 'announced' ? sectionWaitLine('tee', bookingOpensAt) : 'The tee times have gone.'} />
       )}
       {!live && section === 'tee' && phase === 'announced' && (
         // Before booking opens the club's admins may place people already.
-        <CompTeeSheet code={code} slots={slots} groupSize={comp.rules.groupSize} bookingOpen={false} waitLine={null} />
+        <CompTeeSheet code={code} slots={slots} sun={sun} bookingOpen={false} waitLine={null} />
       )}
       {live && section === 'scoring' && (
         <section className="mt-6">

@@ -109,8 +109,12 @@ export function slotClock(
 
 // ─── How long the sheet is ─────────────────────────────────────
 
-/** A backstop, not a target — a 128 field at twos is 64 groups. */
-export const MAX_SLOTS = 64
+/**
+ * A backstop, not a target — a 128 field at twos is 64 groups, and a club's
+ * summer Saturday from sunrise to four and a half hours before sunset at
+ * seven minutes is about 110 (Ross, 17 Nov 2026: raised from 64).
+ */
+export const MAX_SLOTS = 120
 
 /**
  * How many slots the sheet shows: enough to seat the whole field, plus one
@@ -521,12 +525,18 @@ export type TeeBatch = {
    * wizard reopens the way it was answered; `count` is what counts.
    */
   ends?: 'count' | 'last'
+  /**
+   * Players per tee time in this batch (Ross, 17 Nov 2026 — threes at ten
+   * minutes until one o'clock, then fours at fifteen). Absent = the sheet's
+   * `groupSize`, which is every sheet saved before it.
+   */
+  groupSize?: number
 }
 
 export type TeeRules = {
   /** In time order, none overlapping the one before. */
   batches: TeeBatch[]
-  /** Players per tee time. */
+  /** Players per tee time — each batch's, unless the batch says its own. */
   groupSize: number
   /**
    * Asked as whole teams per tee time, where the round has a team board:
@@ -598,9 +608,29 @@ export function sheetLength(rules: Pick<TeeRules, 'batches'>): number {
   return rules.batches.reduce((n, b) => n + Math.max(0, b.count), 0)
 }
 
+/** A batch's players per tee time: its own, else the sheet's. */
+export function batchGroupSize(rules: Pick<TeeRules, 'groupSize'>, b: Pick<TeeBatch, 'groupSize'>): number {
+  return b.groupSize ?? rules.groupSize
+}
+
+/** Players per tee time, slot by slot, in the order `teeClocks` gives the times. */
+export function slotGroupSizes(rules: Pick<TeeRules, 'batches' | 'groupSize'>): number[] {
+  const out: number[] = []
+  for (const b of rules.batches) {
+    if (clockMins(b.start) === null) continue
+    for (let i = 0; i < b.count; i++) out.push(batchGroupSize(rules, b))
+  }
+  return out
+}
+
+/** How many players one tee time takes — the sheet's size for a slot past the rules. */
+export function slotGroupSize(rules: Pick<TeeRules, 'batches' | 'groupSize'>, index: number): number {
+  return slotGroupSizes(rules)[index] ?? rules.groupSize
+}
+
 /** How many players the sheet has room for. */
 export function sheetCapacity(rules: Pick<TeeRules, 'batches' | 'groupSize'>): number {
-  return sheetLength(rules) * rules.groupSize
+  return rules.batches.reduce((n, b) => n + Math.max(0, b.count) * batchGroupSize(rules, b), 0)
 }
 
 /** How many of the field will have no tee time — the wizard's reminder, never a refusal. */
@@ -628,6 +658,9 @@ export function rulesIssue(rules: TeeRules): string | null {
       return `${MIN_TEE_INTERVAL_MINS} to ${MAX_TEE_INTERVAL_MINS} minutes between tee times.`
     }
     if (!Number.isInteger(b.count) || b.count < 1) return `${name} needs at least one tee time.`
+    if (b.groupSize !== undefined && (!Number.isInteger(b.groupSize) || b.groupSize < MIN_GROUP_SIZE || b.groupSize > MAX_GROUP_SIZE)) {
+      return `Between ${MIN_GROUP_SIZE} and ${MAX_GROUP_SIZE} players a tee time.`
+    }
     if (start + (b.count - 1) * b.interval >= 24 * 60) return `${name} runs past midnight.`
     if (start <= prevLast) return `Batch ${i + 1} starts before batch ${i}'s last tee time.`
     prevLast = start + (b.count - 1) * b.interval
@@ -698,6 +731,7 @@ export function parseTeeRules(raw: unknown): TeeRules | null {
       interval: Number(b.interval),
       count: Number(b.count),
       ...(b.ends === 'last' || b.ends === 'count' ? { ends: b.ends } : {}),
+      ...(b.groupSize !== undefined && b.groupSize !== null ? { groupSize: Number(b.groupSize) } : {}),
     })
   }
   const rules: TeeRules = {
@@ -726,12 +760,15 @@ const GROUP_WORD: Record<number, string> = { 2: 'twos', 3: 'threes', 4: 'fours' 
  */
 export function describeRules(rules: TeeRules): string {
   const n = sheetLength(rules)
-  const runs = rules.batches.map(b => b.count === 1
+  const groupWord = (g: number) => GROUP_WORD[g] ?? `groups of ${g}`
+  const mixed = !rules.teamsPerTee && rules.batches.some(b => batchGroupSize(rules, b) !== batchGroupSize(rules, rules.batches[0]))
+  const runs = rules.batches.map(b => (b.count === 1
     ? describeTime(b.start)
-    : `${describeTime(b.start)} to ${describeTime(batchLast(b))}`)
+    : `${describeTime(b.start)} to ${describeTime(batchLast(b))}`) + (mixed ? ` in ${groupWord(batchGroupSize(rules, b))}` : ''))
+  if (mixed) return `${n} tee time${n === 1 ? '' : 's'}, ${runs.join(' and ')}`
   const per = rules.teamsPerTee
     ? `${rules.teamsPerTee} team${rules.teamsPerTee === 1 ? '' : 's'} a tee time`
-    : `in ${GROUP_WORD[rules.groupSize] ?? `groups of ${rules.groupSize}`}`
+    : `in ${groupWord(rules.groupSize)}`
   return `${n} tee time${n === 1 ? '' : 's'}, ${runs.join(' and ')}, ${per}`
 }
 

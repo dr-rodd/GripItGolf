@@ -899,13 +899,15 @@ function wiringTests() {
   eq([eventsOn(evs, '2026-11-04').length, eventsOn(evs, '2026-11-06').length], [1, 0], 'an event shows on every day it runs')
   eq(stepMonth(2026, 12, 1), [2027, 1], 'December into January')
   const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
-    teeSheet: compTeeRules({ name: 'x', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } }) }
+    teeSheet: compTeeRules({ batches: [{ start: '08:00', interval: 10, perTime: 4, times: 12 }], opens: { daysBefore: 7, time: '20:00' } }) }
   const back = compFormFrom(stored)
-  eq(back && { ...back }, { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' }, entry: null },
+  eq(back && { ...back }, { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', batches: [{ start: '08:00', interval: 10, perTime: 4, times: 12 }], opens: { daysBefore: 7, time: '20:00' }, entry: null },
     'a competition reads back into the form it was made from — what a copy is made of')
   eq(compFormFrom({ ...stored, entry: { genders: ['F'], minAge: 50 } })?.entry, { genders: ['F'], minAge: 50 }, '…its entry rules with it (stage (m))')
-  eq(compFormFrom({ ...stored, teeSheet: { batches: [{ start: '08:00', interval: 10, count: 4 }, { start: '13:00', interval: 10, count: 4 }], groupSize: 4 } }), null,
-    '…never guessed at for a sheet that is not one run of times')
+  eq(compFormFrom({ ...stored, teeSheet: { batches: [{ start: '08:00', interval: 10, count: 4 }, { start: '13:00', interval: 15, count: 4, groupSize: 3 }], groupSize: 4 } })?.batches,
+    [{ start: '08:00', interval: 10, perTime: 4, times: 4 }, { start: '13:00', interval: 15, perTime: 3, times: 4 }],
+    '…any sheet copies now, each run with its own players a time (Ross, 17 Nov 2026)')
+  eq(compFormFrom({ ...stored, teeSheet: { batches: [] } }), null, '…and a sheet that does not read is never guessed at')
   eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
   const compsSrc = read('app/clubhouse/[slug]/competitions/Competitions.tsx')
   ok(/may\('run_events'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/competitions/Competitions.tsx')), 'Copy is an Officer’s, as New competition is (D219)')
@@ -1092,11 +1094,11 @@ async function competitionD2Tests() {
   section('A competition from the short form (D162, lib/clubComp.ts)')
   const form: CompForm = {
     name: 'November Medal', date: '2026-11-22', courseId: 'course-1', scoring: 'stableford', allowance: 95, watch: 'members',
-    first: '08:00', interval: 10, perTime: 4, times: 20, opens: { daysBefore: 7, time: '20:00' },
+    batches: [{ start: '08:00', interval: 10, perTime: 4, times: 20 }], opens: { daysBefore: 7, time: '20:00' },
   }
   eq(compFormIssue(form, '2026-11-16'), null, 'a whole form passes')
   ok(!!compFormIssue({ ...form, name: '' }, '2026-11-16') && !!compFormIssue({ ...form, date: '2026-11-01' }, '2026-11-16')
-    && !!compFormIssue({ ...form, perTime: 5 }, '2026-11-16') && !!compFormIssue({ ...form, allowance: 40 }, '2026-11-16'),
+    && !!compFormIssue({ ...form, batches: [{ ...form.batches[0], perTime: 5 }] }, '2026-11-16') && !!compFormIssue({ ...form, allowance: 40 }, '2026-11-16'),
     'no name, a day gone, five a time, a 40% allowance: each refused in a sentence')
   eq(compTeeRules(form), { batches: [{ start: '08:00', interval: 10, count: 20, ends: 'count' }], groupSize: 4, opens: { daysBefore: 7, time: '20:00' } },
     'its tee sheet: one run of times, opening when asked')
@@ -1108,6 +1110,16 @@ async function competitionD2Tests() {
   ok(older.tieBreak === undefined, '…and a totals board without the mark still drops a stored countback — no board read before changes')
   ok(compPermissions().edit_handicaps === false && compPermissions().edit_tee_sheet === true, 'the handicap is the account\'s, never the event\'s (D179)')
   eq(readCompForm({ name: '  A   B ', watch: 'guests' })?.name, 'A B', 'answers read and tidied')
+  eq(readCompForm({ first: '08:00', interval: 10, perTime: 4, times: 20 })?.batches, [{ start: '08:00', interval: 10, perTime: 4, times: 20 }],
+    'a form from before runs (first, interval, perTime, times) reads as one run')
+  const twoRuns: CompForm = { ...form, batches: [{ start: '08:00', interval: 10, perTime: 3, times: 30 }, { start: '13:00', interval: 15, perTime: 4, times: 8 }] }
+  eq(compFormIssue(twoRuns, '2026-11-16'), null, 'threes at ten until one, then fours at fifteen: a whole form')
+  eq(compTeeRules(twoRuns).batches[1], { start: '13:00', interval: 15, count: 8, ends: 'count', groupSize: 4 }, '…the second run says its own players a time')
+  ok(!!compFormIssue({ ...form, batches: [{ start: '08:00', interval: 10, perTime: 4, times: 30 }, { start: '12:00', interval: 10, perTime: 4, times: 4 }] }, '2026-11-16'),
+    'a run that starts before the one before has finished is refused')
+  const tr = compTeeRules(twoRuns)
+  eq(bookingIssue({ rules: tr, date: '2026-11-22', slot: 30, taken: 3, adding: 1, admin: true, now: 0 }), null, 'a fourball time takes a fourth')
+  eq(bookingIssue({ rules: tr, date: '2026-11-22', slot: 29, taken: 3, adding: 1, admin: true, now: 0 }), 'That tee time is full.', '…a three-ball time does not')
 
   section('Booking rules (D173)')
   const rules = compTeeRules(form)
@@ -1787,7 +1799,7 @@ async function clubhouseTests() {
 async function copyTests() {
   section('Stage (k2): Copy to another date, Repeat weekly (/api/club/competition)')
   const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
-    teeSheet: compTeeRules({ name: 'x', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } }) }
+    teeSheet: compTeeRules({ batches: [{ start: '08:00', interval: 10, perTime: 4, times: 12 }], opens: { daysBefore: 7, time: '20:00' } }) }
   const copies: { date: string }[] = []
   const compStore2 = (role: 'owner' | 'member', officer: boolean): CompetitionStore => ({
     async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },

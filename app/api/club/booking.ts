@@ -20,7 +20,7 @@ import { isAccount, type AuthUser } from '@/lib/account'
 import { bookingIssue, withdrawIssue } from '@/lib/clubComp'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { readIndex } from '@/lib/handicapIndex'
-import { teeClocks, type TeeRules } from '@/lib/teeSheet'
+import { slotGroupSize, teeClocks, type TeeRules } from '@/lib/teeSheet'
 import { entryLine, entryRefusal, readAgeDate, refusalWords, type Category, type EntryRules } from '@/lib/clubMembership'
 import type { ActivityEntry, MemberRecord } from './club'
 
@@ -202,7 +202,7 @@ export async function runBooking(
       if (out === 'clash') return fail(409, 'Somebody chosen has just been given a time — look again.')
       // Two phones on one time at once: whoever went over takes theirs back.
       const after = (await store.bookings(comp.roundId)).filter(b => b.slot === slot).length
-      if (after > comp.rules.groupSize) {
+      if (after > slotGroupSize(comp.rules, slot)) {
         await store.deleteBookings(comp.roundId, ids2)
         return fail(409, 'That tee time has just filled — choose another.')
       }

@@ -26,6 +26,17 @@ filed to rounds by date and venue (`roundForCard` in
 or entered by hand); whether eligibility is per competition or by rule (all
 medals, no opens); points by position or Stableford totals.
 
+## Casual tee sheets at a club
+
+Ross, 17 Nov 2026. A club's everyday tee sheet — casual golf, booked by
+members, not a competition — follows the same sun rules as a competition's
+(`lib/sun.ts`): the first tee time at or after sunrise on the interval's grid,
+**the last an hour before sunset** (`CASUAL_LAST_TEE_BEFORE_SUNSET_MINS`,
+against a competition's four and a half hours), and sunrise and sunset said
+at the head and foot of the sheet. Membership privileges (D232) — playing
+days today — grow here: which days and times each membership may book. Not
+built: only the constant exists.
+
 ## Handicap cuts between rounds
 
 **Where it came from.** The winter league (`docs/event-use-cases.md`, use

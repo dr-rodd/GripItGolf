@@ -8,7 +8,7 @@
 import type { Leaderboard } from './leaderboards'
 import { defaultPermissions, type EventPermissions } from './eventPermissions'
 import { irishInstant } from './irishTime'
-import { opensAt, parseTeeRules, rulesIssue, teeClocks, type TeeRules } from './teeSheet'
+import { MAX_BATCHES, batchGroupSize, opensAt, parseTeeRules, rulesIssue, slotGroupSize, teeClocks, type TeeRules } from './teeSheet'
 import { readEntryRules, type EntryRules } from './clubMembership'
 
 export type CompScoring = 'stableford' | 'strokes'
@@ -24,23 +24,40 @@ export interface CompForm {
   /** The handicap allowance, percent. */
   allowance: number
   watch: CompWatch
-  /** The first tee time, "HH:MM". */
-  first: string
-  /** Minutes between tee times. */
-  interval: number
-  /** Players per tee time. */
-  perTime: number
-  /** How many tee times. */
-  times: number
+  /**
+   * The tee times: up to four runs (Ross, 17 Nov 2026 — threes at ten
+   * minutes until one, then fours at fifteen), each its own players a time.
+   */
+  batches: CompBatch[]
   /** Booking opens this many days before, at this time — null: as soon as it is made. */
   opens: { daysBefore: number; time: string } | null
   /** Stage (m): who may enter — genders, memberships, an age band (lib/clubMembership.ts); null is everybody. */
   entry?: EntryRules | null
 }
 
+/** One run of tee times on a competition's sheet. */
+export interface CompBatch {
+  /** The first tee time, "HH:MM". */
+  start: string
+  /** Minutes between tee times. */
+  interval: number
+  /** Players per tee time. */
+  perTime: number
+  /** How many tee times. */
+  times: number
+}
+
 export const COMP_NAME_MAX = 60
 export const COMP_INTERVALS = [7, 8, 9, 10, 11, 12, 15] as const
-export const COMP_MAX_TIMES = 40
+/** The most tee times in one batch. */
+export const COMP_MAX_TIMES = 100
+/** A new batch after the last: an hour after its last tee time, at its interval and size. */
+export function nextBatch(after: CompBatch): CompBatch {
+  const [h, m] = after.start.split(':').map(Number)
+  const last = (h || 0) * 60 + (m || 0) + Math.max(0, after.times - 1) * after.interval + 60
+  const at = Math.min(last, 23 * 60)
+  return { start: `${String(Math.floor(at / 60)).padStart(2, '0')}:${String(at % 60).padStart(2, '0')}`, interval: after.interval, perTime: after.perTime, times: 6 }
+}
 
 /** A form's answers as they arrive — anything, checked here. */
 export function readCompForm(raw: unknown): CompForm | null {
@@ -50,6 +67,14 @@ export function readCompForm(raw: unknown): CompForm | null {
   const opens = r.opens && typeof r.opens === 'object'
     ? { daysBefore: num((r.opens as Record<string, unknown>).daysBefore), time: String((r.opens as Record<string, unknown>).time ?? '') }
     : null
+  const batch = (b: Record<string, unknown>): CompBatch => ({
+    start: typeof b.start === 'string' ? b.start : typeof b.first === 'string' ? b.first : '',
+    interval: num(b.interval), perTime: num(b.perTime), times: num(b.times),
+  })
+  // A form from before batches (one run: first, interval, perTime, times) reads as one batch.
+  const batches = Array.isArray(r.batches)
+    ? r.batches.filter((b): b is Record<string, unknown> => !!b && typeof b === 'object').map(batch)
+    : [batch(r)]
   return {
     name: typeof r.name === 'string' ? r.name.trim().replace(/\s+/g, ' ') : '',
     date: typeof r.date === 'string' ? r.date : '',
@@ -57,10 +82,7 @@ export function readCompForm(raw: unknown): CompForm | null {
     scoring: r.scoring === 'strokes' ? 'strokes' : 'stableford',
     allowance: num(r.allowance),
     watch: r.watch === 'guests' ? 'guests' : 'members',
-    first: typeof r.first === 'string' ? r.first : '',
-    interval: num(r.interval),
-    perTime: num(r.perTime),
-    times: num(r.times),
+    batches,
     opens,
     entry: readEntryRules(r.entry),
   }
@@ -74,29 +96,54 @@ export function compFormIssue(f: CompForm, today: string): string | null {
   if (f.date < today) return 'Pick a day from today on.'
   if (!f.courseId) return 'Choose the course.'
   if (!Number.isInteger(f.allowance) || f.allowance < 50 || f.allowance > 100) return 'The handicap allowance runs from 50% to 100%.'
-  if (!Number.isInteger(f.perTime) || f.perTime < 2 || f.perTime > 4) return 'Two, three or four players a tee time.'
-  if (!Number.isInteger(f.times) || f.times < 1 || f.times > COMP_MAX_TIMES) return `Between 1 and ${COMP_MAX_TIMES} tee times.`
-  if (!Number.isInteger(f.interval) || f.interval < 5 || f.interval > 20) return 'Between 5 and 20 minutes between tee times.'
+  if (!f.batches.length) return 'Add the first tee time.'
+  if (f.batches.length > MAX_BATCHES) return `At most ${MAX_BATCHES} runs of tee times.`
+  for (const [i, b] of f.batches.entries()) {
+    const which = f.batches.length > 1 ? `Run ${i + 1}: ` : ''
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(b.start)) return `${which}pick the first tee time.`
+    if (!Number.isInteger(b.perTime) || b.perTime < 2 || b.perTime > 4) return `${which}two, three or four players a tee time.`
+    if (!Number.isInteger(b.times) || b.times < 1 || b.times > COMP_MAX_TIMES) return `${which}between 1 and ${COMP_MAX_TIMES} tee times.`
+    if (!Number.isInteger(b.interval) || b.interval < 5 || b.interval > 20) return `${which}between 5 and 20 minutes between tee times.`
+  }
   if (f.opens && (!Number.isInteger(f.opens.daysBefore) || f.opens.daysBefore < 0 || f.opens.daysBefore > 30)) {
     return 'Booking opens up to 30 days before.'
   }
   return rulesIssue(compTeeRules(f))
 }
 
-/** The competition's tee sheet (rounds.tee_sheet): one run of times, opening when asked. */
-export function compTeeRules(f: CompForm): TeeRules {
+/**
+ * The competition's tee sheet (rounds.tee_sheet): its runs of times, opening
+ * when asked. The sheet's players a time is the first run's; a run with
+ * another number says its own — so a one-size sheet is stored exactly as
+ * before batches had sizes.
+ */
+export function compTeeRules(f: Pick<CompForm, 'batches' | 'opens'>): TeeRules {
+  const size = f.batches[0]?.perTime ?? 4
   return {
-    batches: [{ start: f.first, interval: f.interval, count: f.times, ends: 'count' }],
-    groupSize: f.perTime,
+    batches: f.batches.map(b => ({
+      start: b.start, interval: b.interval, count: b.times, ends: 'count' as const,
+      ...(b.perTime !== size ? { groupSize: b.perTime } : {}),
+    })),
+    groupSize: size,
     ...(f.opens ? { opens: { daysBefore: f.opens.daysBefore, time: f.opens.time } } : {}),
   }
+}
+
+/** A sheet's runs as the form holds them. */
+export function compBatchesOf(rules: TeeRules): CompBatch[] {
+  return rules.batches.map(b => ({ start: b.start, interval: b.interval, perTime: batchGroupSize(rules, b), times: b.count }))
+}
+
+/** The first tee time of a form, "HH:MM" — what the golf item carries. */
+export function compFirstTee(f: Pick<CompForm, 'batches'>): string {
+  return f.batches[0]?.start ?? ''
 }
 
 /**
  * A competition as it was made, read back into its form (stage (k2), D214):
  * what Copy to another date and Repeat weekly start from, a new date given.
- * Null when the stored tee sheet does not read as a competition's (one run
- * of times) — such a competition is copied by hand, never guessed at.
+ * Any sheet copies (Ross, 17 Nov 2026 — it used to be one run of times
+ * only); null only when the stored sheet does not read at all.
  */
 export function compFormFrom(s: {
   name: string
@@ -109,8 +156,7 @@ export function compFormFrom(s: {
   entry?: unknown
 }): CompForm | null {
   const rules = parseTeeRules(s.teeSheet)
-  const batch = rules?.batches[0]
-  if (!rules || !batch || rules.batches.length !== 1) return null
+  if (!rules || !rules.batches.length) return null
   const opens = rules.opens && 'daysBefore' in rules.opens && typeof rules.opens.daysBefore === 'number'
     ? { daysBefore: rules.opens.daysBefore, time: rules.opens.time } : null
   return {
@@ -120,10 +166,7 @@ export function compFormFrom(s: {
     scoring: s.board?.scoring === 'strokes' ? 'strokes' : 'stableford',
     allowance: typeof s.board?.handicapAllowance === 'number' ? s.board.handicapAllowance : 100,
     watch: s.membersOnly ? 'members' : 'guests',
-    first: batch.start,
-    interval: batch.interval,
-    perTime: rules.groupSize,
-    times: teeClocks(rules).length,
+    batches: compBatchesOf(rules),
     opens,
     entry: readEntryRules(s.entry),
   }
@@ -188,7 +231,7 @@ export function bookingIssue(o: {
   const opens = opensAt(o.rules, o.date)?.getTime() ?? null
   if (!o.admin && opens !== null && o.now < opens) return 'Booking is not open yet.'
   if (o.adding < 1) return 'Choose who to book.'
-  const left = o.rules.groupSize - o.taken
+  const left = slotGroupSize(o.rules, o.slot) - o.taken
   if (o.adding > left) return left <= 0 ? 'That tee time is full.' : `That tee time has ${left === 1 ? 'one place' : `${left} places`} left.`
   return null
 }
