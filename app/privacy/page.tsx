@@ -183,6 +183,14 @@ export default function PrivacyPage() {
           more about a junior, and a junior needs their own account to play in a competition.
         </p>
         <p className="mt-3">
+          <B>A club&apos;s calendar.</B> A club keeps its own events on Green Dot — socials, the AGM,
+          course closures and the like — with a title, the day and times, where, and notes; they hold
+          nothing about any member. Some are kept for the club office alone. Which kinds of club event you
+          have chosen to see (&ldquo;From my clubs, show me&rdquo;) is kept on your Green Dot account, and
+          goes when it does. A club may bring its calendar in from a file it has had a chatbot of its own
+          choosing write; Green Dot itself sends the club&apos;s calendar to no AI service.
+        </p>
+        <p className="mt-3">
           <B>Club competitions.</B> To book a club&apos;s competition together, people on its list can find
           each other by name — the name only, never a number or an email — and see who is on each tee
           time. Every player in a club competition needs their own Green Dot account. Every member on

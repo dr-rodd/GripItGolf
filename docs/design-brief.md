@@ -171,22 +171,66 @@ sake. [In three words, how should it feel? e.g. calm, premium, live.]
 - The site must stay **free to run**.
 - Scoring screens change last and least — they're used mid-round.
 
-## Hand-off spec (end every session with this, one block per change)
+## Hand-off spec (end every session with this — one block per task for Claude Code)
+
+The format the Clubhouse calendar task (D234–D251) came in, adopted for every
+hand-off (M18; Ross, 17 Nov 2026). Sections 0–8, in this order:
 
 ```
-Screen / component:
-What changes (plain words):
-Before → after (mockup or screenshot reference):
-Colours: existing token names only (cream, surface, ink, bark, accent,
-  accent-deep, rust) — or a proposed new token with light AND dark values
-Type: scale names (t-h1, t-h2, t-card, t-body, t-data, t-label, t-cap)
-Spacing / radius / shadow: exact values
-Motion: trigger → what moves → duration (ms) → easing (named or cubic-bezier)
-Reduce Motion version:
-Dark mode notes:
-States covered: loading / empty / error / long names / 1 vs 40 rows
-Rules this changes (so Claude Code updates the tests):
-How I'll check it on my phone:
+TASK: <name>
+From Claude.ai, <date>. Repo read at <commit>.
+
+0. HOW TO USE THIS
+- Everything Claude Code needs is in this block; there is no other doc to find.
+- Repo facts (3) were true at <commit>. Where the code disagrees, the code
+  wins: say so in the plan; don't follow the stale fact.
+- MUST rules (2) are Ross's decisions. "Your call" (5) is Claude Code's.
+  Anything this block doesn't mention: decide, and list it in the hand-back.
+- Record the MUSTs in docs/design-brief.md and CLAUDE.md as decisions,
+  numbered from the next free D-number.
+- PLAN FIRST. Wait for Ross's yes before building, and before any migration
+  (listed, with undo, fail-soft until pasted).
+- Questions back to Claude.ai only if a MUST is impossible or two MUSTs
+  contradict: at most 5, in the format in 8. Everything else, ask Ross.
+
+1. GOAL
+<a paragraph: what changes for whom, and why>
+
+2. MUST (rule -> how we know it's done)
+M1 <rule>
+   -> <a check Ross or a test can run>
+
+3. REPO FACTS (<commit>)
+- <file or table>: <what is true there today>
+
+4. STAGES (each ends with tests, typecheck, build, push, Ross's check)
+s0 <name>: <MUSTs>. Done when <check>.
+
+5. YOUR CALL
+<what Claude Code decides, and says why>
+
+6. OUT OF SCOPE
+<what waits>
+
+7. SCREENS (house kit; tokens only; 13px floor; one emerald action a screen)
+- <screen>: <what is on it>
+  Optional detail, when a screen needs it:
+    Before → after (mockup or screenshot reference)
+    Colours: existing token names only (cream, surface, ink, bark, accent,
+      accent-deep, rust, gold — gold only for winning) — or a proposed new
+      token with light AND dark values
+    Type: scale names (t-h1, t-h2, t-card, t-body, t-data, t-label, t-cap)
+    Spacing / radius / shadow: exact values
+    Motion: trigger → what moves → duration (ms) → easing; the Reduce Motion version
+    Dark mode notes
+    States covered: loading / empty / error / long names / 1 vs 40 rows
+    How I'll check it on my phone
+
+8. HAND BACK
+The plan by stage with choices marked; migrations and their undo; Ross's
+jobs by hand; how he checks each stage on a laptop and a phone.
+Only if needed:
+QUESTIONS FOR CLAUDE.AI: Q1 <question> — options A/B — your lean.
 ```
 
 ## Decisions so far
@@ -394,6 +438,25 @@ From the November 2026 session on the tournament create flow (Ross, 8 Nov;
 | D231 | An Officer may **Book anyway** somebody the rules refuse; it is logged | Built: `anyway` on the booking, `booking.override` in `club_activity` |
 | D232 | Privileges are playing days only for now; more come with casual tee sheets | Recorded |
 | D233 | A player's own tees follow their gender: a competition's player is made from the list row's gender (not given stays the men's, as before) | Built (m3): `insertPlayer`'s `gender` |
+| D234 (M1) | **Events**: the Clubhouse's Competitions becomes Events — every club event, competitions and non-golf, in the season table, filtered by type and who sees it; competitions keep their editor, non-golf events are made and changed in a side panel | Built (c1a, c1b): `/clubhouse/[slug]/events` (`/competitions` redirects), `EventPanel`, `CompPanel` |
+| D235 (M2) | Seven types: Competition (members book), Golf (on the calendar, not booked here), Social, Club business, Other sport, Course, Miscellaneous — COMP GOLF SOCIAL BUSINESS SPORT COURSE MISC | Built: `lib/clubEvents.ts`, `club_events` (095) for all but Competition |
+| D236 (M3) | Visibility per event: Members or Office only — the Clubhouse alone, never the members app, not even an Officer without Clubhouse; filtered on the server. *Ross, 17 Nov 2026:* **Office only is never for golf** — anything that affects the tee sheets is the members' (Competition, Golf, Course always Members) | Built: `noteIssue`, 095's CHECK, `membersNotes` in `app/api/club/club.ts`; `test:clubs` holds that no answer to an Officer without Clubhouse carries an Office only event |
+| D237 (M4) | Club settings: "Show to members" per type, on by default; a Members event of a type not shown stays in the Clubhouse | Built: `ShowToMembers`, `clubs.hidden_event_types`; the golf types (Competition, Golf, Course) always shown, per D236 |
+| D238 (M5) | A member's "From my clubs, show me": a tick per type for the club home and Upcoming, all on to start; Competitions always show | Built: `ClubEventTypesCard` on Me and the club's Club tab, `account_event_prefs` (095), applied on the server |
+| D239 (M6) | The members app shows the club's own events on the club calendar and Comps' Upcoming, with type chips; a tap opens a simple sheet (title, date, times, where, notes) — no booking, no tee sheet | Built: `ClubNotes.tsx` (`NoteRow`, `TypeChips`, `NoteSheet`) |
+| D240 (M7) | **Event presets**: named templates (a code unique in the club, "used for", format, allowance, entry rules, up to four runs of tee times with sunrise and sunset, when booking opens; one the default). New competition can start from one; a calendar row names one, its own values overriding; values copied in when made | Built (c1b): `lib/clubPresets.ts`, `club_presets` (095), `PresetPanel`; both New competitions start from a preset |
+| D241 (M8) | Players per tee time per run (threes at ten until one, then fours at fifteen); sheets saved before read exactly as today | Built (c0): `TeeBatch.groupSize`, `slotGroupSizes`; `test:tee-sheet` |
+| D242 (M9) | Sunrise and sunset worked out here, free, from the course's location and the day, Irish time. The grid: the next full hour after sunrise less whole intervals; a sunrise start the first grid time at or after it; a sunset end the last at or before sunset less the offset. *Ross, 17 Nov 2026:* a course with no location is worked out for Greenwich (GMT), never refused; **a tee sheet shows sunrise at its head and sunset at its foot**; the default last tee time is **4h30 before sunset for competitions, 1h for casual golf** (casual tee sheets a pending concept) | Built (c0): `lib/sun.ts` (NOAA formulas), `COMP_LAST_TEE_BEFORE_SUNSET_MINS`, `CASUAL_LAST_TEE_BEFORE_SUNSET_MINS`; the competition tee sheet's Sunrise/Sunset lines |
+| D243 (M10) | New competition and the competition editor take several runs with their own players a time, or a preset; Copy and Repeat weekly work on any sheet | Built (c0, c1b): `CompForm.batches`, `CompBatches`, `compFormFrom` |
+| D244 (M11) | Tee sheets changed after the fact: every booking stays at its tee time and the member stays in if they may still enter (Book anyway kept); otherwise refused, each member named with why. A competition made in the Clubhouse whose sheet can't be made is not made, and says why | Built (c1b): `planSheetChange`, `changeOne`; never once a card has started or the results are certified |
+| D245 (M12) | Import a calendar, in the Calendar tab, desktop only: copy the prompt or download the template; paste or upload the CSV; preview; import | Built (c2): `/clubhouse/[slug]/calendar/import` |
+| D246 (M13) | The prompt is written live from the club (memberships, presets, home course, season, types and visibility, the header, the rules, two example rows), stamped "Green Dot calendar format v1"; another version is refused with what to do | Built: `calendarPrompt`, `calendarTemplate`, `readCalendarFile`. A blank Memberships keeps the preset's (with none, whoever plays that day) — the prompt says so |
+| D247 (M14) | CSV v1: Ref, Date, End date, Start, End, Title, Type, Visibility, Memberships, Gender, Min age, Max age, Format, Allowance, Preset, Where, Notes, Check | Built: `CALENDAR_COLUMNS`; a COMP's Start and End also take SUNRISE and SUNSET, and replace the preset's tee times with one run at its first interval and players a time (Ross, 17 Nov 2026) |
+| D248 (M15) | The preview before anything saves: New / Changed / Same / Not in this file; bad cells in rust with why; Check rows amber, imported only when ticked; nothing deleted | Built: amber is the gold tint (the Clubhouse draws no boards, so it never reads as winning) |
+| D249 (M16) | Import through New competition's own path, matched on Ref else day and title — the same file twice changes nothing; one failing row never stops the rest; a competition whose sheet can't be made or changed comes in without it; one batch id in club_activity, a line per row | Built (c2): `runCalendarImport`. **Differs on one point**: a *new* competition whose tee sheet can't be made is not made (as D244) — the platform has no competition without a tee sheet — and the row is listed to fix and import again; an existing one keeps its old sheet and says so |
+| D250 (M17) | No AI calls from Green Dot; no .ics import (it goes through the chatbot like any file) | Built: nothing calls a model; `test:clubs` holds `lib/sun.ts` to no fetch |
+| D251 (M18) | The hand-off spec is the 0–8 block, the old visual fields optional under section 7 | Done (c3): "Hand-off spec" above |
+| D252 | **Clubhouse is its own level of admin** (Ross, 17 Nov 2026): making, changing and copying competitions in the Clubhouse, the club's events, presets and the calendar import are Clubhouse holders' (and Green Dot staff's); Officers keep their golf editing on the phone in the members app | Built: `keep_calendar` in `lib/clubMay.ts`; Copy moved from Officers to Clubhouse |
 | D94 exception | "…except a club's members-only competition, where the club's list is the door and every player needs their own Green Dot account. A member who forgets their phone is scored on another and approves their card on their own account later." | Approved and amended by Ross, 16 Nov 2026 |
 
 **The club area to the Pints hand-off** (Ross, 15 Nov 2026) — built with stage (f): the art an image at the top (members home 540px at .62 by day and .50 at night, other pages 380px at .20/.18, cropped 50% 38%, faded from 42%), the frosted header (crest in its ring, name, "Members", the 48px account button), Home's greeting, Live now, Club calendar (52×56 date tiles), Your season (three tiles and the self-claimed line), Outside the club ("These open in green dot."), and Competitions (Upcoming / My entries / Results, a featured card, results' top score in gold-deep). Waiting: "Your next round" with booking (d), and Live now's mini board (it links to the event's board for now).
