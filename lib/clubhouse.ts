@@ -216,6 +216,7 @@ export const SECTIONS = [
   { key: 'memberships', label: 'Memberships', path: '/memberships' },
   { key: 'events', label: 'Events', path: '/events' },
   { key: 'calendar', label: 'Calendar', path: '/calendar' },
+  { key: 'teesheet', label: 'Tee sheet', path: '/tee-sheet' },
   { key: 'settings', label: 'Club settings', path: '/settings' },
 ] as const
 

@@ -258,7 +258,7 @@ function BookPanel({ clubId, date, time, free, offerMe, me, onDone, onCancel }: 
                   return (
                     <li key={f.id}>
                       <button type="button" disabled={taken} onClick={() => { setChosen(x => [...x, { memberId: f.id, name: f.name }]); setQ('') }}
-                        className="w-full text-left px-3 py-2 rounded-tile hover:bg-tint press disabled:text-ink/40">
+                        className="w-full text-left px-3 py-2 rounded-tile hover:bg-tint press disabled:text-disabled-fg">
                         {f.name}
                         {f.why && <span className="block t-cap text-ink/65">{f.why}</span>}
                       </button>

@@ -1,11 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { IconX } from '@/app/components/icons'
+import { IconCheck, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
 import { askClub } from '@/lib/accountClient'
 import {
-  CLUB_EVENT_TYPES, NOTE_NOTES_MAX, NOTE_PLACE_MAX, NOTE_TITLE_MAX, mayBeOffice, noteIssue, readClubNote, typeLabel,
+  CLUB_EVENT_TYPES, NOTE_NOTES_MAX, NOTE_PLACE_MAX, NOTE_TITLE_MAX, mayBeOffice, mayBlockSheet, noteIssue, readClubNote, typeLabel,
   type ClubEventType, type ClubNote, type Visibility,
 } from '@/lib/clubEvents'
 
@@ -15,17 +15,19 @@ import {
  * and who sees it. Office only is offered only for an event that does not
  * touch the golf (Ross, 17 Nov 2026). Deleting asks once.
  */
-export default function EventPanel({ clubId, note, day, onClose, onSaved }: {
+export default function EventPanel({ clubId, note, day, blocking, onClose, onSaved }: {
   clubId: string
   /** The event being changed — none for a new one. */
   note: ClubNote | null
   /** A new event's first day, where it was asked for from a day. */
   day?: string
+  /** A new block booking, from the Tee sheet: a Golf event that takes the sheet. */
+  blocking?: boolean
   onClose: () => void
   onSaved: () => void
 }) {
   const [title, setTitle] = useState(note?.title ?? '')
-  const [type, setType] = useState<ClubEventType>(note?.type ?? 'SOCIAL')
+  const [type, setType] = useState<ClubEventType>(note?.type ?? (blocking ? 'GOLF' : 'SOCIAL'))
   const [startsOn, setStartsOn] = useState(note?.startsOn ?? day ?? '')
   const [endsOn, setEndsOn] = useState(note?.endsOn ?? '')
   const [startTime, setStartTime] = useState(note?.startTime ?? '')
@@ -33,12 +35,14 @@ export default function EventPanel({ clubId, note, day, onClose, onSaved }: {
   const [place, setPlace] = useState(note?.place ?? '')
   const [notes, setNotes] = useState(note?.notes ?? '')
   const [visibility, setVisibility] = useState<Visibility>(note?.visibility ?? 'members')
+  const [blocks, setBlocks] = useState(note?.blocksSheet ?? !!blocking)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sure, setSure] = useState(false)
 
   const office = mayBeOffice(type)
-  const draft = readClubNote({ title, type, startsOn, endsOn, startTime, endTime, place, notes, visibility: office ? visibility : 'members' })
+  const blockable = mayBlockSheet(type)
+  const draft = readClubNote({ title, type, startsOn, endsOn, startTime, endTime, place, notes, visibility: office ? visibility : 'members', blocksSheet: blockable && blocks })
   const issue = noteIssue(draft)
 
   useEffect(() => {
@@ -74,7 +78,7 @@ export default function EventPanel({ clubId, note, day, onClose, onSaved }: {
       <form onSubmit={e => { e.preventDefault(); void save() }}
         className="ch-panel relative w-full md:w-[400px] h-full overflow-y-auto paper border-l border-line shadow-floating p-6">
         <div className="flex items-start gap-3">
-          <h2 id="event-title" className="t-h2 text-ink flex-1 break-words">{note ? note.title : 'New event'}</h2>
+          <h2 id="event-title" className="t-h2 text-ink flex-1 break-words">{note ? note.title : blocking ? 'Block the tee sheet' : 'New event'}</h2>
           <button type="button" onClick={onClose} aria-label="Close" className="ch-hover ch-focus w-11 h-11 rounded-full flex items-center justify-center text-ink flex-shrink-0">
             <IconX size={22} />
           </button>
@@ -83,7 +87,7 @@ export default function EventPanel({ clubId, note, day, onClose, onSaved }: {
         <div className="mt-6 space-y-4">
           <div>
             <label htmlFor="ev-title" className={FIELD_LABEL}>Title</label>
-            <input id="ev-title" className={`${FIELD} ch-focus`} value={title} maxLength={NOTE_TITLE_MAX} placeholder="e.g. AGM"
+            <input id="ev-title" className={`${FIELD} ch-focus`} value={title} maxLength={NOTE_TITLE_MAX} placeholder={blocking ? 'e.g. Corporate outing: Acme Ltd' : 'e.g. AGM'}
               autoFocus={!note} onChange={e => setTitle(e.target.value)} />
           </div>
           <div>
@@ -91,8 +95,25 @@ export default function EventPanel({ clubId, note, day, onClose, onSaved }: {
             <select id="ev-type" className={`${FIELD} ch-focus`} value={type} onChange={e => setType(e.target.value as ClubEventType)}>
               {CLUB_EVENT_TYPES.map(t => <option key={t} value={t}>{typeLabel(t)}</option>)}
             </select>
-            {type === 'GOLF' && <p className="t-cap text-ink/65 mt-2">On the calendar, not booked here — an interclub, a society. A competition members book is made with New competition.</p>}
+            {type === 'GOLF' && <p className="t-cap text-ink/65 mt-2">On the calendar, not booked here — an interclub, a society, a corporate outing. A competition members book is made with New competition.</p>}
           </div>
+          {blockable && (
+            // A block booking (Ross, 17 Nov 2026): the event has the course, so nobody books a casual time under it.
+            <button type="button" role="checkbox" aria-checked={blocks} onClick={() => setBlocks(v => !v)}
+              className="ch-hover ch-focus w-full flex items-start gap-3 text-left rounded-tile -mx-2 px-2 py-2">
+              <span aria-hidden="true" className={`mt-0.5 inline-flex items-center justify-center w-6 h-6 flex-shrink-0 rounded-[6px] border ${blocks ? 'bg-accent-deep border-accent-deep text-white' : 'bg-surface border-line-strong'}`}>
+                {blocks && <IconCheck size={16} />}
+              </span>
+              <span>
+                <span className="t-label text-ink block">Takes the tee sheet</span>
+                <span className="t-cap text-ink/65 block">
+                  {blocks
+                    ? startTime ? 'No casual tee times from when it starts to when it ends. Members see it on the tee sheet with these notes.' : 'No casual tee times all day. Give it times to take part of the day.'
+                    : 'Block booking — a corporate outing, a society, the course closed.'}
+                </span>
+              </span>
+            </button>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label htmlFor="ev-from" className={FIELD_LABEL}>Day</label>

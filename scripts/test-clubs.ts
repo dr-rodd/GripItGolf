@@ -2336,6 +2336,10 @@ async function teeTimesTests() {
   ok(/uq_club_tee_bookings_seat/.test(mig) && /REVOKE ALL ON public\.club_tee_bookings FROM anon, authenticated/.test(mig), '096: one place a seat, closed to phones')
   ok(/ck_club_events_block CHECK \(NOT blocks_tee_sheet OR \(type IN \('GOLF', 'COURSE'\)/.test(mig), '096: only a Golf or Course event takes the sheet, in the database too')
   ok(read('lib/clubMay.ts').includes("case 'keep_tee_sheet':"), 'keeping the tee sheet is the Clubhouse\'s act')
+  eq(sectionAt('/clubhouse/pints/tee-sheet', 'pints'), 'teesheet', 'the Clubhouse has a Tee sheet section')
+  const ts = read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')
+  ok(['office.day', 'office.book', 'office.move', 'office.remove', 'office.settings'].every(a => ts.includes(`'${a}'`)), '…which books, moves, takes off and sets, all through the server')
+  ok(/Takes the tee sheet/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')) && /blocksSheet: blockable && blocks/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')), 'a Golf or Course event is ticked to take the tee sheet — a block booking')
 }
 
 async function main() {

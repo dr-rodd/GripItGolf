@@ -6,7 +6,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { accountLink } from '@/lib/account'
 import { askClub, readAccount, signOutAccount, type ClubSummary } from '@/lib/accountClient'
 import { SECTIONS, clubhouseHref, sectionAt, type SectionKey } from '@/lib/clubhouse'
-import { IconCalendar, IconClipboardList, IconHome, IconSettings, IconTrophy, IconUsers } from '@/app/components/icons'
+import { IconCalendar, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers } from '@/app/components/icons'
 import { Pill, buttonClass } from '@/app/components/ui'
 import NoAccess from '../NoAccess'
 import { rememberClubhouse } from '../clubhouseClient'
@@ -19,7 +19,7 @@ type State =
   | { kind: 'in'; club: ClubSummary; clubs: { slug: string; name: string }[] }
 
 const ICON: Record<SectionKey, (p: { size?: number }) => React.ReactNode> = {
-  overview: IconHome, members: IconUsers, memberships: IconClipboardList, events: IconTrophy, calendar: IconCalendar, settings: IconSettings,
+  overview: IconHome, members: IconUsers, memberships: IconClipboardList, events: IconTrophy, calendar: IconCalendar, teesheet: IconClock, settings: IconSettings,
 }
 
 /**

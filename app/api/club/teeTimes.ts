@@ -199,7 +199,7 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
     return { memberId: r.id, name: r.name, playsHere: credentialsOf(r).playsHere, category: cat ? { days: cat.days, booksTeeTimes: cat.booksTeeTimes, name: cat.name } : null }
   }
 
-  if (action === 'names') {
+  if (action === 'names' || action === 'office.names') {
     const q = str(input.q).trim().replace(/\s+/g, ' ').slice(0, 40)
     if (q.length < 2) return { status: 200, body: { ok: true, names: [] } }
     const rows = await store.searchRows(clubId, q, 12)
