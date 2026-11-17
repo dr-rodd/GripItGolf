@@ -48,6 +48,25 @@ export function bookingStore(db: Db): BookingStore {
   return {
     userFromToken: t => clubs.userFromToken(t),
     competition: code => readCompetition(db, code),
+    isStaff: userId => clubs.isStaff ? clubs.isStaff(userId) : Promise.resolve(false),
+    async officeSheet(c) {
+      const [sheet, place] = await Promise.all([
+        readCompSheet(db, { tripId: c.tripId, roundId: c.roundId, courseId: c.courseId ?? '' }),
+        c.courseId
+          ? db.from('courses').select('latitude, longitude').eq('id', c.courseId).maybeSingle().then(r => r.data as { latitude: number | null; longitude: number | null } | null)
+          : Promise.resolve(null),
+      ])
+      return {
+        seats: sheet.seats, certifiedAt: sheet.certifiedAt, courseName: sheet.courseName,
+        started: [...new Set([...sheet.onCourse, ...sheet.signed, ...sheet.final, ...sheet.waiting])],
+        place: place ? { lat: place.latitude, lng: place.longitude } : null,
+      }
+    },
+    async moveBookings(roundId, playerIds, slot) {
+      if (!playerIds.length) return
+      const { error } = await db.from('tee_assignments').update({ slot_index: slot }).eq('round_id', roundId).in('player_id', playerIds)
+      if (error) throw error
+    },
     async myRow(clubId, userId) {
       const { data } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1))
       const row = ((data ?? []) as unknown as RowRow[])[0]

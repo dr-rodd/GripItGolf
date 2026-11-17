@@ -159,7 +159,7 @@ export default function TeeSheet() {
                         <span className="t-cap text-ink/65">{row.overlay.kind === 'competition' ? 'Competition' : 'Block booking'}{row.times.length ? ` · ${row.times.length} tee time${row.times.length === 1 ? '' : 's'}` : ''}</span>
                         <span className="flex-1" />
                         {row.overlay.kind === 'competition'
-                          ? <Link href={`/club/${face.slug}/comp/${row.overlay.id}/tee-times`} className="t-label text-accent-deep ch-hover ch-focus">Its tee sheet</Link>
+                          ? <Link href={`/clubhouse/${face.slug}/events/${row.overlay.id}`} className="t-label text-accent-deep ch-hover ch-focus">Its tee sheet</Link>
                           : <button type="button" onClick={() => openOverlay(row.overlay)} className="t-label text-accent-deep ch-hover ch-focus">Change</button>}
                       </div>
                       {row.overlay.detail && row.overlay.kind === 'block' && <p className="t-cap text-ink/80 mt-1 break-words">{row.overlay.detail}</p>}

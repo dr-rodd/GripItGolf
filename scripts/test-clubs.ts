@@ -1264,6 +1264,43 @@ async function competitionD2Tests() {
   const idx = await runBooking({ token: 'tok-ross', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '13.9' }, bstore, open)
   ok(idx.status === 200 && indexSets[0] === 'r-ross:13.9:ross', 'the start sheet changes the one index, by the member starting the card (D179)')
 
+  section('The Clubhouse keeps a competition\'s tee sheet — never through the members app (Ross, 17 Nov 2026)')
+  {
+    const logged: ActivityEntry[] = []
+    let certifiedAt: string | null = null
+    const ostore: BookingStore = {
+      ...bstore,
+      async isStaff(u) { return u === 'staff' },
+      async officeSheet() {
+        return {
+          seats: bs.map(b => ({ playerId: b.playerId, rowId: ps.find(p => p.id === b.playerId)?.clubMemberId ?? null, name: rows.find(r => `p-${r.id}` === b.playerId)?.name ?? '?', handicap: null, slot: b.slot, bookedBy: b.bookedBy })),
+          started: [], certifiedAt, courseName: 'Lahinch', place: null,
+        }
+      },
+      async moveBookings(_r, ids, slot) { bs = bs.map(b => (ids.includes(b.playerId) ? { ...b, slot } : b)) },
+      async logActivity(e) { logged.push(...e) },
+    }
+    const office = (tok: string, action: string, body: Record<string, unknown> = {}) => runBooking({ token: tok, action: `office.${action}`, code: 'COMP01', ...body }, ostore, open)
+    eq((await office('tok-ofc', 'sheet')).status, 403, 'an Officer without Clubhouse has no office view (Clubhouse is its own level)')
+    eq((await office('tok-dave', 'sheet')).status, 403, '…nor a member')
+    const view = await office('tok-off', 'sheet')
+    const vb = view.body as unknown as { slots?: { seats: { name: string }[] }[]; comp?: { courseName: string } }
+    ok(view.status === 200 && vb.slots?.[0]?.seats.some(x => x.name === 'Ross') === true && vb.comp?.courseName === 'Lahinch', 'Clubhouse reads every time and who is on it')
+    eq(view.status === 200 ? view.door : 'x', null, '…handing out no members-app door')
+    eq((await office('tok-off', 'book', { slot: 1, memberIds: ['r-dave', 'r-adm'] })).status, 200, 'Clubhouse books two onto a time')
+    ok(bs.filter(b => b.slot === 1).length === 2 && bs.filter(b => b.slot === 1).every(b => b.bookedBy === null), '…booked by the office, nobody\'s player')
+    eq((await office('tok-off', 'move', { memberIds: ['r-dave'], slot: 2 })).status, 200, 'Clubhouse moves Dave to another time')
+    eq(bs.find(b => b.playerId === 'p-r-dave')?.slot, 2, '…and there he is')
+    eq((await office('tok-off', 'move', { memberIds: ['r-dave'], slot: 99 })).status, 409, '…never to a time not on the sheet')
+    eq((await office('tok-off', 'withdraw', { memberIds: ['r-adm'] })).status, 200, 'Clubhouse takes somebody off')
+    ok(!bs.some(b => b.playerId === 'p-r-adm'), '…gone')
+    ok(['comp.book', 'comp.move', 'comp.withdraw'].every(a => logged.some(x => x.action === a && x.byName === 'Office')), 'every office change on the club\'s activity log')
+    eq((await runBooking({ token: 'tok-staff', action: 'office.sheet', code: 'COMP01' }, ostore, open)).status, 200, 'Green Dot staff keep it too')
+    certifiedAt = NOW.toISOString()
+    eq((await office('tok-off', 'move', { memberIds: ['r-dave'], slot: 3 })).status, 409, 'nothing changes once the results are certified')
+    bs = bs.filter(b => b.playerId !== 'p-r-dave'); ps = ps.filter(p => p.id !== 'p-r-dave')
+  }
+
   section('Who may enter, at booking (stage (m))')
   const keptPs = ps, keptBs = bs
   ps = []; bs = []
@@ -2336,6 +2373,12 @@ async function teeTimesTests() {
   ok(/uq_club_tee_bookings_seat/.test(mig) && /REVOKE ALL ON public\.club_tee_bookings FROM anon, authenticated/.test(mig), '096: one place a seat, closed to phones')
   ok(/ck_club_events_block CHECK \(NOT blocks_tee_sheet OR \(type IN \('GOLF', 'COURSE'\)/.test(mig), '096: only a Golf or Course event takes the sheet, in the database too')
   ok(read('lib/clubMay.ts').includes("case 'keep_tee_sheet':"), 'keeping the tee sheet is the Clubhouse\'s act')
+  {
+    const walkCh = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walkCh(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : [])
+    const out = walkCh('app/clubhouse').filter(f => !f.endsWith('ClubhouseShell.tsx')).filter(f => /href=\{?`\/club\/|'\/club\/\$\{/.test(read(f)))
+    eq(out, [], 'nothing in the Clubhouse links into the members app but the shell\'s own "The members app" (Ross, 17 Nov 2026)')
+    ok(/events\/\$\{e\.code\}/.test(read('lib/clubhouse.ts')) && !/\/club\/\$\{o\.clubSlug\}/.test(read('lib/clubhouse.ts')), 'a competition opens on the Clubhouse\'s own page, from Events, the Calendar and Needs you')
+  }
   eq(sectionAt('/clubhouse/pints/tee-sheet', 'pints'), 'teesheet', 'the Clubhouse has a Tee sheet section')
   const ts = read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')
   ok(['office.day', 'office.book', 'office.move', 'office.remove', 'office.settings'].every(a => ts.includes(`'${a}'`)), '…which books, moves, takes off and sets, all through the server')

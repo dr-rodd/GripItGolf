@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
 import { buttonClass, cardClass } from '@/app/components/ui'
-import { eventHref, eventsOn, isOfficeOnly, monthGrid, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
+import { eventHref, eventsOn, isOfficeOnly, monthGrid, opensOutside, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
 import { typeLabel, type ClubNote } from '@/lib/clubEvents'
 import EventPanel from '../events/EventPanel'
 import { irishToday } from '@/lib/clubs'
@@ -50,7 +50,7 @@ export default function ClubCalendar() {
         ? <button key={e.code} type="button" title={e.name} onClick={() => setEditing(e.note!)} className={chipClass(e)}>{chipBody(e)}</button>
         : <div key={e.code} title={e.name} className={chipClass(e)}>{chipBody(e)}</div>
     }
-    return <Link key={e.code} href={href} title={e.name} className={chipClass(e)}>{chipBody(e)}</Link>
+    return <Link key={e.code} href={href} title={e.name} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={chipClass(e)}>{chipBody(e)}</Link>
   }
 
   return (
@@ -110,7 +110,7 @@ export default function ClubCalendar() {
                 )
                 const cls = 'flex items-center justify-between gap-3 min-h-11 text-ink text-[15px] font-medium w-full text-left'
                 return href
-                  ? <Link key={e.code} href={href} className={cls}>{inner}</Link>
+                  ? <Link key={e.code} href={href} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={cls}>{inner}</Link>
                   : e.note && office ? <button key={e.code} type="button" onClick={() => setEditing(e.note!)} className={cls}>{inner}</button>
                     : <div key={e.code} className={cls}>{inner}</div>
               })}

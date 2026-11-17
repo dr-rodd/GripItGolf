@@ -17,16 +17,21 @@
 // is the service-role store.
 
 import { isAccount, type AuthUser } from '@/lib/account'
-import { bookingIssue, withdrawIssue } from '@/lib/clubComp'
+import { bookingIssue, teeInstant, withdrawIssue } from '@/lib/clubComp'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { readIndex } from '@/lib/handicapIndex'
-import { slotGroupSize, teeClocks, type TeeRules } from '@/lib/teeSheet'
+import { describeOpening, opensAt, slotGroupSize, slotGroupSizes, teeClocks, type TeeRules } from '@/lib/teeSheet'
+import { sunDay } from '@/lib/sun'
+import { STAFF_NAME } from '@/lib/clubhouse'
 import { entryLine, entryRefusal, readAgeDate, refusalWords, type Category, type EntryRules } from '@/lib/clubMembership'
 import type { ActivityEntry, MemberRecord } from './club'
 
 export interface CompRecord {
   tripId: string
   code: string
+  /** Its name — read alongside, absent from a stand-in that does not say. */
+  name?: string
+  courseId?: string
   clubId: string
   roundId: string
   date: string
@@ -74,6 +79,22 @@ export interface BookingStore {
   memberships?(clubId: string): Promise<{ categories: Category[]; ageDate: string }>
   /** The club's activity log (092), for an Officer's "Book anyway" — fail-soft. */
   logActivity?(entries: ActivityEntry[]): Promise<void>
+  /** The Clubhouse (Ross, 17 Nov 2026): Green Dot staff keep any club's sheets. */
+  isStaff?(userId: string): Promise<boolean>
+  /** The Clubhouse's view of the sheet: every seat, the cards, the course and its sun. */
+  officeSheet?(c: CompRecord): Promise<OfficeSheet>
+  /** The Clubhouse moves players to another tee time. */
+  moveBookings?(roundId: string, playerIds: string[], slot: number): Promise<void>
+}
+
+/** What the Clubhouse's competition page reads of a sheet. */
+export interface OfficeSheet {
+  seats: { playerId: string; rowId: string | null; name: string; handicap: number | null; slot: number; bookedBy: string | null }[]
+  /** Players whose card has started, been signed or is final. */
+  started: string[]
+  certifiedAt: string | null
+  courseName: string | null
+  place: { lat: number | null; lng: number | null } | null
 }
 
 export interface BookingBody {
@@ -111,6 +132,7 @@ export async function runBooking(
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
   const comp = await store.competition(str(input.code).trim().toUpperCase())
   if (!comp) return fail(404, 'No such competition.')
+  if (str(input.action).startsWith('office.')) return runCompOffice(input, store, user, comp, now)
   const me = await store.myRow(comp.clubId, user.id)
   if (!me) return fail(403, 'This competition is for the club’s members. Sign in with the account on its list.')
   // Officers run the competition (D219): book anyone, change or withdraw any time.
@@ -161,62 +183,13 @@ export async function runBooking(
     const taken = bookings.filter(b => b.slot === slot).length
     const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken, adding: rows.length, admin, now: now.getTime() })
     if (issue) return fail(409, issue)
-    // Every player needs their own account (D94's exception, amended).
-    // D209: somebody who does not play here is in no field.
-    const notPlaying = rows.find(r => !clubMay('play', { row: credentialsOf(r) }))
-    if (notPlaying) return fail(409, `${notPlaying.name} isn’t ticked as playing at the club.`)
-    const noAccount = rows.find(r => !r.userId)
-    if (noAccount) return fail(409, `${noAccount.name} needs a Green Dot account linked to the club’s list to play.`)
-    const already = rows.find(r => bookings.some(b => b.playerId === playerOfRow.get(r.id)))
-    if (already) return fail(409, `${already.name} already has a tee time.`)
-    // Stage (m): who may enter. An Officer may book somebody anyway — a
-    // record the club got wrong should not keep a player off the tee — and
-    // that is logged (Ross, 17 Nov 2026).
-    const refused = rows.map(r => ({ r, f: refusalOf(r) })).filter((x): x is { r: MemberRecord; f: NonNullable<ReturnType<typeof refusalOf>> } => !!x.f)
-    if (refused.length && !(admin && input.anyway === true)) {
-      const { r, f } = refused[0]
-      return { status: 409, body: { ok: false, error: refusalWords(f, r.id === me.id ? null : r.name), ...(admin ? { anyway: true } : {}) } }
-    }
-
-    // The player for each row, made the first time it is booked.
-    const ensure = async (row: MemberRecord): Promise<string> => {
-      const have = playerOfRow.get(row.id)
-      if (have) return have
-      const made = await store.insertPlayer({
-        trip_id: comp.tripId, name: row.name, handicap: await store.indexOf(row),
-        club_member_id: row.id, claimed: row.id === me.id,
-        // The card's tees follow the player's gender; not given stays the
-        // men's, as every player has always been made.
-        gender: row.gender ?? 'M',
-      })
-      playerOfRow.set(row.id, made)
-      return made
-    }
-    let myPlayerId = mine
-    try {
-      const ids2 = await Promise.all(rows.map(ensure))
-      if (rows.some(r => r.id === me.id)) myPlayerId = playerOfRow.get(me.id) ?? null
-      const out = await store.insertBookings(ids2.map(pid => ({
-        trip_id: comp.tripId, round_id: comp.roundId, player_id: pid, slot_index: slot, booked_by: myPlayerId,
-      })))
-      if (out === 'clash') return fail(409, 'Somebody chosen has just been given a time — look again.')
-      // Two phones on one time at once: whoever went over takes theirs back.
-      const after = (await store.bookings(comp.roundId)).filter(b => b.slot === slot).length
-      if (after > slotGroupSize(comp.rules, slot)) {
-        await store.deleteBookings(comp.roundId, ids2)
-        return fail(409, 'That tee time has just filled — choose another.')
-      }
-      if (myPlayerId) await store.linkAccount(user.id, comp.tripId, myPlayerId).catch(() => undefined)
-      if (refused.length && store.logActivity) {
-        await store.logActivity(refused.map(({ r, f }) => ({
-          clubId: comp.clubId, byUser: user.id, byName: me.name, byStaff: false, action: 'booking.override',
-          memberId: r.id, memberName: r.name, changes: { [comp.code]: [refusalWords(f, r.name), 'booked anyway'] }, batchId: null,
-        }))).catch(e => console.error('club activity not logged:', e))
-      }
-    } catch (e) {
-      console.error('booking failed:', e)
-      return fail(503, 'Could not book — try again.')
-    }
+    const placed = await placeRows({
+      store, comp, userId: user.id, rows, slot, bookings, playerOfRow, refusalOf, admin, anyway: input.anyway === true,
+      bookedBy: mine, claimRowId: me.id, byName: me.name, byStaff: false,
+    })
+    if (!placed.ok) return placed.outcome
+    const myPlayerId = rows.some(r => r.id === me.id) ? playerOfRow.get(me.id) ?? null : mine
+    if (myPlayerId) await store.linkAccount(user.id, comp.tripId, myPlayerId).catch(() => undefined)
     return ok({ myPlayerId, booked: booked || rows.some(r => r.id === me.id) })
   }
 
@@ -258,6 +231,244 @@ export async function runBooking(
       return fail(503, 'Could not take the booking off — try again.')
     }
     return ok({ myPlayerId: rowId === me.id ? null : mine, booked: rowId === me.id ? false : booked })
+  }
+
+  return fail(400, 'Unknown request.')
+}
+
+type Refusal = NonNullable<ReturnType<typeof entryRefusal>>
+
+/**
+ * Putting rows of the club's list on one tee time — the one copy, a
+ * member's booking and the Clubhouse's alike: everybody plays here and has
+ * their own account (D94's exception), nobody twice, who may enter (an
+ * Officer or the office may book anyway, logged), the player made for a row
+ * the first time it is booked, and two phones on one time at once settled
+ * by whoever went over taking theirs back.
+ */
+async function placeRows(o: {
+  store: BookingStore
+  comp: CompRecord
+  userId: string
+  rows: MemberRecord[]
+  slot: number
+  bookings: Booked[]
+  playerOfRow: Map<string, string>
+  refusalOf: (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => Refusal | null
+  admin: boolean
+  anyway: boolean
+  /** The player making the booking — null for the office. */
+  bookedBy: string | null
+  /** The booker's own row, claimed when they book themselves — null for the office. */
+  claimRowId: string | null
+  byName: string
+  byStaff: boolean
+}): Promise<{ ok: true; ids: string[] } | { ok: false; outcome: BookingOutcome }> {
+  const { store, comp, rows, slot, playerOfRow } = o
+  const no = (outcome: BookingOutcome) => ({ ok: false as const, outcome })
+  // D209: somebody who does not play here is in no field.
+  const notPlaying = rows.find(r => !clubMay('play', { row: credentialsOf(r) }))
+  if (notPlaying) return no(fail(409, `${notPlaying.name} isn’t ticked as playing at the club.`))
+  const noAccount = rows.find(r => !r.userId)
+  if (noAccount) return no(fail(409, `${noAccount.name} needs a Green Dot account linked to the club’s list to play.`))
+  const already = rows.find(r => o.bookings.some(b => b.playerId === playerOfRow.get(r.id)))
+  if (already) return no(fail(409, `${already.name} already has a tee time.`))
+  // Stage (m): who may enter. An Officer may book somebody anyway — a
+  // record the club got wrong should not keep a player off the tee — and
+  // that is logged (Ross, 17 Nov 2026).
+  const refused = rows.map(r => ({ r, f: o.refusalOf(r) })).filter((x): x is { r: MemberRecord; f: Refusal } => !!x.f)
+  if (refused.length && !(o.admin && o.anyway)) {
+    const { r, f } = refused[0]
+    return no({ status: 409, body: { ok: false, error: refusalWords(f, r.id === o.claimRowId ? null : r.name), ...(o.admin ? { anyway: true } : {}) } })
+  }
+  // The player for each row, made the first time it is booked.
+  const ensure = async (row: MemberRecord): Promise<string> => {
+    const have = playerOfRow.get(row.id)
+    if (have) return have
+    const made = await store.insertPlayer({
+      trip_id: comp.tripId, name: row.name, handicap: await store.indexOf(row),
+      club_member_id: row.id, claimed: row.id === o.claimRowId,
+      // The card's tees follow the player's gender; not given stays the
+      // men's, as every player has always been made.
+      gender: row.gender ?? 'M',
+    })
+    playerOfRow.set(row.id, made)
+    return made
+  }
+  try {
+    const ids = await Promise.all(rows.map(ensure))
+    const by = o.claimRowId && rows.some(r => r.id === o.claimRowId) ? playerOfRow.get(o.claimRowId) ?? o.bookedBy : o.bookedBy
+    const out = await store.insertBookings(ids.map(pid => ({
+      trip_id: comp.tripId, round_id: comp.roundId, player_id: pid, slot_index: slot, booked_by: by,
+    })))
+    if (out === 'clash') return no(fail(409, 'Somebody chosen has just been given a time — look again.'))
+    // Two phones on one time at once: whoever went over takes theirs back.
+    const after = (await store.bookings(comp.roundId)).filter(b => b.slot === slot).length
+    if (after > slotGroupSize(comp.rules, slot)) {
+      await store.deleteBookings(comp.roundId, ids)
+      return no(fail(409, 'That tee time has just filled — choose another.'))
+    }
+    if (refused.length && store.logActivity) {
+      await store.logActivity(refused.map(({ r, f }) => ({
+        clubId: comp.clubId, byUser: o.userId, byName: o.byName, byStaff: o.byStaff, action: 'booking.override',
+        memberId: r.id, memberName: r.name, changes: { [comp.code]: [refusalWords(f, r.name), 'booked anyway'] }, batchId: null,
+      }))).catch(e => console.error('club activity not logged:', e))
+    }
+    return { ok: true, ids }
+  } catch (e) {
+    console.error('booking failed:', e)
+    return no(fail(503, 'Could not book — try again.'))
+  }
+}
+
+// ─── The Clubhouse keeps a competition's tee sheet (Ross, 17 Nov 2026) ───
+
+/** One tee time as the Clubhouse's competition page draws it. */
+export interface OfficeSlot {
+  index: number
+  /** "08:20". */
+  clock: string
+  size: number
+  gone: boolean
+  seats: { rowId: string | null; playerId: string; name: string; handicap: number | null; started: boolean }[]
+}
+
+export interface OfficeBody {
+  ok: true
+  comp: { code: string; name: string; date: string; courseName: string | null }
+  slots: OfficeSlot[]
+  sun: { sunrise: string | null; sunset: string | null; located: boolean }
+  /** Booking for the members: when it opens, said — null once open. */
+  opening: string | null
+  entry?: string
+  certified: boolean
+  cardsStarted: boolean
+}
+
+/**
+ * The Clubhouse's side of a competition's tee sheet — **never the members
+ * app** (Ross: no tee sheet editing from the Clubhouse goes out to it):
+ * `office.sheet` (every time and who is on it), `office.names`,
+ * `office.book` (anybody on the list who plays here and has an account,
+ * before booking opens, Book anyway logged), `office.move` (players to
+ * another time with room) and `office.withdraw`. Clubhouse or Green Dot
+ * staff (`keep_calendar`); every change on the club's activity log. Nothing
+ * once the results are certified; a time gone takes nobody new.
+ */
+async function runCompOffice(input: Record<string, unknown>, store: BookingStore, user: AuthUser, comp: CompRecord, now: Date): Promise<BookingOutcome> {
+  const [row, staff] = await Promise.all([
+    store.myRow(comp.clubId, user.id).catch(() => null),
+    store.isStaff ? store.isStaff(user.id).catch(() => false) : Promise.resolve(false),
+  ])
+  if (!clubMay('keep_calendar', { row: row ? credentialsOf(row) : null, staff })) return fail(403, 'Only someone with Clubhouse keeps the club’s competitions here.')
+  const byName = row?.name ?? STAFF_NAME
+  const byStaff = !row && staff
+  const [players, bookings, ms] = await Promise.all([
+    store.players(comp.tripId),
+    store.bookings(comp.roundId),
+    store.memberships ? store.memberships(comp.clubId).catch(() => ({ categories: [] as Category[], ageDate: '01-01' })) : Promise.resolve({ categories: [] as Category[], ageDate: '01-01' }),
+  ])
+  const playerOfRow = new Map(players.filter(p => p.clubMemberId).map(p => [p.clubMemberId as string, p.id]))
+  const rules = comp.entry ?? null
+  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => entryRefusal({
+    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+    category: ms.categories.find(c => c.id === r.categoryId) ?? null, day: comp.date, ageDate: readAgeDate(ms.ageDate), categories: ms.categories,
+  })
+  const done = (body: Record<string, unknown> = {}): BookingOutcome => ({ status: 200, body: { ok: true, ...body } as BookingBody, door: null })
+  const log = async (action: string, changes: Record<string, [unknown, unknown]>) => {
+    if (!store.logActivity) return
+    await store.logActivity([{ clubId: comp.clubId, byUser: user.id, byName, byStaff, action, memberId: null, memberName: null, changes, batchId: null }])
+      .catch(e => console.error('club activity not logged:', e))
+  }
+  const sheet = store.officeSheet ? await store.officeSheet(comp) : null
+  const certified = !!sheet?.certifiedAt
+  const clocks = teeClocks(comp.rules)
+  const nameOf = (pid: string) => sheet?.seats.find(x => x.playerId === pid)?.name ?? 'A player'
+
+  if (input.action === 'office.sheet') {
+    if (!sheet) return fail(503, 'Could not read the tee sheet — try again.')
+    const sizes = slotGroupSizes(comp.rules)
+    const started = new Set(sheet.started)
+    const sun = sunDay(comp.date, sheet.place ? { lat: sheet.place.lat ?? NaN, lng: sheet.place.lng ?? NaN } : null)
+    const slots: OfficeSlot[] = clocks.map((clock, index) => {
+      const at = teeInstant(comp.date, clock)
+      return {
+        index, clock, size: sizes[index] ?? comp.rules.groupSize, gone: at !== null && now.getTime() >= at,
+        seats: sheet.seats.filter(x => x.slot === index).map(x => ({ rowId: x.rowId, playerId: x.playerId, name: x.name, handicap: x.handicap, started: started.has(x.playerId) })),
+      }
+    })
+    const opens = opensAt(comp.rules, comp.date)
+    const line = entryLine(rules, ms.categories)
+    const body: OfficeBody = {
+      ok: true, comp: { code: comp.code, name: comp.name ?? comp.code, date: comp.date, courseName: sheet.courseName },
+      slots, sun, opening: opens && now < opens ? describeOpening(comp.rules, comp.date) : null,
+      ...(line ? { entry: line } : {}), certified, cardsStarted: sheet.started.length > 0,
+    }
+    return done(body as unknown as Record<string, unknown>)
+  }
+
+  if (input.action === 'office.names') {
+    const q = str(input.q).trim()
+    if (q.length < 2) return done({ names: [] })
+    const booked = new Set(bookings.map(b => b.playerId))
+    const rows = await store.searchRows(comp.clubId, q.slice(0, 40), 20)
+    return done({ names: rows.map(r => {
+      const f = refusalOf(r)
+      return { id: r.id, name: r.name, linked: r.linked, booked: booked.has(playerOfRow.get(r.id) ?? ''), ...(f ? { why: refusalWords(f, r.name) } : {}) }
+    }) })
+  }
+
+  if (certified) return fail(409, 'The results are certified — an Officer reopens them before the tee sheet changes.')
+
+  if (input.action === 'office.book') {
+    const slot = typeof input.slot === 'number' ? input.slot : NaN
+    const ids = [...new Set((Array.isArray(input.memberIds) ? input.memberIds : []).map(str).filter(Boolean))]
+    const rows = await store.rowsByIds(comp.clubId, ids)
+    if (rows.length !== ids.length) return fail(404, 'Somebody chosen is not on the club’s list.')
+    const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken: bookings.filter(b => b.slot === slot).length, adding: rows.length, admin: true, now: now.getTime() })
+    if (issue) return fail(409, issue)
+    const placed = await placeRows({
+      store, comp, userId: user.id, rows, slot, bookings, playerOfRow, refusalOf, admin: true, anyway: input.anyway === true,
+      bookedBy: null, claimRowId: null, byName, byStaff,
+    })
+    if (!placed.ok) return placed.outcome
+    await log('comp.book', { [`${comp.code} ${clocks[slot]}`]: [null, rows.map(r => r.name).join(', ')] })
+    return done()
+  }
+
+  const rowIds = [...new Set((Array.isArray(input.memberIds) ? input.memberIds : []).map(str).filter(Boolean))]
+  const moving = rowIds.map(id => playerOfRow.get(id)).filter((x): x is string => !!x)
+  const theirs = bookings.filter(b => moving.includes(b.playerId))
+  if (!rowIds.length || theirs.length !== rowIds.length) return fail(404, 'That booking isn’t on the sheet.')
+  const started = new Set(sheet?.started ?? [])
+
+  if (input.action === 'office.move') {
+    const slot = typeof input.slot === 'number' ? input.slot : NaN
+    if (!store.moveBookings) return fail(503, 'Could not move them — try again.')
+    const startedOne = theirs.find(b => started.has(b.playerId))
+    if (startedOne) return fail(409, `${nameOf(startedOne.playerId)}’s card has started.`)
+    const taken = bookings.filter(b => b.slot === slot && !moving.includes(b.playerId)).length
+    const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken, adding: theirs.length, admin: true, now: now.getTime() })
+    if (issue) return fail(409, issue)
+    try { await store.moveBookings(comp.roundId, moving, slot) } catch { return fail(503, 'Could not move them — try again.') }
+    await log('comp.move', Object.fromEntries(theirs.map(b => [`${comp.code} · ${nameOf(b.playerId)}`, [clocks[b.slot] ?? null, clocks[slot] ?? null]])))
+    return done()
+  }
+
+  if (input.action === 'office.withdraw') {
+    for (const b of theirs) {
+      if (started.has(b.playerId)) return fail(409, `${nameOf(b.playerId)}’s card has started — void it on the members app first.`)
+      const issue = withdrawIssue({ date: comp.date, clock: clocks[b.slot] ?? null, mine: false, bookedByMe: false, admin: true, now: now.getTime() })
+      if (issue) return fail(403, issue)
+    }
+    try {
+      await store.deleteBookings(comp.roundId, moving)
+      for (const pid of moving) await store.deletePlayerIfUnplayed(pid, comp.roundId)
+    } catch {
+      return fail(503, 'Could not take the booking off — try again.')
+    }
+    await log('comp.withdraw', Object.fromEntries(theirs.map(b => [`${comp.code} · ${nameOf(b.playerId)}`, [clocks[b.slot] ?? null, null]])))
+    return done()
   }
 
   return fail(400, 'Unknown request.')

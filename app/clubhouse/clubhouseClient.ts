@@ -108,3 +108,18 @@ export async function importCalendarRows(clubId: string, batch: string, rows: Se
   if (r.status !== 200) return { ok: false, error: errorOf(r.body) }
   return { ok: true, done: (r.body.done ?? []) as ImportRowOutcome[] }
 }
+
+/**
+ * A competition's tee sheet kept from the Clubhouse (Ross, 17 Nov 2026 —
+ * never through the members app): `sheet`, `names`, `book`, `move`,
+ * `withdraw` on /api/club/booking's office side. Never throws.
+ */
+export async function askCompOffice<T = Record<string, unknown>>(action: 'sheet' | 'names' | 'book' | 'move' | 'withdraw', code: string, body: Record<string, unknown> = {}):
+  Promise<({ ok: true } & T) | { ok: false; error: string; anyway?: boolean }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { ...body, code, action: `office.${action}` }, '/api/club/booking')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach, anyway: r.body.anyway === true }
+  return { ok: true, ...(r.body as T) }
+}

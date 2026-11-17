@@ -110,7 +110,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <h2 id="comp-panel-title" className="t-h2 text-ink break-words">{code ? form?.name || 'Competition' : 'New competition'}</h2>
-            {code && <p className="t-cap text-ink/65 mt-1"><Link href={`/club/${slug}/comp/${code}`} className="underline underline-offset-2">Open it in the members app</Link>{state ? ` · ${state.booked} booked` : ''}</p>}
+            {code && <p className="t-cap text-ink/65 mt-1"><Link href={`/clubhouse/${slug}/events/${code}`} className="underline underline-offset-2">Its tee sheet</Link>{state ? ` · ${state.booked} booked` : ''}</p>}
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="ch-hover ch-focus w-11 h-11 rounded-full flex items-center justify-center text-ink flex-shrink-0">
             <IconX size={22} />
@@ -121,7 +121,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
           error ? <p role="alert" className="t-cap text-rust-deep mt-6">{error}</p> : <div className="skeleton h-96 rounded-card mt-6" />
         ) : (
           <fieldset disabled={locked} className="mt-6 space-y-5">
-            {locked && <p className="t-cap text-ink/80">{state!.certified ? 'The results are certified — reopen them in the members app to change anything.' : 'A card has started, so the competition can’t be changed here.'}</p>}
+            {locked && <p className="t-cap text-ink/80">{state!.certified ? 'The results are certified, so nothing can change. An Officer reopens them first.' : 'A card has started, so the competition can’t be changed.'}</p>}
             {!code && presets.length > 0 && (
               <div>
                 <label htmlFor="cp-preset" className={FIELD_LABEL}>Start from a preset</label>

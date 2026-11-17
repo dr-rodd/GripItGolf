@@ -7,7 +7,7 @@ import CourseName from '@/app/components/CourseName'
 import { splitCourseName } from '@/lib/courseDirectory'
 import { FIELD, FIELD_LABEL, Pill, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { copyCompetition } from '../../clubhouseClient'
-import { MAX_COPIES, formatLine, isOfficeOnly, seasonOfYear, seasonType, seasonYears, weeklyFrom, type SeasonEvent } from '@/lib/clubhouse'
+import { MAX_COPIES, eventHref, formatLine, isOfficeOnly, opensOutside, seasonOfYear, seasonType, seasonYears, weeklyFrom, type SeasonEvent } from '@/lib/clubhouse'
 import { EVENT_TYPES, noteTimeLine, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
@@ -63,7 +63,7 @@ export default function Events() {
   const open = (e: SeasonEvent) => {
     const cls = 'ch-hover ch-focus rounded-tile -mx-1 px-1 py-0.5 text-left text-ink text-[15px] font-medium'
     if (e.note) return office ? <button type="button" onClick={() => setEditing(e.note!)} className={cls}>{e.name}</button> : <span className="text-ink text-[15px] font-medium">{e.name}</span>
-    return <Link href={e.competition ? `/club/${face.slug}/comp/${e.code}` : `/${e.code}`} className={cls}>{e.name}</Link>
+    return <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={cls}>{e.name}</Link>
   }
 
   return (
@@ -187,7 +187,7 @@ export default function Events() {
                 <li key={e.code}>
                   {e.note
                     ? <button type="button" onClick={() => setEditing(e.note!)} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</button>
-                    : <Link href={e.competition ? `/club/${face.slug}/comp/${e.code}` : `/${e.code}`} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
+                    : <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
                 </li>
               )
             })}
@@ -288,7 +288,7 @@ function CopyPanel({ clubId, slug, event, onClose, onMade }: {
                 <p className="t-label text-ink">{result.made.length} made</p>
                 <ul className="space-y-1">
                   {result.made.map(m => (
-                    <li key={m.code}><Link href={`/club/${slug}/comp/${m.code}`} className="text-ink text-[15px] underline underline-offset-2">{clubEventDates(m.date, m.date)}</Link></li>
+                    <li key={m.code}><Link href={`/clubhouse/${slug}/events/${m.code}`} className="text-ink text-[15px] underline underline-offset-2">{clubEventDates(m.date, m.date)}</Link></li>
                   ))}
                 </ul>
               </>

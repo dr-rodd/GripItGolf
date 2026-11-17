@@ -173,7 +173,8 @@ export function needsYou(o: {
     out.push({
       key: `certify-${c.code}`,
       line: `${c.name}: every card is in. ${o.officer ? 'Certify the results.' : 'An Officer certifies the results.'}`,
-      href: `/club/${o.clubSlug}/comp/${c.code}/scoring`,
+      // The Clubhouse's own page for it, never the members app (Ross, 17 Nov 2026).
+      href: `${o.base}/events/${c.code}`,
     })
   }
   const neverAsked = o.counts.invited === null ? null : Math.max(0, o.counts.notJoined - o.counts.invited - o.counts.noEmail)
@@ -335,8 +336,19 @@ export function weeklyFrom(start: string, count: number): string[] {
   return Array.from({ length: Math.min(count, MAX_COPIES) }, (_, i) => new Date(Date.UTC(y, m - 1, d + 7 * i)).toISOString().slice(0, 10))
 }
 
-/** Where an event opens: a competition inside its club, anything else by its code (`clubEventHref`'s rule); a club event opens in place (null). */
+/**
+ * Where an event opens from the Clubhouse — **never the members app** (Ross,
+ * 17 Nov 2026: all the Clubhouse's admin stays in the Clubhouse): a
+ * competition on the Clubhouse's own page for it, a club event in place
+ * (null), and anything else — a trip or event the club runs on its own pages
+ * — by its code, in a tab of its own (`opensOutside`).
+ */
 export function eventHref(e: Pick<SeasonEvent, 'code' | 'competition' | 'kind'>, slug: string): string | null {
   if (e.kind === 'club') return null
-  return e.competition ? `/club/${slug}/comp/${e.code}` : `/${e.code}`
+  return e.competition ? `/clubhouse/${slug}/events/${e.code}` : `/${e.code}`
+}
+
+/** An event that is neither a competition nor the club's own: it lives on its own pages, opened in a new tab so the Clubhouse stays. */
+export function opensOutside(e: Pick<SeasonEvent, 'competition' | 'kind'>): boolean {
+  return e.kind !== 'club' && !e.competition
 }
