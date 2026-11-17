@@ -29,6 +29,9 @@ export type DirectoryCourse = {
    */
   hole_count?: number
   rated_tees?: number
+  /** Where it is (migration 026) — read with the list's `*`; the tee sheet's sunrise and sunset (lib/sun.ts). */
+  latitude?: number | null
+  longitude?: number | null
 }
 
 export const MAX_COURSE_NAME = 80

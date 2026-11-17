@@ -5,6 +5,7 @@
 import { ACCOUNT_WORDS } from '@/lib/account'
 import { accountToken, askClub, askServer, readAccount, type ClubSummary } from '@/lib/accountClient'
 import { clubMay } from '@/lib/clubMay'
+import type { CompForm } from '@/lib/clubComp'
 
 /** The club this device last opened the Clubhouse at — a convenience, never authorising. */
 const LAST_KEY = 'gd.clubhouse.v1'
@@ -50,4 +51,33 @@ export async function copyCompetition(clubId: string, code: string, dates: strin
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   const b = r.body as { made?: { code: string; date: string }[]; refused?: { date: string; why: string }[] }
   return { ok: true, made: b.made ?? [], refused: b.refused ?? [] }
+}
+
+/** Stage c1: one ask of /api/club/competition from the Clubhouse. Never throws. */
+async function askCompetition(body: Record<string, unknown>): Promise<{ status: number; body: Record<string, unknown> }> {
+  const token = await accountToken()
+  if (!token) return { status: 0, body: { error: 'Sign in to your Green Dot account first.' } }
+  const r = await askServer(token, body, '/api/club/competition')
+  return r ?? { status: 0, body: { error: ACCOUNT_WORDS.noReach } }
+}
+const errorOf = (b: Record<string, unknown>) => (typeof b.error === 'string' ? b.error : ACCOUNT_WORDS.noReach)
+
+/** Stage c1, M10: New competition from the Clubhouse — the office's. */
+export async function makeClubhouseCompetition(clubId: string, form: CompForm): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const r = await askCompetition({ clubId, form, from: 'clubhouse' })
+  return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
+}
+
+/** Stage c1, M11: a competition as its form, for the Clubhouse's panel. */
+export async function readCompetitionForm(clubId: string, code: string): Promise<{ ok: true; form: CompForm; booked: number; started: boolean; certified: boolean } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'read', clubId, code })
+  if (r.status !== 200) return { ok: false, error: errorOf(r.body) }
+  return { ok: true, form: r.body.form as CompForm, booked: Number(r.body.booked) || 0, started: !!r.body.started, certified: !!r.body.certified }
+}
+
+/** Stage c1, M11: a competition changed — or refused, each booking that could not be kept named with why. */
+export async function changeCompetition(clubId: string, code: string, form: CompForm): Promise<{ ok: true; moved: number } | { ok: false; error: string; problems?: { name: string; why: string }[] }> {
+  const r = await askCompetition({ action: 'change', clubId, code, form })
+  if (r.status === 200) return { ok: true, moved: Number(r.body.moved) || 0 }
+  return { ok: false, error: errorOf(r.body), ...(Array.isArray(r.body.problems) ? { problems: r.body.problems as { name: string; why: string }[] } : {}) }
 }

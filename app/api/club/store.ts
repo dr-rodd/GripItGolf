@@ -11,6 +11,7 @@ import { compPhase, type CompPhase } from '@/lib/compPhase'
 import { teeInstant } from '@/lib/clubComp'
 import { opensAt, parseTeeRules, sheetCapacity, teeClocks } from '@/lib/teeSheet'
 import { deleteNote, readClubHidden, readMemberHiddenOf, readNotes, saveNote, writeClubHidden } from './notesStore'
+import { deletePreset, readPresets, savePreset } from './presetsStore'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
@@ -645,6 +646,9 @@ export function clubStore(db: Db): ClubStore {
     clubHidden: clubId => readClubHidden(db, clubId),
     setClubHidden: (clubId, types) => writeClubHidden(db, clubId, types),
     memberHidden: userId => readMemberHiddenOf(db, userId),
+    presets: clubId => readPresets(db, clubId),
+    savePreset: (clubId, p, position) => savePreset(db, clubId, p, position),
+    deletePreset: (clubId, id) => deletePreset(db, clubId, id),
     categories: clubId => readCategories(db, clubId),
     async categoryCounts(clubId) {
       const { data, error } = await db.from('club_members').select('category_id').eq('club_id', clubId).is('removed_at', null).not('category_id', 'is', null)

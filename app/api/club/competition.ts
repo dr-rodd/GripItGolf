@@ -12,7 +12,10 @@
 // handicap the account's (D179). Handed its store, so `test:clubs` runs it.
 
 import { isAccount, type AuthUser } from '@/lib/account'
-import { compBoard, compFirstTee, compFormFrom, compFormIssue, compPermissions, compTeeRules, readCompForm, type CompForm } from '@/lib/clubComp'
+import { compBoard, compFirstTee, compFormFrom, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, type CompForm, type SheetBooking } from '@/lib/clubComp'
+import { entryRefusal, readAgeDate, refusalWords } from '@/lib/clubMembership'
+import type { TeeRules } from '@/lib/teeSheet'
+import { STAFF_NAME } from '@/lib/clubhouse'
 import { MAX_COPIES } from '@/lib/clubhouse'
 import { irishToday } from '@/lib/clubs'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
@@ -22,6 +25,31 @@ import { unheldPin } from '@/lib/pinHash'
 import { entryRulesIssue, type Category, type EntryRules } from '@/lib/clubMembership'
 import { runCreate, type CreateStore } from '../trip/create/create'
 import type { ClubRecord, MemberRecord } from './club'
+
+/**
+ * Who may make or change a club's competitions from where (Ross, 17 Nov
+ * 2026): in the members app its Officers (D219); in the Clubhouse its
+ * Clubhouse holders and Green Dot staff (`keep_calendar` — Clubhouse is its
+ * own level of admin). The club, and the name its log carries.
+ */
+async function competitionAsker(store: CompetitionStore, userId: string, clubId: unknown, from: 'app' | 'clubhouse'):
+  Promise<{ ok: true; club: ClubRecord; byName: string; staff: boolean } | { ok: false; error: string }> {
+  if (from === 'app') {
+    const mine = (await store.clubsOf(userId)).find(x => x.club.id === clubId)
+    if (!mine || !mine.club.verifiedAt || !clubMay('run_events', { row: credentialsOf(mine.row) })) return { ok: false, error: 'Only a verified club’s Officers make its competitions.' }
+    return { ok: true, club: mine.club, byName: mine.row.name, staff: false }
+  }
+  if (typeof clubId !== 'string' || !store.club) return { ok: false, error: 'Only someone with Clubhouse makes the club’s competitions here.' }
+  const [club, row, staff] = await Promise.all([
+    store.club(clubId),
+    store.rowOf ? store.rowOf(clubId, userId).catch(() => null) : Promise.resolve(null),
+    store.isStaff ? store.isStaff(userId).catch(() => false) : Promise.resolve(false),
+  ])
+  if (!club || !club.verifiedAt || !clubMay('keep_calendar', { row: row ? credentialsOf(row) : null, staff })) {
+    return { ok: false, error: 'Only someone with Clubhouse makes the club’s competitions here.' }
+  }
+  return { ok: true, club, byName: row ? row.name : STAFF_NAME, staff: !row && staff }
+}
 
 export interface CompetitionStore {
   userFromToken(token: string): Promise<AuthUser | null>
@@ -47,8 +75,58 @@ export interface CompetitionStore {
   categories?(clubId: string): Promise<Category[]>
   /** Stage (m): a competition's entry rules into trip_private (094) — throws when the column is missing. */
   setEntryRules?(tripId: string, rules: EntryRules): Promise<void>
+  /** Stage c2 (095): the calendar file's Ref on a competition it made. */
+  setImportRef?(tripId: string, ref: string): Promise<void>
   /** The club's activity log (092), fail-soft. */
   logActivity?(entries: import('./club').ActivityEntry[]): Promise<void>
+
+  // Stage c1 — the Clubhouse makes and changes competitions (`keep_calendar`).
+  /** A club by its id, for staff and Clubhouse holders. */
+  club?(clubId: string): Promise<ClubRecord | null>
+  /** This account's row at the club, linked and not taken off. */
+  rowOf?(clubId: string, userId: string): Promise<MemberRecord | null>
+  isStaff?(userId: string): Promise<boolean>
+  /** A competition as it stands, for changing it: its rows, sheet, entry rules, bookings, and whether a card has started or it is certified. */
+  compNow?(code: string): Promise<CompNow | null>
+  /** The list rows of the members booked, for their entry under new rules. */
+  rowsByIds?(clubId: string, ids: string[]): Promise<MemberRecord[]>
+  /** The club's age date ('MM-DD'). */
+  ageDate?(clubId: string): Promise<string>
+  /** List rows an Officer booked anyway onto this competition (D231's `booking.override` lines). */
+  overrides?(clubId: string, code: string): Promise<Set<string>>
+  /** A change written: the bookings moved, then the round, its item, the event and its entry rules. */
+  applyChange?(c: CompNow, change: CompChange): Promise<void>
+}
+
+/** A competition as it stands, read for a change (stage c1, M11). */
+export interface CompNow {
+  tripId: string
+  roundId: string
+  itemId: string | null
+  clubId: string
+  code: string
+  name: string
+  date: string
+  courseId: string
+  rules: TeeRules
+  leaderboards: unknown[]
+  entry: unknown
+  membersOnly: boolean
+  started: boolean
+  certified: boolean
+  bookings: { playerId: string; rowId: string | null; name: string; slot: number }[]
+}
+
+/** What a change writes. */
+export interface CompChange {
+  moves: { playerId: string; slot: number }[]
+  name: string
+  date: string
+  courseId: string
+  teeSheet: TeeRules
+  firstTee: string
+  leaderboards: unknown[]
+  entry: CompForm['entry']
 }
 
 export type CompetitionOutcome =
@@ -64,9 +142,13 @@ export class EntryNotReady extends Error {
 const ENTRY_LATER = 'Who may enter isn’t set up yet — open it to everybody, or try again later.'
 
 /** One competition made: the event through the create route's own checks, then its golf item and round — or why not. */
-async function makeOne(
+export async function makeOne(
   store: CompetitionStore, token: string, clubId: string, form: CompForm, now: Date,
-): Promise<{ ok: true; code: string; doorCookie: string | null } | { ok: false; status: 400 | 503; error: string }> {
+  /** Stage c1: made from the Clubhouse, the club already checked (`competitionAsker`). */
+  trusted?: ClubRecord,
+  /** Stage c2: a calendar file's Ref, kept on the event. */
+  ref?: string | null,
+): Promise<{ ok: true; code: string; tripId: string; doorCookie: string | null } | { ok: false; status: 400 | 503; error: string }> {
   const roundId = store.newId()
   let made: { tripId: string; code: string; doorCookie: string | null } | null = null
   // A code another event holds is tried again, as the create forms do.
@@ -89,7 +171,7 @@ async function makeOne(
     const out = await runCreate({
       token, row, adminPin: null,
       publicPin: form.watch === 'members' ? unheldPin() : null,
-      clubId,
+      ...(trusted ? { trustedClub: { id: trusted.id, name: trusted.name } } : { clubId }),
     }, store.create, now)
     if (out.status === 409) continue
     if (out.status !== 200) return { ok: false, status: out.status === 400 ? 400 : 503, error: out.body.error?.message ?? 'Could not make the competition — try again.' }
@@ -119,35 +201,41 @@ async function makeOne(
       if (!store.setEntryRules) throw new EntryNotReady()
       await store.setEntryRules(made.tripId, form.entry)
     }
+    if (ref && store.setImportRef) await store.setImportRef(made.tripId, ref)
   } catch (e) {
     console.error('competition round failed:', e)
     await store.deleteTrip(made.tripId).catch(() => undefined)
     if (form.entry && (e as Error)?.name === 'EntryNotReady') return { ok: false, status: 503, error: ENTRY_LATER }
     return { ok: false, status: 503, error: 'Could not make the competition — try again.' }
   }
-  return { ok: true, code: made.code, doorCookie: made.doorCookie }
+  return { ok: true, code: made.code, tripId: made.tripId, doorCookie: made.doorCookie }
 }
 
 export async function runNewCompetition(
-  input: { token: string | null; clubId: unknown; form: unknown },
+  input: { token: string | null; clubId: unknown; form: unknown; from?: 'app' | 'clubhouse' },
   store: CompetitionStore,
   now: Date,
 ): Promise<CompetitionOutcome> {
   if (!input.token) return fail(401, 'Sign in first.')
   const user = await store.userFromToken(input.token)
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
-  const mine = (await store.clubsOf(user.id)).find(x => x.club.id === input.clubId)
-  if (!mine || !mine.club.verifiedAt || !clubMay('run_events', { row: credentialsOf(mine.row) })) {
-    return fail(403, 'Only a verified club’s Officers make its competitions.')
-  }
+  const from = input.from ?? 'app'
+  const who = await competitionAsker(store, user.id, input.clubId, from)
+  if (!who.ok) return fail(403, who.error)
   const form = readCompForm(input.form)
   if (!form) return fail(400, 'Fill in the competition.')
-  const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, mine.club.id, form)
+  const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, who.club.id, form)
   if (issue) return fail(400, issue)
 
-  const out = await makeOne(store, input.token, mine.club.id, form, now)
+  const out = await makeOne(store, input.token, who.club.id, form, now, from === 'clubhouse' ? who.club : undefined)
   if (!out.ok) return fail(out.status, out.error)
-  return { status: 200, body: { ok: true, code: out.code, slug: mine.club.slug }, doorCookie: out.doorCookie }
+  if (from === 'clubhouse' && store.logActivity) {
+    await store.logActivity([{
+      clubId: who.club.id, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.add',
+      memberId: null, memberName: null, changes: { [out.code]: [null, `${form.name} · ${form.date}`] }, batchId: null,
+    }]).catch(e => console.error('club activity not logged:', e))
+  }
+  return { status: 200, body: { ok: true, code: out.code, slug: who.club.slug }, doorCookie: out.doorCookie }
 }
 
 /** Why a form's entry rules cannot be kept at this club — a membership not the club's — or null. */
@@ -180,10 +268,10 @@ export async function runCopyCompetition(
   if (!input.token) return no(401, 'Sign in first.')
   const user = await store.userFromToken(input.token)
   if (!user || !isAccount(user)) return no(403, 'Sign in to your Green Dot account first.')
-  const mine = (await store.clubsOf(user.id)).find(x => x.club.id === input.clubId)
-  if (!mine || !mine.club.verifiedAt || !clubMay('run_events', { row: credentialsOf(mine.row) })) {
-    return no(403, 'Only a verified club’s Officers make its competitions.')
-  }
+  // Copy and Repeat weekly live in the Clubhouse: its holders' (Ross, 17 Nov 2026).
+  const who = await competitionAsker(store, user.id, input.clubId, 'clubhouse')
+  if (!who.ok) return no(403, who.error)
+  const mine = { club: who.club, row: { name: who.byName } }
   const dates = [...new Set((Array.isArray(input.dates) ? input.dates : []).filter((d): d is string => typeof d === 'string'))]
   if (dates.length === 0 || dates.length > MAX_COPIES) return no(400, `Choose between 1 and ${MAX_COPIES} dates.`)
   const source = store.compSource && typeof input.code === 'string' ? await store.compSource(input.code.trim().toUpperCase()) : null
@@ -195,15 +283,121 @@ export async function runCopyCompetition(
     if (!form) return no(400, 'This competition’s tee sheet could not be read — make the copy from New competition.')
     const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, mine.club.id, form)
     if (issue) { refused.push({ date, why: issue }); continue }
-    const out = await makeOne(store, input.token, mine.club.id, form, now)
+    const out = await makeOne(store, input.token, mine.club.id, form, now, who.club)
     if (out.ok) made.push({ code: out.code, date })
     else refused.push({ date, why: out.error })
   }
   if (made.length && store.logActivity) {
     await store.logActivity([{
-      clubId: mine.club.id, byUser: user.id, byName: mine.row.name, byStaff: false, action: 'competition.copy',
+      clubId: mine.club.id, byUser: user.id, byName: mine.row.name, byStaff: who.staff, action: 'competition.copy',
       memberId: null, memberName: null, changes: { from: [input.code, made.map(m => `${m.code} ${m.date}`).join(', ')] }, batchId: null,
     }]).catch(e => console.error('club activity not logged:', e))
   }
   return { status: 200, body: { ok: true, made, refused } }
 }
+
+// ─── Stage c1, M10–M11: a competition read and changed in the Clubhouse ───
+
+export type CompReadOutcome =
+  | { status: 200; body: { ok: true; form: CompForm; booked: number; started: boolean; certified: boolean } }
+  | { status: 400 | 401 | 403 | 404 | 503; body: { ok: false; error: string } }
+
+/** A competition as its form, for the Clubhouse's panel — with how many are booked and whether it can still be changed. */
+export async function runReadCompetition(
+  input: { token: string | null; clubId: unknown; code: unknown },
+  store: CompetitionStore,
+): Promise<CompReadOutcome> {
+  const no = (status: 400 | 401 | 403 | 404 | 503, error: string): CompReadOutcome => ({ status, body: { ok: false, error } })
+  if (!input.token) return no(401, 'Sign in first.')
+  const user = await store.userFromToken(input.token)
+  if (!user || !isAccount(user)) return no(403, 'Sign in to your Green Dot account first.')
+  const who = await competitionAsker(store, user.id, input.clubId, 'clubhouse')
+  if (!who.ok) return no(403, who.error)
+  const c = store.compNow && typeof input.code === 'string' ? await store.compNow(input.code.trim().toUpperCase()) : null
+  if (!c || c.clubId !== who.club.id) return no(404, 'No such competition at this club.')
+  const board = c.leaderboards.find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: unknown; handicapAllowance?: unknown } | undefined
+  const form = compFormFrom({ name: c.name, date: c.date, courseId: c.courseId, board: board ?? null, teeSheet: c.rules, membersOnly: c.membersOnly, entry: c.entry })
+  if (!form) return no(404, 'This competition’s tee sheet could not be read.')
+  return { status: 200, body: { ok: true, form, booked: c.bookings.length, started: c.started, certified: c.certified } }
+}
+
+export type CompChangeOutcome =
+  | { status: 200; body: { ok: true; moved: number } }
+  | { status: 400 | 401 | 403 | 404 | 409 | 503; body: { ok: false; error: string; problems?: { name: string; why: string }[] } }
+
+/**
+ * A competition changed in the Clubhouse (M10, M11): its name, day, course,
+ * format, allowance, who may enter, tee times and when booking opens. Every
+ * booking stays at its tee time and the member stays in if they may still
+ * enter — an Officer's Book anyway kept — or the change is refused, each
+ * member named with why (`planSheetChange`). Never once a card has started
+ * or the results are certified. Logged.
+ */
+export async function runChangeCompetition(
+  input: { token: string | null; clubId: unknown; code: unknown; form: unknown },
+  store: CompetitionStore,
+  now: Date,
+): Promise<CompChangeOutcome> {
+  const no = (status: 400 | 401 | 403 | 404 | 409 | 503, error: string, problems?: { name: string; why: string }[]): CompChangeOutcome =>
+    ({ status, body: { ok: false, error, ...(problems ? { problems } : {}) } })
+  if (!input.token) return no(401, 'Sign in first.')
+  const user = await store.userFromToken(input.token)
+  if (!user || !isAccount(user)) return no(403, 'Sign in to your Green Dot account first.')
+  const who = await competitionAsker(store, user.id, input.clubId, 'clubhouse')
+  if (!who.ok) return no(403, who.error)
+  if (!store.compNow || !store.applyChange) return no(503, 'Changing a competition isn’t set up yet — try again later.')
+  const c = typeof input.code === 'string' ? await store.compNow(input.code.trim().toUpperCase()) : null
+  if (!c || c.clubId !== who.club.id) return no(404, 'No such competition at this club.')
+  if (c.certified) return no(409, 'The results are certified — reopen them in the members app first.')
+  if (c.started) return no(409, 'A card has started — the competition is in play.')
+  const form = readCompForm(input.form)
+  if (!form) return no(400, 'Fill in the competition.')
+  // A competition's watching (who may open it) is set when it is made.
+  form.watch = c.membersOnly ? 'members' : 'guests'
+  const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, who.club.id, form)
+  if (issue) return no(400, issue)
+
+  const after = compTeeRules(form)
+  // Each booked member's entry under the new rules and day — unless an Officer booked them anyway (D231).
+  const rowIds = c.bookings.map(b => b.rowId).filter((x): x is string => !!x)
+  const [rows, categories, ageDate, anyway] = await Promise.all([
+    rowIds.length && store.rowsByIds ? store.rowsByIds(c.clubId, rowIds) : Promise.resolve([] as MemberRecord[]),
+    store.categories ? store.categories(c.clubId).catch(() => [] as Category[]) : Promise.resolve([] as Category[]),
+    store.ageDate ? store.ageDate(c.clubId).catch(() => '01-01') : Promise.resolve('01-01'),
+    store.overrides ? store.overrides(c.clubId, c.code).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+  ])
+  const rowOf = new Map(rows.map(r => [r.id, r]))
+  const bookings: SheetBooking[] = c.bookings.map(b => {
+    const r = b.rowId ? rowOf.get(b.rowId) : undefined
+    const f = r && !anyway.has(r.id) ? entryRefusal({
+      rules: form.entry ?? null, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+      category: categories.find(x => x.id === r.categoryId) ?? null, day: form.date, ageDate: readAgeDate(ageDate), categories,
+    }) : null
+    return { playerId: b.playerId, name: b.name, slot: b.slot, refused: f ? refusalWords(f, b.name) : null }
+  })
+  const plan = planSheetChange({ before: c.rules, after, bookings })
+  if (!plan.ok) {
+    return no(409, `The change would leave ${plan.problems.length === 1 ? 'a booking' : `${new Set(plan.problems.map(p => p.name)).size} bookings`} that can’t be kept — nothing was changed.`, plan.problems)
+  }
+  const boards = c.leaderboards.map(b => ((b as { clubCompetition?: boolean }).clubCompetition ? compBoard(c.roundId, form) : b))
+  try {
+    await store.applyChange(c, {
+      moves: plan.moves, name: form.name, date: form.date, courseId: form.courseId, teeSheet: after, firstTee: compFirstTee(form),
+      leaderboards: boards, entry: form.entry ?? null,
+    })
+  } catch (e) {
+    console.error('competition change failed:', e)
+    return no(503, (e as Error)?.name === 'EntryNotReady' ? ENTRY_LATER : 'Could not change the competition — try again.')
+  }
+  if (store.logActivity) {
+    const before = compFormFrom({ name: c.name, date: c.date, courseId: c.courseId, board: null, teeSheet: c.rules, membersOnly: c.membersOnly, entry: c.entry })
+    await store.logActivity([{
+      clubId: c.clubId, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.change',
+      memberId: null, memberName: null,
+      changes: { [c.code]: [`${c.name} · ${c.date} · ${before ? sheetLine(before) : ''}`, `${form.name} · ${form.date} · ${sheetLine(form)}`] }, batchId: null,
+    }]).catch(e => console.error('club activity not logged:', e))
+  }
+  return { status: 200, body: { ok: true, moved: plan.moves.length } }
+}
+
+const sheetLine = (f: Pick<CompForm, 'batches'>) => f.batches.map(b => `${b.start} ×${b.times} every ${b.interval} in ${b.perTime}s`).join(', ')

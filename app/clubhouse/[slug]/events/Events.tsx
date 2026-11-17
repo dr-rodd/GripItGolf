@@ -14,6 +14,11 @@ import { PHASE_WORDS } from '@/lib/compPhase'
 import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
 import EventPanel from './EventPanel'
+import CompPanel from './CompPanel'
+import PresetPanel from './PresetPanel'
+import { useCategories } from '../useCategories'
+import { askClub } from '@/lib/accountClient'
+import { planLine, type Preset } from '@/lib/clubPresets'
 
 type Shown = 'all' | 'members' | 'office'
 
@@ -36,8 +41,18 @@ export default function Events() {
   const [shown, setShown] = useState<Shown>('all')
   const [copying, setCopying] = useState<SeasonEvent | null>(null)
   const [editing, setEditing] = useState<ClubNote | 'new' | null>(null)
+  // Stage c1, M7, M10–M11: competitions made and changed here, from presets.
+  const [comp, setComp] = useState<string | 'new' | null>(null)
+  const [presetOpen, setPresetOpen] = useState<Preset | 'new' | null>(null)
+  const [presets, setPresets] = useState<Preset[] | null>(null)
+  const [presetsReady, setPresetsReady] = useState(false)
+  const { categories, ageDate } = useCategories(club.id)
   const office = may('keep_calendar')
-  const officer = may('run_events')
+  useEffect(() => {
+    let live = true
+    void askClub('presets', { clubId: club.id }).then(r => { if (live && r.ok) { setPresets(r.presets ?? []); setPresetsReady(!!r.presetsReady) } })
+    return () => { live = false }
+  }, [club.id])
 
   const rows = useMemo(() => seasonOfYear(events ?? [], year)
     .filter(e => type === 'all' || seasonType(e) === type)
@@ -56,14 +71,15 @@ export default function Events() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-0">
           <h1 className="t-h1 text-ink">Events</h1>
-          <p className="t-cap text-ink/65 mt-1">
-            {officer ? <>New competition and Manage are in <Link href={`/club/${face.slug}?tab=comps`} className="underline underline-offset-2 text-ink">the members app</Link>.</> : 'Competitions, and everything else on at the club.'}
-          </p>
+          <p className="t-cap text-ink/65 mt-1">Competitions, and everything else on at the club.</p>
         </div>
         {office && (
-          <button type="button" onClick={() => setEditing('new')} disabled={!notesReady}
-            title={notesReady ? undefined : 'The club’s calendar isn’t set up yet.'}
-            className={`${buttonClass('secondary', false)} ch-focus hidden md:inline-flex`}>New event</button>
+          <div className="hidden md:flex gap-3">
+            <button type="button" onClick={() => setEditing('new')} disabled={!notesReady}
+              title={notesReady ? undefined : 'The club’s calendar isn’t set up yet.'}
+              className={`${buttonClass('secondary', false)} ch-focus`}>New event</button>
+            <button type="button" onClick={() => setComp('new')} className={`${buttonClass('primary', false)} ch-focus`}>New competition</button>
+          </div>
         )}
       </div>
 
@@ -142,8 +158,11 @@ export default function Events() {
                         {c ? <Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill> : isOfficeOnly(e) ? <Pill>Office only</Pill> : null}
                       </td>
                       <td className="px-3 text-right whitespace-nowrap">
-                        {c && officer && (
-                          <button type="button" onClick={() => setCopying(e)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Copy</button>
+                        {c && office && (
+                          <>
+                            <button type="button" onClick={() => setComp(e.code)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Change</button>
+                            <button type="button" onClick={() => setCopying(e)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Copy</button>
+                          </>
                         )}
                       </td>
                     </tr>
@@ -173,10 +192,48 @@ export default function Events() {
               )
             })}
           </ul>
-          {(officer || office) && <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to add events, copy a competition or repeat it weekly.</p>}
+          {office && <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to add events, make, change or copy a competition, or keep the presets.</p>}
         </>
       )}
 
+      {office && presetsReady && presets && (
+        <section className="mt-10 hidden md:block">
+          <div className="flex items-end gap-3">
+            <div className="flex-1">
+              <h2 className="t-h2 text-ink">Presets</h2>
+              <p className="t-cap text-ink/65 mt-1">What a competition starts from — its format, who can enter, its tee times. Changing one changes no competition already made.</p>
+            </div>
+            <button type="button" onClick={() => setPresetOpen('new')} className={`${buttonClass('secondary', false)} ch-focus`}>New preset</button>
+          </div>
+          {presets.length === 0 ? (
+            <div className={`${cardClass()} p-6 mt-4 max-w-xl`}>
+              <p className="t-card text-ink">No presets yet</p>
+              <p className="text-ink/80 text-[15px] mt-2">Make one for each kind of competition the club runs — the Saturday men’s comp, the Wednesday semi-open — and New competition and a calendar file start from it.</p>
+            </div>
+          ) : (
+            <ul className={`${cardClass()} mt-4 divide-y divide-line overflow-hidden`}>
+              {presets.map(p => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => setPresetOpen(p)} className="ch-hover ch-focus w-full text-left flex items-start gap-4 px-4 py-3">
+                    <span className="font-mono text-[15px] text-ink w-20 flex-shrink-0 pt-0.5">{p.code}</span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-ink text-[15px] font-medium">{p.name}</span>
+                      {p.usedFor && <span className="block t-cap text-ink/65">{p.usedFor}</span>}
+                      <span className="block t-cap text-ink/65">{formatLine(p)} · {planLine(p.plan)}</span>
+                    </span>
+                    {p.isDefault && <Pill>Default</Pill>}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {comp && <CompPanel clubId={club.id} slug={face.slug} code={comp === 'new' ? null : comp} homeCourseId={club.homeCourseId ?? null}
+        cats={categories ?? []} ageDate={ageDate} presets={presets ?? []} onClose={() => setComp(null)} onDone={again} />}
+      {presetOpen && <PresetPanel clubId={club.id} preset={presetOpen === 'new' ? null : presetOpen} presets={presets ?? []} homeCourseId={club.homeCourseId ?? null}
+        cats={categories ?? []} ageDate={ageDate} onClose={() => setPresetOpen(null)} onSaved={setPresets} />}
       {copying && <CopyPanel clubId={club.id} slug={face.slug} event={copying} onClose={() => setCopying(null)} onMade={again} />}
       {editing && <EventPanel clubId={club.id} note={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={again} />}
     </>

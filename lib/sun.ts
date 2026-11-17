@@ -135,3 +135,14 @@ export function clockLess(at: string, minutes: number): string | null {
   if (a === null || !Number.isFinite(minutes) || a - minutes < 0) return null
   return clock(a - Math.round(minutes))
 }
+
+/** "Sunrise 7:42 am · Sunset 4:28 pm", and "(Greenwich)" where the course has no location. */
+export function sunWords(s: SunDay): string | null {
+  if (!s.sunrise && !s.sunset) return null
+  const say = (c: string) => {
+    const [h, m] = c.split(':').map(Number)
+    return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
+  }
+  const parts = [s.sunrise ? `Sunrise ${say(s.sunrise)}` : null, s.sunset ? `Sunset ${say(s.sunset)}` : null].filter(Boolean).join(' · ')
+  return s.located ? parts : `${parts} (worked out for Greenwich — the course has no location)`
+}

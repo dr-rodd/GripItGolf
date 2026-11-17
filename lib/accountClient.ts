@@ -576,6 +576,9 @@ export interface ClubAnswer {
   notesReady?: boolean
   hiddenTypes?: ClubEventType[]
   noteId?: string
+  /** Stage c1, M7: the club's event presets. */
+  presets?: import('./clubPresets').Preset[]
+  presetsReady?: boolean
 }
 
 /**

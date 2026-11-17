@@ -29,6 +29,8 @@ import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
 import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { noteAsSeason } from '@/lib/clubhouse'
+import { planLine, presetIssue, readPreset, type Preset } from '@/lib/clubPresets'
+import { entryRulesIssue } from '@/lib/clubMembership'
 import type { ActivityEntry, ClubOutcome, ClubRecord, ClubStore, ClubSummary, MemberRecord } from './club'
 
 /** A row as the grid's read returns it: the list row, when its code was last sent, and its own index. */
@@ -74,6 +76,10 @@ export interface ClubhouseStore {
   setClubHidden?(clubId: string, types: ClubEventType[]): Promise<void>
   /** The types a member has asked not to see — none before 095. */
   memberHidden?(userId: string): Promise<ClubEventType[]>
+  /** Stage c1 (095): the club's event presets — null before 095. */
+  presets?(clubId: string): Promise<Preset[] | null>
+  savePreset?(clubId: string, p: Omit<Preset, 'id'> & { id: string | null }, position: number): Promise<string | 'clash'>
+  deletePreset?(clubId: string, id: string): Promise<void>
 }
 
 type Store = ClubStore & ClubhouseStore
@@ -83,7 +89,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'presets', 'preset.save', 'preset.delete'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -182,6 +188,13 @@ export async function runClubhouse(
     ])
     return { status: 200, body: { ok: true, categories: list.map(c => ({ ...c, count: counts.get(c.id) ?? 0 })), ageDate: readAgeDate(club.ageDate) } }
   }
+  // Stage c1, M7: the presets are read by the office and by Officers starting
+  // a competition from one in the members app.
+  if (action === 'presets') {
+    if (!clubMay('keep_calendar', asker) && !clubMay('run_events', asker)) return fail(403, 'Only the club’s Officers and office see its presets.')
+    const list = store.presets ? await store.presets(club.id).catch(() => null) : null
+    return { status: 200, body: { ok: true, presets: list ?? [], presetsReady: list !== null } }
+  }
   if (!clubMay('open_clubhouse', asker)) return fail(403, 'You haven’t been given access to the Clubhouse.')
   const byName = mine?.name ?? STAFF_NAME
   const line = (act: string, target: MemberRecord | null, changes: Record<string, [unknown, unknown]>, batchId: string | null = null): ActivityEntry => ({
@@ -236,6 +249,8 @@ export async function runClubhouse(
     if (action === 'category.delete') {
       const counts = store.categoryCounts ? await store.categoryCounts(club.id) : new Map<string, number>()
       if ((counts.get(id!) ?? 0) > 0) return fail(409, 'People are in this membership — move them to another first.')
+      const using = (store.presets ? await store.presets(club.id).catch(() => null) : null)?.find(p => p.entry?.categories?.includes(id!))
+      if (using) return fail(409, `The preset ${using.name} enters this membership — change it first.`)
       await store.deleteCategory(club.id, id!)
       await logged([line('category.delete', null, { [before!.code]: [before!.name, null] })])
       return { status: 200, body: { ok: true, categories: list.filter(c => c.id !== id).map(c => ({ ...c, count: 0 })) } }
@@ -263,6 +278,35 @@ export async function runClubhouse(
       store.clubHidden ? store.clubHidden(club.id).catch(() => []) : Promise.resolve([]),
     ])
     return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(noteAsSeason)], notesReady: notes !== null, hiddenTypes: hidden } }
+  }
+
+  // Stage c1, M7: a preset kept or deleted — the office's.
+  if (action === 'preset.save' || action === 'preset.delete') {
+    if (!clubMay('keep_calendar', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s presets.')
+    const LATER = 'Presets aren’t set up yet — try again later.'
+    if (!store.presets || !store.savePreset || !store.deletePreset) return fail(503, LATER)
+    const list = await store.presets(club.id).catch(() => null)
+    if (list === null) return fail(503, LATER)
+    const id = str(input.id)
+    const before = id ? list.find(p => p.id === id) : undefined
+    if (id && !before) return fail(404, 'That preset isn’t the club’s.')
+    if (action === 'preset.delete') {
+      try { await store.deletePreset(club.id, id) } catch { return fail(503, LATER) }
+      await logged([line('preset.delete', null, { [before!.code]: [before!.name, null] })])
+      return { status: 200, body: { ok: true, presets: list.filter(p => p.id !== id) } }
+    }
+    const p = readPreset({ ...(input.preset && typeof input.preset === 'object' ? input.preset : {}), id: id || null })
+    const why = presetIssue(p, list.filter(x => x.id !== id))
+      ?? (p.entry ? entryRulesIssue(p.entry, store.categories ? (await store.categories(club.id)).map(c => c.id) : []) : null)
+    if (why) return fail(400, why)
+    let saved: string
+    try {
+      saved = await store.savePreset(club.id, p, before ? list.indexOf(before) : list.length)
+    } catch { return fail(503, LATER) }
+    if (saved === 'clash') return fail(409, 'Another preset already uses that name or code.')
+    const said = (x: Pick<Preset, 'name' | 'plan' | 'isDefault'>) => `${x.name} · ${planLine(x.plan)}${x.isDefault ? ' · default' : ''}`
+    await logged([line(before ? 'preset.update' : 'preset.add', null, { [p.code]: [before ? said(before) : null, said(p)] })])
+    return { status: 200, body: { ok: true, presets: await store.presets(club.id).catch(() => list) ?? list } }
   }
 
   // Stage c1, M1–M4: one of the club's own events made, changed or deleted,

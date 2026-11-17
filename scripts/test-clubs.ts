@@ -27,7 +27,8 @@ import type { ListQuery } from '../app/api/club/clubhouse'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
-import { runCopyCompetition } from '../app/api/club/competition'
+import { runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
+import { applyPreset, formFromPreset, planIssue, presetIssue, readPreset, resolvePlan, type TeePlan } from '../lib/clubPresets'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { inviteHash, linkDetails, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
@@ -36,7 +37,7 @@ import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
 import { barOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
-import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, readCompForm, withdrawIssue, type CompForm } from '../lib/clubComp'
+import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, withdrawIssue, type CompForm, type SheetBooking } from '../lib/clubComp'
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
 import type { CreateStore } from '../app/api/trip/create/create'
@@ -931,8 +932,8 @@ function wiringTests() {
   eq(compFormFrom({ ...stored, teeSheet: { batches: [] } }), null, '…and a sheet that does not read is never guessed at')
   eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
   const compsSrc = read('app/clubhouse/[slug]/events/Events.tsx')
-  ok(/may\('run_events'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/events/Events.tsx')), 'Copy is an Officer’s, as New competition is (D219)')
-  ok(/makeOne\(store, input\.token, mine\.club\.id, form, now\)/.test(read('app/api/club/competition.ts')), 'a copy is made exactly as New competition makes one')
+  ok(/may\('keep_calendar'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/events/Events.tsx')), 'Copy is the Clubhouse’s (Ross, 17 Nov 2026: Clubhouse is its own level)')
+  ok(/makeOne\(store, input\.token, mine\.club\.id, form, now, who\.club\)/.test(read('app/api/club/competition.ts')), 'a copy is made exactly as New competition makes one')
 
 
 
@@ -1818,13 +1819,18 @@ async function clubhouseTests() {
 }
 
 async function copyTests() {
-  section('Stage (k2): Copy to another date, Repeat weekly (/api/club/competition)')
+  section('Copy to another date, Repeat weekly — the Clubhouse’s (stage (k2); Ross, 17 Nov 2026)')
   const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
     teeSheet: compTeeRules({ batches: [{ start: '08:00', interval: 10, perTime: 4, times: 12 }], opens: { daysBefore: 7, time: '20:00' } }) }
   const copies: { date: string }[] = []
-  const compStore2 = (role: 'owner' | 'member', officer: boolean): CompetitionStore => ({
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null }
+  const rossRow = (officer: boolean, clubhouse: boolean): MemberRecord => ({ id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role: 'member', userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer, clubhouse })
+  const compStore2 = (officer: boolean, clubhouse: boolean, extra: Partial<CompetitionStore> = {}): CompetitionStore => ({
     async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },
-    async clubsOf() { return [{ club: { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null }, row: { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role, userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer, clubhouse: true } }] },
+    async clubsOf() { return [{ club: pints, row: rossRow(officer, clubhouse) }] },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf() { return rossRow(officer, clubhouse) },
+    async isStaff() { return false },
     create: {} as CreateStore,
     async insertItem() { return 'item' },
     async insertRound(r) { copies.push({ date: String(r.scheduled_date) }) },
@@ -1832,12 +1838,86 @@ async function copyTests() {
     newCode: () => `C${copies.length}XXXX`.slice(0, 6),
     newId: () => `id-${copies.length}`,
     async compSource(code) { return code === 'MEDAL1' ? { clubId: 'c1', ...stored } : null },
+    ...extra,
   })
-  const office = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-11-28'] }, compStore2('member', false), NOW)
-  eq(office.status, 403, 'Clubhouse without Officer copies nothing')
-  const past = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-01-01'] }, compStore2('member', true), NOW)
-  ok(past.status === 200 && past.body.ok && past.body.made.length === 0 && /from today/.test(past.body.refused[0]?.why ?? ''), 'a past date is refused by name')
-  eq((await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'NOPE01', dates: ['2026-11-28'] }, compStore2('member', true), NOW)).status, 404, 'a competition not of this club: not found')
+  const officerOnly = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-11-28'] }, compStore2(true, false), NOW)
+  eq(officerOnly.status, 403, 'an Officer without Clubhouse copies nothing here — Clubhouse is its own level (Ross, 17 Nov 2026)')
+  const past = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-01-01'] }, compStore2(false, true), NOW)
+  ok(past.status === 200 && past.body.ok && past.body.made.length === 0 && /from today/.test(past.body.refused[0]?.why ?? ''), 'Clubhouse copies; a past date is refused by name')
+  eq((await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'NOPE01', dates: ['2026-11-28'] }, compStore2(false, true), NOW)).status, 404, 'a competition not of this club: not found')
+
+  section('Stage c1, M7: presets (lib/clubPresets.ts)')
+  const plan: TeePlan = { batches: [{ start: { kind: 'sunrise' }, end: { kind: 'sunset', minus: 270 }, interval: 10, perTime: 4 }], opens: { daysBefore: 7, time: '20:00' } }
+  const r1 = resolvePlan(plan, { sunrise: '08:38', sunset: '16:08' })
+  eq(r1.ok && r1.batches, [{ start: '08:40', interval: 10, perTime: 4, times: 18 }], 'sunrise to 4h30 before sunset in midwinter: 08:40 to 11:30 at ten (sunset 16:08)')
+  const r2 = resolvePlan(plan, { sunrise: '08:38', sunset: '12:30' })
+  ok(!r2.ok && /no tee times between sunrise/.test(r2.why), 'a day with no time between them makes no sheet, and says why')
+  const split: TeePlan = { batches: [{ start: { kind: 'clock', at: '08:00' }, end: { kind: 'clock', at: '12:50' }, interval: 10, perTime: 3 }, { start: { kind: 'clock', at: '13:00' }, end: { kind: 'count', n: 8 }, interval: 15, perTime: 4 }], opens: null }
+  const r3 = resolvePlan(split, { sunrise: null, sunset: null })
+  eq(r3.ok && r3.batches.map(b => [b.start, b.times, b.perTime]), [['08:00', 30, 3], ['13:00', 8, 4]], 'threes at ten until one, then fours at fifteen — no sun needed')
+  ok(!!planIssue({ ...split, batches: [split.batches[0], { ...split.batches[1], start: { kind: 'sunrise' } }] }), 'only the first run can start at sunrise')
+  const p0 = readPreset({ name: 'Saturday men’s comp', scoring: 'stableford', allowance: 95, plan, entry: { genders: ['M'] } })
+  eq([p0.code, presetIssue(p0, [])], ['SMC', null], 'a preset’s code is made from its name; a whole preset passes')
+  ok(!!presetIssue(p0, [{ code: 'SMC', name: 'Other' }]), 'a code another preset uses is refused')
+  const made = formFromPreset(p0, { date: '2026-12-19', courseId: 'c1', sun: { sunrise: '08:38', sunset: '16:08' } })
+  ok(made.ok && made.form.entry?.genders?.[0] === 'M' && made.form.batches[0].start === '08:40' && made.form.opens?.daysBefore === 7,
+    'a competition from a preset: its entry rules, tee times for that day’s sun and booking opening copied in')
+  const laid = applyPreset({ name: 'Christmas Hamper', date: '', courseId: 'c1', scoring: 'strokes', allowance: 100, watch: 'members', batches: [{ start: '09:00', interval: 10, perTime: 4, times: 4 }], opens: null, entry: null }, p0, null)
+  ok(laid.form.name === 'Christmas Hamper' && laid.form.scoring === 'stableford' && laid.form.batches[0].start === '09:00' && laid.why === null,
+    'a preset laid on before the day is chosen keeps the name typed and waits for the day for its times')
+
+  section('Stage c1, M11: a tee sheet changed after the fact (planSheetChange)')
+  const was = compTeeRules({ batches: [{ start: '08:00', interval: 10, perTime: 4, times: 6 }], opens: null })
+  const bk = (name: string, slot: number, refused: string | null = null): SheetBooking => ({ playerId: `p-${name}`, name, slot, refused })
+  const later = compTeeRules({ batches: [{ start: '07:30', interval: 10, perTime: 4, times: 9 }], opens: null })
+  const kept = planSheetChange({ before: was, after: later, bookings: [bk('Ann', 0), bk('Bob', 2)] })
+  eq(kept.ok && kept.moves, [{ playerId: 'p-Ann', slot: 3 }, { playerId: 'p-Bob', slot: 5 }], 'three earlier times added: everybody keeps their clock, their slot number follows')
+  const gone = planSheetChange({ before: was, after: compTeeRules({ batches: [{ start: '08:00', interval: 15, perTime: 4, times: 6 }], opens: null }), bookings: [bk('Ann', 0), bk('Bob', 1)] })
+  ok(!gone.ok && gone.problems.length === 1 && gone.problems[0].name === 'Bob' && /8:10 am/.test(gone.problems[0].why), 'a time that has gone: refused, the member named')
+  const smaller = planSheetChange({ before: was, after: compTeeRules({ batches: [{ start: '08:00', interval: 10, perTime: 3, times: 6 }], opens: null }), bookings: ['A', 'B', 'C', 'D'].map(n => bk(n, 0)) })
+  ok(!smaller.ok && smaller.problems.length === 4 && /now takes 3, and 4 are booked/.test(smaller.problems[0].why), 'a group made smaller than its booking: refused, each named')
+  const out = planSheetChange({ before: was, after: was, bookings: [bk('Ann', 0, 'Ann is not in a ladies’ competition.')] })
+  ok(!out.ok && out.problems[0].why === 'Ann is not in a ladies’ competition.', 'a member who may no longer enter: refused with why')
+
+  section('Stage c1, M10–M11: competitions made and changed in the Clubhouse (/api/club/competition)')
+  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: {}, from: 'clubhouse' }, compStore2(true, false), NOW)).status, 403,
+    'New competition in the Clubhouse: refused to an Officer without Clubhouse')
+  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: {}, from: 'clubhouse' }, compStore2(false, true), NOW)).status, 400,
+    '…let through to Clubhouse, which then has to fill it in')
+  const now0: CompNow = {
+    tripId: 't1', roundId: 'r1', itemId: 'i1', clubId: 'c1', code: 'MEDAL1', name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', rules: was,
+    leaderboards: [compBoard('r1', { scoring: 'stableford', allowance: 95 })], entry: null, membersOnly: true, started: false, certified: false,
+    bookings: [{ playerId: 'p-ann', rowId: 'row-ann', name: 'Ann Byrne', slot: 1 }, { playerId: 'p-bob', rowId: 'row-bob', name: 'Bob Kenny', slot: 1 }],
+  }
+  const rowsOf: MemberRecord[] = [
+    { ...rossRow(false, false), id: 'row-ann', name: 'Ann Byrne', userId: 'ann', gender: 'F' },
+    { ...rossRow(false, false), id: 'row-bob', name: 'Bob Kenny', userId: 'bob', gender: 'M' },
+  ]
+  let applied: CompChange | null = null
+  const editStore = (over: Partial<CompNow> = {}, anyway: string[] = []) => compStore2(false, true, {
+    async compNow(code) { return code === 'MEDAL1' ? { ...now0, ...over } : null },
+    async rowsByIds() { return rowsOf },
+    async ageDate() { return '01-01' },
+    async overrides() { return new Set(anyway) },
+    async applyChange(_c, ch) { applied = ch },
+  })
+  const form0 = compFormFrom({ name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'stableford', handicapAllowance: 95 }, teeSheet: was, membersOnly: true })!
+  const earlier = { ...form0, batches: [{ start: '07:40', interval: 10, perTime: 4, times: 8 }] }
+  const ch1 = await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: earlier }, editStore(), NOW)
+  ok(ch1.status === 200 && JSON.stringify(applied!.moves) === JSON.stringify([{ playerId: 'p-ann', slot: 3 }, { playerId: 'p-bob', slot: 3 }]),
+    'two earlier times: the change is made and both bookings stay at 8:10')
+  applied = null
+  const ladies = { ...form0, entry: { genders: ['F' as const] } }
+  const ch2 = await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: ladies }, editStore(), NOW)
+  ok(ch2.status === 409 && !ch2.body.ok && ch2.body.problems?.length === 1 && ch2.body.problems[0].name === 'Bob Kenny' && applied === null,
+    'made ladies’ only with a man booked: refused, Bob named, nothing written')
+  eq((await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: ladies }, editStore({}, ['row-bob']), NOW)).status, 200,
+    '…but kept when an Officer booked him anyway (D231)')
+  eq((await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: earlier }, editStore({ started: true }), NOW)).status, 409, 'never once a card has started')
+  eq((await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: earlier }, compStore2(true, false, { async compNow() { return now0 } }), NOW)).status, 403,
+    'an Officer without Clubhouse changes nothing here')
+  const read1 = await runReadCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1' }, editStore())
+  ok(read1.status === 200 && read1.body.ok && read1.body.booked === 2 && read1.body.form.batches[0].times === 6, 'a competition read back into the panel, with how many are booked')
 }
 
 function membershipRuleTests() {

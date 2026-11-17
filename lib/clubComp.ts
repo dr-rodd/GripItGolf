@@ -253,3 +253,53 @@ export function withdrawIssue(o: {
   if (at !== null && o.now >= at) return 'That tee time has gone.'
   return null
 }
+
+// ─── Changing a tee sheet after the fact (Clubhouse stage c1, M11) ───
+
+/** A booking on the sheet as a change reads it: who, on which tee time, and why they may no longer enter (null: they may, or an Officer booked them anyway). */
+export interface SheetBooking {
+  playerId: string
+  name: string
+  slot: number
+  /** The refusal in words under the new rules, or null. */
+  refused: string | null
+}
+
+/**
+ * A changed tee sheet, checked against the bookings already on it (Ross,
+ * 17 Nov 2026): every booking stays at its tee time — the same clock, its
+ * slot number following — and the change is refused, each member named
+ * with why, if any cannot: their time has gone, the group there is now
+ * smaller than its booking, or they may no longer enter. Pure: what moves.
+ */
+export function planSheetChange(o: {
+  before: Pick<TeeRules, 'batches' | 'groupSize'>
+  after: Pick<TeeRules, 'batches' | 'groupSize'>
+  bookings: readonly SheetBooking[]
+}): { ok: true; moves: { playerId: string; slot: number }[] } | { ok: false; problems: { name: string; why: string }[] } {
+  const was = teeClocks(o.before)
+  const now = teeClocks(o.after)
+  const problems: { name: string; why: string }[] = []
+  const at = new Map<number, SheetBooking[]>()
+  const moves: { playerId: string; slot: number }[] = []
+  for (const b of o.bookings) {
+    const clock = was[b.slot]
+    const slot = clock ? now.indexOf(clock) : -1
+    if (slot < 0) { problems.push({ name: b.name, why: clock ? `their tee time, ${say(clock)}, is not on the new sheet.` : 'their tee time is not on the sheet.' }); continue }
+    if (b.refused) problems.push({ name: b.name, why: b.refused })
+    at.set(slot, [...(at.get(slot) ?? []), b])
+    if (slot !== b.slot) moves.push({ playerId: b.playerId, slot })
+  }
+  for (const [slot, list] of at) {
+    const room = slotGroupSize(o.after, slot)
+    if (list.length > room) {
+      for (const b of list) problems.push({ name: b.name, why: `the ${say(now[slot])} tee time now takes ${room}, and ${list.length} are booked on it.` })
+    }
+  }
+  return problems.length ? { ok: false, problems } : { ok: true, moves }
+}
+
+const say = (clock: string) => {
+  const [h, m] = clock.split(':').map(Number)
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, '0')} ${h < 12 ? 'am' : 'pm'}`
+}

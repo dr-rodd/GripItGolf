@@ -4,7 +4,11 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { EntryNotReady, runCopyCompetition, runNewCompetition, type CompetitionStore } from '../competition'
+import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
+import { parseTeeRules } from '@/lib/teeSheet'
+import { readAgeDate } from '@/lib/clubMembership'
+import { asRow, rowCols, withTicks, type RowRow } from '../rows'
+import { missing095 } from '../notesStore'
 import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
 
@@ -19,7 +23,7 @@ const NO_STORE = { 'Cache-Control': 'no-store' }
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
 
 export async function POST(req: NextRequest) {
-  const body = await req.json().catch(() => null) as { action?: unknown; clubId?: unknown; form?: unknown; code?: unknown; dates?: unknown } | null
+  const body = await req.json().catch(() => null) as { action?: unknown; clubId?: unknown; form?: unknown; code?: unknown; dates?: unknown; from?: unknown } | null
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
     const db = createAdminClient()
@@ -47,13 +51,47 @@ export async function POST(req: NextRequest) {
         const { error } = await db.from('trip_private').update({ entry_rules: rules }).eq('trip_id', tripId)
         if (error) throw isMissingColumn(error) ? new EntryNotReady() : error
       },
+      async setImportRef(tripId, ref) {
+        const { error } = await db.from('trip_private').update({ import_ref: ref }).eq('trip_id', tripId)
+        if (error && !missing095(error)) throw error
+      },
+      // Stage c1: the Clubhouse makes and changes competitions.
+      club: clubId => clubs.club(clubId),
+      rowOf: (clubId, userId) => clubs.rowOf ? clubs.rowOf(clubId, userId) : Promise.resolve(null),
+      isStaff: userId => clubs.isStaff ? clubs.isStaff(userId) : Promise.resolve(false),
+      compNow: code => readCompNow(db, code),
+      async rowsByIds(clubId, ids) {
+        if (!ids.length) return []
+        const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).in('id', ids))
+        if (error) throw error
+        return ((data ?? []) as unknown as RowRow[]).map(asRow)
+      },
+      async ageDate(clubId) {
+        const { data } = await db.from('clubs').select('age_date').eq('id', clubId).maybeSingle()
+        return readAgeDate((data as { age_date?: string | null } | null)?.age_date)
+      },
+      async overrides(clubId, code) {
+        const { data, error } = await db.from('club_activity').select('member_id, changes').eq('club_id', clubId).eq('action', 'booking.override').not('member_id', 'is', null)
+        if (error) return new Set<string>()
+        return new Set(((data ?? []) as { member_id: string; changes: Record<string, unknown> | null }[]).filter(r => r.changes && code in r.changes).map(r => r.member_id))
+      },
+      applyChange: (c, change) => applyChange(db, c, change),
     }
     // Stage (k2): Copy to another date, and Repeat weekly.
     if (body?.action === 'copy') {
       const copied = await runCopyCompetition({ token, clubId: body.clubId, code: body.code, dates: body.dates }, store, new Date())
       return NextResponse.json(copied.body, { status: copied.status, headers: NO_STORE })
     }
-    const out = await runNewCompetition({ token, clubId: body?.clubId, form: body?.form }, store, new Date())
+    // Stage c1, M10–M11: a competition read into the Clubhouse's panel, and changed there.
+    if (body?.action === 'read') {
+      const read = await runReadCompetition({ token, clubId: body.clubId, code: body.code }, store)
+      return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
+    }
+    if (body?.action === 'change') {
+      const changed = await runChangeCompetition({ token, clubId: body.clubId, code: body.code, form: body.form }, store, new Date())
+      return NextResponse.json(changed.body, { status: changed.status, headers: NO_STORE })
+    }
+    const out = await runNewCompetition({ token, clubId: body?.clubId, form: body?.form, from: body?.from === 'clubhouse' ? 'clubhouse' : 'app' }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
     if (out.status === 200 && out.doorCookie) {
       res.cookies.set(entryCookie(out.body.code), out.doorCookie, {
@@ -86,4 +124,72 @@ async function readCompSource(db: ReturnType<typeof createAdminClient>, code: st
     clubId, name: t.name, date: r.scheduled_date ?? t.start_date ?? '', courseId: r.course_id,
     board: board ?? null, teeSheet: r.tee_sheet, membersOnly: !!t.public_passcode_hash, entry,
   }
+}
+
+type Db = ReturnType<typeof createAdminClient>
+
+/** A competition as it stands, for a change (stage c1, M11): its rows, sheet, bookings, and whether a card has started or it is certified. */
+async function readCompNow(db: Db, code: string): Promise<CompNow | null> {
+  if (!/^[A-Z0-9]{4,12}$/.test(code)) return null
+  const { data: trip } = await db.from('trips').select('id, trip_code, name, leaderboards, competition, public_passcode_hash').eq('trip_code', code).maybeSingle()
+  const t = trip as { id: string; trip_code: string; name: string; leaderboards: unknown; competition: string | null; public_passcode_hash: string | null } | null
+  if (!t || t.competition !== 'club') return null
+  const [priv, entry, round] = await Promise.all([
+    db.from('trip_private').select('club_id').eq('trip_id', t.id).maybeSingle(),
+    readEntryRulesOf(db, t.id),
+    db.from('rounds').select('id, course_id, scheduled_date, tee_sheet, itinerary_item_id').eq('trip_id', t.id).order('round_number').limit(1).maybeSingle(),
+  ])
+  const clubId = (priv.data as { club_id?: string | null } | null)?.club_id
+  const r = round.data as { id: string; course_id: string; scheduled_date: string | null; tee_sheet: unknown; itinerary_item_id: string | null } | null
+  const rules = r ? parseTeeRules(r.tee_sheet) : null
+  if (!clubId || !r || !r.scheduled_date || !rules) return null
+  const [live, cert, seats] = await Promise.all([
+    db.from('live_rounds').select('round_id', { count: 'exact', head: true }).eq('round_id', r.id),
+    // Migration 091 — fail-soft: before it nothing is certified.
+    db.from('rounds').select('certified_at').eq('id', r.id).maybeSingle(),
+    db.from('tee_assignments').select('player_id, slot_index, players(name, club_member_id)').eq('round_id', r.id),
+  ])
+  if (seats.error) throw seats.error
+  type Seat = { player_id: string; slot_index: number; players: { name: string; club_member_id: string | null } | { name: string; club_member_id: string | null }[] | null }
+  return {
+    tripId: t.id, roundId: r.id, itemId: r.itinerary_item_id, clubId, code: t.trip_code, name: t.name, date: r.scheduled_date, courseId: r.course_id,
+    rules, leaderboards: Array.isArray(t.leaderboards) ? t.leaderboards : [], entry, membersOnly: !!t.public_passcode_hash,
+    started: (live.count ?? 0) > 0,
+    certified: !cert.error && !!(cert.data as { certified_at?: string | null } | null)?.certified_at,
+    bookings: ((seats.data ?? []) as unknown as Seat[]).map(a => {
+      const p = Array.isArray(a.players) ? a.players[0] : a.players
+      return { playerId: a.player_id, rowId: p?.club_member_id ?? null, name: p?.name ?? 'A player', slot: a.slot_index }
+    }),
+  }
+}
+
+/**
+ * A change written (stage c1, M11): who may enter first (the one write that
+ * can be refused before 094), then the bookings moved to their tee times'
+ * new numbers, then the round, its golf item and the event. A failure after
+ * the bookings moved puts them back.
+ */
+async function applyChange(db: Db, c: CompNow, ch: import('../competition').CompChange): Promise<void> {
+  const ent = await db.from('trip_private').update({ entry_rules: ch.entry }).eq('trip_id', c.tripId)
+  if (ent.error && !(isMissingColumn(ent.error) && !ch.entry)) throw isMissingColumn(ent.error) ? new EntryNotReady() : ent.error
+  const was = new Map(c.bookings.map(b => [b.playerId, b.slot]))
+  const done: string[] = []
+  try {
+    for (const m of ch.moves) {
+      const { error } = await db.from('tee_assignments').update({ slot_index: m.slot }).eq('round_id', c.roundId).eq('player_id', m.playerId)
+      if (error) throw error
+      done.push(m.playerId)
+    }
+    const rnd = await db.from('rounds').update({ tee_sheet: ch.teeSheet, scheduled_date: ch.date, course_id: ch.courseId }).eq('id', c.roundId)
+    if (rnd.error) throw rnd.error
+  } catch (e) {
+    for (const pid of done) await db.from('tee_assignments').update({ slot_index: was.get(pid) }).eq('round_id', c.roundId).eq('player_id', pid)
+    throw e
+  }
+  if (c.itemId) {
+    const item = await db.from('itinerary_items').update({ tee_time: ch.firstTee, course_id: ch.courseId }).eq('id', c.itemId)
+    if (item.error) throw item.error
+  }
+  const trip = await db.from('trips').update({ name: ch.name, start_date: ch.date, end_date: ch.date, leaderboards: ch.leaderboards }).eq('id', c.tripId)
+  if (trip.error) throw trip.error
 }

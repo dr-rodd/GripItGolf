@@ -5,14 +5,14 @@ import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
 import CompBatches from '@/app/components/CompBatches'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
-import { FIELD, FIELD_LABEL, Segmented, buttonClass, chipClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
 import { askClub, makeCompetition } from '@/lib/accountClient'
-import {
-  AGE_MAX, GENDER_COMP_WORDS, WEEKDAY_NAMES, ageDateLabel, entryLine, entryRulesIssue, playsOn, readEntryRules, weekdayOf,
-  type Category, type EntryRules, type Gender,
-} from '@/lib/clubMembership'
+import { entryRulesIssue, readEntryRules, type Category, type EntryRules } from '@/lib/clubMembership'
+import EntryRulesFields from '@/app/components/EntryRulesFields'
 import { compFormIssue, type CompForm } from '@/lib/clubComp'
 import { irishToday } from '@/lib/clubs'
+import { applyPreset, type Preset } from '@/lib/clubPresets'
+import { sunDay } from '@/lib/sun'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
 
 /**
@@ -41,12 +41,29 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
   // Stage (m): the club's memberships and its age date, for Who can enter.
   const [cats, setCats] = useState<Category[]>([])
   const [ageDate, setAgeDate] = useState('01-01')
+  // Stage c1, M7: the club's presets — a competition may start from one.
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetId, setPresetId] = useState('')
+  const [presetWhy, setPresetWhy] = useState<string | null>(null)
+  const [laid, setLaid] = useState('')
   useEffect(() => {
     let live = true
     void askClub('categories', { clubId }).then(r => { if (live && r.ok) { setCats(r.categories ?? []); setAgeDate(r.ageDate ?? '01-01') } })
+    void askClub('presets', { clubId }).then(r => {
+      if (!live || !r.ok) return
+      setPresets(r.presets ?? [])
+      setPresetId(id => id || (r.presets ?? []).find(p => p.isDefault)?.id || '')
+    })
     return () => { live = false }
   }, [clubId])
-  const entry: EntryRules = form.entry ?? {}
+  // The preset is laid on whenever the day or course changes, so its sunrise and sunset follow them.
+  const preset = presets.find(p => p.id === presetId) ?? null
+  const course = courses.find(c => c.id === form.courseId)
+  const presetKey = `${presetId}|${form.date}|${form.courseId}|${course ? 'c' : ''}`
+  if (preset && laid !== presetKey) {
+    const out = applyPreset(form, preset, form.date ? sunDay(form.date, course ? { lat: course.latitude ?? NaN, lng: course.longitude ?? NaN } : null) : null)
+    setLaid(presetKey); setForm(out.form); setPresetWhy(out.why)
+  }
   const setEntry = (e: EntryRules) => setForm(f => ({ ...f, entry: e }))
   const issue = compFormIssue(form, today) ?? entryRulesIssue(readEntryRules(form.entry), cats.map(c => c.id))
   const set = <K extends keyof CompForm>(k: K, v: CompForm[K]) => setForm(f => ({ ...f, [k]: v }))
@@ -62,6 +79,17 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
   return (
     <section className="mt-6 space-y-5" aria-busy={busy}>
       <h1 className="t-h1 text-ink">New competition</h1>
+      {presets.length > 0 && (
+        <div>
+          <label htmlFor="comp-preset" className={FIELD_LABEL}>Start from a preset</label>
+          <select id="comp-preset" className={FIELD} value={presetId} onChange={e => { setPresetId(e.target.value); setLaid('') }}>
+            <option value="">None — fill it in</option>
+            {presets.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+          {preset?.usedFor && <p className="t-cap text-ink/65 mt-2">{preset.usedFor}</p>}
+          {presetWhy && <p className="t-cap text-rust-deep mt-2" role="alert">{presetWhy}</p>}
+        </div>
+      )}
       <div>
         <label htmlFor="comp-name" className={FIELD_LABEL}>Name</label>
         <input id="comp-name" className={FIELD} value={form.name} maxLength={60} placeholder="e.g. November Medal"
@@ -99,56 +127,7 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
       </div>
 
       <h2 className="t-h2 text-ink pt-2">Who can enter</h2>
-      <div>
-        <p className={FIELD_LABEL}>Men’s or ladies’</p>
-        <div className="flex flex-wrap gap-2">
-          {(['M', 'F'] as Gender[]).map(g => {
-            const on = !!entry.genders?.includes(g)
-            return (
-              <button key={g} type="button" aria-pressed={on} className={chipClass(on)}
-                onClick={() => setEntry({ ...entry, genders: on ? (entry.genders ?? []).filter(x => x !== g) : [...(entry.genders ?? []), g] })}>
-                {GENDER_COMP_WORDS[g]}
-              </button>
-            )
-          })}
-        </div>
-        <p className="t-cap text-ink/65 mt-2">Neither, or both: open to everybody.</p>
-      </div>
-      {cats.length > 0 && (
-        <div>
-          <p className={FIELD_LABEL}>Memberships</p>
-          <div className="flex flex-wrap gap-2">
-            {cats.map(c => {
-              const on = !!entry.categories?.includes(c.id)
-              return (
-                <button key={c.id} type="button" aria-pressed={on} className={chipClass(on)}
-                  onClick={() => setEntry({ ...entry, categories: on ? (entry.categories ?? []).filter(x => x !== c.id) : [...(entry.categories ?? []), c.id] })}>
-                  {c.name}
-                </button>
-              )
-            })}
-          </div>
-          <p className="t-cap text-ink/65 mt-2">
-            {entry.categories?.length
-              ? 'Only these, whatever their playing days.'
-              : form.date
-                ? `None ticked: every membership that plays on a ${WEEKDAY_NAMES[weekdayOf(form.date)]}${cats.some(c => !playsOn(c, form.date)) ? ` — not ${cats.filter(c => !playsOn(c, form.date)).map(c => c.name).join(' or ')}` : ''}.`
-                : 'None ticked: every membership whose playing days include the day.'}
-          </p>
-        </div>
-      )}
-      <div>
-        <p className={FIELD_LABEL}>Ages</p>
-        <div className="grid grid-cols-[6rem_auto_6rem] items-center gap-2 w-fit">
-          <input aria-label="Aged from" className={FIELD} inputMode="numeric" placeholder="From" value={entry.minAge ?? ''}
-            onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, minAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
-          <span className="t-label text-ink/80">to</span>
-          <input aria-label="Aged up to" className={FIELD} inputMode="numeric" placeholder="To" value={entry.maxAge ?? ''}
-            onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, maxAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
-        </div>
-        <p className="t-cap text-ink/65 mt-2">Empty is any age. Ages count on {ageDateLabel(ageDate)}.</p>
-      </div>
-      <p className="t-label text-ink">Open to: {entryLine(readEntryRules(form.entry), cats) ?? 'everybody on the club’s list who plays here'}</p>
+      <EntryRulesFields entry={form.entry} onChange={setEntry} cats={cats} date={form.date} ageDate={ageDate} />
 
       <h2 className="t-h2 text-ink pt-2">Tee times</h2>
       <CompBatches batches={form.batches} onChange={b => set('batches', b)} />

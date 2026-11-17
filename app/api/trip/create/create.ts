@@ -74,7 +74,16 @@ const fail = (status: 400 | 401 | 403 | 409 | 503, message: string, code?: strin
   ({ status, body: { data: null, error: { message, ...(code ? { code } : {}) } } })
 
 export async function runCreate(
-  input: { token: string | null; row: unknown; adminPin?: unknown; publicPin?: unknown; clubId?: unknown },
+  input: {
+    token: string | null; row: unknown; adminPin?: unknown; publicPin?: unknown; clubId?: unknown
+    /**
+     * A club the server's own caller has already checked this account may
+     * make events for (the Clubhouse's `keep_calendar`, stage c1) — never
+     * from a request body. Absent, `clubId` is checked against the clubs
+     * this account is an Officer of.
+     */
+    trustedClub?: { id: string; name: string }
+  },
   store: CreateStore,
   now: Date,
 ): Promise<CreateOutcome> {
@@ -106,7 +115,10 @@ export async function runCreate(
   // beside the row, never a column. Club admins only (D138–D140) is an
   // organiser PIN nobody is given; a PIN typed in is one lent to helpers.
   let club: { id: string; name: string } | null = null
-  if (input.clubId !== undefined && input.clubId !== null) {
+  if (input.trustedClub) {
+    if (!store.setEventClub) return fail(400, 'Not a club this event can go under.')
+    club = input.trustedClub
+  } else if (input.clubId !== undefined && input.clubId !== null) {
     if (typeof input.clubId !== 'string' || !store.adminClubs || !store.setEventClub) return fail(400, 'Not a club this event can go under.')
     club = (await store.adminClubs(userId)).find(k => k.id === input.clubId) ?? null
     if (!club) return fail(403, 'Only a verified club’s Officers make its events.')

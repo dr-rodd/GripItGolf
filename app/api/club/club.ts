@@ -274,6 +274,9 @@ export type ClubBody = {
   notesReady?: boolean
   hiddenTypes?: import('@/lib/clubEvents').ClubEventType[]
   noteId?: string
+  /** Stage c1, M7: the club's event presets, and whether they can be kept yet (095). */
+  presets?: import('@/lib/clubPresets').Preset[]
+  presetsReady?: boolean
   /** Stage c1: the members home's club events — only those this member may see (`memberSees`). */
   notes?: import('@/lib/clubEvents').ClubNote[]
   /** Stage (m): the club's memberships with their head counts, and its age date ('MM-DD'). */
