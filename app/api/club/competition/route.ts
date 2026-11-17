@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
+import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
 import { parseTeeRules } from '@/lib/teeSheet'
 import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
@@ -109,7 +109,10 @@ export async function POST(req: NextRequest) {
       const changed = await runChangeCompetition({ token, clubId: body.clubId, code: body.code, form: body.form }, store, new Date())
       return NextResponse.json(changed.body, { status: changed.status, headers: NO_STORE })
     }
-    const out = await runNewCompetition({ token, clubId: body?.clubId, form: body?.form, from: body?.from === 'clubhouse' ? 'clubhouse' : 'app' }, store, new Date())
+    // A club match play (Ross, 17 Nov 2026), made in the Clubhouse.
+    const out = body?.action === 'matchplay.new'
+      ? await runNewMatchPlay({ token, clubId: body.clubId, form: body.form }, store, new Date())
+      : await runNewCompetition({ token, clubId: body?.clubId, form: body?.form, from: body?.from === 'clubhouse' ? 'clubhouse' : 'app' }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
     if (out.status === 200 && out.doorCookie) {
       res.cookies.set(entryCookie(out.body.code), out.doorCookie, {

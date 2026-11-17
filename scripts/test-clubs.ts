@@ -24,6 +24,7 @@ import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
+import { clubEventDates } from '../lib/clubs'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
@@ -47,6 +48,12 @@ import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, 
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
 import type { CreateStore } from '../app/api/trip/create/create'
+import { runNewMatchPlay } from '../app/api/club/competition'
+import {
+  matchPlayBoard, matchPlayFormIssue, matchPlayKeyDates, matchPlayLine, matchPlayPhase, matchPlayRules, matchPlaySeed,
+  readClubMatchPlay, readMatchPlayForm, type MatchPlayForm,
+} from '../lib/clubMatchPlay'
+import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
 import { cardScoreRows, nrGross, type CommitHole } from '../lib/cardCommit'
 import { runSign, signedOff, type CardHole, type NewSignature, type Signature, type SignPlayer, type SignStore } from '../app/api/card/sign'
@@ -1880,6 +1887,109 @@ async function clubhouseTests() {
   ok(staffEdit.status === 200 && s.list.get(ids[2])!.email === 'sean@x.ie', 'staff change a row at a club not theirs')
 }
 
+async function matchPlayTests() {
+  section('A club match play (Ross, 17 Nov 2026; D264–D271, lib/clubMatchPlay.ts)')
+  const today = '2026-11-15'
+  const form: MatchPlayForm = {
+    name: 'Captain’s Prize Matchplay', format: 'fourball', allowance: 90, watch: 'members', entry: null,
+    field: 'entries', closes: { date: '2027-03-31', time: '20:00' }, qualifier: null, maxField: 16,
+    draw: { when: 'auto', date: null, time: null, seeding: 'handicap' },
+    deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'],
+    venue: 'home', tie: 'extra', handicap: 'on_day',
+  }
+  eq(matchPlayFormIssue(form, NOW, today), null, 'a whole form passes: fourball, 16 pairs, four play-by dates')
+  ok(/each of the 4 rounds/.test(matchPlayFormIssue({ ...form, deadlines: form.deadlines.slice(1) }, NOW, today) ?? ''), 'a field of 16 needs four dates')
+  eq(matchPlayFormIssue({ ...form, maxField: null, deadlines: ['2027-07-31'] }, NOW, today), null, 'no limit (D264): the Final alone is enough')
+  ok(!!matchPlayFormIssue({ ...form, maxField: null, deadlines: [] }, NOW, today), '…but not no dates at all')
+  ok(/before the draw/.test(matchPlayFormIssue({ ...form, deadlines: ['2027-03-01', ...form.deadlines.slice(1)] }, NOW, today) ?? ''),
+    'a round due before entries close and the draw is refused')
+  ok(/cannot be due before the Quarter/.test(matchPlayFormIssue({ ...form, deadlines: ['2027-04-30', '2027-06-30', '2027-05-31', '2027-07-31'] }, NOW, today) ?? ''),
+    'deadlines never run backwards')
+  ok(!!matchPlayFormIssue({ ...form, closes: { date: '2026-11-01', time: '20:00' } }, NOW, today), 'entries closing in the past are refused')
+  ok(/before entries close/.test(matchPlayFormIssue({ ...form, draw: { when: 'date', date: '2027-03-30', time: '20:00', seeding: 'random' } }, NOW, today) ?? ''),
+    'a dated draw before entries close is refused (D265)')
+  eq(matchPlayFormIssue({ ...form, draw: { when: 'manual', date: null, time: null, seeding: 'random' } }, NOW, today), null, 'a draw by hand passes (D265)')
+  ok(!!matchPlayFormIssue({ ...form, allowance: 5 }, NOW, today), 'an allowance under 10% is refused')
+  const qual: MatchPlayForm = { ...form, field: 'qualifier', closes: null, qualifier: { code: 'MEDAL1', qualify: 16 }, draw: { when: 'auto', date: null, time: null, seeding: 'qualifier' } }
+  eq(matchPlayFormIssue(qual, NOW, today), null, 'a qualifier: the top 16 of a club competition, seeded by its finish')
+  ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 12 } }, NOW, today), '…12 qualifying is no bracket')
+  ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 32 } }, NOW, today), '…nor more than the biggest field')
+  eq(readMatchPlayForm({ name: '  A   B ', maxField: null })?.name, 'A B', 'answers read and tidied')
+  eq(readMatchPlayForm({ maxField: null })?.maxField, null, '…no limit reads as null')
+
+  eq(matchPlayBoard(form), { id: 'lb-matchplay', audience: 'team', competition: 'matchplay', teamSet: 'set-2', handicapAllowance: 90 },
+    'a fourball draw: pairs, on a sheet of their own, 90%')
+  eq(matchPlayBoard({ format: 'singles', allowance: 100 }), { id: 'lb-matchplay', audience: 'individual', competition: 'matchplay' }, 'singles at 100%: the plain draw')
+  eq(parseLeaderboards([matchPlayBoard(form)])[0].handicapAllowance, 90, 'a draw keeps its allowance when read back')
+  eq(parseLeaderboards([{ id: 'lb-matchplay', audience: 'individual', competition: 'matchplay' }])[0].handicapAllowance, undefined, '…and a draw stored before reads exactly as it did')
+
+  const seed = matchPlaySeed(form)
+  const setup = parseBracketSetup(seed)
+  ok(setup?.schedule === 'continuous' && setup.entry === 'self_join' && setup.deadlines?.length === 4, 'stored as the platform’s continuous knockout: members enter themselves, four deadlines')
+  eq(setup?.draw, { when: 'date', on: '2027-03-31', at: '20:00', seeding: 'handicap' }, '…the draw made when entries close, seeded by handicap — the draw job reads it as ever')
+  eq(parseBracketSetup(matchPlaySeed({ ...form, draw: { when: 'manual', date: null, time: null, seeding: 'random' } }))?.draw, { when: 'later' }, 'a draw by hand waits')
+  eq(parseBracketSetup(matchPlaySeed(qual))?.qualifying, { eventCode: 'MEDAL1', seeding: 'seeded' }, 'a qualifier rides in the knockout’s own qualifying key')
+  const back = readClubMatchPlay(seed)
+  ok(!!back && back.format === 'fourball' && back.maxField === 16 && back.closes?.time === '20:00' && back.drawOn?.date === '2027-03-31', 'read back whole')
+  eq(readClubMatchPlay({ format: 'match_play', schedule: 'continuous' }), null, 'a knockout that is not a club’s is not one')
+  eq(matchPlayKeyDates(back!), ['2027-03-31', '2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'], 'its calendar marks: entries closing and the draw, then each play-by date')
+
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, NOW), 'entries_open', 'before entries close: open')
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, new Date('2027-04-01T00:00:00Z')), 'entries_closed', 'after: closed, waiting for the draw')
+  eq(matchPlayPhase(back!, { drawn: true, won: false }, NOW), 'in_play', 'drawn: in play')
+  eq(matchPlayPhase(readClubMatchPlay(matchPlaySeed(qual))!, { drawn: false, won: false }, NOW), 'qualifier', 'a qualifier’s field waits for it')
+  eq(matchPlayLine(back!, 'entries_open'), `Entries close ${clubEventDates('2027-03-31', '2027-03-31')}, 8:00 pm`, 'the line says when entries close, Irish time')
+  const rules = matchPlayRules(back!, { allowance: 90 })
+  ok(rules.lines[0].value === 'Fourball match play · 90% handicap' && rules.lines.some(l => l.value === 'Your index on the day you play'),
+    'the rules as members read them, the handicap on the day (D269)')
+  eq(rules.deadlines.map(d => d.round), ['Round of 16', 'Quarter-Final', 'Semi-Final', 'Final'], '…each play-by date under its round')
+
+  section('Making a club match play (/api/club/competition matchplay.new)')
+  const rows: Record<string, unknown>[] = []
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null }
+  const rossRow = (clubhouse: boolean): MemberRecord => ({ id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role: 'member', userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer: true, clubhouse })
+  const logged: ActivityEntry[] = []
+  const store = (clubhouse: boolean, extra: Partial<CompetitionStore> = {}): CompetitionStore => ({
+    async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },
+    async clubsOf() { return [{ club: pints, row: rossRow(clubhouse) }] },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf() { return rossRow(clubhouse) },
+    async isStaff() { return false },
+    create: {
+      async userFromToken(t) { return t.slice(4) },
+      async isMember() { return true },
+      async insertTrip(row) { rows.push(row); return { id: 'trip-mp' } },
+      async writeMembership() {},
+      async writeLeadEmail() {},
+      async deleteTrip() { rows.pop() },
+      async adminClubs() { return [] },
+      async setEventClub() {},
+    },
+    async insertItem() { throw new Error('a match play has no golf item') },
+    async insertRound() { throw new Error('a match play has no round') },
+    async deleteTrip() {},
+    newCode: () => 'MATCH1',
+    newId: () => 'id',
+    async logActivity(e) { logged.push(...e) },
+    async compSource(code) { return code === 'MEDAL1' ? { clubId: 'c1', name: 'Spring Medal', date: '2027-04-10', courseId: 'k', board: null, teeSheet: null, membersOnly: true } : null },
+    ...extra,
+  })
+  eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form }, store(false), NOW)).status, 403, 'an Officer without Clubhouse makes none — it is the office’s')
+  const made = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form }, store(true), NOW)
+  ok(made.status === 200 && made.body.ok && made.body.code === 'MATCH1', 'Clubhouse makes one')
+  const row = rows[0]
+  ok(row.competition === 'club' && row.kind === 'tournament' && row.start_date === today && row.end_date === '2027-07-31',
+    '…a club competition from today to the Final’s play-by date, with no golf item or round')
+  ok(String(row.public_passcode_hash ?? '').startsWith('s1$'), '…members only (D164)')
+  ok((row.event_permissions as Record<string, unknown>).score_matches === false, '…a match is scored by its players and the Officers, not anybody with the code')
+  ok(logged.some(l => l.action === 'competition.add'), '…logged')
+  const badQual = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: { ...qual, qualifier: { code: 'OTHER1', qualify: 16 } } }, store(true), NOW)
+  ok(badQual.status === 400 && !badQual.body.ok && /club’s own/.test(badQual.body.error), 'a qualifier not the club’s own is refused')
+  const lateQual = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: { ...qual, deadlines: ['2027-04-05', ...qual.deadlines.slice(1)] } }, store(true), NOW)
+  ok(lateQual.status === 400 && !lateQual.body.ok && /before the first round/.test(lateQual.body.error), '…as is one played after the first round is due')
+  eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: qual }, store(true), NOW)).status, 200, 'the club’s own Spring Medal qualifies them')
+}
+
 async function copyTests() {
   section('Copy to another date, Repeat weekly — the Clubhouse’s (stage (k2); Ross, 17 Nov 2026)')
   const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
@@ -2422,6 +2532,7 @@ async function main() {
   membershipRuleTests()
   await membershipRouteTests()
   await copyTests()
+  await matchPlayTests()
   await routeTests()
   await eventTests()
   lookTests()

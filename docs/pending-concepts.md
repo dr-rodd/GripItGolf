@@ -11,8 +11,8 @@ delete it from here.
 *Ross, 17 Nov 2026: "make room for continuous matchplay in comps … Golfer of
 the Year is also a continuous event, but a separate feature in Clubhouse."
 Plan only — nothing below is built. Proposals are marked **P1–P14**; the
-questions that change what gets built are **Q1–Q6** at the foot. Becomes
-D264 onwards once answered.*
+questions that change what gets built are **Q1–Q6** at the foot. Answered the same
+day: D264–D271 at the foot. Stage 1 is being built.*
 
 ### What already exists, and is reused whole
 
@@ -228,25 +228,33 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
-### Questions for Ross
+### Ross's answers (17 Nov 2026) — D264–D271
 
-- **Q1. Where do next matches sit?** Proposed: a **Matches** segment in
-  Comps beside My entries, plus your next match on Home. The alternative is
-  a sixth footer tab, which crowds the bar (five today).
-- **Q2. Does a partner have to accept?** Proposed **no**: whoever enters
-  names them, they see "Entered with Ross" and can withdraw themselves
-  (the tee sheet's medium security). The alternative is a pending invite
-  they accept — safer, slower, and a pair can miss the close.
-- **Q3. Who confirms a result?** Proposed: **the other side confirms**,
-  Officers settle a dispute, 48 hours' silence agrees. Alternatives: no
-  confirmation (whoever finalises decides — today's knockout), or a marker
-  as in stroke competitions.
-- **Q4. Which handicap?** Proposed: **the index on the day the match is
-  played**. The alternative, frozen at the draw, is some clubs' rule.
-- **Q5. Golfer of the Year points** — by finishing position with a weight
-  per competition (proposed), or by Stableford totals over the year?
-- **Q6. A round's deadline passing** — informational, Officers decide
-  (proposed), or an automatic walkover / both out?
+- **D264 — no biggest field is an answer too.** "No limit" beside 8 · 16 ·
+  32 · 64. With no cap the deadlines are set **from the Final back** — the
+  Final, then "+ Add an earlier round" as many as the club likes — and the
+  draw lines them up as it already does (`drawDeadlines`): a round earlier
+  than the dates set has none.
+- **D265 — the draw**: when entries close (default), **on another date and
+  time**, or **by hand** — the Officers make it themselves, seeded or not,
+  on the existing draw builder, as an organiser does today. Automatic
+  draws are random or seeded by handicap index (or by qualifier finish).
+- **D266 (Q1)** — a **Matches** segment in Comps, and **your next match on
+  Home** first and foremost.
+- **D267 (Q2)** — **a partner does not accept**: named, they see "Entered
+  with X" and may withdraw themselves.
+- **D268 (Q3)** — **no confirmation by the other side**: whoever puts the
+  result in is shown a pop-up first ("This puts Ross through to the
+  Quarter-finals. Nobody else is asked — is it right?") and confirms it.
+  Officers can still change a result (the existing reopen).
+- **D269 (Q4)** — the handicap is **the index on the day the match is
+  played by default, changeable in the Clubhouse** per competition (or
+  frozen at the draw).
+- **D270 (Q5)** — Golfer of the Year is **points by position**, the table
+  chosen in the Clubhouse.
+- **D271 (Q6)** — a deadline passing is **informational**: the Officers
+  see overdue matches on Needs you and decide, **with filters** (by
+  competition, by round, by how overdue) because a club may have hundreds.
 
 ## Casual tee sheets at a club — what is still to come
 

@@ -6,6 +6,7 @@ import { ACCOUNT_WORDS } from '@/lib/account'
 import { accountToken, askClub, askServer, describeStoredSession, readAccount, type ClubSummary } from '@/lib/accountClient'
 import { clubMay } from '@/lib/clubMay'
 import type { CompForm } from '@/lib/clubComp'
+import type { MatchPlayForm } from '@/lib/clubMatchPlay'
 
 /** The club this device last opened the Clubhouse at — a convenience, never authorising. */
 const LAST_KEY = 'gd.clubhouse.v1'
@@ -65,6 +66,12 @@ const errorOf = (b: Record<string, unknown>) => (typeof b.error === 'string' ? b
 /** Stage c1, M10: New competition from the Clubhouse — the office's. */
 export async function makeClubhouseCompetition(clubId: string, form: CompForm): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   const r = await askCompetition({ clubId, form, from: 'clubhouse' })
+  return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
+}
+
+/** A club match play from the Clubhouse (Ross, 17 Nov 2026) — the office's. */
+export async function makeClubMatchPlay(clubId: string, form: MatchPlayForm): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'matchplay.new', clubId, form })
   return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
 }
 

@@ -23,6 +23,7 @@ import { NO_FORMATS } from '@/lib/formats'
 import { toItemRow } from '@/lib/itinerarySync'
 import { unheldPin } from '@/lib/pinHash'
 import { entryRulesIssue, type Category, type EntryRules } from '@/lib/clubMembership'
+import { matchPlayBoard, matchPlayDates, matchPlayFormIssue, matchPlayPermissions, matchPlaySeed, readMatchPlayForm } from '@/lib/clubMatchPlay'
 import { runCreate, type CreateStore } from '../trip/create/create'
 import type { ClubRecord, MemberRecord } from './club'
 
@@ -418,3 +419,84 @@ export async function changeOne(store: CompetitionStore, c: CompNow, form: CompF
 }
 
 const sheetLine = (f: Pick<CompForm, 'batches'>) => f.batches.map(b => `${b.start} ×${b.times} every ${b.interval} in ${b.perTime}s`).join(', ')
+
+// ─── A club match play (Ross, 17 Nov 2026; D264–D271) ──────────
+
+/**
+ * A club match play made in the Clubhouse (`keep_calendar`, stage 1 of
+ * the plan in docs/pending-concepts.md): the event through the create
+ * route's own checks — a continuous knockout, `trips.competition = 'club'`,
+ * Club admins only, members only unless guests may watch — with no golf
+ * item and no round: matches are played when the players arrange them,
+ * paced by the deadlines set here. A qualifier must be one of this club's
+ * own competitions, played before the first round is due. Logged.
+ */
+export async function runNewMatchPlay(
+  input: { token: string | null; clubId: unknown; form: unknown },
+  store: CompetitionStore,
+  now: Date,
+): Promise<CompetitionOutcome> {
+  if (!input.token) return fail(401, 'Sign in first.')
+  const user = await store.userFromToken(input.token)
+  if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
+  const who = await competitionAsker(store, user.id, input.clubId, 'clubhouse')
+  if (!who.ok) return fail(403, who.error)
+  const form = readMatchPlayForm(input.form)
+  if (!form) return fail(400, 'Fill in the competition.')
+  const today = irishToday(now)
+  const issue = matchPlayFormIssue(form, now, today) ?? await entryIssue(store, who.club.id, { entry: form.entry } as CompForm)
+  if (issue) return fail(400, issue)
+  if (form.field === 'qualifier' && form.qualifier) {
+    if (!store.compSource) return fail(503, 'Qualifiers aren’t set up yet — try again later.')
+    const q = await store.compSource(form.qualifier.code)
+    if (!q || q.clubId !== who.club.id) return fail(400, 'The qualifier must be one of the club’s own competitions.')
+    if (q.date > form.deadlines[0]) return fail(400, 'The qualifier must be played before the first round is due.')
+  }
+
+  const dates = matchPlayDates(form, today)
+  let made: { tripId: string; code: string; doorCookie: string | null } | null = null
+  for (let attempt = 0; attempt < 4 && !made; attempt++) {
+    const code = store.newCode()
+    const row = {
+      name: form.name,
+      slug: code.toLowerCase(),
+      trip_code: code,
+      status: 'upcoming',
+      start_date: dates.start,
+      end_date: dates.end,
+      kind: 'tournament',
+      formats: { ...NO_FORMATS, league: { ...NO_FORMATS.league }, matchplay: { ...NO_FORMATS.matchplay } },
+      leaderboards: [matchPlayBoard(form)],
+      bracket_setup: matchPlaySeed(form),
+      event_permissions: matchPlayPermissions(),
+      competition: 'club',
+    }
+    const out = await runCreate({
+      token: input.token, row, adminPin: null,
+      publicPin: form.watch === 'members' ? unheldPin() : null,
+      trustedClub: { id: who.club.id, name: who.club.name },
+    }, store.create, now)
+    if (out.status === 409) continue
+    if (out.status !== 200) return fail(out.status === 400 ? 400 : 503, out.body.error?.message ?? 'Could not make the competition — try again.')
+    made = { tripId: out.body.data.id, code, doorCookie: out.doorCookie }
+  }
+  if (!made) return fail(503, 'Could not make the competition — try again.')
+
+  if (form.entry) {
+    try {
+      if (!store.setEntryRules) throw new EntryNotReady()
+      await store.setEntryRules(made.tripId, form.entry)
+    } catch (e) {
+      console.error('match play entry rules failed:', e)
+      await store.deleteTrip(made.tripId).catch(() => undefined)
+      return fail(503, (e as Error)?.name === 'EntryNotReady' ? ENTRY_LATER : 'Could not make the competition — try again.')
+    }
+  }
+  if (store.logActivity) {
+    await store.logActivity([{
+      clubId: who.club.id, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.add',
+      memberId: null, memberName: null, changes: { [made.code]: [null, `${form.name} · match play · final by ${dates.end}`] }, batchId: null,
+    }]).catch(e => console.error('club activity not logged:', e))
+  }
+  return { status: 200, body: { ok: true, code: made.code, slug: who.club.slug }, doorCookie: made.doorCookie }
+}
