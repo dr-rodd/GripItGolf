@@ -3,7 +3,7 @@
 // app/club or app/home — the members app stays as lean as it was.
 
 import { ACCOUNT_WORDS } from '@/lib/account'
-import { accountToken, askClub, askServer, readAccount, type ClubSummary } from '@/lib/accountClient'
+import { accountToken, askClub, askServer, describeStoredSession, readAccount, type ClubSummary } from '@/lib/accountClient'
 import { clubMay } from '@/lib/clubMay'
 import type { CompForm } from '@/lib/clubComp'
 
@@ -19,16 +19,16 @@ export function rememberClubhouse(slug: string) {
 }
 
 export type Door =
-  | { kind: 'signedOut' }
+  | { kind: 'signedOut'; why: string }
   | { kind: 'lost'; error: string }
   | { kind: 'none' }
   | { kind: 'open'; clubs: ClubSummary[] }
 
 /** Who is at the door: signed out, a lost signal, no Clubhouse anywhere, or the verified clubs it opens at. */
 export async function knock(): Promise<Door> {
-  if (!(await readAccount())) return { kind: 'signedOut' }
+  if (!(await readAccount())) return { kind: 'signedOut', why: `this phone holds ${describeStoredSession()}` }
   const r = await askClub('mine')
-  if (!r.ok) return /sign in/i.test(r.error) ? { kind: 'signedOut' } : { kind: 'lost', error: r.error }
+  if (!r.ok) return /sign in/i.test(r.error) ? { kind: 'signedOut', why: `the server said “${r.error}” (this phone holds ${describeStoredSession()})` } : { kind: 'lost', error: r.error }
   const clubs = (r.clubs ?? []).filter(c => c.status === 'verified' && clubMay('open_clubhouse', { row: c.credentials }))
   return clubs.length ? { kind: 'open', clubs } : { kind: 'none' }
 }

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { accountLink } from '@/lib/account'
-import { askClub, readAccount, signOutAccount, type ClubSummary } from '@/lib/accountClient'
+import { askClub, describeStoredSession, readAccount, rememberWhyOut, signOutAccount, type ClubSummary } from '@/lib/accountClient'
 import { SECTIONS, clubhouseHref, sectionAt, type SectionKey } from '@/lib/clubhouse'
 import { IconCalendar, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers } from '@/app/components/icons'
 import { Pill, buttonClass } from '@/app/components/ui'
@@ -43,7 +43,7 @@ export default function ClubhouseShell({ face, children }: { face: ClubhouseFace
     void (async () => {
       const account = await readAccount()
       if (!live) return
-      if (!account) { window.location.replace(accountLink(window.location.pathname + window.location.search)); return }
+      if (!account) { rememberWhyOut('the Clubhouse', `this phone holds ${describeStoredSession()}`); window.location.replace(accountLink(window.location.pathname + window.location.search)); return }
       setEmail(account.email)
       const r = await askClub('clubhouse', { slug: face.slug })
       if (!live) return
@@ -51,7 +51,7 @@ export default function ClubhouseShell({ face, children }: { face: ClubhouseFace
         rememberClubhouse(face.slug)
         setState({ kind: 'in', club: r.club, clubs: (r.myClubs ?? []).map(c => ({ slug: c.slug, name: c.name })) })
       } else if (!r.ok && /access to the Clubhouse|sign in/i.test(r.error)) {
-        if (/sign in/i.test(r.error)) { window.location.replace(accountLink(window.location.pathname)); return }
+        if (/sign in/i.test(r.error)) { rememberWhyOut('the Clubhouse', `the server said “${r.error}” (this phone holds ${describeStoredSession()})`); window.location.replace(accountLink(window.location.pathname)); return }
         setState({ kind: 'none' })
       } else setState({ kind: 'lost' })
     })()

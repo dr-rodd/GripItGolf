@@ -12,7 +12,7 @@ import {
 } from '@/lib/account'
 import {
   accountStatus, checkUsername, confirmCode, deleteAccount, forgetPending, passwordOwed, readAccount, readPending,
-  saveUsername, savePassword, sendCode, sendForgotCode, signIn, signOutAccount, watchAccount,
+  saveUsername, savePassword, sendCode, sendForgotCode, signIn, signOutAccount, takeWhyOut, watchAccount,
   type Pending, type UsernameCheck,
 } from '@/lib/accountClient'
 
@@ -60,6 +60,8 @@ export default function AccountScreen() {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [renaming, setRenaming] = useState(false)
   const [emailTaken, setEmailTaken] = useState(false)
+  // Sent back here from the Clubhouse: says why, once (Ross, 17 Nov 2026).
+  const [sentBack, setSentBack] = useState<string | null>(null)
 
   // Where to go once signed in (`?next=`, D135 — the create wizard that sent
   // this phone here), and whether to open on Join. Read after mount: the
@@ -69,6 +71,7 @@ export default function AccountScreen() {
   useEffect(() => {
     const q = new URLSearchParams(window.location.search)
     setNext(safeNext(q.get('next')))
+    setSentBack(takeWhyOut())
     if (q.get('join') === '1') setView(v => (v.kind === 'loading' || v.kind === 'signIn' ? { kind: 'join' } : v))
   }, [])
   // Signed in just now (not already, on arrival): on to where it was sent
@@ -300,6 +303,7 @@ export default function AccountScreen() {
               Forgot password?
             </button>
             {errorLine}
+            {sentBack && <p className="t-cap text-ink/80 mt-2">You were sent back here from {sentBack}.</p>}
             <button type="submit" disabled={busy || !identifier.trim() || !password} className={`${buttonClass('primary')} mt-6`}>
               {busy ? 'Signing in…' : 'Sign in'}
             </button>

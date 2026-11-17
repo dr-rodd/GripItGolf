@@ -87,6 +87,43 @@ export async function readAccount(): Promise<{ email: string } | null> {
   }
 }
 
+const WHY_KEY = 'gd.whyOut.v1'
+
+/** What this phone holds as its sign-in right now, in a word — for saying why somebody was sent back to sign in. */
+export function describeStoredSession(): string {
+  try {
+    const keys = Object.keys(window.localStorage).filter(k => /^sb-.+-auth-token$/.test(k))
+    if (!keys.length) return 'nothing kept on this phone'
+    const u = (JSON.parse(window.localStorage.getItem(keys[0]) ?? 'null') as { user?: { is_anonymous?: boolean }; expires_at?: number } | null)
+    if (!u) return 'an empty entry kept'
+    const left = typeof u.expires_at === 'number' ? Math.round(u.expires_at - Date.now() / 1000) : null
+    return `${u.user?.is_anonymous ? 'an anonymous phone sign-in' : 'an account sign-in'}${left === null ? '' : `, ${left}s left`}`
+  } catch {
+    return 'could not read what is kept'
+  }
+}
+
+/**
+ * Somebody sent to sign in says why, shown once on the sign-in screen
+ * (Ross, 17 Nov 2026: signed in, saw the Clubhouse for a moment and was sent
+ * back — which of the two never said). Never a token or a name.
+ */
+export function rememberWhyOut(where: string, why: string) {
+  console.error('sent to sign in:', where, why)
+  try { window.sessionStorage.setItem(WHY_KEY, `${where}: ${why}`.slice(0, 200)) } catch { /* unavailable */ }
+}
+
+/** The reason somebody was last sent to sign in — once. */
+export function takeWhyOut(): string | null {
+  try {
+    const w = window.sessionStorage.getItem(WHY_KEY)
+    if (w) window.sessionStorage.removeItem(WHY_KEY)
+    return w
+  } catch {
+    return null
+  }
+}
+
 /** Told whenever the sign-in changes, on this tab or another. Returns the way to stop. */
 export function watchAccount(onChange: () => void): () => void {
   if (!inBrowser()) return () => {}

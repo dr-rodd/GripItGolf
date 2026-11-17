@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { accountLink } from '@/lib/account'
-import { askClub, type ClubSummary } from '@/lib/accountClient'
+import { askClub, rememberWhyOut, type ClubSummary } from '@/lib/accountClient'
 import { clubhouseHref } from '@/lib/clubhouse'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 import NoAccess from './NoAccess'
@@ -28,7 +28,7 @@ export default function Door() {
     void (async () => {
       const d = await knock()
       if (!live) return
-      if (d.kind === 'signedOut') { window.location.replace(accountLink('/clubhouse')); return }
+      if (d.kind === 'signedOut') { rememberWhyOut('the Clubhouse door', d.why); window.location.replace(accountLink('/clubhouse')); return }
       if (d.kind === 'lost') { setState('lost'); return }
       const asked = new URLSearchParams(window.location.search).has('find')
       if (d.kind === 'open' && !asked) { router.replace(clubhouseHref(doorClub(d.clubs, lastClubhouse()).slug)); return }
