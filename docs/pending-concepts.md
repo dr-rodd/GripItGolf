@@ -6,25 +6,247 @@ why it came up, what it would touch, and the questions to settle first.
 When one is built, move its decisions into the doc that owns that area and
 delete it from here.
 
-## Golfer of the Year for clubs
+## Club match play and Golfer of the Year — plan of 17 Nov 2026
 
-**Where it came from.** The November 2026 session on the tournament create
-flow (Ross, 8 Nov): a series covers a society's season or a club's Golfer
-of the Year, and a club product would want the second built for it.
+*Ross, 17 Nov 2026: "make room for continuous matchplay in comps … Golfer of
+the Year is also a continuous event, but a separate feature in Clubhouse."
+Plan only — nothing below is built. Proposals are marked **P1–P14**; the
+questions that change what gets built are **Q1–Q6** at the foot. Becomes
+D264 onwards once answered.*
 
-**What it is.** If Green Dot is ever a product for clubs, link the club's
-competitions for the year as a series, the organiser marking each
-competition eligible or ineligible, so a Golfer of the Year standing builds
-itself from the eligible ones.
+### What already exists, and is reused whole
 
-**What it builds on.** The series (`LeagueSetup.repeat`, ad hoc rounds, a
-round that does not count via `rounds.casual`) and Golf Ireland's cards
-filed to rounds by date and venue (`roundForCard` in
-`lib/golfIrelandCards.ts`).
+A club match play competition is **a knockout event under a club** — the
+two halves are both built, and this plan is mostly joining them:
 
-**Questions first.** How a club's competition list arrives (Golf Ireland,
-or entered by hand); whether eligibility is per competition or by rule (all
-medals, no opens); points by position or Stableford totals.
+- **The knockout** (story 2): `trips.bracket_setup` with
+  `format: 'match_play', schedule: 'continuous'` (`knockoutSeed`), the draw
+  (`lib/bracketDraw.ts` — `DrawPlan` with a go-live date and time, Irish,
+  random / by handicap / by order / pre-made, made once by `makeDueDraw` and
+  the nightly `runDueDraws`), round deadlines lined up **from the Final
+  back** (`drawDeadlines`), a qualifying event by code with seeding
+  (`Qualifying`, stored but never acted on), `matchplay_matches`, the match
+  page (arrange course, day and tees, contacts, walkover), the match card
+  (holes in order, NR, the 19th, Finalise, reopen), Live now, the bracket.
+- **The club competition** (stages d1–d4, c1–c2): `trips.competition =
+  'club'`, Club admins only (a PIN nobody is given), members only through
+  the door, every player their own Green Dot account with the account's
+  handicap index (D179), a player made from a list row the first time it is
+  needed (`players.club_member_id`), entry rules (`EntryRules`,
+  `entryRefusal`), the Clubhouse's Events and Calendar, Comps' rows and the
+  competition's own pages under `/club/[slug]/comp/[code]`.
+
+What is new: **creating one from the Clubhouse, entries with a closing
+date, partners, a qualifier taken from the schedule, matches inside the
+club area, and a result both sides agree.** Golfer of the Year is new
+entirely, and reads only what is already stored.
+
+### Part 1 — Club match play
+
+**P1. What it is.** A verified club's knockout over weeks: Singles,
+Fourball (better ball) or Foursomes (one ball a side). Stored as today's
+continuous knockout plus `trips.competition = 'club'`; the club's
+competition writer (`app/api/club/competition.ts`) makes it through
+`runCreate` as it makes a stroke competition — no itinerary, no rounds
+(`CreateKnockoutForm`'s lean shape), one matchplay board
+(`knockoutBoards`; a pairs board for Fourball and Foursomes, so
+`needsPairings` and the pairs draw hold). **No migration for the
+competition itself**: everything new rides in `bracket_setup` (P3) and
+`trip_private.entry_rules` (094).
+
+**P2. Made in the Clubhouse only** (`keep_calendar`, Ross: "created in
+clubhouse"). Events → **New competition** asks first *Stroke play (one
+day)* or *Match play (over weeks)*; match play opens its own side panel,
+`MatchPlayPanel` beside `CompPanel`. Change and Copy as for a stroke
+competition, with the same rule: nothing that would move a player once the
+draw is made. Officers in the members app see it and run it on the day
+(walkovers, results, reopening) but do not make one.
+
+**P3. The panel's questions**, in order — each answer at its default
+unless changed:
+
+| Question | Answers | Stored |
+|---|---|---|
+| Name | e.g. "Captain's Prize Matchplay" | `trips.trip_name` |
+| Format | Singles · Fourball · Foursomes | the board (`teamFormat`) |
+| Handicap allowance | Singles 100%, Fourball 90%, Foursomes 50% of the pair's combined — WHS's recommendations, changeable | the board's `handicapAllowance` |
+| Who may enter | the stroke panel's own entry rules — genders, memberships, an age band | `trip_private.entry_rules` |
+| How the field is made | **Members enter** (with an entries-close date and time) or **From a qualifier** (P8) | `bracket_setup.entry` |
+| Biggest field | 8 · 16 · 32 · 64 — the cap, so the rounds are known now | `bracket_setup.maxField` (new) |
+| The draw | **When entries close** (default) or a date and time; random, seeded by handicap index, or by qualifier finish | `bracket_setup.draw` (`DrawPlan`, `at` = entries close) |
+| Round deadlines | a date per round of the biggest field, Final last — the existing `RoundDeadlines` | `bracket_setup.deadlines` |
+| Where matches are played | Home course only (default) · Any course | `bracket_setup.venue` (new) |
+| Level after 18 | Down the 19th (default — the card already does it) · Halved, replay | `bracket_setup.tie` (new) |
+| Who sees it | Members (default) · Guests may watch | the door, as a stroke competition |
+
+**P4. Deadlines are set for the biggest field and lined up from the Final
+back.** A 32 cap asks five dates; if 11 enter, the draw is 16 and the first
+date simply falls away — `drawDeadlines` already does exactly this. So
+every deadline is set at creation, as asked, without knowing the entries.
+
+**P5. Entries close at a date and time (Irish, `irishInstant`)** — asked
+only when members enter. **The draw is made at that moment by default**
+(the stored `DrawPlan` with `when: 'date'`), so "entries close" and "the
+draw" are one event unless the club sets the draw later. More entrants than
+the cap: entries close early when it is full, and say so ("Full — 32 of
+32").
+
+**P6. Where it stands** — `lib/compPhase.ts` gains a match play reading
+beside the stroke one (one file, two pure functions): **Announced** (before
+entries open) → **Entries open** → **Entries closed** (until the draw) →
+**Round of 16 · play by Fri 5 Jun** (the round in play and its deadline) →
+**Final** → **Finished** (the winner known — gold from here only, D171's
+rule). The Summary card's phase line and Comps' rows read it.
+
+**P7. Signing up** (members app, Comps → Upcoming → the competition's
+Summary). An eligible member sees the rules — format, allowance, where
+played, the tie rule — **the entries-close date, the draw date and every
+round's play-by date**, then **Enter**. An ineligible one sees why, in
+`refusalWords`' own words, and no button. Entered, the button is
+**Withdraw**, until entries close. Entrants are listed (names only).
+Entering makes the player row from the list row, as booking does.
+
+- **Fourball and Foursomes: a partner, through the tee sheet's booking.**
+  The entry list *is* a sheet of pair rows drawn with `TeeSeats` — your
+  seat filled, the seat beside it **+ Join** — and picking a partner is the
+  tee sheet's own picker (`lib/teeBooking.ts`, `bookingPlan`): the club's
+  eligible members not yet entered, searchable. The pair is a team on the
+  pairs sheet (`team_members.added_by` — medium security: you may take out
+  yourself and whoever you added). **Enter without a partner yet** leaves
+  the seat open — another eligible member may tap **+ Join** beside you
+  ("looking for a partner") until entries close; a lone entry at close is
+  not drawn (said beforehand).
+- **The partner sees "Entered with Ross"** on the Summary, on Comps' My
+  entries, and on Home's Coming up — and may withdraw themselves, which
+  leaves Ross entered alone with an open seat (Q2).
+
+**P8. A qualifier from the schedule.** "From a qualifier" picks one of the
+club's stroke competitions on the Calendar (dated before the draw), or
+**makes a new one there and then** through `CompPanel` with its own date —
+and asks **how many qualify** (a power of two up to the cap) and the seeding
+(by finish, or random among the qualifiers — the existing `SEEDINGS`). The
+link is the qualifier's code in `bracket_setup.qualifying` (exists). **When
+the qualifier is certified** (`rounds.certified_at`), the top N on its
+Results — ties by the qualifier's own countback (`lib/tiebreak.ts`) — become
+the field and the draw is made (`byStandings`). Before then the match play
+Summary says "Field: the top 16 from the Spring Medal, Sat 4 Apr". A
+Fourball or Foursomes qualifier must be a pairs competition — **not built
+today** (club stroke competitions are singles), so a pairs match play's
+field is members entering until it is (P13).
+
+**P9. Next matches in the members app.** Comps gains a fourth segment,
+**Matches**, beside Upcoming · My entries · Results (Q1): each of your open
+matches across the club's match play competitions — the opponent (and your
+partner), the round, the play-by date, the course and day once arranged —
+and below them the ones you are out of, faded. **Home's Coming up carries
+your next match** as one row while you have one. A match opens its own page
+inside the club area, `/club/[slug]/comp/[code]/match/[id]`, drawing the
+existing match page's parts (arrange, contacts, walkover) in the club skin,
+and its card the existing knockout card — the same components, the club
+footer, so a member never leaves the club area (D186's rule).
+
+**P10. A competition's own sections** (the footer's competition set):
+match play swaps Tee times · Scoring · Leaderboard for **Entries** (until
+the draw) / **Draw** (the bracket, after it) · **Matches** (every match in
+the round in play, Live now on top) · **Rules**. `lib/clubBar.ts` learns
+the second set; the Summary stays the hub.
+
+**P11. A result both sides agree** (Q3). One side finalises the card (or
+records a result by hand); **the other side confirms** from their Matches
+row ("Ross won 3&2 — Confirm · Not right"); confirmed, the winner goes
+through. Not right sends it to the club's Officers, who settle it (the
+existing organiser override on the bracket). An Officer may record any
+result. A match unconfirmed after 48 hours is taken as agreed. The match
+card stays browser-written (`match_scores`, members only from 077); the
+confirm is a server route (`/api/club/match`) writing the winner through
+`persistWinner`, so nobody's phone can put themselves through alone.
+
+**P12. Handicaps** (Q4): each player's index **on the day the match is
+played**, confirmed at the card's start as a stroke competition's are
+(`IndexConfirm`), the shots off the difference (`matchStrokes`). The match
+page shows the shots as they would stand today.
+
+**P13. Not now:** a pairs stroke qualifier; consolation plates; seeding by
+last year's finish; a member arranging a match by message inside Green Dot
+(the contacts on the match page carry it); home-and-away venues.
+
+**Deadlines passed** (Q6): informational, as everywhere else — the round's
+line turns to "Was due Fri 5 Jun", the Officers see the overdue matches on
+Clubhouse's **Needs you** and award a walkover or put both out (the
+existing award). Nothing happens on its own.
+
+### Part 2 — Golfer of the Year
+
+**P14. A Clubhouse section of its own, "Golfer of the Year"** (sidebar,
+`keep_calendar`), one table a year, and **as many as the club runs** — the
+men's, the ladies', the seniors', each with its own entry rules
+(`EntryRules`, the competitions' own — a ladies' Golfer of the Year counts
+only the ladies). Each has:
+
+- **Points by finish** — a table the club edits (default 1st 25, 2nd 20,
+  3rd 16, 4th 13, 5th 11, 6th 10 … 15th 1), shared on a tie (two level for
+  2nd both get 18), from each certified competition's Results.
+- **Match play by stage reached** — winner, runner-up, semi-finalists,
+  quarter-finalists (default 25 / 15 / 8 / 4), given as each round finishes.
+- **Which competitions count** — by kind (singles stroke, match play), all
+  the year's by default; and **each competition's weight**, changed on its
+  row: ×0 (doesn't count), ×1, ×1.5, ×2 (a Major) — "certain events editable
+  to contribute more or less".
+- **Best N** — every result counts, or the best 8 (say), a club's usual rule.
+- **Who appears** — Plays here members whose rows meet the entry rules.
+
+**Stored**: migration **097**, `club_awards` (club, year, name, rules
+jsonb with the per-competition weights keyed by event code), server only,
+grants by name. **The standing is never stored** — worked out on every read
+from certified Results and finished brackets, the way a board is, in one
+pure file (`lib/clubAward.ts`), so changing a weight re-tells the table at
+once and a reopened competition drops out until certified again.
+
+**Members see it** at the top of Comps → Results ("Golfer of the Year — you
+are 4th, 12 behind") and on its own page with every counting result, each
+showing what it was worth. The Clubhouse page shows the same table and the
+rules beside it.
+
+### The stages (each tested on greendot.live before the next)
+
+1. **Made in the Clubhouse.** The type chooser, `MatchPlayPanel`, the writer
+   (`runNewMatchPlay` beside `runNewCompetition`), its rows on Events,
+   Calendar and Comps, the Summary with the rules and every date, the phase
+   (P6). Nobody can enter yet. No migration. `test:clubs`.
+2. **Singles entries.** Enter / Withdraw, eligibility, the entrants list,
+   entries closing, the draw made at close (the existing `makeDueDraw`,
+   seeded by account index).
+3. **Matches in the club area.** The Matches segment, Home's row, the match
+   page and card inside the club shell, the competition's own footer set,
+   result confirmation (P11), deadlines on Needs you.
+4. **Partners.** Fourball and Foursomes entries on the seat sheet, "Entered
+   with X", looking for a partner; **the knockout card learns Foursomes**
+   (one ball a side — `foursomesStrokes` exists for session cards; the
+   knockout card plays only better ball today).
+5. **Qualifiers.** Picking or making one from the schedule, the field and
+   seeding off its certified Results.
+6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
+   standing, the members' card and page.
+
+### Questions for Ross
+
+- **Q1. Where do next matches sit?** Proposed: a **Matches** segment in
+  Comps beside My entries, plus your next match on Home. The alternative is
+  a sixth footer tab, which crowds the bar (five today).
+- **Q2. Does a partner have to accept?** Proposed **no**: whoever enters
+  names them, they see "Entered with Ross" and can withdraw themselves
+  (the tee sheet's medium security). The alternative is a pending invite
+  they accept — safer, slower, and a pair can miss the close.
+- **Q3. Who confirms a result?** Proposed: **the other side confirms**,
+  Officers settle a dispute, 48 hours' silence agrees. Alternatives: no
+  confirmation (whoever finalises decides — today's knockout), or a marker
+  as in stroke competitions.
+- **Q4. Which handicap?** Proposed: **the index on the day the match is
+  played**. The alternative, frozen at the draw, is some clubs' rule.
+- **Q5. Golfer of the Year points** — by finishing position with a weight
+  per competition (proposed), or by Stableford totals over the year?
+- **Q6. A round's deadline passing** — informational, Officers decide
+  (proposed), or an automatic walkover / both out?
 
 ## Casual tee sheets at a club — what is still to come
 
