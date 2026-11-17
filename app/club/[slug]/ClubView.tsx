@@ -598,12 +598,8 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
       <HandicapIndexCard className="mt-6" />
       <ListGroup className="mt-6">
         {clubMay('open_clubhouse', { row: m.credentials ?? null }) && (
-          <>
-            <ListRow href={`/club/${face.slug}/list`} label="The club’s list and look"
-              hint="Add people, send their codes, the crest, the art and the colour" />
-            <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"
-              hint="The club’s office, best on a computer: greendot.live/clubhouse" />
-          </>
+          <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"
+            hint="The club’s list, its look and its season — best on a computer" />
         )}
         <ListRow href="/home?tab=events" label="Your events"
           hint="Every event you’re in or run, and the players linked to you" />

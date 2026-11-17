@@ -61,7 +61,7 @@ function uiFiles(): string[] {
       else if (/\.tsx?$/.test(e.name)) out.push(p)
     }
   }
-  for (const d of ['app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms', 'app/enter']) walk(d)
+  for (const d of ['app/components', 'app/join', 'app/dashboard', 'app/admin', 'app/golf', 'app/create', 'app/run', 'app/privacy', 'app/terms', 'app/enter', 'app/clubhouse']) walk(d)
   out.push('app/page.tsx', 'app/layout.tsx', 'app/Landing.tsx', 'app/[code]/page.tsx')
   // The scoring screens a trip actually uses (refresh plan, Phase 6). The
   // legacy portal beside them — ScoringClient, CoursePortalClient and the
@@ -2812,6 +2812,23 @@ section('The card start sheet wears the parts kit (D72)')
   ok(compact.includes('rounded-tile') && compact.includes('min-h-11') && compact.includes('bg-accent-deep') && !compact.includes('rounded-full'),
     'the compact tile is square-cornered at chip height, deep emerald when chosen')
   ok(chipClass(false).includes('rounded-full'), '  …and a chip stays fully round')
+}
+
+section('The Clubhouse: hover, focus and its two moves, on purpose (stage (k1), D202)')
+{
+  // A desktop office is the first place on the site a pointer hovers. Its
+  // states are named in the stylesheet, once, and nothing else invents one.
+  ok(/\.ch-hover \{ transition: background-color 120ms ease-out, color 120ms ease-out; \}/.test(css) && /\.ch-hover:hover \{ background-color: var\(--color-tint\); \}/.test(css),
+    'hover is the tint, 120ms ease-out')
+  ok(/\.ch-focus:focus-visible \{ outline: 2px solid var\(--color-accent-deep\); outline-offset: 2px; \}/.test(css), 'focus is a 2px deep-emerald ring, 2px off')
+  ok(/\.ch-nav\[aria-current="page"\][^{]*\{ background-color: var\(--gd-club-tint\); color: var\(--gd-club-deep\); \}/.test(css), 'the lit section wears the club’s tint and deep words (D125)')
+  ok(/\.ch-panel \{ animation: chPanelIn 260ms var\(--gd-ease\) both; \}/.test(css) && /\.ch-bar-rise \{ animation: chBarRise 160ms ease-out both; \}/.test(css),
+    'the side panel on the putt curve in 260ms, the ticked-rows bar rising in 160ms')
+  ok(/prefers-reduced-motion: reduce\) \{\s*\.ch-panel \{ animation: gdFade/.test(css), '  …both only fading under Reduce Motion')
+  const ch = uiFiles().filter(f => f.startsWith('app/clubhouse/'))
+  ok(ch.length > 5, 'the Clubhouse is held to every rule on this page')
+  eq(ch.filter(f => /hover:/.test(stripComments(read(f)))), [], '  …and draws its hover through the named class, never a hover: utility')
+  eq(ch.filter(f => /font-serif|t-data/.test(stripComments(read(f)))), [], 'names in the Clubhouse are Archivo — the serif stays on boards and cards')
 }
 
 section('The team palette: brick to navy (D75)')

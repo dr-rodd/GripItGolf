@@ -205,3 +205,82 @@ export function sectionAt(pathname: string, slug: string): SectionKey {
 
 /** "Green Dot staff" — what a club is shown for a staff change (D222), never who. */
 export const STAFF_NAME = 'Green Dot staff'
+
+// ─── Stage (k2): the season and the calendar (D214, D215) ──────
+
+/** One of the club's events as the Competitions table and the Calendar read it. */
+export interface SeasonEvent {
+  code: string
+  name: string
+  kind: 'trip' | 'tournament' | 'run'
+  startDate: string | null
+  endDate: string | null
+  /** A club competition's facts; null for any other event under the club. */
+  competition: {
+    phase: CompPhase
+    courseName: string | null
+    scoring: 'stableford' | 'strokes'
+    allowance: number
+    booked: number
+    capacity: number
+    membersOnly: boolean
+  } | null
+}
+
+/** The format as the table says it: "Stableford · 95%". */
+export function formatLine(c: { scoring: 'stableford' | 'strokes'; allowance: number }): string {
+  return `${c.scoring === 'strokes' ? 'Strokes' : 'Stableford'}${c.allowance !== 100 ? ` · ${c.allowance}%` : ''}`
+}
+
+/** The events of one year, in date order (an undated one last). */
+export function seasonOfYear(events: SeasonEvent[], year: number): SeasonEvent[] {
+  return events
+    .filter(e => (e.startDate ?? '').startsWith(`${year}-`) || (e.endDate ?? '').startsWith(`${year}-`))
+    .sort((a, b) => (a.startDate ?? '9999').localeCompare(b.startDate ?? '9999') || a.name.localeCompare(b.name))
+}
+
+/** The years a season table offers: the ones with events, and this one. */
+export function seasonYears(events: SeasonEvent[], thisYear: number): number[] {
+  const ys = new Set<number>([thisYear])
+  for (const e of events) if (e.startDate) ys.add(Number(e.startDate.slice(0, 4)))
+  return [...ys].sort((a, b) => b - a)
+}
+
+/** A month as the Calendar draws it: weeks from Monday, each day its date (or null outside the month). */
+export function monthGrid(year: number, month: number): (string | null)[][] {
+  const first = new Date(Date.UTC(year, month - 1, 1))
+  const days = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const lead = (first.getUTCDay() + 6) % 7
+  const cells: (string | null)[] = Array.from({ length: lead }, () => null)
+  for (let d = 1; d <= days; d++) cells.push(`${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`)
+  while (cells.length % 7) cells.push(null)
+  const weeks: (string | null)[][] = []
+  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7))
+  return weeks
+}
+
+/** The events on a day: starting on it, or running across it. */
+export function eventsOn(events: SeasonEvent[], day: string): SeasonEvent[] {
+  return events.filter(e => e.startDate && e.startDate <= day && (e.endDate ?? e.startDate) >= day)
+}
+
+/** The month after or before, as [year, month]. */
+export function stepMonth(year: number, month: number, by: 1 | -1): [number, number] {
+  const m = month + by
+  return m === 0 ? [year - 1, 12] : m === 13 ? [year + 1, 1] : [year, m]
+}
+
+/** At most this many competitions made by one Copy or Repeat weekly. */
+export const MAX_COPIES = 26
+
+/** Every week from a date, `count` times — Repeat weekly's dates. */
+export function weeklyFrom(start: string, count: number): string[] {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !Number.isInteger(count) || count < 1) return []
+  const [y, m, d] = start.split('-').map(Number)
+  return Array.from({ length: Math.min(count, MAX_COPIES) }, (_, i) => new Date(Date.UTC(y, m - 1, d + 7 * i)).toISOString().slice(0, 10))
+}
+
+/** Where an event opens: a competition inside its club, anything else by its code (`clubEventHref`'s rule). */
+export function eventHref(e: Pick<SeasonEvent, 'code' | 'competition'>, slug: string): string {
+  return e.competition ? `/club/${slug}/comp/${e.code}` : `/${e.code}`
+}

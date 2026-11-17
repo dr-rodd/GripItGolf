@@ -8,7 +8,7 @@
 import type { Leaderboard } from './leaderboards'
 import { defaultPermissions, type EventPermissions } from './eventPermissions'
 import { irishInstant } from './irishTime'
-import { opensAt, rulesIssue, teeClocks, type TeeRules } from './teeSheet'
+import { opensAt, parseTeeRules, rulesIssue, teeClocks, type TeeRules } from './teeSheet'
 
 export type CompScoring = 'stableford' | 'strokes'
 /** D184: members only by default; guests may watch, read-only, with the code. */
@@ -85,6 +85,40 @@ export function compTeeRules(f: CompForm): TeeRules {
     batches: [{ start: f.first, interval: f.interval, count: f.times, ends: 'count' }],
     groupSize: f.perTime,
     ...(f.opens ? { opens: { daysBefore: f.opens.daysBefore, time: f.opens.time } } : {}),
+  }
+}
+
+/**
+ * A competition as it was made, read back into its form (stage (k2), D214):
+ * what Copy to another date and Repeat weekly start from, a new date given.
+ * Null when the stored tee sheet does not read as a competition's (one run
+ * of times) — such a competition is copied by hand, never guessed at.
+ */
+export function compFormFrom(s: {
+  name: string
+  date: string
+  courseId: string
+  board: { scoring?: unknown; handicapAllowance?: unknown } | null
+  teeSheet: unknown
+  membersOnly: boolean
+}): CompForm | null {
+  const rules = parseTeeRules(s.teeSheet)
+  const batch = rules?.batches[0]
+  if (!rules || !batch || rules.batches.length !== 1) return null
+  const opens = rules.opens && 'daysBefore' in rules.opens && typeof rules.opens.daysBefore === 'number'
+    ? { daysBefore: rules.opens.daysBefore, time: rules.opens.time } : null
+  return {
+    name: s.name,
+    date: s.date,
+    courseId: s.courseId,
+    scoring: s.board?.scoring === 'strokes' ? 'strokes' : 'stableford',
+    allowance: typeof s.board?.handicapAllowance === 'number' ? s.board.handicapAllowance : 100,
+    watch: s.membersOnly ? 'members' : 'guests',
+    first: batch.start,
+    interval: batch.interval,
+    perTime: rules.groupSize,
+    times: teeClocks(rules).length,
+    opens,
   }
 }
 

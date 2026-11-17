@@ -28,7 +28,7 @@ import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from
 import { isAccount, type AuthUser } from '@/lib/account'
 import { cleanHex } from '@/lib/clubColour'
 import type { SeasonRow } from '@/lib/cardSummary'
-import type { ListCounts, GridRow, Need } from '@/lib/clubhouse'
+import type { ListCounts, GridRow, Need, SeasonEvent } from '@/lib/clubhouse'
 import { STAFF_NAME } from '@/lib/clubhouse'
 import { isClubhouseAction, runClubhouse, type ClubhouseStore } from './clubhouse'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
@@ -248,6 +248,8 @@ export type ClubBody = {
   done?: number
   failed?: { name: string; why: string }[]
   csv?: string
+  /** Stage (k2): every event under the club, with a competition's facts. */
+  calendar?: SeasonEvent[]
 }
 
 export type ClubOutcome =

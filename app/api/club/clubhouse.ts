@@ -11,6 +11,8 @@
 // * `page` — 50 rows of the list, searched, filtered and ordered by the
 //   database, numbers whole, each with its index and standing.
 // * `export` — the whole list as a file, logged.
+// * `season` — every event under the club, a competition's facts with it
+//   (stage (k2)): the Competitions table and the Calendar.
 // * `bulk` — the ticked rows: a tick given or taken, a code each, off the
 //   list or back on it — each row through `clubMay`, what could not be done
 //   said by name.
@@ -18,7 +20,7 @@
 import { clubMay, credentialChangeIssue, credentialsOf, removeIssue, storedRole, withChange, type Asker, type CredentialKey, type Credentials } from '@/lib/clubMay'
 import {
   PAGE_SIZE, STAFF_NAME, cleanSearch, listCsv, needsYou, readFilter, readSort,
-  type GridRow, type ListCounts, type ListFilter, type ListSort,
+  type GridRow, type ListCounts, type ListFilter, type ListSort, type SeasonEvent,
 } from '@/lib/clubhouse'
 import { INVITE_DAYS, INVITE_RESEND_MINUTES, inviteCodeFrom, inviteEmail, irishToday, maskNumber } from '@/lib/clubs'
 import { severIndex } from '../handicaps/handicaps'
@@ -50,6 +52,8 @@ export interface ClubhouseStore {
   listCounts?(clubId: string): Promise<ListCounts>
   /** When codes went out: written beside each new one (093). */
   markInvited?(memberId: string, at: string): Promise<void>
+  /** Stage (k2): every event under the club, with a competition's facts. */
+  seasonEvents?(clubId: string): Promise<SeasonEvent[]>
 }
 
 type Store = ClubStore & ClubhouseStore
@@ -59,7 +63,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -162,6 +166,12 @@ export async function runClubhouse(
     const query: ListQuery = { q: cleanSearch(input.q), filter: readFilter(input.filter), sort: readSort(input.sort), desc: input.desc === true, page, size: PAGE_SIZE }
     const { rows, total } = await store.listPage(club.id, query)
     return { status: 200, body: { ok: true, grid: await gridRows(store, rows), total } }
+  }
+
+  // Stage (k2), D214, D215: the season table and the calendar read one list.
+  if (action === 'season') {
+    if (!store.seasonEvents) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
+    return { status: 200, body: { ok: true, calendar: await store.seasonEvents(club.id) } }
   }
 
   if (action === 'export') {

@@ -24,6 +24,9 @@ import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
+import { MAX_COPIES, eventsOn, formatLine, monthGrid, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
+import { compFormFrom } from '../lib/clubComp'
+import { runCopyCompetition } from '../app/api/club/competition'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { inviteHash, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
@@ -590,7 +593,7 @@ function lookTests() {
     return d.isDirectory() ? (d.name === 'node_modules' || d.name.startsWith('.') ? [] : files(p)) : /\.(ts|tsx)$/.test(d.name) ? [p] : []
   })
   const users = [...files('app'), ...files('lib')].filter(f => /\b(text|bg|ring|border|fill|stroke)-(club|on-club|club-deep|club-tint)\b/.test(read(f)))
-  ok(users.length > 0 && users.every(f => f.startsWith(`app${path.sep}club${path.sep}`) || f.startsWith('app/club/')), 'the club colour is used only on a club’s own pages (app/club/)')
+  ok(users.length > 0 && users.every(f => /^app[\\/]club(house)?[\\/]/.test(f)), 'the club colour is used only on a club’s own pages (app/club/, and the Clubhouse’s identity, app/clubhouse/)')
   for (const f of ['lib/resultTone.ts', 'lib/matchSides.ts', 'lib/teamColors.ts', 'app/components/ui.tsx']) {
     ok(!/club/i.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')), `${f} never speaks the club colour — it is no result, side, team, button or pill of the kit`)
   }
@@ -788,12 +791,12 @@ function wiringTests() {
   ok(/clubId: pins\.clubId/.test(read('lib/entryClient.ts')), 'the club goes beside the row, never a column (Q3)')
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<CodeBox \/>/.test(view) && /href="\/create"/.test(view), 'the club area’s Home has the code box and Make an event')
-  ok(/href=\{`\/club\/\$\{face\.slug\}\/list`\}/.test(view) && /href="\/home\?tab=events"/.test(view),
-    'its Club tab holds the list (Clubhouse) and Your events')
-  ok(fs.existsSync('app/club/[slug]/list/page.tsx') && /notFound\(\)/.test(read('app/club/[slug]/list/page.tsx')),
-    'the list lives under the club, a verified club only')
-  ok(/window\.location\.replace\(state\.list \? `\/club\/\$\{state\.club\.slug\}\/list`/.test(read('app/account/club/ClubScreen.tsx')),
-    '  …and the old address goes on there for a verified club')
+  ok(/href=\{`\/clubhouse\/\$\{face\.slug\}`\}/.test(view) && /clubMay\('open_clubhouse'/.test(view) && /href="\/home\?tab=events"/.test(view),
+    'its Club tab holds the way into the Clubhouse (Clubhouse holders) and Your events')
+  ok(/redirect\(`\/clubhouse\/\$\{slug\}\/members`\)/.test(read('app/club/[slug]/list/page.tsx')),
+    'the list moved to the Clubhouse’s Members (stage (k1)); the old address goes on there')
+  ok(/window\.location\.replace\(state\.list \? `\/clubhouse\/\$\{state\.club\.slug\}\/members`/.test(read('app/account/club/ClubScreen.tsx')),
+    '  …as does /account/club for a verified club')
   ok(/owner_id', userId/.test(read('app/api/club/store.ts')), 'a member’s own events include the ones they made (D144)')
 
   section('Stage (k0): one rule for what a club’s people may do (lib/clubMay.ts)')
@@ -829,13 +832,49 @@ function wiringTests() {
   ok(fs.existsSync('app/clubhouse/page.tsx') && fs.existsSync('app/clubhouse/[slug]/page.tsx'), 'greendot.live/clubhouse and /clubhouse/<club> (Ross, 16 Nov 2026: one address for every sport)')
   const lean = [...walk('app/club'), ...walk('app/home'), 'app/account/club/ClubScreen.tsx'].filter(f => /from ['"](@\/app\/clubhouse|\.\.?\/[^'"]*clubhouse)/.test(read(f)))
   eq(lean, [], 'nothing in the members app imports the Clubhouse — members’ pages get no heavier')
-  const door = read('app/clubhouse/Door.tsx'), room = read('app/clubhouse/[slug]/ClubhouseRoom.tsx'), none = read('app/clubhouse/NoAccess.tsx')
-  ok(/accountLink\('\/clubhouse'\)/.test(door) && /accountLink\(`\/clubhouse\/\$\{slug\}`\)/.test(room), 'signed out: the site’s own sign-in, and back — no second password')
+  const door = read('app/clubhouse/Door.tsx'), room = read('app/clubhouse/[slug]/ClubhouseShell.tsx'), none = read('app/clubhouse/NoAccess.tsx')
+  ok(/accountLink\('\/clubhouse'\)/.test(door) && /accountLink\(window\.location\.pathname/.test(room), 'signed out: the site’s own sign-in, and back — no second password')
   ok(/You haven’t been given access to the Clubhouse\./.test(none) && /Your club’s office can grant it\./.test(none) && /variant="secondary"/.test(none),
     'without it: one card, the way back secondary — no emerald')
-  ok(/clubMay\('open_clubhouse'/.test(read('app/clubhouse/clubhouseClient.ts')) && /<ClubScreen clubId=\{clubId\} whole /.test(room),
-    'with it: the club’s list, numbers in full')
+  ok(/clubMay\('open_clubhouse'/.test(read('app/clubhouse/clubhouseClient.ts')) && /askClub\('clubhouse', \{ slug: face\.slug \}\)/.test(room),
+    'with it: the shell, asked once at the door')
   ok(!/isTripRoot|app\/golf/.test(door + room), 'not under /golf: the trip tree is untouched')
+
+  section('Stage (k1): the Clubhouse’s screens (D202, D207, D212, D222)')
+  for (const s of ['page.tsx', 'members/page.tsx', 'competitions/page.tsx', 'calendar/page.tsx', 'settings/page.tsx']) {
+    ok(fs.existsSync(`app/clubhouse/[slug]/${s}`), `  /clubhouse/<club>/${s.replace(/\/?page\.tsx$/, '') || '(Overview)'}`)
+  }
+  ok(/<ShellContext\.Provider/.test(room) && /lg:w-60/.test(room) && /max-w-\[1200px\]/.test(room), 'one shell for every section: a 240 sidebar, content up to 1200')
+  ok(!/club-art|<Art /.test(room + read('app/clubhouse/[slug]/members/MembersGrid.tsx')), 'no art behind a table (D217)')
+  const gridSrc = read('app/clubhouse/[slug]/members/MembersGrid.tsx')
+  ok(/askClub\('page'/.test(gridSrc) && /askClub\('bulk'/.test(gridSrc) && /askClub\('export'/.test(gridSrc), 'the grid reads a page at a time and changes the ticked rows together')
+  ok(/e\.key === '\/'/.test(gridSrc) && /e\.key\.toLowerCase\(\) === 'z'/.test(gridSrc) && /e\.key === 'Tab'/.test(gridSrc), 'keys: / to search, Ctrl+Z to undo, Enter, Escape and Tab in a cell')
+  ok(/Open this on a computer/.test(gridSrc) && /md:hidden/.test(gridSrc), 'a phone gets one column and is told what needs a computer (D202)')
+  ok(/xlsx\?\|numbers\|ods/.test(read('app/clubhouse/[slug]/members/PasteSheet.tsx')), 'a spreadsheet’s own file is asked for as CSV — no library')
+  ok(/ClubLook club=\{club\}/.test(read('app/clubhouse/[slug]/settings/ClubSettings.tsx')) && /ClubHomeCourse/.test(read('app/clubhouse/[slug]/settings/ClubSettings.tsx')), 'Club settings: the look and the home course, moved as they are')
+  ok(/Green Dot staff/.test(room) && /\?find=1/.test(room), 'staff see that they are staff, and find another club')
+
+  section('Stage (k2): Competitions and Calendar (D214, D215)')
+  eq(weeklyFrom('2026-11-21', 3), ['2026-11-21', '2026-11-28', '2026-12-05'], 'Repeat weekly: every seventh day')
+  eq(weeklyFrom('2026-11-21', 40).length, MAX_COPIES, `…at most ${MAX_COPIES} at once`)
+  const nov = monthGrid(2026, 11)
+  eq([nov[0][6], nov[0][5], nov.at(-1)![0]], ['2026-11-01', null, '2026-11-30'], 'a month from Monday: 1 Nov 2026 a Sunday, the 30th a Monday')
+  const evs: SeasonEvent[] = [{ code: 'A', name: 'Week', kind: 'tournament', startDate: '2026-11-03', endDate: '2026-11-05', competition: null }]
+  eq([eventsOn(evs, '2026-11-04').length, eventsOn(evs, '2026-11-06').length], [1, 0], 'an event shows on every day it runs')
+  eq(stepMonth(2026, 12, 1), [2027, 1], 'December into January')
+  const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
+    teeSheet: compTeeRules({ name: 'x', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } }) }
+  const back = compFormFrom(stored)
+  eq(back && { ...back }, { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } },
+    'a competition reads back into the form it was made from — what a copy is made of')
+  eq(compFormFrom({ ...stored, teeSheet: { batches: [{ start: '08:00', interval: 10, count: 4 }, { start: '13:00', interval: 10, count: 4 }], groupSize: 4 } }), null,
+    '…never guessed at for a sheet that is not one run of times')
+  eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
+  const compsSrc = read('app/clubhouse/[slug]/competitions/Competitions.tsx')
+  ok(/may\('run_events'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/competitions/Competitions.tsx')), 'Copy is an Officer’s, as New competition is (D219)')
+  ok(/makeOne\(store, input\.token, mine\.club\.id, form, now\)/.test(read('app/api/club/competition.ts')), 'a copy is made exactly as New competition makes one')
+
+
 
   section('Migration 092')
   const m92 = read('supabase/migrations/20260101000092_club_credentials.sql')
@@ -1657,9 +1696,33 @@ async function clubhouseTests() {
   ok(staffEdit.status === 200 && s.list.get(ids[2])!.email === 'sean@x.ie', 'staff change a row at a club not theirs')
 }
 
+async function copyTests() {
+  section('Stage (k2): Copy to another date, Repeat weekly (/api/club/competition)')
+  const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
+    teeSheet: compTeeRules({ name: 'x', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } }) }
+  const copies: { date: string }[] = []
+  const compStore2 = (role: 'owner' | 'member', officer: boolean): CompetitionStore => ({
+    async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },
+    async clubsOf() { return [{ club: { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null }, row: { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role, userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer, clubhouse: true } }] },
+    create: {} as CreateStore,
+    async insertItem() { return 'item' },
+    async insertRound(r) { copies.push({ date: String(r.scheduled_date) }) },
+    async deleteTrip() {},
+    newCode: () => `C${copies.length}XXXX`.slice(0, 6),
+    newId: () => `id-${copies.length}`,
+    async compSource(code) { return code === 'MEDAL1' ? { clubId: 'c1', ...stored } : null },
+  })
+  const office = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-11-28'] }, compStore2('member', false), NOW)
+  eq(office.status, 403, 'Clubhouse without Officer copies nothing')
+  const past = await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', dates: ['2026-01-01'] }, compStore2('member', true), NOW)
+  ok(past.status === 200 && past.body.ok && past.body.made.length === 0 && /from today/.test(past.body.refused[0]?.why ?? ''), 'a past date is refused by name')
+  eq((await runCopyCompetition({ token: 'tok-ross', clubId: 'c1', code: 'NOPE01', dates: ['2026-11-28'] }, compStore2('member', true), NOW)).status, 404, 'a competition not of this club: not found')
+}
+
 async function main() {
   ruleTests()
   await clubhouseTests()
+  await copyTests()
   await routeTests()
   await eventTests()
   lookTests()

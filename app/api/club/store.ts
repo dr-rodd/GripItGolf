@@ -16,7 +16,8 @@ import { asUser, userFromClaims } from '../account/store'
 import { readSeason } from '../stats/season'
 import type { ClubRecord, ClubStore, MemberRecord } from './club'
 import type { ListQuery, PageRecord } from './clubhouse'
-import { SORT_COLUMN, type ListCounts } from '@/lib/clubhouse'
+import { SORT_COLUMN, type ListCounts, type SeasonEvent } from '@/lib/clubhouse'
+import { readAllRows } from '@/lib/allRows'
 import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
 import { TicksNotReady, asRow, isMissingColumn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
 
@@ -209,6 +210,52 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
     onList: on, joined: j, invited, notJoined: Math.max(0, on - j), off: off ?? 0,
     playsHere: playsHere ?? on, officer: officer ?? legacyRun ?? 0, clubhouse: clubhouse ?? legacyRun ?? 0, noEmail: noEmail ?? 0,
   }
+}
+
+/**
+ * Every event under the club with what the Clubhouse's Competitions table
+ * and Calendar show (stage (k2), D214, D215): a competition's course, format,
+ * phase and how many are booked of how many places. Reads the events, then
+ * their trips' boards and rounds together, then the courses and the
+ * bookings (past 1,000 rows) together.
+ */
+export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEvent[]> {
+  const events = await readClubEvents(db, clubId)
+  const comps = events.filter(e => e.competition)
+  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, startDate: e.startDate, endDate: e.endDate, competition: null })
+  if (!comps.length) return events.map(base)
+  const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards').in('trip_code', comps.map(c => c.code))
+  const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown }[]
+  const { data: rounds } = tripRows.length ? await db.from('rounds').select('id, trip_id, course_id, tee_sheet').in('trip_id', tripRows.map(t => t.id)) : { data: [] }
+  const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string; tee_sheet?: unknown }[]
+  const [courses, seats] = await Promise.all([
+    roundRows.length ? db.from('courses').select('id, name').in('id', [...new Set(roundRows.map(r => r.course_id))]) : Promise.resolve({ data: [] }),
+    roundRows.length
+      ? readAllRows<{ id: string; round_id: string }>(() => db.from('tee_assignments').select('id, round_id', { count: 'exact' }).in('round_id', roundRows.map(r => r.id)).order('id'), r => r.id)
+      : Promise.resolve({ data: [], error: null }),
+  ])
+  const courseName = new Map(((courses.data ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]))
+  const booked = new Map<string, number>()
+  for (const a of seats.data ?? []) booked.set(a.round_id, (booked.get(a.round_id) ?? 0) + 1)
+  return events.map(e => {
+    if (!e.competition) return base(e)
+    const trip = tripRows.find(t => t.trip_code === e.code)
+    const round = trip ? roundRows.find(r => r.trip_id === trip.id) : undefined
+    const board = (Array.isArray(trip?.leaderboards) ? trip!.leaderboards : []).find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: string; handicapAllowance?: number } | undefined
+    const rules = parseTeeRules(round?.tee_sheet)
+    return {
+      ...base(e),
+      competition: {
+        phase: e.competition.phase,
+        courseName: round ? courseName.get(round.course_id) ?? null : null,
+        scoring: board?.scoring === 'strokes' ? 'strokes' as const : 'stableford' as const,
+        allowance: typeof board?.handicapAllowance === 'number' ? board.handicapAllowance : 100,
+        booked: round ? booked.get(round.id) ?? 0 : 0,
+        capacity: rules ? teeClocks(rules).length * rules.groupSize : 0,
+        membersOnly: e.competition.membersOnly,
+      },
+    }
+  })
 }
 
 export function clubStore(db: Db): ClubStore {
@@ -542,6 +589,7 @@ export function clubStore(db: Db): ClubStore {
     async listCounts(clubId) {
       return readListCounts(db, clubId)
     },
+    seasonEvents: clubId => readClubSeason(db, clubId),
     async markInvited(memberId, at) {
       // Before 093 there is no column: the standing simply says Not joined.
       await db.from('club_members').update({ invited_at: at }).eq('id', memberId)

@@ -27,6 +27,7 @@
 
 import type { ClubEvent } from './clubs'
 import type { Credentials } from './clubMay'
+import type { GridRow, ListCounts, Need, SeasonEvent } from './clubhouse'
 import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
@@ -492,6 +493,8 @@ export interface ClubSummary {
   id: string; slug: string; name: string; status: 'pending' | 'verified' | 'refused'
   /** This account's ticks at the club — lib/clubMay.ts reads them. */
   credentials: Credentials
+  /** Stage (k1), D222: Green Dot staff, in the Clubhouse. */
+  staff?: boolean
   colour: string | null; crestUrl: string | null; artUrl: string | null; artDarkUrl: string | null
   /** D161: the club's home course, or null. */
   homeCourseId?: string | null
@@ -523,6 +526,20 @@ export interface ClubAnswer {
   note?: string
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
   myClubs?: { slug: string; name: string; toSign: number }[]
+  /** Stage (k1), the Clubhouse. */
+  grid?: GridRow[]
+  total?: number
+  counts?: ListCounts
+  byPhase?: Record<string, number>
+  needs?: Need[]
+  done?: number
+  failed?: { name: string; why: string }[]
+  csv?: string
+  /** Stage (k2): the club's events with what the Clubhouse shows of each. */
+  calendar?: SeasonEvent[]
+  /** Stage (k2): competitions made by Copy or Repeat weekly, and the dates refused. */
+  made?: { code: string; date: string }[]
+  refused?: { date: string; why: string }[]
 }
 
 /**
@@ -576,6 +593,21 @@ export async function makeCompetition(clubId: string, form: Record<string, unkno
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, code: String(r.body.code), slug: String(r.body.slug) }
+}
+
+/**
+ * Stage (k2), D214: a competition copied to other dates — Copy to another
+ * date (one) or Repeat weekly (a run). Each made as New competition makes
+ * one; a date that could not be made comes back with why. Never throws.
+ */
+export async function copyCompetition(clubId: string, code: string, dates: string[]): Promise<{ ok: true; made: { code: string; date: string }[]; refused: { date: string; why: string }[] } | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { action: 'copy', clubId, code, dates }, '/api/club/competition')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  const b = r.body as { made?: { code: string; date: string }[]; refused?: { date: string; why: string }[] }
+  return { ok: true, made: b.made ?? [], refused: b.refused ?? [] }
 }
 
 export interface BookingAnswer {

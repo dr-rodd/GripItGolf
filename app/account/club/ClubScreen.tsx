@@ -76,7 +76,7 @@ export default function ClubScreen({ clubId: given, back, whole = false }: {
   // verified has no club area and keeps it here.
   useEffect(() => {
     if (given || state.kind !== 'ready' || state.club.status !== 'verified') return
-    window.location.replace(state.list ? `/club/${state.club.slug}/list` : `/club/${state.club.slug}`)
+    window.location.replace(state.list ? `/clubhouse/${state.club.slug}/members` : `/club/${state.club.slug}`)
   }, [given, state])
 
   const preview = useMemo(() => (paste.trim() ? parseMemberList(paste) : null), [paste])

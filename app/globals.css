@@ -394,6 +394,30 @@ html.club-switch-fade::view-transition-group(club-header) { animation-duration: 
   .club-header:has(.club-switch:active) { transform: none; }
 }
 
+/* ── The Clubhouse (stage (k1), D202): a desktop office ──
+   The first hover states on the site — a pointer, unlike a thumb, says
+   where it is before it presses. Hover is the tint (120ms ease-out); a lit
+   section is the club's tint with the club's deep words (D125); the focus
+   ring is 2px of deep emerald, 2px off, wherever a key lands; a ticked row
+   or the cell being edited wears the emerald tint. The side panel comes in
+   from the right on the putt curve in 260ms, the ticked-rows bar rises in
+   160ms ease-out; under Reduce Motion both only fade. Nothing in the grid
+   moves while it is read. */
+.ch-hover { transition: background-color 120ms ease-out, color 120ms ease-out; }
+.ch-hover:hover { background-color: var(--color-tint); }
+.ch-nav[aria-current="page"], .ch-nav[aria-current="page"]:hover { background-color: var(--gd-club-tint); color: var(--gd-club-deep); }
+.ch-focus:focus-visible { outline: 2px solid var(--color-accent-deep); outline-offset: 2px; }
+.ch-row[aria-selected="true"] > td { background-color: var(--color-accent-tint); }
+.ch-cell-editing { background-color: var(--color-accent-tint); }
+.ch-panel { animation: chPanelIn 260ms var(--gd-ease) both; }
+@keyframes chPanelIn { from { transform: translateX(100%); } to { transform: none; } }
+.ch-bar-rise { animation: chBarRise 160ms ease-out both; }
+@keyframes chBarRise { from { transform: translateY(16px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .ch-panel { animation: gdFade 150ms ease-out both; }
+  .ch-bar-rise { animation: gdFade 150ms ease-out both; }
+}
+
 /* ── The club footer and a competition's set (D180 amended, D188) ──
    One bar, drawn by the club's layout (`ClubTabBar`), so opening a
    competition from Comps changes its set in place: Board, Stats and Club
