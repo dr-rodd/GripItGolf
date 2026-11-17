@@ -303,7 +303,7 @@ export default function AccountScreen() {
               Forgot password?
             </button>
             {errorLine}
-            {sentBack && <p className="t-cap text-ink/80 mt-2">You were sent back here from {sentBack}.</p>}
+            {sentBack && <p className="t-cap text-ink/80 mt-2 break-words">You were sent back here from {sentBack}.</p>}
             <button type="submit" disabled={busy || !identifier.trim() || !password} className={`${buttonClass('primary')} mt-6`}>
               {busy ? 'Signing in…' : 'Sign in'}
             </button>

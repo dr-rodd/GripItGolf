@@ -56,9 +56,31 @@ const PENDING_MS = 10 * 60 * 1000
 
 const inBrowser = () => typeof window !== 'undefined'
 
+let watched = false
 async function client() {
   const { supabase } = await import('./supabase')
+  // A short log of what the sign-in did, kept for the tab — so that being
+  // sent back to sign in can say what removed it (Ross, 17 Nov 2026).
+  if (!watched && typeof window !== 'undefined') {
+    watched = true
+    supabase.auth.onAuthStateChange(event => noteAuth(event))
+  }
   return supabase
+}
+
+const AUTH_LOG_KEY = 'gd.authlog.v1'
+
+/** One line on the tab's sign-in log — an event and the time, never a token or a name. */
+function noteAuth(what: string) {
+  try {
+    const log = JSON.parse(window.sessionStorage.getItem(AUTH_LOG_KEY) ?? '[]') as string[]
+    log.push(`${new Date().toISOString().slice(11, 19)} ${what}`)
+    window.sessionStorage.setItem(AUTH_LOG_KEY, JSON.stringify(log.slice(-16)))
+  } catch { /* unavailable — the log is only a help */ }
+}
+
+function readAuthLog(): string {
+  try { return (JSON.parse(window.sessionStorage.getItem(AUTH_LOG_KEY) ?? '[]') as string[]).join(' | ') } catch { return '' }
 }
 
 type AuthErr = { code?: string; status?: number; message?: string } | null | undefined
@@ -128,7 +150,8 @@ function keptSession(): string {
  */
 export function rememberWhyOut(where: string, why: string) {
   console.error('sent to sign in:', where, why)
-  try { window.sessionStorage.setItem(WHY_KEY, `${where}: ${why}`.slice(0, 200)) } catch { /* unavailable */ }
+  const log = readAuthLog()
+  try { window.sessionStorage.setItem(WHY_KEY, `${where}: ${why}${log ? ` [${log}]` : ''}`.slice(0, 900)) } catch { /* unavailable */ }
 }
 
 /** The reason somebody was last sent to sign in — once. */
@@ -400,6 +423,9 @@ export async function signIn(identifier: string, password: string): Promise<Answ
     return lost('no answer', e)
   }
   const body = await res.json().catch(() => ({})) as { session?: { access_token?: unknown; refresh_token?: unknown } }
+  // The phone's clock against the server's: a clock hours out makes every fresh sign-in look expired.
+  const served = Date.parse(res.headers.get('date') ?? '')
+  noteAuth(`sign-in ${res.status}${Number.isNaN(served) ? '' : `, clock ${Math.round((Date.now() - served) / 1000)}s off`}`)
   if (res.status === 429) return { ok: false, error: ACCOUNT_WORDS.tooMany }
   if (res.status === 401) return { ok: false, error: ACCOUNT_WORDS.signInFailed }
   const at = body.session?.access_token, rt = body.session?.refresh_token
@@ -410,6 +436,7 @@ export async function signIn(identifier: string, password: string): Promise<Answ
     // Keeping the session asks Supabase to vouch for it once: a second way in if that ask was dropped.
     if (error) ({ error } = await auth.refreshSession({ refresh_token: rt }))
     if (error) return lost('keeping the session', error)
+    noteAuth(`kept: ${keptSession()}`)
     // Signed in, but will the browser keep it past the next page? A phone
     // that holds nothing would send the member straight back to sign in.
     if (/^(nothing|an empty|could not)/.test(keptSession())) {
