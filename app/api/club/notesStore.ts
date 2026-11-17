@@ -19,26 +19,46 @@ export class NotesNotReady extends Error {
 }
 
 const NOTE_COLS = 'id, ref, title, type, starts_on, ends_on, start_time, end_time, place, notes, visibility'
+/** 096's column — an event that takes the casual tee sheet — read in a second try when missing. */
+const BLOCK_COL = 'blocks_tee_sheet'
 type NoteRow = {
   id: string; ref: string | null; title: string; type: ClubEventType; starts_on: string; ends_on: string | null
   start_time: string | null; end_time: string | null; place: string | null; notes: string | null; visibility: 'members' | 'office'
+  blocks_tee_sheet?: boolean | null
 }
 const asNote = (r: NoteRow): ClubNote => ({
   id: r.id, ref: r.ref, title: r.title, type: r.type, startsOn: r.starts_on, endsOn: r.ends_on,
   startTime: r.start_time, endTime: r.end_time, place: r.place, notes: r.notes, visibility: r.visibility,
+  blocksSheet: r.blocks_tee_sheet === true,
 })
+
+/** 096 is not in yet: an event cannot take the tee sheet. */
+export class BlockNotReady extends Error {
+  constructor() { super('club_events.blocks_tee_sheet is missing (migration 096)'); this.name = 'BlockNotReady' }
+}
+const missingBlockCol = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === '42703' || e.code === 'PGRST204') && (e.message ?? '').includes(BLOCK_COL)
 
 /**
  * The club's own events, in date order — office ones too, for the
  * Clubhouse. `from` keeps those ending on or after a day. Null before 095.
  */
-export async function readNotes(db: Db, clubId: string, opts: { from?: string; membersOnly?: boolean } = {}): Promise<ClubNote[] | null> {
-  let q = db.from('club_events').select(NOTE_COLS).eq('club_id', clubId)
-  if (opts.membersOnly) q = q.eq('visibility', 'members')
-  if (opts.from) q = q.or(`ends_on.gte.${opts.from},and(ends_on.is.null,starts_on.gte.${opts.from})`)
-  const { data, error } = await q.order('starts_on').order('start_time', { nullsFirst: true }).order('title').limit(2000)
+export async function readNotes(db: Db, clubId: string, opts: { from?: string; to?: string; membersOnly?: boolean; blocking?: boolean } = {}): Promise<ClubNote[] | null> {
+  const ask = (cols: string) => {
+    let q = db.from('club_events').select(cols).eq('club_id', clubId)
+    if (opts.membersOnly) q = q.eq('visibility', 'members')
+    if (opts.blocking) q = q.eq(BLOCK_COL, true)
+    if (opts.from) q = q.or(`ends_on.gte.${opts.from},and(ends_on.is.null,starts_on.gte.${opts.from})`)
+    if (opts.to) q = q.lte('starts_on', opts.to)
+    return q.order('starts_on').order('start_time', { nullsFirst: true }).order('title').limit(2000)
+  }
+  let { data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}`)
+  if (error && missingBlockCol(error)) {
+    if (opts.blocking) return []
+    ;({ data, error } = await ask(NOTE_COLS))
+  }
   if (error) { if (missing095(error)) return null; throw error }
-  return ((data ?? []) as NoteRow[]).map(asNote)
+  return ((data ?? []) as unknown as NoteRow[]).map(asNote)
 }
 
 /** An event kept: a new one made, or this club's changed. The id. */
@@ -49,9 +69,15 @@ export async function saveNote(db: Db, clubId: string, n: Omit<ClubNote, 'id'> &
     updated_at: new Date().toISOString(),
     ...(by.batch ? { import_batch: by.batch } : {}),
   }
-  const { data, error } = n.id
-    ? await db.from('club_events').update(row).eq('id', n.id).eq('club_id', clubId).select('id').maybeSingle()
-    : await db.from('club_events').insert({ ...row, created_by: by.userId }).select('id').single()
+  const write = (r: Record<string, unknown>) => n.id
+    ? db.from('club_events').update(r).eq('id', n.id).eq('club_id', clubId).select('id').maybeSingle()
+    : db.from('club_events').insert({ ...r, created_by: by.userId }).select('id').single()
+  let { data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet })
+  // Before 096 an event that does not take the sheet saves as it always did.
+  if (error && missingBlockCol(error)) {
+    if (n.blocksSheet) throw new BlockNotReady()
+    ;({ data, error } = await write(row))
+  }
   if (error) { if (missing095(error)) throw new NotesNotReady(); throw error }
   if (!data) throw new Error('That event isn’t the club’s.')
   return (data as { id: string }).id

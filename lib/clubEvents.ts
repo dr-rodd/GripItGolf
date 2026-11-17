@@ -76,6 +76,18 @@ export interface ClubNote {
   place: string | null
   notes: string | null
   visibility: Visibility
+  /**
+   * Golf and Course only (migration 096): the event takes the casual tee
+   * sheet for its times — all day without them (lib/clubTeeSheet.ts). A
+   * corporate outing, a society, a course closure.
+   */
+  blocksSheet: boolean
+}
+
+/** Types whose events may block the casual tee sheet. */
+export const BLOCK_TYPES: readonly ClubEventType[] = ['GOLF', 'COURSE']
+export function mayBlockSheet(t: EventType): boolean {
+  return (BLOCK_TYPES as readonly string[]).includes(t)
 }
 
 export const NOTE_TITLE_MAX = 80
@@ -108,6 +120,7 @@ export function readClubNote(raw: unknown): Omit<ClubNote, 'id' | 'ref'> & { id:
     place: tidy(r.place, NOTE_PLACE_MAX + 1),
     notes: typeof r.notes === 'string' && r.notes.trim() ? r.notes.trim().slice(0, NOTE_NOTES_MAX + 1) : null,
     visibility: r.visibility === 'office' ? 'office' : 'members',
+    blocksSheet: r.blocksSheet === true,
   }
 }
 
@@ -125,6 +138,8 @@ export function noteIssue(n: ReturnType<typeof readClubNote>): string | null {
   if (n.place && n.place.length > NOTE_PLACE_MAX) return `Keep where under ${NOTE_PLACE_MAX} characters.`
   if (n.notes && n.notes.length > NOTE_NOTES_MAX) return `Keep the notes under ${NOTE_NOTES_MAX} characters.`
   if (n.visibility === 'office' && !mayBeOffice(n.type)) return `${typeLabel(n.type)} events are always shown to members — anything that touches the golf is.`
+  if (n.blocksSheet && !mayBlockSheet(n.type)) return 'Only a Golf or Course event takes the tee sheet.'
+  if (n.blocksSheet && n.visibility === 'office') return 'An event that takes the tee sheet is shown to members.'
   return null
 }
 

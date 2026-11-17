@@ -25,6 +25,12 @@ import {
 } from '../lib/teeSheet'
 import { sunDay, sunriseTee, countUntil, clockLess, COMP_LAST_TEE_BEFORE_SUNSET_MINS, CASUAL_LAST_TEE_BEFORE_SUNSET_MINS, FALLBACK_PLACE } from '../lib/sun'
 import { irishInstant, daysBefore } from '../lib/irishTime'
+import {
+  DEFAULT_CASUAL, readCasualSettings, casualSettingsIssue, settingsLine, casualDay, competitionOverlay, blockOverlay,
+  covers, overlayAt, overlaySpan, sheetRows, bookingRefusal, opensFor, openingLine, casualBookIssue, casualCancelIssue,
+  bookingName, readGuestName, type CasualBooking, type BookerFacts, type Overlay,
+} from '../lib/clubTeeSheet'
+import { noteIssue, readClubNote } from '../lib/clubEvents'
 import { teeSheetAccess } from '../lib/eventPermissions'
 import { TEE_INTERVAL_MINS } from '../lib/itinerary'
 import {
@@ -925,6 +931,114 @@ section('Sunrise and sunset (M9, lib/sun.ts)')
   ok(!/fetch\(|import .*supabase/.test(libSrc), 'worked out here, never asked of a service')
   const sheet = read('app/club/[slug]/comp/[code]/CompTeeSheet.tsx')
   ok(sheet.includes('Sunrise {sun.sunrise}') && sheet.includes('Sunset {sun.sunset}'), 'a competition\'s tee sheet says sunrise at its head and sunset at its foot')
+}
+
+
+section('Casual tee sheet (lib/clubTeeSheet.ts)')
+{
+  // Settings.
+  eq(readCasualSettings(null), DEFAULT_CASUAL, 'nothing stored is ten minutes, fours, seven days before at 7 pm, one a day')
+  eq(readCasualSettings({ interval: 8, groupSize: 9, perDay: 2 }), { ...DEFAULT_CASUAL, interval: 8, perDay: 2 }, 'a bad answer falls back alone, the good ones kept')
+  eq(casualSettingsIssue({ ...DEFAULT_CASUAL, interval: 3 }), '5 to 30 minutes between tee times.', 'interval bounded as a competition\'s')
+  eq(casualSettingsIssue({ ...DEFAULT_CASUAL, opensDaysBefore: 40 }), 'Booking opens between 0 and 28 days before.', 'opening bounded')
+  eq(casualSettingsIssue({ ...DEFAULT_CASUAL, perDay: 0 }), 'Between 1 and 4 tee times a member a day.', 'at least one a day')
+  eq(settingsLine(DEFAULT_CASUAL), '10 minutes apart · fours · opens 7 days before at 7:00 pm · one tee time a member a day', 'the settings said in a line')
+
+  // The day: sunrise on the grid to an hour before sunset.
+  const dub = { lat: 53.35, lng: -6.26 }
+  const day = casualDay('2026-12-21', dub, { interval: 10 })
+  const sun = sunDay('2026-12-21', dub)
+  eq(day.times[0], sunriseTee(sun.sunrise!, 10), 'the first time is the first at or after sunrise on the grid')
+  const lastMins = clockMins(day.times[day.times.length - 1])!
+  const limit = clockMins(clockLess(sun.sunset!, 60)!)!
+  ok(lastMins <= limit && lastMins + 10 > limit, 'the last time is the last at or before an hour before sunset')
+  ok(day.times.every((t, i) => i === 0 || clockMins(t)! - clockMins(day.times[i - 1])! === 10), 'every interval apart')
+  ok(casualDay('2026-06-21', dub, { interval: 10 }).times.length > day.times.length * 2 - 10, 'midsummer has far more times than midwinter')
+  eq(casualDay('2026-12-21', null, { interval: 10 }).sun.located, false, 'no location: Greenwich, never no sheet')
+  ok(casualDay('2026-12-21', null, { interval: 10 }).times.length > 0, '  …and still a sheet')
+
+  // Overlays.
+  const comp = competitionOverlay({ code: 'ABC123', name: 'Saturday Medal', clocks: ['08:00', '08:10', '10:00', '11:20'] })!
+  eq([comp.from, comp.to], ['08:00', '11:20'], 'a competition takes its first tee time to its last')
+  ok(covers(comp, '08:00') && covers(comp, '11:20') && !covers(comp, '07:50') && !covers(comp, '11:30'), '  …inclusive, with no gap either side')
+  eq(competitionOverlay({ code: 'X', name: 'X', clocks: [] }), null, 'a competition with no times takes nothing')
+  const outing = { id: 'e1', title: 'Corporate outing: Acme', startsOn: '2026-11-21', endsOn: null, startTime: '12:00', endTime: '14:30', notes: 'Shotgun', place: null }
+  const block = blockOverlay(outing, '2026-11-21')!
+  ok(covers(block, '12:00') && covers(block, '14:20') && !covers(block, '14:30'), 'an event takes its start to its end, free again at its end')
+  eq(blockOverlay(outing, '2026-11-22'), null, 'not on another day')
+  const closure = blockOverlay({ ...outing, id: 'e2', title: 'Course closed', startsOn: '2026-11-20', endsOn: '2026-11-22', startTime: null, endTime: null }, '2026-11-21')!
+  ok(covers(closure, '06:00') && covers(closure, '23:00'), 'an event with no times takes the whole day, every day it runs')
+  eq(overlaySpan(closure), 'All day', '  …said "All day"')
+  eq(overlaySpan(comp), '8:00 am to 11:20 am', 'a span said in clock words')
+  eq(overlaySpan({ kind: 'block', from: '12:00', to: null }), 'From 12:00 pm', 'a start with no end runs to the end of the day')
+  eq(overlayAt([comp, block], '12:10')?.id, 'e1', 'the overlay at a time')
+
+  const times = ['07:40', '07:50', '08:00', '08:10', '11:20', '11:30', '12:00', '12:10', '14:30']
+  const early: Overlay = { kind: 'block', id: 'e3', title: 'Frost', from: '06:00', to: '07:00', detail: null }
+  const rows = sheetRows(times, [comp, block, early])
+  eq(rows.map(r => (r.kind === 'time' ? r.time : `[${r.overlay.id}:${r.times.join(',')}]`)),
+    ['[e3:]', '07:40', '07:50', '[ABC123:08:00,08:10,11:20]', '11:30', '[e1:12:00,12:10]', '14:30'],
+    'the day in order: an overlay once over the times it takes, one before sunrise still said in its place')
+
+  // Who books.
+  const sat = '2026-11-21', mon = '2026-11-23'
+  const full: BookerFacts = { memberId: 'm1', name: 'Ross', playsHere: true, category: { days: [0, 1, 2, 3, 4, 5, 6], booksTeeTimes: true } }
+  const fiveDay: BookerFacts = { memberId: 'm2', name: 'Dave', playsHere: true, category: { days: [0, 1, 2, 3, 4], booksTeeTimes: true } }
+  const social: BookerFacts = { memberId: 'm3', name: 'Seán', playsHere: true, category: { days: [0, 1, 2, 3, 4, 5, 6], booksTeeTimes: false } }
+  const none: BookerFacts = { memberId: 'm4', name: 'Ann', playsHere: true, category: null }
+  const away: BookerFacts = { memberId: 'm5', name: 'Joe', playsHere: false, category: full.category }
+  eq(bookingRefusal(full, sat, true), null, 'a full member books any day')
+  eq(bookingRefusal(fiveDay, sat, true), 'Sat 21 Nov isn’t one of Dave’s playing days.', 'a five-day member not on a Saturday')
+  eq(bookingRefusal(fiveDay, mon, true), null, '  …but a Monday')
+  eq(bookingRefusal(social, mon, true), 'Seán’s membership doesn’t book tee times.', 'a membership that does not book tee times')
+  eq(bookingRefusal(none, mon, true), 'Ann has no membership that books tee times.', 'no membership, where the club has them')
+  eq(bookingRefusal(none, mon, false), null, 'a club with no memberships: everybody who plays here books')
+  eq(bookingRefusal(away, mon, false), 'Joe isn’t down as playing here.', 'Plays here off: nobody books them')
+  eq(bookingRefusal(fiveDay, sat, true, true), 'Sat 21 Nov isn’t one of your playing days.', 'said to the member themselves')
+
+  // Opening.
+  eq(opensFor(sat, DEFAULT_CASUAL)?.toISOString(), irishInstant('2026-11-14', '19:00')?.toISOString(), 'booking opens seven days before at 7 pm, Irish time')
+  eq(openingLine(sat, DEFAULT_CASUAL, new Date('2026-11-14T18:00:00Z')), 'Booking opens Sat 14 Nov at 7:00 pm', 'before: said when')
+  eq(openingLine(sat, DEFAULT_CASUAL, new Date('2026-11-14T19:00:00Z')), null, 'at the time: open')
+
+  // Booking.
+  const members = new Map([full, fiveDay, social, none].map(m => [m.memberId, m]))
+  const now = new Date('2026-11-20T10:00:00Z')
+  const bk = (id: string, time: string, memberId: string | null, guestName: string | null = null, bookedBy: string | null = memberId): CasualBooking => ({ id, date: sat, time, memberId, guestName, bookedBy })
+  const base = { settings: DEFAULT_CASUAL, date: sat, times, overlays: [comp, block], bookings: [] as CasualBooking[], members, clubHasMemberships: true, booker: 'm1', office: false, now }
+  eq(casualBookIssue({ ...base, time: '07:40', people: [{ memberId: 'm1' }, { guestName: 'Pat' }] }), null, 'a member books themselves and a guest')
+  eq(casualBookIssue({ ...base, time: '07:45', people: [{ memberId: 'm1' }] }), 'That isn’t a tee time on the sheet.', 'only a time on the sheet')
+  eq(casualBookIssue({ ...base, time: '08:10', people: [{ memberId: 'm1' }] }), 'Saturday Medal has the course then (8:00 am to 11:20 am).', 'never under a competition')
+  eq(casualBookIssue({ ...base, time: '12:00', people: [{ memberId: 'm1' }], office: true }), 'Corporate outing: Acme has the course then (12:00 pm to 2:30 pm).', 'never under a block, not even the office')
+  eq(casualBookIssue({ ...base, time: '07:40', people: [{ memberId: 'm1' }, { memberId: 'm2' }] }), 'Sat 21 Nov isn’t one of Dave’s playing days.', 'each member booked is checked for the day')
+  eq(casualBookIssue({ ...base, time: '07:40', people: [{ memberId: 'm1' }, { guestName: '  ' }] }), 'Give the guest’s name.', 'a guest needs a name')
+  const three = [bk('a', '07:40', 'm9'), bk('b', '07:40', null, 'G1', 'm9'), bk('c', '07:40', null, 'G2', 'm9')]
+  eq(casualBookIssue({ ...base, time: '07:40', bookings: three, people: [{ memberId: 'm1' }, { guestName: 'Pat' }] }), 'Only 1 place left at 7:40 am.', 'guests take a place like anybody')
+  eq(casualBookIssue({ ...base, time: '07:40', bookings: [...three, bk('d', '07:40', 'm8')], people: [{ memberId: 'm1' }] }), '7:40 am is full.', 'a full time')
+  eq(casualBookIssue({ ...base, time: '07:50', bookings: [bk('e', '14:30', 'm1')], people: [{ memberId: 'm1' }] }), 'You already have a tee time that day (2:30 pm).', 'one tee time a member a day')
+  eq(casualBookIssue({ ...base, settings: { ...DEFAULT_CASUAL, perDay: 2 }, time: '07:50', bookings: [bk('e', '14:30', 'm1')], people: [{ memberId: 'm1' }] }), null, '  …unless the club allows more')
+  eq(casualBookIssue({ ...base, time: '07:40', now: new Date('2026-11-13T10:00:00Z'), people: [{ memberId: 'm1' }] }), 'Booking opens Sat 14 Nov at 7:00 pm.', 'not before booking opens')
+  eq(casualBookIssue({ ...base, time: '07:40', now: new Date('2026-11-21T09:00:00Z'), people: [{ memberId: 'm1' }] }), 'That tee time has gone.', 'not a time gone')
+  eq(casualBookIssue({ ...base, time: '07:40', office: true, booker: null, now: new Date('2026-11-13T10:00:00Z'), people: [{ memberId: 'm2' }, { memberId: 'm3' }, { memberId: 'm4' }] }), null, 'the office books anybody, any day, before it opens')
+  eq(casualBookIssue({ ...base, time: '07:40', office: true, bookings: three, moving: ['a'], people: [{ memberId: 'm9' }, { memberId: 'm1' }] }), 'That member isn’t on the club’s list.', 'a move leaves its own place free, members still checked against the list')
+  eq(casualBookIssue({ ...base, time: '07:50', office: true, bookings: [bk('e', '07:50', 'm1')], people: [{ memberId: 'm1' }] }), 'Ross is already on this time.', 'nobody twice on one time')
+
+  // Cancelling.
+  const mine = bk('x', '07:40', 'm1'), myGuest = bk('y', '07:40', null, 'Pat', 'm1'), theirs = bk('z', '07:40', 'm2')
+  eq(casualCancelIssue(mine, { memberId: 'm1', office: false }, now), null, 'a member takes themselves off')
+  eq(casualCancelIssue(myGuest, { memberId: 'm1', office: false }, now), null, '  …and whoever they booked')
+  eq(casualCancelIssue(theirs, { memberId: 'm1', office: false }, now), 'Only the member, whoever booked them or the office takes them off.', '  …never somebody else')
+  eq(casualCancelIssue(mine, { memberId: 'm1', office: false }, new Date('2026-11-21T09:00:00Z')), 'That tee time has gone.', 'cancelled up to the tee time')
+  eq(casualCancelIssue(theirs, { memberId: null, office: true }, new Date('2026-11-21T09:00:00Z')), null, 'the office takes anybody off, any time')
+  eq(bookingName(myGuest, new Map([['m1', 'Ross']])), { name: 'Pat', guestOf: 'Ross' }, 'a guest reads "Guest of Ross"')
+  eq(readGuestName('  Pat   Murphy '), 'Pat Murphy', 'a guest\'s name tidied')
+
+  // A block is a Golf or Course event (096).
+  const ev = (o: Record<string, unknown>) => noteIssue(readClubNote({ title: 'Outing', type: 'GOLF', startsOn: '2026-11-21', blocksSheet: true, ...o }))
+  eq(ev({}), null, 'a Golf event takes the sheet')
+  eq(ev({ type: 'COURSE' }), null, '  …and a Course event')
+  eq(ev({ type: 'SOCIAL' }), 'Only a Golf or Course event takes the tee sheet.', '  …never a Social one')
+  ok(!read('lib/clubTeeSheet.ts').includes('supabase'), 'the rules are pure')
 }
 
 // ─── Result ────────────────────────────────────────────────────

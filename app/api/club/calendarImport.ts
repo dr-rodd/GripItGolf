@@ -23,7 +23,7 @@ import { irishToday } from '@/lib/clubs'
 import { sunDay } from '@/lib/sun'
 import { describeRules } from '@/lib/teeSheet'
 import { compTeeRules } from '@/lib/clubComp'
-import { typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
+import { mayBlockSheet, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import {
   MAX_CALENDAR_ROWS, calendarPrompt, calendarTemplate, noteIssue, readCalendarRow, rowAsNote, rowRecipe,
   type CalendarCells, type CalendarContext, type CalendarRow, type PreviewRow, type RowOutcome, type RowStatus,
@@ -116,7 +116,8 @@ function workOut(r: CalendarRow, k: Context, today: string): {
   const note = rowAsNote(r)
   const issue = noteIssue(note)
   if (issue) return { preview: { ...base, status: 'bad', why: issue }, form: null, note: null, comp: null, existingNote: existing }
-  const n = { ...note, ref: note.ref ?? existing?.ref ?? null }
+  // A calendar file says nothing about the tee sheet: an event the office set to take it keeps doing so.
+  const n = { ...note, ref: note.ref ?? existing?.ref ?? null, blocksSheet: !!existing?.blocksSheet && mayBlockSheet(note.type) }
   return { preview: { ...base, status: !existing ? 'new' : sameNote(existing, n) ? 'same' : 'changed' }, form: null, note: n, comp: null, existingNote: existing }
 }
 

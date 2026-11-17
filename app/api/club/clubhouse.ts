@@ -343,9 +343,10 @@ export async function runClubhouse(
     try {
       saved = await store.saveNote(club.id, { ...note, ref: note.ref ?? before?.ref ?? null }, { userId: user.id })
     } catch (e) {
+      if ((e as Error)?.name === 'BlockNotReady') return fail(503, 'Taking the tee sheet isn’t set up yet — save it without, or try again later.')
       return (e as Error)?.name === 'NotesNotReady' ? fail(503, LATER) : fail(503, 'Could not save the event — try again.')
     }
-    const said = (n: Pick<ClubNote, 'type' | 'startsOn' | 'visibility'>) => `${typeLabel(n.type)} · ${n.startsOn}${n.visibility === 'office' ? ' · Office only' : ''}`
+    const said = (n: Pick<ClubNote, 'type' | 'startsOn' | 'visibility' | 'blocksSheet'>) => `${typeLabel(n.type)} · ${n.startsOn}${n.visibility === 'office' ? ' · Office only' : ''}${n.blocksSheet ? ' · Takes the tee sheet' : ''}`
     await logged([line(before ? 'event.update' : 'event.add', null, { [note.title]: [before ? said(before) : null, said(note)] })])
     return { status: 200, body: { ok: true, noteId: saved } }
   }
