@@ -26,16 +26,23 @@ filed to rounds by date and venue (`roundForCard` in
 or entered by hand); whether eligibility is per competition or by rule (all
 medals, no opens); points by position or Stableford totals.
 
-## Casual tee sheets at a club
+## Casual tee sheets at a club — what is still to come
 
-Ross, 17 Nov 2026. A club's everyday tee sheet — casual golf, booked by
-members, not a competition — follows the same sun rules as a competition's
-(`lib/sun.ts`): the first tee time at or after sunrise on the interval's grid,
-**the last an hour before sunset** (`CASUAL_LAST_TEE_BEFORE_SUNSET_MINS`,
-against a competition's four and a half hours), and sunrise and sunset said
-at the head and foot of the sheet. Membership privileges (D232) — playing
-days today — grow here: which days and times each membership may book. Not
-built: only the constant exists.
+Ross, 17 Nov 2026. **Built** (D253–D260): the club's casual tee sheet on the
+home course, sunrise to an hour before sunset (`lib/clubTeeSheet.ts`,
+`/api/club/tee-times`, migration 096). Agreed and not built:
+
+- **A club with more than one course** — a sheet per course, each on its own
+  sun, a competition taking only its own course's sheet (today a club's
+  home course is the sheet, and a competition elsewhere takes nothing).
+- **Times within a day per membership** — five-day members not before 10 am
+  at weekends, juniors after 3 pm. Today a membership books on its playing
+  days, all day.
+- **A settings change for one season or one weekday** — a winter interval,
+  threes on a Saturday morning. Today one setting runs every day.
+- **Locks while a member books** — the competition sheet's freeze. Today two
+  members booking the last place together are settled by the database (one
+  place a seat): the second is told the time has just filled.
 
 ## Handicap cuts between rounds
 

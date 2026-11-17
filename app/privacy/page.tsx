@@ -191,6 +191,15 @@ export default function PrivacyPage() {
           choosing write; Green Dot itself sends the club&apos;s calendar to no AI service.
         </p>
         <p className="mt-3">
+          <B>A club&apos;s tee sheet.</B> A club&apos;s members book casual tee times on Green Dot. A booking
+          holds the day, the time, the member on the club&apos;s list (or a guest&apos;s name, as the member
+          who brought them gave it) and who made it. Everybody on the club&apos;s list sees the names on
+          each time, as at the club&apos;s own booking desk; a guest is shown as the guest of whoever
+          brought them. The club office sees and changes every booking, and its changes are on the
+          club&apos;s record of changes. A booking is kept as long as the club is, and goes with the
+          member&apos;s place on the club&apos;s list.
+        </p>
+        <p className="mt-3">
           <B>Club competitions.</B> To book a club&apos;s competition together, people on its list can find
           each other by name — the name only, never a number or an email — and see who is on each tee
           time. Every player in a club competition needs their own Green Dot account. Every member on
