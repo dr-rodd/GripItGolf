@@ -173,17 +173,26 @@ export function overlaySpan(o: Pick<Overlay, 'kind' | 'from' | 'to'>): string {
   return `${describeTime(o.from)} to ${describeTime(o.to)}`
 }
 
-/** One row of the day as a sheet draws it: a casual time, or an overlay over the times it takes. */
+/**
+ * One row of the day as a sheet draws it: a casual time, or an overlay over
+ * the times it takes — with `caught`, those of its times somebody was
+ * booked on before it took them (an outing blocked after, a competition
+ * moved), so nobody's booking is ever out of sight.
+ */
 export type SheetRow =
   | { kind: 'time'; time: string }
-  | { kind: 'overlay'; overlay: Overlay; times: string[] }
+  | { kind: 'overlay'; overlay: Overlay; times: string[]; caught: string[] }
 
 /**
  * The day in order: casual times, and each overlay once, over the run of
  * times it takes — placed by its start where it takes none of the day's
- * times (a competition before sunrise is still said).
+ * times (a competition before sunrise is still said). `booked` are the
+ * times with somebody on them: one off the grid (the interval changed since)
+ * is a row of its own, one under an overlay is listed as caught by it.
  */
-export function sheetRows(times: readonly string[], overlays: readonly Overlay[]): SheetRow[] {
+export function sheetRows(grid: readonly string[], overlays: readonly Overlay[], booked: Iterable<string> = []): SheetRow[] {
+  const held = new Set(booked)
+  const times = [...new Set([...grid, ...held])].sort((a, b) => (clockMins(a) ?? 0) - (clockMins(b) ?? 0))
   const rows: SheetRow[] = []
   const placed = new Set<Overlay>()
   for (const t of times) {
@@ -191,14 +200,16 @@ export function sheetRows(times: readonly string[], overlays: readonly Overlay[]
     // Overlays that take none of the day's times, starting before this one.
     for (const x of overlays) {
       if (placed.has(x) || x === o || times.some(tt => covers(x, tt))) continue
-      if ((clockMins(x.from) ?? 0) <= (clockMins(t) ?? 0)) { rows.push({ kind: 'overlay', overlay: x, times: [] }); placed.add(x) }
+      if ((clockMins(x.from) ?? 0) <= (clockMins(t) ?? 0)) { rows.push({ kind: 'overlay', overlay: x, times: [], caught: [] }); placed.add(x) }
     }
     if (!o) { rows.push({ kind: 'time', time: t }); continue }
-    const last = rows[rows.length - 1]
-    if (last && last.kind === 'overlay' && last.overlay === o) last.times.push(t)
-    else { rows.push({ kind: 'overlay', overlay: o, times: [t] }); placed.add(o) }
+    const band = rows.find((r): r is Extract<SheetRow, { kind: 'overlay' }> => r.kind === 'overlay' && r.overlay === o)
+    const row = band ?? { kind: 'overlay' as const, overlay: o, times: [], caught: [] }
+    if (!band) { rows.push(row); placed.add(o) }
+    if (grid.includes(t)) row.times.push(t)
+    if (held.has(t)) row.caught.push(t)
   }
-  for (const x of overlays) if (!placed.has(x)) rows.push({ kind: 'overlay', overlay: x, times: [] })
+  for (const x of overlays) if (!placed.has(x)) rows.push({ kind: 'overlay', overlay: x, times: [], caught: [] })
   return rows
 }
 

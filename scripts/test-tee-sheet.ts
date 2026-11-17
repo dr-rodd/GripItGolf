@@ -979,6 +979,10 @@ section('Casual tee sheet (lib/clubTeeSheet.ts)')
   eq(rows.map(r => (r.kind === 'time' ? r.time : `[${r.overlay.id}:${r.times.join(',')}]`)),
     ['[e3:]', '07:40', '07:50', '[ABC123:08:00,08:10,11:20]', '11:30', '[e1:12:00,12:10]', '14:30'],
     'the day in order: an overlay once over the times it takes, one before sunrise still said in its place')
+  const kept = sheetRows(times, [comp, block], ['08:10', '12:10', '07:45'])
+  eq(kept.map(r => (r.kind === 'time' ? r.time : `[${r.overlay.id}:${r.caught.join(',')}]`)),
+    ['07:40', '07:45', '07:50', '[ABC123:08:10]', '11:30', '[e1:12:10]', '14:30'],
+    'nobody\'s booking out of sight: one off the grid its own row, one under an overlay caught by it')
 
   // Who books.
   const sat = '2026-11-21', mon = '2026-11-23'

@@ -7,12 +7,13 @@ import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { askTeeTimes } from '@/lib/accountClient'
 import {
   lookAheadDays, overlaySpan, sheetRows, timeGone,
-  type Overlay, type TeeBookingView, type TeeDayBody,
+  type Overlay, type SheetRow, type TeeBookingView, type TeeDayBody,
 } from '@/lib/clubTeeSheet'
 import { describeTime } from '@/lib/itinerary'
 
 type Day = { ok: true } & TeeDayBody
 type Pick = { memberId: string; name: string } | { guestName: string }
+type Item = { key: string; row: Extract<SheetRow, { kind: 'overlay' }> } | { key: string; time: string; caught: string | null }
 
 const dayChip = (d: string) => {
   const t = new Date(`${d}T12:00:00Z`)
@@ -89,7 +90,7 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
   const mine = day.me ? day.bookings.filter(b => b.memberId === day.me!.memberId) : []
   const offerMe = !!day.me && !day.me.refusal && mine.length < day.settings.perDay
   const mayBook = day.ready && !day.opening
-  const rows = sheetRows(day.times, day.overlays)
+  const rows = sheetRows(day.times, day.overlays, day.bookings.map(b => b.time))
 
   return (
     <section className="mt-6">
@@ -118,9 +119,14 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
       {!day.sun.located && <p className="t-cap text-ink/65">Worked out for Greenwich — the club’s home course has no location.</p>}
       {day.times.length === 0 && <p className="text-ink/80 text-[15px] mt-4">No tee times this day.</p>}
       <ul className="mt-2 space-y-3">
-        {rows.map(row => {
-          if (row.kind === 'overlay') return <OverlayRow key={`o-${row.overlay.kind}-${row.overlay.id}`} o={row.overlay} times={row.times.length} />
-          const time = row.time
+        {rows.flatMap((row): Item[] => row.kind === 'overlay'
+          ? [{ key: `o-${row.overlay.kind}-${row.overlay.id}`, row }, ...row.caught.map(time => ({ key: time, time, caught: row.overlay.title }))]
+          : [{ key: row.time, time: row.time, caught: null }]
+        ).map(item => {
+          if ('row' in item) return <OverlayRow key={item.key} o={item.row.overlay} times={item.row.times.length} />
+          const { time, caught } = item
+          // Off the grid (the interval changed since) or under an overlay since: shown, never offered.
+          const bookable = !caught && day.times.includes(time)
           const seats = day.bookings.filter(b => b.time === time)
           const free = day.settings.groupSize - seats.length
           const gone = timeGone(day.date, time, new Date())
@@ -144,7 +150,7 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
                     </div>
                   ))}
                   {/* The places left, one line — a full sheet of four empty boxes a time was a long scroll. */}
-                  {free > 0 && (mayBook && !gone && open !== time ? (
+                  {free > 0 && bookable && (mayBook && !gone && open !== time ? (
                     <button type="button" onClick={() => { setOpen(time); setError(null) }}
                       className="col-span-2 rounded-tile border border-dashed border-line-strong min-h-11 flex items-center justify-center gap-1 t-label text-accent-deep press">
                       <IconPlus size={16} /> Book <span className="text-ink/65 font-normal">· {free} place{free === 1 ? '' : 's'}</span>
@@ -154,6 +160,7 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
                   ))}
                 </div>
               </div>
+              {caught && <p className="t-cap text-ink/65 mt-2">Booked before {caught} had the course — the office will be in touch.</p>}
               {error?.time === time && <p className="t-cap text-rust-deep mt-2" role="alert">{error.text}</p>}
               {open === time && day.me && (
                 <BookPanel clubId={clubId} date={day.date} time={time} free={free} offerMe={offerMe} me={day.me}

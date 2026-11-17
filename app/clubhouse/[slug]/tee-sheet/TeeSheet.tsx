@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { askTeeTimes } from '@/lib/accountClient'
@@ -62,7 +62,7 @@ export default function TeeSheet() {
   const again = () => setAsked(a => ({ ...a, n: a.n + 1 }))
   const date = day?.date ?? asked.date
   const today = day?.today ?? irishToday(new Date())
-  const rows = useMemo(() => (day ? sheetRows(day.times, day.overlays) : []), [day])
+  const rows = useMemo(() => (day ? sheetRows(day.times, day.overlays, day.bookings.map(b => b.time)) : []), [day])
   const chosen = day ? day.bookings.filter(b => picked.has(b.id)) : []
   const moveTimes = day ? day.times.filter(t => !overlayAt(day.overlays, t) && !chosen.every(b => b.time === t)) : []
 
@@ -150,7 +150,8 @@ export default function TeeSheet() {
               <thead className="sr-only"><tr><th>Time</th>{Array.from({ length: day.settings.groupSize }, (_, i) => <th key={i}>Place {i + 1}</th>)}</tr></thead>
               <tbody>
                 {rows.map(row => row.kind === 'overlay' ? (
-                  <tr key={`o-${row.overlay.kind}-${row.overlay.id}`} className="border-b border-line last:border-b-0 bg-tint">
+                  <Fragment key={`o-${row.overlay.kind}-${row.overlay.id}`}>
+                  <tr className="border-b border-line last:border-b-0 bg-tint">
                     <td colSpan={day.settings.groupSize + 1} className="px-4 py-3">
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span className="t-cap text-ink/65 tabular-nums">{overlaySpan(row.overlay)}</span>
@@ -162,11 +163,17 @@ export default function TeeSheet() {
                           : <button type="button" onClick={() => openOverlay(row.overlay)} className="t-label text-accent-deep ch-hover ch-focus">Change</button>}
                       </div>
                       {row.overlay.detail && row.overlay.kind === 'block' && <p className="t-cap text-ink/80 mt-1 break-words">{row.overlay.detail}</p>}
+                      {row.caught.length > 0 && <p className="t-cap text-rust-deep mt-1">Booked before it took the course — tick them below to move them.</p>}
                     </td>
                   </tr>
+                  {row.caught.map(t => (
+                    <TimeRow key={t} time={t} size={day.settings.groupSize} seats={day.bookings.filter(b => b.time === t)}
+                      picked={picked} onToggle={toggle} onBook={null} />
+                  ))}
+                  </Fragment>
                 ) : (
                   <TimeRow key={row.time} time={row.time} size={day.settings.groupSize} seats={day.bookings.filter(b => b.time === row.time)}
-                    picked={picked} onToggle={toggle} onBook={() => { setBooking(row.time); setError('') }} />
+                    picked={picked} onToggle={toggle} onBook={day.times.includes(row.time) ? () => { setBooking(row.time); setError('') } : null} />
                 ))}
               </tbody>
             </table>
@@ -210,7 +217,9 @@ export default function TeeSheet() {
 
 /** One casual tee time: its places, each name a tick to move or take off, the free ones to book. */
 function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
-  time: string; size: number; seats: TeeBookingView[]; picked: Set<string>; onToggle: (id: string) => void; onBook: () => void
+  time: string; size: number; seats: TeeBookingView[]; picked: Set<string>; onToggle: (id: string) => void
+  /** Null for a time off the grid or under an overlay: shown, never booked. */
+  onBook: (() => void) | null
 }) {
   return (
     <tr className="border-b border-line last:border-b-0">
@@ -236,7 +245,7 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
         }
         return (
           <td key={i} className="px-1 py-1.5 align-top">
-            {i === seats.length ? (
+            {i === seats.length && onBook ? (
               <button type="button" onClick={onBook} aria-label={`Book ${describeTime(time)}`}
                 className="ch-hover ch-focus w-full min-h-10 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
                 <IconPlus size={16} /> Book
