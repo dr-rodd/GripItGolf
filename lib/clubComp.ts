@@ -9,6 +9,7 @@ import type { Leaderboard } from './leaderboards'
 import { defaultPermissions, type EventPermissions } from './eventPermissions'
 import { irishInstant } from './irishTime'
 import { opensAt, parseTeeRules, rulesIssue, teeClocks, type TeeRules } from './teeSheet'
+import { readEntryRules, type EntryRules } from './clubMembership'
 
 export type CompScoring = 'stableford' | 'strokes'
 /** D184: members only by default; guests may watch, read-only, with the code. */
@@ -33,6 +34,8 @@ export interface CompForm {
   times: number
   /** Booking opens this many days before, at this time — null: as soon as it is made. */
   opens: { daysBefore: number; time: string } | null
+  /** Stage (m): who may enter — genders, memberships, an age band (lib/clubMembership.ts); null is everybody. */
+  entry?: EntryRules | null
 }
 
 export const COMP_NAME_MAX = 60
@@ -59,6 +62,7 @@ export function readCompForm(raw: unknown): CompForm | null {
     perTime: num(r.perTime),
     times: num(r.times),
     opens,
+    entry: readEntryRules(r.entry),
   }
 }
 
@@ -101,6 +105,8 @@ export function compFormFrom(s: {
   board: { scoring?: unknown; handicapAllowance?: unknown } | null
   teeSheet: unknown
   membersOnly: boolean
+  /** Stage (m): its entry rules as stored (trip_private.entry_rules). */
+  entry?: unknown
 }): CompForm | null {
   const rules = parseTeeRules(s.teeSheet)
   const batch = rules?.batches[0]
@@ -119,6 +125,7 @@ export function compFormFrom(s: {
     perTime: rules.groupSize,
     times: teeClocks(rules).length,
     opens,
+    entry: readEntryRules(s.entry),
   }
 }
 

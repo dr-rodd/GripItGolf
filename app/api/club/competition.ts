@@ -19,6 +19,7 @@ import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { NO_FORMATS } from '@/lib/formats'
 import { toItemRow } from '@/lib/itinerarySync'
 import { unheldPin } from '@/lib/pinHash'
+import { entryRulesIssue, type Category, type EntryRules } from '@/lib/clubMembership'
 import { runCreate, type CreateStore } from '../trip/create/create'
 import type { ClubRecord, MemberRecord } from './club'
 
@@ -39,7 +40,13 @@ export interface CompetitionStore {
   compSource?(code: string): Promise<{
     clubId: string; name: string; date: string; courseId: string
     board: { scoring?: unknown; handicapAllowance?: unknown } | null; teeSheet: unknown; membersOnly: boolean
+    /** Stage (m): its entry rules as stored. */
+    entry?: unknown
   } | null>
+  /** Stage (m): the club's memberships, for checking a competition's entry rules. */
+  categories?(clubId: string): Promise<Category[]>
+  /** Stage (m): a competition's entry rules into trip_private (094) — throws when the column is missing. */
+  setEntryRules?(tripId: string, rules: EntryRules): Promise<void>
   /** The club's activity log (092), fail-soft. */
   logActivity?(entries: import('./club').ActivityEntry[]): Promise<void>
 }
@@ -49,6 +56,12 @@ export type CompetitionOutcome =
   | { status: 400 | 401 | 403 | 404 | 503; body: { ok: false; error: string } }
 
 const fail = (status: 400 | 401 | 403 | 404 | 503, error: string): CompetitionOutcome => ({ status, body: { ok: false, error } })
+
+/** Who may enter cannot be kept yet (before migration 094). */
+export class EntryNotReady extends Error {
+  constructor() { super('trip_private.entry_rules is missing (migration 094)'); this.name = 'EntryNotReady' }
+}
+const ENTRY_LATER = 'Who may enter isn’t set up yet — open it to everybody, or try again later.'
 
 /** One competition made: the event through the create route's own checks, then its golf item and round — or why not. */
 async function makeOne(
@@ -99,9 +112,17 @@ async function makeOne(
       start_format: 'tee_sheet',
       tee_sheet: compTeeRules(form),
     })
+    // Stage (m): who may enter. Rules that cannot be kept make no
+    // competition — one open to everybody when it was meant to be the
+    // ladies' would be the worse failure.
+    if (form.entry) {
+      if (!store.setEntryRules) throw new EntryNotReady()
+      await store.setEntryRules(made.tripId, form.entry)
+    }
   } catch (e) {
     console.error('competition round failed:', e)
     await store.deleteTrip(made.tripId).catch(() => undefined)
+    if (form.entry && (e as Error)?.name === 'EntryNotReady') return { ok: false, status: 503, error: ENTRY_LATER }
     return { ok: false, status: 503, error: 'Could not make the competition — try again.' }
   }
   return { ok: true, code: made.code, doorCookie: made.doorCookie }
@@ -121,12 +142,20 @@ export async function runNewCompetition(
   }
   const form = readCompForm(input.form)
   if (!form) return fail(400, 'Fill in the competition.')
-  const issue = compFormIssue(form, irishToday(now))
+  const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, mine.club.id, form)
   if (issue) return fail(400, issue)
 
   const out = await makeOne(store, input.token, mine.club.id, form, now)
   if (!out.ok) return fail(out.status, out.error)
   return { status: 200, body: { ok: true, code: out.code, slug: mine.club.slug }, doorCookie: out.doorCookie }
+}
+
+/** Why a form's entry rules cannot be kept at this club — a membership not the club's — or null. */
+async function entryIssue(store: CompetitionStore, clubId: string, form: CompForm): Promise<string | null> {
+  if (!form.entry) return null
+  if (form.entry.categories?.length && !store.categories) return 'Memberships aren’t set up yet — try again later.'
+  const known = form.entry.categories?.length && store.categories ? (await store.categories(clubId)).map(c => c.id) : []
+  return entryRulesIssue(form.entry, known)
 }
 
 export type CopyOutcome =
@@ -164,7 +193,7 @@ export async function runCopyCompetition(
   for (const date of dates.sort()) {
     const form = compFormFrom({ ...source, date })
     if (!form) return no(400, 'This competition’s tee sheet is not one run of times — make the copy from New competition.')
-    const issue = compFormIssue(form, irishToday(now))
+    const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, mine.club.id, form)
     if (issue) { refused.push({ date, why: issue }); continue }
     const out = await makeOne(store, input.token, mine.club.id, form, now)
     if (out.ok) made.push({ code: out.code, date })

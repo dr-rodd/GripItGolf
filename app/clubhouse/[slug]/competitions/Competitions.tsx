@@ -68,7 +68,7 @@ export default function Competitions() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-line">
-                  {['Day', 'Competition', 'Course', 'Format', 'Booked', 'Where it stands'].map(h => (
+                  {['Day', 'Competition', 'Course', 'Format', 'Who can enter', 'Booked', 'Where it stands'].map(h => (
                     <th key={h} scope="col" className={`t-eyebrow text-ink/65 font-normal px-4 py-3 whitespace-nowrap ${h === 'Booked' ? 'text-right' : ''}`}>{h}</th>
                   ))}
                   <th scope="col" className="px-4"><span className="sr-only">Actions</span></th>
@@ -83,6 +83,7 @@ export default function Competitions() {
                       <td className="px-4 text-ink text-[15px] font-medium">{e.name}</td>
                       <td className="px-4 text-ink/80 text-[15px]">{c.courseName ? <CourseName name={c.courseName} /> : '—'}</td>
                       <td className="px-4 text-ink/80 text-[15px] whitespace-nowrap">{formatLine(c)}</td>
+                      <td className="px-4 text-ink/80 text-[15px]">{c.entry ?? 'Everybody'}</td>
                       <td className="px-4 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c.capacity ? `${c.booked} of ${c.capacity}` : c.booked}</td>
                       <td className="px-4 whitespace-nowrap"><Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill></td>
                       <td className="px-4 text-right whitespace-nowrap">

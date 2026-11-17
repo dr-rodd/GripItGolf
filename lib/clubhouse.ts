@@ -255,6 +255,8 @@ export interface SeasonEvent {
     booked: number
     capacity: number
     membersOnly: boolean
+    /** Stage (m): who may enter, said short — absent, everybody. */
+    entry?: string
   } | null
 }
 

@@ -20,7 +20,7 @@ import { SORT_COLUMN, type ListCounts, type SeasonEvent } from '@/lib/clubhouse'
 import { readAllRows } from '@/lib/allRows'
 import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
 import { TicksNotReady, asRow, isMissingColumn, missingSet, peopleMissing, peopleOn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
-import { birthRange, cleanDays, type Category, type RowExtras } from '@/lib/clubMembership'
+import { birthRange, cleanDays, entryLine, readEntryRules, type Category, type RowExtras } from '@/lib/clubMembership'
 
 export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow }
 
@@ -247,12 +247,16 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
   const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown }[]
   const { data: rounds } = tripRows.length ? await db.from('rounds').select('id, trip_id, course_id, tee_sheet').in('trip_id', tripRows.map(t => t.id)) : { data: [] }
   const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string; tee_sheet?: unknown }[]
-  const [courses, seats] = await Promise.all([
+  const [courses, seats, entries, cats] = await Promise.all([
     roundRows.length ? db.from('courses').select('id, name').in('id', [...new Set(roundRows.map(r => r.course_id))]) : Promise.resolve({ data: [] }),
     roundRows.length
       ? readAllRows<{ id: string; round_id: string }>(() => db.from('tee_assignments').select('id, round_id', { count: 'exact' }).in('round_id', roundRows.map(r => r.id)).order('id'), r => r.id)
       : Promise.resolve({ data: [], error: null }),
+    // Stage (m): each competition's entry rules (094) — none before it.
+    tripRows.length ? db.from('trip_private').select('trip_id, entry_rules').in('trip_id', tripRows.map(t => t.id)) : Promise.resolve({ data: [], error: null }),
+    readCategories(db, clubId),
   ])
+  const entryOf = new Map(entries.error ? [] : ((entries.data ?? []) as { trip_id: string; entry_rules: unknown }[]).map(x => [x.trip_id, entryLine(readEntryRules(x.entry_rules), cats)]))
   const courseName = new Map(((courses.data ?? []) as { id: string; name: string }[]).map(c => [c.id, c.name]))
   const booked = new Map<string, number>()
   for (const a of seats.data ?? []) booked.set(a.round_id, (booked.get(a.round_id) ?? 0) + 1)
@@ -272,6 +276,7 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
         booked: round ? booked.get(round.id) ?? 0 : 0,
         capacity: rules ? teeClocks(rules).length * rules.groupSize : 0,
         membersOnly: e.competition.membersOnly,
+        ...(trip && entryOf.get(trip.id) ? { entry: entryOf.get(trip.id)! } : {}),
       },
     }
   })

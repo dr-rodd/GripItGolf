@@ -1,11 +1,15 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CourseSelect from '@/app/components/CourseSelect'
 import DateField from '@/app/components/DateField'
 import { usePlatformCourses } from '@/app/components/usePlatformCourses'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass, chipClass } from '@/app/components/ui'
-import { makeCompetition } from '@/lib/accountClient'
+import { askClub, makeCompetition } from '@/lib/accountClient'
+import {
+  AGE_MAX, GENDER_COMP_WORDS, WEEKDAY_NAMES, ageDateLabel, entryLine, entryRulesIssue, playsOn, readEntryRules, weekdayOf,
+  type Category, type EntryRules, type Gender,
+} from '@/lib/clubMembership'
 import { compFormIssue, type CompForm } from '@/lib/clubComp'
 import { irishToday } from '@/lib/clubs'
 import type { DirectoryCourse } from '@/lib/courseDirectory'
@@ -35,7 +39,17 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
   const [error, setError] = useState('')
   const today = useMemo(() => irishToday(new Date()), [])
   const courses = [...listed.filter(c => !added.some(a => a.id === c.id)), ...added]
-  const issue = compFormIssue(form, today)
+  // Stage (m): the club's memberships and its age date, for Who can enter.
+  const [cats, setCats] = useState<Category[]>([])
+  const [ageDate, setAgeDate] = useState('01-01')
+  useEffect(() => {
+    let live = true
+    void askClub('categories', { clubId }).then(r => { if (live && r.ok) { setCats(r.categories ?? []); setAgeDate(r.ageDate ?? '01-01') } })
+    return () => { live = false }
+  }, [clubId])
+  const entry: EntryRules = form.entry ?? {}
+  const setEntry = (e: EntryRules) => setForm(f => ({ ...f, entry: e }))
+  const issue = compFormIssue(form, today) ?? entryRulesIssue(readEntryRules(form.entry), cats.map(c => c.id))
   const set = <K extends keyof CompForm>(k: K, v: CompForm[K]) => setForm(f => ({ ...f, [k]: v }))
 
   async function save() {
@@ -84,6 +98,58 @@ export default function NewCompetition({ clubId, homeCourseId, onCancel }: {
             : 'Anybody with the code can follow it, read-only. Only members book and score.'}
         </p>
       </div>
+
+      <h2 className="t-h2 text-ink pt-2">Who can enter</h2>
+      <div>
+        <p className={FIELD_LABEL}>Men’s or ladies’</p>
+        <div className="flex flex-wrap gap-2">
+          {(['M', 'F'] as Gender[]).map(g => {
+            const on = !!entry.genders?.includes(g)
+            return (
+              <button key={g} type="button" aria-pressed={on} className={chipClass(on)}
+                onClick={() => setEntry({ ...entry, genders: on ? (entry.genders ?? []).filter(x => x !== g) : [...(entry.genders ?? []), g] })}>
+                {GENDER_COMP_WORDS[g]}
+              </button>
+            )
+          })}
+        </div>
+        <p className="t-cap text-ink/65 mt-2">Neither, or both: open to everybody.</p>
+      </div>
+      {cats.length > 0 && (
+        <div>
+          <p className={FIELD_LABEL}>Memberships</p>
+          <div className="flex flex-wrap gap-2">
+            {cats.map(c => {
+              const on = !!entry.categories?.includes(c.id)
+              return (
+                <button key={c.id} type="button" aria-pressed={on} className={chipClass(on)}
+                  onClick={() => setEntry({ ...entry, categories: on ? (entry.categories ?? []).filter(x => x !== c.id) : [...(entry.categories ?? []), c.id] })}>
+                  {c.name}
+                </button>
+              )
+            })}
+          </div>
+          <p className="t-cap text-ink/65 mt-2">
+            {entry.categories?.length
+              ? 'Only these, whatever their playing days.'
+              : form.date
+                ? `None ticked: every membership that plays on a ${WEEKDAY_NAMES[weekdayOf(form.date)]}${cats.some(c => !playsOn(c, form.date)) ? ` — not ${cats.filter(c => !playsOn(c, form.date)).map(c => c.name).join(' or ')}` : ''}.`
+                : 'None ticked: every membership whose playing days include the day.'}
+          </p>
+        </div>
+      )}
+      <div>
+        <p className={FIELD_LABEL}>Ages</p>
+        <div className="flex items-center gap-2">
+          <input aria-label="Aged from" className={`${FIELD} w-24`} inputMode="numeric" placeholder="From" value={entry.minAge ?? ''}
+            onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, minAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
+          <span className="t-label text-ink/80">to</span>
+          <input aria-label="Aged up to" className={`${FIELD} w-24`} inputMode="numeric" placeholder="To" value={entry.maxAge ?? ''}
+            onChange={e => { const v = e.target.value.replace(/\D/g, ''); setEntry({ ...entry, maxAge: v ? Math.min(AGE_MAX, Number(v)) : undefined }) }} />
+        </div>
+        <p className="t-cap text-ink/65 mt-2">Empty is any age. Ages count on {ageDateLabel(ageDate)}.</p>
+      </div>
+      <p className="t-label text-ink">Open to: {entryLine(readEntryRules(form.entry), cats) ?? 'everybody on the club’s list who plays here'}</p>
 
       <h2 className="t-h2 text-ink pt-2">Tee times</h2>
       <div className="grid grid-cols-2 gap-3">

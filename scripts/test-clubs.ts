@@ -52,7 +52,7 @@ import { verifyPin } from '../lib/pinHash'
 import {
   ageBandLine, ageCountedOn, ageOn, birthRange, categoryCodeFrom, categoryIssue, entryLine, entryRefusal, entryRulesIssue, playsOn,
   readAgeDate, readBirthDate, readEntryRules, readGender, refusalWords, resolveExtras, uniqueCode, daysLine,
-  type Category, type Gender, type RowExtras,
+  type Category, type EntryRules, type Gender, type RowExtras,
 } from '../lib/clubMembership'
 import { INDEX_MAX, INDEX_MIN, indexLabel, linkPlan, readIndex, sameIndex } from '../lib/handicapIndex'
 import { linkIndex, listIndexes, setIndex, severIndex, type HandicapStore } from '../app/api/handicaps/handicaps'
@@ -901,8 +901,9 @@ function wiringTests() {
   const stored = { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', board: { scoring: 'strokes', handicapAllowance: 95 }, membersOnly: true,
     teeSheet: compTeeRules({ name: 'x', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } }) }
   const back = compFormFrom(stored)
-  eq(back && { ...back }, { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' } },
+  eq(back && { ...back }, { name: 'Monthly Medal', date: '2026-11-21', courseId: 'c1', scoring: 'strokes', allowance: 95, watch: 'members', first: '08:00', interval: 10, perTime: 4, times: 12, opens: { daysBefore: 7, time: '20:00' }, entry: null },
     'a competition reads back into the form it was made from — what a copy is made of')
+  eq(compFormFrom({ ...stored, entry: { genders: ['F'], minAge: 50 } })?.entry, { genders: ['F'], minAge: 50 }, '…its entry rules with it (stage (m))')
   eq(compFormFrom({ ...stored, teeSheet: { batches: [{ start: '08:00', interval: 10, count: 4 }, { start: '13:00', interval: 10, count: 4 }], groupSize: 4 } }), null,
     '…never guessed at for a sheet that is not one run of times')
   eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
@@ -1160,11 +1161,19 @@ async function competitionD2Tests() {
   madeRows.length = 0
   await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, watch: 'guests' } }, compStore('admin'), NOW)
   ok(!madeRows[0]?.public_passcode_hash, 'guests can watch: no door (D184)')
+  const ladies = { ...form, entry: { genders: ['F'], minAge: 50 } }
+  const noColumn = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies }, compStore('admin'), NOW)
+  ok(noColumn.status === 503 && !noColumn.body.ok && /Who may enter isn’t set up yet/.test(noColumn.body.error), 'entry rules with nowhere to keep them make no competition (before 094)')
+  const keptRules: unknown[] = []
+  const withRules = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies }, { ...compStore('admin'), async setEntryRules(_t, r) { keptRules.push(r) } }, NOW)
+  ok(withRules.status === 200 && JSON.stringify(keptRules[0]) === JSON.stringify({ genders: ['F'], minAge: 50 }), '…and with somewhere, the ladies’ over-50s are kept')
+  const badCat = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, entry: { categories: ['gone'] } } }, { ...compStore('admin'), async categories() { return [] }, async setEntryRules() {} }, NOW)
+  eq(badCat.status, 400, 'a membership not the club’s is refused')
 
   section('Booking from the club\'s list (/api/club/booking)')
   const listRow = (id: string, name: string, userId: string | null, role: 'owner' | 'admin' | 'member' = 'member') =>
     ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role, userId, removedAt: null, onBoards: true })
-  const rows = [listRow('r-ross', 'Ross', 'ross'), listRow('r-dave', 'Dave', 'dave'), listRow('r-ann', 'Ann', null), listRow('r-adm', 'Admin', 'adm', 'admin'),
+  const rows: MemberRecord[] = [listRow('r-ross', 'Ross', 'ross'), listRow('r-dave', 'Dave', 'dave'), listRow('r-ann', 'Ann', null), listRow('r-adm', 'Admin', 'adm', 'admin'),
     { ...listRow('r-off', 'Office', 'off'), playsHere: false, clubhouse: true, officer: false },
     { ...listRow('r-ofc', 'Officer', 'ofc'), playsHere: true, clubhouse: false, officer: true }]
   let ps: CompPlayer[] = []
@@ -1214,6 +1223,48 @@ async function competitionD2Tests() {
     'an Officer runs the competition on the phone; Clubhouse alone does not (D219)')
   const idx = await runBooking({ token: 'tok-ross', action: 'index', code: 'COMP01', playerId: 'p-r-ross', index: '13.9' }, bstore, open)
   ok(idx.status === 200 && indexSets[0] === 'r-ross:13.9:ross', 'the start sheet changes the one index, by the member starting the card (D179)')
+
+  section('Who may enter, at booking (stage (m))')
+  const keptPs = ps, keptBs = bs
+  ps = []; bs = []
+  const sat = '2026-11-21'
+  const cats6: Category[] = [{ id: 'six', name: '6 Day', code: '6DAY', days: [0, 1, 2, 3, 4, 6] }, { id: 'jun', name: 'Junior', code: 'JUN', days: [0, 1, 2, 3, 4, 5, 6] }]
+  rows.push({ ...listRow('r-liz', 'Liz', 'liz'), gender: 'F', birthDate: '1970-03-01', categoryId: 'six' })
+  rows.find(r => r.id === 'r-ross')!.gender = 'M'
+  const overrides: ActivityEntry[] = []
+  const madePlayers: { gender: string }[] = []
+  const estore = (entry: EntryRules | null): BookingStore => ({
+    ...bstore,
+    async competition(c) { return c === 'COMP01' ? { tripId: 't1', code: 'COMP01', clubId: 'c1', roundId: 'rd', date: sat, rules, publicHash: null, entry } : null },
+    async searchRows(_c, q) { return rows.filter(r => r.name.toLowerCase().includes(q.toLowerCase())).map(r => ({ id: r.id, name: r.name, linked: !!r.userId, gender: r.gender, birthDate: r.birthDate, categoryId: r.categoryId })) },
+    async insertPlayer(r) { madePlayers.push({ gender: r.gender }); const id = `p-${r.club_member_id}`; ps.push({ id, clubMemberId: r.club_member_id }); return id },
+    async memberships() { return { categories: cats6, ageDate: '01-01' } },
+    async logActivity(e) { overrides.push(...e) },
+  })
+  const satOpen = new Date(Date.parse(`${sat}T07:00:00Z`))
+  const ebook = (st: BookingStore, tok: string, ids: string[], extra: Record<string, unknown> = {}) => runBooking({ token: tok, action: 'book', code: 'COMP01', slot: 0, memberIds: ids, ...extra }, st, satOpen)
+  const lizSat = await ebook(estore({ genders: ['F'] }), 'tok-liz', ['r-liz'])
+  ok(lizSat.status === 409 && !lizSat.body.ok && /Saturday isn’t one of your playing days/.test(lizSat.body.error), 'a 6-day lady cannot book the ladies’ Saturday competition')
+  const lizTicked = await ebook(estore({ genders: ['F'], categories: ['six'] }), 'tok-liz', ['r-liz'])
+  ok(lizTicked.status === 200 && madePlayers.at(-1)?.gender === 'F', '…unless the competition ticks 6 Day — and her player is made a woman, for the ladies’ tees')
+  ps = []; bs = []
+  const rossLadies = await ebook(estore({ genders: ['F'] }), 'tok-ross', ['r-ross'])
+  ok(rossLadies.status === 409 && !rossLadies.body.ok && /ladies’ competition/.test(rossLadies.body.error) && !rossLadies.body.anyway, 'a man cannot book a ladies’ competition — and is not offered Book anyway')
+  const daveNone = await ebook(estore({ genders: ['M'] }), 'tok-ross', ['r-dave'])
+  ok(daveNone.status === 409 && !daveNone.body.ok && /hasn’t recorded Dave’s gender/.test(daveNone.body.error), 'no gender recorded blocks a men’s competition')
+  const junior = await ebook(estore({ categories: ['jun'] }), 'tok-ross', ['r-ross'])
+  ok(junior.status === 409 && !junior.body.ok && /Junior members/.test(junior.body.error), 'a full man may not book a junior competition')
+  const ofcTry = await ebook(estore({ categories: ['jun'] }), 'tok-ofc', ['r-ross'])
+  ok(ofcTry.status === 409 && !ofcTry.body.ok && ofcTry.body.anyway === true, 'an Officer is told why, and offered Book anyway')
+  const ofcAnyway = await ebook(estore({ categories: ['jun'] }), 'tok-ofc', ['r-ross'], { anyway: true })
+  ok(ofcAnyway.status === 200 && overrides.some(o => o.action === 'booking.override' && o.memberId === 'r-ross'), '…and booking anyway is logged')
+  eq((await ebook(estore({ categories: ['jun'] }), 'tok-ross', ['r-dave'], { anyway: true })).status, 409, 'a member cannot book anyway')
+  const lizState = await runBooking({ token: 'tok-liz', action: 'state', code: 'COMP01' }, estore({ genders: ['F'] }), satOpen)
+  ok(lizState.status === 200 && lizState.body.ok && lizState.body.entry === 'Ladies’' && /Saturday/.test(lizState.body.myRefusal ?? ''), 'the sheet says who may enter, and why this member may not')
+  const nm = await runBooking({ token: 'tok-ross', action: 'names', code: 'COMP01', q: 'liz' }, estore({ genders: ['M'] }), satOpen)
+  ok(nm.status === 200 && nm.body.ok && /men’s competition/.test(nm.body.names?.[0]?.why ?? ''), 'the partner search greys who may not enter, with why')
+  eq((await ebook(estore(null), 'tok-ross', ['r-dave'])).status, 200, 'no rules: everybody, as before')
+  ps = keptPs; bs = keptBs
 
   section('Every member watches; only the tee sheet plays (D184; Ross, 16 Nov 2026)')
   eq(mergeGrant(null, { watchOnly: true, playerId: 'p1' }, NOW).role, 'spectator', 'somebody not playing watches only, whatever they claim')

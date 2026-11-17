@@ -605,7 +605,11 @@ export interface BookingAnswer {
   myRowId?: string
   admin?: boolean
   booked?: boolean
-  names?: { id: string; name: string; booked: boolean; linked: boolean }[]
+  names?: { id: string; name: string; booked: boolean; linked: boolean; why?: string }[]
+  /** Stage (m): who may enter, said short — absent, everybody. */
+  entry?: string
+  /** Stage (m): why this account may not enter. */
+  myRefusal?: string
 }
 
 /**
@@ -613,7 +617,7 @@ export interface BookingAnswer {
  * and the members-only door's way through), `names` (partners from the
  * list), `book` and `withdraw`. Never throws.
  */
-export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number }> {
+export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number; anyway?: boolean }> {
   const code = typeof body.code === 'string' ? body.code : ''
   if (action === 'state') return kept(`booking:${code}`, () => askBookingNow(action, body))
   const r = await askBookingNow(action, body)
@@ -621,12 +625,13 @@ export async function askBooking(action: 'state' | 'names' | 'book' | 'withdraw'
   return r
 }
 
-async function askBookingNow(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number }> {
+async function askBookingNow(action: 'state' | 'names' | 'book' | 'withdraw', body: Record<string, unknown>): Promise<({ ok: true } & BookingAnswer) | { ok: false; error: string; status?: number; anyway?: boolean }> {
   const token = await accountToken()
   if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
   const r = await askServer(token, { ...body, action }, '/api/club/booking')
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
-  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  // Stage (m): `anyway` — an Officer may book this person despite the entry rules.
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach, ...(r.body.anyway === true ? { anyway: true } : {}) }
   return { ok: true, ...(r.body as BookingAnswer) }
 }
 

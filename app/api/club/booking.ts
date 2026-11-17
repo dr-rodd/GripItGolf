@@ -21,7 +21,8 @@ import { bookingIssue, withdrawIssue } from '@/lib/clubComp'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { readIndex } from '@/lib/handicapIndex'
 import { teeClocks, type TeeRules } from '@/lib/teeSheet'
-import type { MemberRecord } from './club'
+import { entryLine, entryRefusal, readAgeDate, refusalWords, type Category, type EntryRules } from '@/lib/clubMembership'
+import type { ActivityEntry, MemberRecord } from './club'
 
 export interface CompRecord {
   tripId: string
@@ -32,6 +33,8 @@ export interface CompRecord {
   rules: TeeRules
   /** The members-only door's lock, or null when guests may watch. */
   publicHash: string | null
+  /** Stage (m): who may enter (094's trip_private.entry_rules) — null, everybody. */
+  entry?: EntryRules | null
 }
 
 export interface Booked { playerId: string; slot: number; bookedBy: string | null }
@@ -46,12 +49,12 @@ export interface BookingStore {
   /** Rows of this club's list by id, taken off ones left out. */
   rowsByIds(clubId: string, ids: string[]): Promise<MemberRecord[]>
   /** Names on the list matching what was typed — never numbers or emails. */
-  searchRows(clubId: string, q: string, limit: number): Promise<{ id: string; name: string; linked: boolean }[]>
+  searchRows(clubId: string, q: string, limit: number): Promise<({ id: string; name: string; linked: boolean } & Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>)[]>
   /** The one handicap index for a row (D179): its account's when linked, else its own. */
   indexOf(row: MemberRecord): Promise<number | null>
   players(tripId: string): Promise<CompPlayer[]>
   bookings(roundId: string): Promise<Booked[]>
-  insertPlayer(row: { trip_id: string; name: string; handicap: number | null; club_member_id: string; claimed: boolean }): Promise<string>
+  insertPlayer(row: { trip_id: string; name: string; handicap: number | null; club_member_id: string; claimed: boolean; gender: 'M' | 'F' }): Promise<string>
   /** 'clash' when one of them already has a time (one per player per round). */
   insertBookings(rows: { trip_id: string; round_id: string; player_id: string; slot_index: number; booked_by: string | null }[]): Promise<'ok' | 'clash'>
   deleteBookings(roundId: string, playerIds: string[]): Promise<void>
@@ -67,6 +70,10 @@ export interface BookingStore {
    * row's players in any competition whose card has not started given it.
    */
   setIndexFromCard(row: MemberRecord, value: number | null, by: string, roundId: string): Promise<void>
+  /** Stage (m): the club's memberships and the day its ages count on — none, and 1 January, before 094. */
+  memberships?(clubId: string): Promise<{ categories: Category[]; ageDate: string }>
+  /** The club's activity log (092), for an Officer's "Book anyway" — fail-soft. */
+  logActivity?(entries: ActivityEntry[]): Promise<void>
 }
 
 export interface BookingBody {
@@ -78,12 +85,17 @@ export interface BookingBody {
   admin?: boolean
   /** This account's player is on a tee time — only those play (Ross, 16 Nov 2026). */
   booked?: boolean
-  names?: { id: string; name: string; booked: boolean; linked: boolean }[]
+  /** Each name with why they may not enter, if they may not (stage (m)) — greyed, an Officer may book them anyway. */
+  names?: { id: string; name: string; booked: boolean; linked: boolean; why?: string }[]
+  /** Stage (m): who may enter, said short ("Ladies’ · Aged 50 and over") — absent, everybody. */
+  entry?: string
+  /** Stage (m): why this account may not enter, if it may not. */
+  myRefusal?: string
 }
 
 export type BookingOutcome =
   | { status: 200; body: BookingBody; door: { code: string; value: string } | null }
-  | { status: 400 | 401 | 403 | 404 | 409 | 503; body: { ok: false; error: string } }
+  | { status: 400 | 401 | 403 | 404 | 409 | 503; body: { ok: false; error: string; anyway?: boolean } }
 
 type FailStatus = 400 | 401 | 403 | 404 | 409 | 503
 const fail = (status: FailStatus, error: string): BookingOutcome => ({ status, body: { ok: false, error } })
@@ -110,8 +122,18 @@ export async function runBooking(
   const playerOfRow = new Map(players.filter(p => p.clubMemberId).map(p => [p.clubMemberId as string, p.id]))
   const mine = playerOfRow.get(me.id) ?? null
   const booked = !!mine && bookings.some(b => b.playerId === mine)
+  // Stage (m): who may enter, read once — the rules, the club's memberships
+  // and its age date. Without rules a membership's days still decide.
+  const ms = store.memberships ? await store.memberships(comp.clubId).catch(() => ({ categories: [] as Category[], ageDate: '01-01' })) : { categories: [] as Category[], ageDate: '01-01' }
+  const rules = comp.entry ?? null
+  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => entryRefusal({
+    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+    category: ms.categories.find(c => c.id === r.categoryId) ?? null, day: comp.date, ageDate: readAgeDate(ms.ageDate), categories: ms.categories,
+  })
+  const line = entryLine(rules, ms.categories)
+  const mineRefused = refusalOf(me)
   const ok = (body: Omit<BookingBody, 'ok'> = {}): BookingOutcome =>
-    ({ status: 200, body: { ok: true, myRowId: me.id, admin, booked, ...body }, door })
+    ({ status: 200, body: { ok: true, myRowId: me.id, admin, booked, ...(line ? { entry: line } : {}), ...(mineRefused ? { myRefusal: refusalWords(mineRefused) } : {}), ...body }, door })
 
   // What this phone is in the competition — and its way through the door.
   if (input.action === 'state') {
@@ -125,7 +147,10 @@ export async function runBooking(
     if (q.length < 2) return ok({ names: [] })
     const booked = new Set(bookings.map(b => b.playerId))
     const rows = await store.searchRows(comp.clubId, q.slice(0, 40), 20)
-    return ok({ names: rows.map(r => ({ id: r.id, name: r.name, linked: r.linked, booked: booked.has(playerOfRow.get(r.id) ?? '') })) })
+    return ok({ names: rows.map(r => {
+      const f = refusalOf(r)
+      return { id: r.id, name: r.name, linked: r.linked, booked: booked.has(playerOfRow.get(r.id) ?? ''), ...(f ? { why: refusalWords(f, r.name) } : {}) }
+    }) })
   }
 
   if (input.action === 'book') {
@@ -144,6 +169,14 @@ export async function runBooking(
     if (noAccount) return fail(409, `${noAccount.name} needs a Green Dot account linked to the club’s list to play.`)
     const already = rows.find(r => bookings.some(b => b.playerId === playerOfRow.get(r.id)))
     if (already) return fail(409, `${already.name} already has a tee time.`)
+    // Stage (m): who may enter. An Officer may book somebody anyway — a
+    // record the club got wrong should not keep a player off the tee — and
+    // that is logged (Ross, 17 Nov 2026).
+    const refused = rows.map(r => ({ r, f: refusalOf(r) })).filter((x): x is { r: MemberRecord; f: NonNullable<ReturnType<typeof refusalOf>> } => !!x.f)
+    if (refused.length && !(admin && input.anyway === true)) {
+      const { r, f } = refused[0]
+      return { status: 409, body: { ok: false, error: refusalWords(f, r.id === me.id ? null : r.name), ...(admin ? { anyway: true } : {}) } }
+    }
 
     // The player for each row, made the first time it is booked.
     const ensure = async (row: MemberRecord): Promise<string> => {
@@ -152,6 +185,9 @@ export async function runBooking(
       const made = await store.insertPlayer({
         trip_id: comp.tripId, name: row.name, handicap: await store.indexOf(row),
         club_member_id: row.id, claimed: row.id === me.id,
+        // The card's tees follow the player's gender; not given stays the
+        // men's, as every player has always been made.
+        gender: row.gender ?? 'M',
       })
       playerOfRow.set(row.id, made)
       return made
@@ -171,6 +207,12 @@ export async function runBooking(
         return fail(409, 'That tee time has just filled — choose another.')
       }
       if (myPlayerId) await store.linkAccount(user.id, comp.tripId, myPlayerId).catch(() => undefined)
+      if (refused.length && store.logActivity) {
+        await store.logActivity(refused.map(({ r, f }) => ({
+          clubId: comp.clubId, byUser: user.id, byName: me.name, byStaff: false, action: 'booking.override',
+          memberId: r.id, memberName: r.name, changes: { [comp.code]: [refusalWords(f, r.name), 'booked anyway'] }, batchId: null,
+        }))).catch(e => console.error('club activity not logged:', e))
+      }
     } catch (e) {
       console.error('booking failed:', e)
       return fail(503, 'Could not book — try again.')

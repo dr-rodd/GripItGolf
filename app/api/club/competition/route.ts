@@ -4,7 +4,9 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { runCopyCompetition, runNewCompetition, type CompetitionStore } from '../competition'
+import { EntryNotReady, runCopyCompetition, runNewCompetition, type CompetitionStore } from '../competition'
+import { isMissingColumn } from '../rows'
+import { readEntryRulesOf } from '../entryRules'
 
 // POST /api/club/competition — `{ clubId, form }` with a Green Dot member's
 // token: a verified club's owner or admin makes a competition (D162). The
@@ -40,6 +42,11 @@ export async function POST(req: NextRequest) {
       newId: () => randomUUID(),
       compSource: code => readCompSource(db, code),
       logActivity: entries => clubs.logActivity ? clubs.logActivity(entries) : Promise.resolve(),
+      categories: clubId => clubs.categories ? clubs.categories(clubId) : Promise.resolve([]),
+      async setEntryRules(tripId, rules) {
+        const { error } = await db.from('trip_private').update({ entry_rules: rules }).eq('trip_id', tripId)
+        if (error) throw isMissingColumn(error) ? new EntryNotReady() : error
+      },
     }
     // Stage (k2): Copy to another date, and Repeat weekly.
     if (body?.action === 'copy') {
@@ -66,8 +73,9 @@ async function readCompSource(db: ReturnType<typeof createAdminClient>, code: st
   const { data: trip } = await db.from('trips').select('id, name, start_date, leaderboards, competition, public_passcode_hash').eq('trip_code', code).maybeSingle()
   const t = trip as { id: string; name: string; start_date: string | null; leaderboards: unknown; competition: string | null; public_passcode_hash: string | null } | null
   if (!t || t.competition !== 'club') return null
-  const [priv, round] = await Promise.all([
+  const [priv, entry, round] = await Promise.all([
     db.from('trip_private').select('club_id').eq('trip_id', t.id).maybeSingle(),
+    readEntryRulesOf(db, t.id),
     db.from('rounds').select('course_id, scheduled_date, tee_sheet').eq('trip_id', t.id).order('round_number').limit(1).maybeSingle(),
   ])
   const clubId = (priv.data as { club_id?: string | null } | null)?.club_id
@@ -76,6 +84,6 @@ async function readCompSource(db: ReturnType<typeof createAdminClient>, code: st
   const board = (Array.isArray(t.leaderboards) ? t.leaderboards : []).find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: unknown; handicapAllowance?: unknown } | undefined
   return {
     clubId, name: t.name, date: r.scheduled_date ?? t.start_date ?? '', courseId: r.course_id,
-    board: board ?? null, teeSheet: r.tee_sheet, membersOnly: !!t.public_passcode_hash,
+    board: board ?? null, teeSheet: r.tee_sheet, membersOnly: !!t.public_passcode_hash, entry,
   }
 }

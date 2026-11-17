@@ -5,6 +5,8 @@ import { handicapStore } from '../handicaps/store'
 import { setIndex } from '../handicaps/handicaps'
 import { serviceStore } from '../entry/store'
 import { asRow, clubStore, rowCols, withTicks, type RowRow } from './store'
+import { readEntryRulesOf } from './entryRules'
+import { readEntryRules } from '@/lib/clubMembership'
 import type { BookingStore, CompRecord } from './booking'
 import { readRoundLock, readSignatures } from '../card/signatures'
 import { signedOff } from '../card/sign'
@@ -21,9 +23,10 @@ export async function readCompetition(db: Db, code: string): Promise<(CompRecord
   const { data: t, error } = await db.from('trips').select('id, trip_code, name, competition, public_passcode_hash').eq('trip_code', code).maybeSingle()
   const trip = (error ? null : t) as { id: string; trip_code: string; name: string; competition?: string | null; public_passcode_hash?: string | null } | null
   if (!trip || trip.competition !== 'club') return null
-  const [{ data: priv }, { data: round }] = await Promise.all([
+  const [{ data: priv }, { data: round }, entry] = await Promise.all([
     db.from('trip_private').select('club_id').eq('trip_id', trip.id).maybeSingle(),
     db.from('rounds').select('id, scheduled_date, tee_sheet, course_id').eq('trip_id', trip.id).order('round_number').limit(1).maybeSingle(),
+    readEntryRulesOf(db, trip.id),
   ])
   const clubId = (priv as { club_id?: string | null } | null)?.club_id
   const r = round as { id: string; scheduled_date: string | null; tee_sheet?: unknown; course_id: string } | null
@@ -34,6 +37,7 @@ export async function readCompetition(db: Db, code: string): Promise<(CompRecord
   return {
     tripId: trip.id, code: trip.trip_code, name: trip.name, clubId, roundId: r.id, date: r.scheduled_date, rules, courseId: r.course_id,
     publicHash: trip.public_passcode_hash ?? null,
+    entry: readEntryRules(entry),
   }
 }
 
@@ -59,10 +63,11 @@ export function bookingStore(db: Db): BookingStore {
       const like = `%${q.replace(/[%_\\]/g, m => `\\${m}`)}%`
       // D209: only those who play here are offered for a field (092; before it, everyone).
       const { data, error } = await withTicks(t => {
-        const q = db.from('club_members').select('id, name, user_id').eq('club_id', clubId).is('removed_at', null)
+        const q = db.from('club_members').select(rowCols(t)).eq('club_id', clubId).is('removed_at', null)
         return (t ? q.eq('plays_here', true) : q).ilike('name', like).order('name').limit(limit)
       })
-      return error ? [] : ((data ?? []) as { id: string; name: string; user_id: string | null }[]).map(r => ({ id: r.id, name: r.name, linked: !!r.user_id }))
+      return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow)
+        .map(r => ({ id: r.id, name: r.name, linked: !!r.userId, gender: r.gender, birthDate: r.birthDate, categoryId: r.categoryId }))
     },
     async indexOf(row) {
       return row.userId ? handicaps.accountIndex(row.userId) : handicaps.rowIndex(row.id)
@@ -101,6 +106,11 @@ export function bookingStore(db: Db): BookingStore {
       if (live.error || done.error || (live.count ?? 0) > 0 || (done.count ?? 0) > 0) return
       await db.from('players').delete().eq('id', playerId)
     },
+    async memberships(clubId) {
+      const [categories, club] = await Promise.all([clubs.categories ? clubs.categories(clubId) : Promise.resolve([]), clubs.club(clubId)])
+      return { categories, ageDate: club?.ageDate ?? '01-01' }
+    },
+    logActivity: entries => clubs.logActivity ? clubs.logActivity(entries) : Promise.resolve(),
     linkAccount: (userId, tripId, playerId) => entry.linkPlayer!(userId, tripId, playerId),
     doorToken: c => (c.publicHash ? entryToken(c.publicHash, c.code) : null),
     async setIndexFromCard(row, value, by, roundId) {
