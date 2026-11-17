@@ -212,6 +212,7 @@ export function needsYou(o: {
 export const SECTIONS = [
   { key: 'overview', label: 'Overview', path: '' },
   { key: 'members', label: 'Members', path: '/members' },
+  { key: 'memberships', label: 'Memberships', path: '/memberships' },
   { key: 'competitions', label: 'Competitions', path: '/competitions' },
   { key: 'calendar', label: 'Calendar', path: '/calendar' },
   { key: 'settings', label: 'Club settings', path: '/settings' },

@@ -9,7 +9,8 @@ import { askClub } from '@/lib/accountClient'
 import { CREDENTIAL_WORDS, clubMay, credentialLine, type Asker, type CredentialKey } from '@/lib/clubMay'
 import { STANDING_WORDS, standingOf, type GridRow } from '@/lib/clubhouse'
 import { indexLabel, readIndex } from '@/lib/handicapIndex'
-import { listRowIssue, cleanRow } from '@/lib/clubs'
+import { listRowIssue, cleanRow, irishToday } from '@/lib/clubs'
+import { GENDER_WORDS, NOT_GIVEN, birthDateLabel, readBirthDate, type Category, type Gender } from '@/lib/clubMembership'
 
 export const GRANT_FOR: Record<CredentialKey, 'grant_plays_here' | 'grant_officer' | 'grant_clubhouse' | 'grant_owner'> = {
   playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner',
@@ -34,9 +35,11 @@ export function tickWhy(asker: Asker, row: Pick<GridRow, 'credentials'>, key: Cr
  * list or putting them back. `row` null is a new person. Everything saves
  * through /api/club and the grid takes the answer.
  */
-export default function RowPanel({ clubId, clubName, asker, row, onClose, onSaved }: {
+export default function RowPanel({ clubId, clubName, categories, asker, row, onClose, onSaved }: {
   clubId: string
   clubName: string
+  /** Stage (m): the club's memberships. */
+  categories: Pick<Category, 'id' | 'code' | 'name'>[]
   asker: Asker
   row: GridRow | null
   onClose: () => void
@@ -49,6 +52,9 @@ export default function RowPanel({ clubId, clubName, asker, row, onClose, onSave
   const [guiNumber, setGuiNumber] = useState(row?.guiNumber ?? '')
   const shownIndex = row?.handicapIndex === null || row?.handicapIndex === undefined ? '' : indexLabel(row.handicapIndex)
   const [index, setIndex] = useState(shownIndex)
+  const [gender, setGender] = useState<Gender | ''>(row?.gender ?? '')
+  const [born, setBorn] = useState(birthDateLabel(row?.birthDate ?? null))
+  const [categoryId, setCategoryId] = useState(row?.categoryId ?? '')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [confirmOff, setConfirmOff] = useState(false)
@@ -63,12 +69,15 @@ export default function RowPanel({ clubId, clubName, asker, row, onClose, onSave
 
   async function save() {
     setError('')
+    const b = readBirthDate(born, irishToday(new Date()))
+    if (!b.ok) { setError(b.why); return }
     if (!row) {
       const r0 = cleanRow({ name, email, memberNumber, guiNumber })
       const why = listRowIssue(r0)
       if (why) { setError(why); return }
       setBusy(true)
-      const r = await askClub('add', { clubId, rows: [r0], slim: true })
+      const code = categories.find(c => c.id === categoryId)?.code
+      const r = await askClub('add', { clubId, slim: true, rows: [{ ...r0, ...(gender ? { gender } : {}), ...(born.trim() ? { birthDate: born.trim() } : {}), ...(code ? { category: code } : {}) }] })
       setBusy(false)
       if (!r.ok) { setError(r.error); return }
       if (r.skipped?.length) { setError(`${r.skipped[0].name}: ${r.skipped[0].why}`); return }
@@ -81,6 +90,9 @@ export default function RowPanel({ clubId, clubName, asker, row, onClose, onSave
     if (memberNumber.trim() !== (row.memberNumber ?? '')) body.memberNumber = memberNumber
     if (guiNumber.trim() !== (row.guiNumber ?? '')) body.guiNumber = guiNumber
     if (index.trim() !== shownIndex) body.handicapIndex = index.trim()
+    if (gender !== (row.gender ?? '')) body.gender = gender
+    if ((b.value ?? null) !== row.birthDate) body.birthDate = born.trim()
+    if (categoryId !== (row.categoryId ?? '')) body.categoryId = categoryId
     if (Object.keys(body).length === 0) { onClose(); return }
     setBusy(true)
     const r = await askClub('update', { clubId, memberId: row.id, whole: true, slim: true, ...body })
@@ -90,6 +102,7 @@ export default function RowPanel({ clubId, clubName, asker, row, onClose, onSave
     onSaved({
       ...row, name: after.name, email: after.email, memberNumber: after.memberNumber, guiNumber: after.guiNumber,
       handicapIndex: body.handicapIndex === undefined ? row.handicapIndex : indexValue(index, row.handicapIndex),
+      gender: gender || null, birthDate: b.value ?? null, categoryId: categoryId || null,
     }, 'Saved.')
   }
 
@@ -170,6 +183,30 @@ export default function RowPanel({ clubId, clubName, asker, row, onClose, onSave
               </p>
             </div>
           )}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label htmlFor={`p-gender-${id}`} className={FIELD_LABEL}>Gender</label>
+              <select id={`p-gender-${id}`} value={gender} onChange={e => setGender(e.target.value as Gender | '')} className={`${FIELD} ch-focus`}>
+                <option value="">{NOT_GIVEN}</option>
+                <option value="M">{GENDER_WORDS.M}</option>
+                <option value="F">{GENDER_WORDS.F}</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor={`p-born-${id}`} className={FIELD_LABEL}>Date of birth</label>
+              <input id={`p-born-${id}`} value={born} onChange={e => setBorn(e.target.value)} placeholder="dd/mm/yyyy" inputMode="numeric" className={`${FIELD} ch-focus`} />
+            </div>
+          </div>
+          {categories.length > 0 && (
+            <div>
+              <label htmlFor={`p-cat-${id}`} className={FIELD_LABEL}>Membership</label>
+              <select id={`p-cat-${id}`} value={categoryId} onChange={e => setCategoryId(e.target.value)} className={`${FIELD} ch-focus`}>
+                <option value="">None — plays any day</option>
+                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+          )}
+          {row?.linked && <p className="t-cap text-ink/65 -mt-2">Their gender and date of birth are one value everywhere: set here, they show on their Green Dot account, which they cannot change themselves.</p>}
           <button type="button" disabled={busy || !name.trim()} onClick={() => void save()} className={`${buttonClass('secondary', false)} ch-focus`}>
             {row ? 'Save' : 'Add to the list'}
           </button>

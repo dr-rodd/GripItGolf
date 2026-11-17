@@ -11,21 +11,27 @@ import {
 } from '@/lib/clubhouse'
 import { cleanRow, irishToday, listRowIssue } from '@/lib/clubs'
 import { indexLabel } from '@/lib/handicapIndex'
+import { AGE_MAX, GENDER_WORDS, NOT_GIVEN, birthDateLabel, readBirthDate, type Gender } from '@/lib/clubMembership'
 import { useShell } from '../ShellContext'
+import { useCategories } from '../useCategories'
 import RowPanel, { indexValue, tickWhy } from './RowPanel'
 import PasteSheet, { UPLOAD_ACCEPT, readListFile } from './PasteSheet'
 
-type Field = 'name' | 'email' | 'memberNumber' | 'guiNumber' | 'handicapIndex'
+type Field = 'name' | 'email' | 'memberNumber' | 'guiNumber' | 'handicapIndex' | 'birthDate'
 const FIELDS: Field[] = ['name', 'email', 'memberNumber', 'guiNumber', 'handicapIndex']
+/** Every typed cell, in Tab's order: the five, then Born after Gender (stage (m)). */
+const TAB_ORDER: Field[] = [...FIELDS, 'birthDate']
 const TICKS: { key: CredentialKey; label: string }[] = [
   { key: 'playsHere', label: 'Plays here' }, { key: 'officer', label: 'Officer' }, { key: 'clubhouse', label: 'Clubhouse' },
 ]
 const SORTABLE: Partial<Record<Field, ListSort>> = { name: 'name', email: 'email', memberNumber: 'memberNumber', guiNumber: 'guiNumber' }
-const HEAD: Record<Field, string> = { name: 'Name', email: 'Email', memberNumber: 'Member no.', guiNumber: 'GUI no.', handicapIndex: 'Index' }
+const HEAD: Record<Field, string> = { name: 'Name', email: 'Email', memberNumber: 'Member no.', guiNumber: 'GUI no.', handicapIndex: 'Index', birthDate: 'Born' }
+const RIGHT: Field[] = ['memberNumber', 'guiNumber', 'handicapIndex', 'birthDate']
 
 /** A cell's text as the grid shows and edits it. */
 function shown(r: GridRow, f: Field): string {
   if (f === 'handicapIndex') return r.handicapIndex === null ? '' : indexCell(r.handicapIndex)
+  if (f === 'birthDate') return birthDateLabel(r.birthDate)
   return r[f] ?? ''
 }
 
@@ -69,23 +75,46 @@ export default function MembersGrid() {
   const [toast, setToast] = useState<Toast | null>(null)
   const [busy, setBusy] = useState(false)
   const [confirmOff, setConfirmOff] = useState(false)
+  // Stage (m): narrowing by gender, membership and age (counted on the club's age date).
+  const [gender, setGender] = useState<'' | Gender | 'none'>('')
+  const [category, setCategory] = useState('')
+  const [ageMin, setAgeMin] = useState('')
+  const [ageMax, setAgeMax] = useState('')
+  const [ages, setAges] = useState<{ min?: number; max?: number }>({})
+  const { categories } = useCategories(club.id)
   const search = useRef<HTMLInputElement>(null)
   const undoRef = useRef<(() => void) | null>(null)
 
   // The filter an address asks for (?filter=), from the Overview's figures.
-  useEffect(() => { setFilter(readFilter(new URLSearchParams(window.location.search).get('filter'))) }, [])
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    setFilter(readFilter(p.get('filter')))
+    const g = p.get('gender')
+    if (g === 'M' || g === 'F' || g === 'none') setGender(g)
+    if (p.get('category')) setCategory(p.get('category')!)
+  }, [])
+  // An age box settles a moment after the last key, as the search does.
+  useEffect(() => {
+    const age = (v: string) => { const n = Number(v); return v.trim() && Number.isInteger(n) && n >= 0 && n <= AGE_MAX ? n : undefined }
+    const t = setTimeout(() => setAges({ min: age(ageMin), max: age(ageMax) }), 250)
+    return () => clearTimeout(t)
+  }, [ageMin, ageMax])
   // A search settles a moment after the last key.
   useEffect(() => { const t = setTimeout(() => setSearched(q.trim()), 250); return () => clearTimeout(t) }, [q])
-  useEffect(() => { setPage(0); setTicked(new Set()) }, [searched, filter, sort, desc])
+  useEffect(() => { setPage(0); setTicked(new Set()) }, [searched, filter, sort, desc, gender, category, ages])
 
   useEffect(() => {
     let live = true
-    void askClub('page', { clubId: club.id, q: searched, filter, sort, desc, page }).then(r => {
+    const people = {
+      ...(gender ? { gender } : {}), ...(category ? { category } : {}),
+      ...(ages.min !== undefined ? { ageMin: ages.min } : {}), ...(ages.max !== undefined ? { ageMax: ages.max } : {}),
+    }
+    void askClub('page', { clubId: club.id, q: searched, filter, sort, desc, page, ...people }).then(r => {
       if (!live) return
       if (r.ok && r.grid) { setData({ grid: r.grid, total: r.total ?? r.grid.length }); setLost(false) } else setLost(true)
     })
     return () => { live = false }
-  }, [club.id, searched, filter, sort, desc, page, reload])
+  }, [club.id, searched, filter, sort, desc, page, reload, gender, category, ages])
 
   function chooseFilter(f: ListFilter) {
     setFilter(f)
@@ -112,7 +141,14 @@ export default function MembersGrid() {
       const why = listRowIssue(cleanRow({ name: row.name, email: row.email, memberNumber: row.memberNumber, guiNumber: row.guiNumber, [field]: v }))
       if (why) { setFailedCell(`${row.id}:${field}`); say({ text: why, tone: 'error' }); return }
     }
-    const next: GridRow = field === 'handicapIndex' ? { ...row, handicapIndex: indexValue(v, row.handicapIndex) } : { ...row, [field]: v || null }
+    let born: string | null = null
+    if (field === 'birthDate') {
+      const b = readBirthDate(v, irishToday(new Date()))
+      if (!b.ok) { setFailedCell(`${row.id}:${field}`); say({ text: b.why, tone: 'error' }); return }
+      born = b.value ?? null
+    }
+    const next: GridRow = field === 'handicapIndex' ? { ...row, handicapIndex: indexValue(v, row.handicapIndex) }
+      : field === 'birthDate' ? { ...row, birthDate: born } : { ...row, [field]: v || null }
     patch(row.id, () => next)
     setFailedCell(null)
     const r = await askClub('update', { clubId: club.id, memberId: row.id, whole: true, slim: true, [field]: v })
@@ -123,6 +159,21 @@ export default function MembersGrid() {
       return
     }
     say({ text: isUndo ? 'Put back.' : 'Saved.', tone: 'ok', undo: isUndo ? undefined : () => void commit(next, field, before, true) })
+  }
+
+  // ─── A gender or a membership, chosen from its list (stage (m)) ───
+  async function choose(row: GridRow, key: 'gender' | 'categoryId', value: string | null, isUndo = false) {
+    const before = row[key] ?? null
+    if (value === before) return
+    const next: GridRow = { ...row, [key]: value }
+    patch(row.id, () => next)
+    const r = await askClub('update', { clubId: club.id, memberId: row.id, slim: true, [key]: value ?? '' })
+    if (!r.ok) {
+      patch(row.id, () => row)
+      say({ text: r.error, tone: 'error' })
+      return
+    }
+    say({ text: isUndo ? 'Put back.' : 'Saved.', tone: 'ok', undo: isUndo ? undefined : () => void choose(next, key, before, true) })
   }
 
   // ─── One tick ───
@@ -194,7 +245,11 @@ export default function MembersGrid() {
 
   const grid = data?.grid ?? []
   const total = data?.total ?? 0
-  const empty = !!data && total === 0 && !searched && filter === 'all'
+  const narrowed = !!gender || !!category || ages.min !== undefined || ages.max !== undefined
+  const empty = !!data && total === 0 && !searched && filter === 'all' && !narrowed
+  const cats = categories ?? []
+  const catName = (id: string | null) => cats.find(c => c.id === id)?.name ?? null
+  const showEveryone = () => { setQ(''); chooseFilter('all'); setGender(''); setCategory(''); setAgeMin(''); setAgeMax('') }
   const allTicked = grid.length > 0 && grid.every(r => ticked.has(r.id))
   const toggleSort = (s: ListSort) => { if (sort === s) setDesc(d => !d); else { setSort(s); setDesc(false) } }
 
@@ -204,8 +259,8 @@ export default function MembersGrid() {
     else if (e.key === 'Tab') {
       e.preventDefault()
       void commit(row, field, draft)
-      const i = FIELDS.indexOf(field) + (e.shiftKey ? -1 : 1)
-      if (i >= 0 && i < FIELDS.length) { setEditing({ id: row.id, field: FIELDS[i] }); setDraft(shown(row, FIELDS[i])) }
+      const i = TAB_ORDER.indexOf(field) + (e.shiftKey ? -1 : 1)
+      if (i >= 0 && i < TAB_ORDER.length) { setEditing({ id: row.id, field: TAB_ORDER[i] }); setDraft(shown(row, TAB_ORDER[i])) }
     }
   }
 
@@ -233,6 +288,26 @@ export default function MembersGrid() {
         <select value={filter} onChange={e => chooseFilter(e.target.value as ListFilter)} aria-label="Show" className={`${FIELD} ch-focus md:max-w-[240px]`}>
           {LIST_FILTERS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
+        <select value={gender} onChange={e => setGender(e.target.value as typeof gender)} aria-label="Gender" className={`${FIELD} ch-focus md:max-w-[180px]`}>
+          <option value="">Any gender</option>
+          <option value="M">{GENDER_WORDS.M}</option>
+          <option value="F">{GENDER_WORDS.F}</option>
+          <option value="none">{NOT_GIVEN}</option>
+        </select>
+        {cats.length > 0 && (
+          <select value={category} onChange={e => setCategory(e.target.value)} aria-label="Membership" className={`${FIELD} ch-focus md:max-w-[200px]`}>
+            <option value="">Any membership</option>
+            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value="none">No membership</option>
+          </select>
+        )}
+        <div className="flex items-center gap-2">
+          <input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMin} onChange={e => setAgeMin(e.target.value)} placeholder="Age from"
+            aria-label="Aged from" className={`${FIELD} ch-focus w-28`} />
+          <span className="t-cap text-ink/65">to</span>
+          <input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="Age to"
+            aria-label="Aged up to" className={`${FIELD} ch-focus w-28`} />
+        </div>
       </div>
       <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to paste a list, upload a file, download the list or change many at once.</p>
 
@@ -264,7 +339,7 @@ export default function MembersGrid() {
                   </th>
                   {FIELDS.map(f => {
                     const s = SORTABLE[f]
-                    const right = f === 'memberNumber' || f === 'guiNumber' || f === 'handicapIndex'
+                    const right = RIGHT.includes(f)
                     return (
                       <th key={f} scope="col" aria-sort={s && sort === s ? (desc ? 'descending' : 'ascending') : undefined}
                         className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap ${right ? 'text-right' : ''}`}>
@@ -276,6 +351,9 @@ export default function MembersGrid() {
                       </th>
                     )
                   })}
+                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Gender</th>
+                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3 text-right">{HEAD.birthDate}</th>
+                  {cats.length > 0 && <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Membership</th>}
                   <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Standing</th>
                   {TICKS.map(t => <th key={t.key} scope="col" className="t-eyebrow text-ink/65 font-normal px-2 py-3 text-center whitespace-nowrap">{t.label}</th>)}
                   <th scope="col" className="px-4"><span className="sr-only">Details</span></th>
@@ -283,11 +361,11 @@ export default function MembersGrid() {
               </thead>
               <tbody>
                 {!data && Array.from({ length: 8 }, (_, i) => (
-                  <tr key={i} className="border-b border-line"><td colSpan={11} className="px-4 py-2"><div className="skeleton h-8 rounded-tile" /></td></tr>
+                  <tr key={i} className="border-b border-line"><td colSpan={15} className="px-4 py-2"><div className="skeleton h-8 rounded-tile" /></td></tr>
                 ))}
                 {data && grid.length === 0 && (
-                  <tr><td colSpan={11} className="px-4 py-8 text-ink/65 text-[15px]">
-                    Nobody matches. <button type="button" onClick={() => { setQ(''); chooseFilter('all') }} className="underline underline-offset-2 text-ink ch-focus">Show everyone</button>
+                  <tr><td colSpan={15} className="px-4 py-8 text-ink/65 text-[15px]">
+                    Nobody matches. <button type="button" onClick={showEveryone} className="underline underline-offset-2 text-ink ch-focus">Show everyone</button>
                   </td></tr>
                 )}
                 {grid.map(r => (
@@ -295,9 +373,28 @@ export default function MembersGrid() {
                     <td className="px-4">
                       <TickBox label={`Tick ${r.name}`} on={ticked.has(r.id)} onChange={v => setTicked(s => { const n = new Set(s); if (v) n.add(r.id); else n.delete(r.id); return n })} />
                     </td>
-                    {FIELDS.map(f => {
+                    {[...FIELDS, 'gender' as const, 'birthDate' as const, ...(cats.length ? ['categoryId' as const] : [])].map(f => {
+                      if (f === 'gender') return (
+                        <td key={f} className="px-1">
+                          <select value={r.gender ?? ''} onChange={e => void choose(r, 'gender', e.target.value || null)} aria-label={`Gender for ${r.name}`}
+                            className={`ch-focus ch-hover h-9 px-2 rounded-tile bg-transparent text-[15px] ${r.gender ? 'text-ink/80' : 'text-ink/65'}`}>
+                            <option value="">{NOT_GIVEN}</option>
+                            <option value="M">{GENDER_WORDS.M}</option>
+                            <option value="F">{GENDER_WORDS.F}</option>
+                          </select>
+                        </td>
+                      )
+                      if (f === 'categoryId') return (
+                        <td key={f} className="px-1">
+                          <select value={r.categoryId ?? ''} onChange={e => void choose(r, 'categoryId', e.target.value || null)} aria-label={`Membership for ${r.name}`}
+                            className={`ch-focus ch-hover h-9 px-2 rounded-tile bg-transparent text-[15px] max-w-[11rem] ${r.categoryId ? 'text-ink/80' : 'text-ink/65'}`}>
+                            <option value="">None</option>
+                            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                          </select>
+                        </td>
+                      )
                       const key = `${r.id}:${f}`
-                      const right = f === 'memberNumber' || f === 'guiNumber' || f === 'handicapIndex'
+                      const right = RIGHT.includes(f)
                       const isEditing = editing?.id === r.id && editing.field === f
                       return (
                         <td key={f} className={`px-1 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''}`}>
@@ -305,6 +402,7 @@ export default function MembersGrid() {
                             <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => editKey(e, r, f)}
                               onBlur={() => void commit(r, f, draft)} aria-label={`${HEAD[f]} for ${r.name}`}
                               inputMode={f === 'guiNumber' ? 'numeric' : f === 'handicapIndex' ? 'decimal' : undefined}
+                              placeholder={f === 'birthDate' ? 'dd/mm/yyyy' : undefined}
                               className={`w-full min-w-[6rem] h-9 px-2 rounded-tile bg-surface border border-accent-deep text-[15px] text-ink outline-none ${right ? 'text-right tabular-nums' : ''}`} />
                           ) : (
                             <button type="button" onClick={() => { setEditing({ id: r.id, field: f }); setDraft(shown(r, f)) }}
@@ -343,7 +441,7 @@ export default function MembersGrid() {
                 <button type="button" onClick={() => setPanel({ row: r })} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">
                   <span className="flex-1 min-w-0">
                     <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}</span>
-                    <span className="block t-cap text-ink/65 mt-0.5">{[r.memberNumber ? `No. ${r.memberNumber}` : null, r.handicapIndex !== null ? `Index ${indexLabel(r.handicapIndex)}` : null].filter(Boolean).join(' · ') || (r.email ?? 'No email')}</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">{[r.memberNumber ? `No. ${r.memberNumber}` : null, r.handicapIndex !== null ? `Index ${indexLabel(r.handicapIndex)}` : null, catName(r.categoryId)].filter(Boolean).join(' · ') || (r.email ?? 'No email')}</span>
                   </span>
                   <StandingPill s={standingOf(r)} />
                 </button>
@@ -407,14 +505,14 @@ export default function MembersGrid() {
       )}
 
       {panel && (
-        <RowPanel clubId={club.id} clubName={face.name} asker={asker} row={panel.row} onClose={() => setPanel(null)}
+        <RowPanel clubId={club.id} clubName={face.name} categories={cats} asker={asker} row={panel.row} onClose={() => setPanel(null)}
           onSaved={(next, note) => {
             if (next) { patch(next.id, () => next); setPanel({ row: next }) } else { setPanel(null); setReload(n => n + 1) }
             say({ text: note, tone: 'ok' })
           }} />
       )}
       {paste !== null && (
-        <PasteSheet clubId={club.id} startText={paste} onClose={() => setPaste(null)}
+        <PasteSheet clubId={club.id} categories={cats} startText={paste} onClose={() => setPaste(null)}
           onDone={(note, skipped) => { setPaste(null); setReload(n => n + 1); say({ text: note, tone: skipped.length ? 'error' : 'ok', skipped }) }} />
       )}
     </div>

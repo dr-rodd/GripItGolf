@@ -27,6 +27,7 @@
 
 import type { ClubEvent } from './clubs'
 import type { Credentials } from './clubMay'
+import type { Category } from './clubMembership'
 import type { GridRow, ListCounts, Need, SeasonEvent } from './clubhouse'
 import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
@@ -540,6 +541,9 @@ export interface ClubAnswer {
   /** Stage (k2): competitions made by Copy or Repeat weekly, and the dates refused. */
   made?: { code: string; date: string }[]
   refused?: { date: string; why: string }[]
+  /** Stage (m): the club's memberships with how many are in each, and the day its ages count on. */
+  categories?: (Category & { count: number })[]
+  ageDate?: string
 }
 
 /**

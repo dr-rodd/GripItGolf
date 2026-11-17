@@ -285,6 +285,7 @@ const TOO_MANY = 'Too many tries — wait a few minutes and try again.'
 const NOT_ON = 'Only someone with Clubhouse keeps the club’s list.'
 const NOT_LOOK = 'Only someone with Clubhouse changes the club’s look.'
 const TICKS_LATER = 'The ticks aren’t set up yet — try again later.'
+const PEOPLE_LATER = 'Memberships, genders and dates of birth aren’t set up yet — try again later.'
 
 export { inviteHash, inviteTryKey } from './invites'
 import { inviteHash, inviteTryKey } from './invites'
@@ -692,7 +693,7 @@ export async function runClub(
       try {
         await setDetails(store, target, details)
       } catch (e) {
-        if ((e as Error)?.name === 'TicksNotReady') return fail(503, TICKS_LATER)
+        if ((e as Error)?.name === 'TicksNotReady') return fail(503, PEOPLE_LATER)
         throw e
       }
     }
@@ -712,7 +713,7 @@ export async function runClub(
       try {
         if ((await store.updateRow(target.id, patch)) === 'clash') return fail(409, 'That number is already another person’s on the list.')
       } catch (e) {
-        if ((e as Error)?.name === 'TicksNotReady') return fail(503, TICKS_LATER)
+        if ((e as Error)?.name === 'TicksNotReady') return fail(503, patch.category_id !== undefined ? PEOPLE_LATER : TICKS_LATER)
         throw e
       }
     }

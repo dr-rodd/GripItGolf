@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconX } from '@/app/components/icons'
 import { FIELD, buttonClass } from '@/app/components/ui'
 import { askClub } from '@/lib/accountClient'
-import { MAX_LIST_ROWS, parseMemberList } from '@/lib/clubs'
+import { MAX_LIST_ROWS, hasExtras, irishToday, parseMemberList } from '@/lib/clubs'
+import { GENDER_WORDS, NOT_GIVEN, birthDateLabel, resolveExtras, type Category } from '@/lib/clubMembership'
 
 /** The files the list reads: text a spreadsheet saves (CSV, tab-separated, plain text). */
 export const UPLOAD_ACCEPT = '.csv,.tsv,.txt,text/csv,text/tab-separated-values,text/plain'
@@ -18,8 +19,10 @@ export const UPLOAD_ACCEPT = '.csv,.tsv,.txt,text/csv,text/tab-separated-values,
  * off by being missing. A spreadsheet's own file (.xlsx) is asked to be
  * saved as CSV first — reading it would take a library the size of the page.
  */
-export default function PasteSheet({ clubId, startText, onClose, onDone }: {
+export default function PasteSheet({ clubId, categories, startText, onClose, onDone }: {
   clubId: string
+  /** Stage (m): the club's memberships, to read a Category column's codes against. */
+  categories: Pick<Category, 'id' | 'code' | 'name'>[]
   startText: string
   onClose: () => void
   onDone: (note: string, skipped: { name: string; why: string }[]) => void
@@ -28,7 +31,21 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const box = useRef<HTMLTextAreaElement>(null)
-  const preview = useMemo(() => (text.trim() ? parseMemberList(text) : null), [text])
+  const preview = useMemo(() => {
+    if (!text.trim()) return null
+    const read = parseMemberList(text)
+    // Stage (m): a gender, a date of birth and a membership code read here
+    // too, so a bad cell is said before anything is saved.
+    const today = irishToday(new Date())
+    const rows: (typeof read.rows[number] & { extras: ReturnType<typeof resolveExtras> & { ok: true } })[] = []
+    const badCells: { name: string; why: string }[] = []
+    for (const r of read.rows) {
+      const x = resolveExtras(r, categories, today)
+      if (x.ok) rows.push({ ...r, extras: x })
+      else badCells.push({ name: r.name, why: x.why })
+    }
+    return { rows, problems: read.problems, badCells, people: read.rows.some(hasExtras) }
+  }, [text, categories])
 
   useEffect(() => {
     if (!startText) box.current?.focus()
@@ -40,7 +57,7 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
   async function add() {
     if (!preview?.rows.length) return
     setBusy(true); setError('')
-    const r = await askClub('add', { clubId, rows: preview.rows, slim: true })
+    const r = await askClub('add', { clubId, rows: preview.rows.map(r => ({ name: r.name, memberNumber: r.memberNumber, guiNumber: r.guiNumber, email: r.email, gender: r.gender, birthDate: r.birthDate, category: r.category })), slim: true })
     setBusy(false)
     if (!r.ok) { setError(r.error); return }
     const parts = [r.added ? `${r.added} added` : null, r.updated ? `${r.updated} brought up to date` : null].filter(Boolean)
@@ -58,7 +75,7 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
           </button>
         </div>
         <p className="t-cap text-ink/65 mt-2 leading-snug">
-          From a spreadsheet, one person a line: name, member number, GUI number, email — or a first line naming the columns.
+          From a spreadsheet, one person a line: name, member number, GUI number, email — or a first line naming the columns, which may add Gender, Date of birth and Category (a membership’s code).
           Anyone already on the list is brought up to date by their numbers or email. Nobody is taken off. Up to {MAX_LIST_ROWS} at a time.
         </p>
         <textarea ref={box} value={text} onChange={e => setText(e.target.value)} rows={8} spellCheck={false}
@@ -68,8 +85,14 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
           <div className="mt-5">
             <p className="t-label text-ink">
               {preview.rows.length} {preview.rows.length === 1 ? 'person' : 'people'} to add
-              {preview.problems.length > 0 && `, ${preview.problems.length} line${preview.problems.length === 1 ? '' : 's'} left out`}
+              {preview.problems.length + preview.badCells.length > 0 && `, ${preview.problems.length + preview.badCells.length} left out`}
             </p>
+            {preview.badCells.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {preview.badCells.slice(0, 50).map((p, i) => <li key={i} className="t-cap text-rust-deep">{p.name}: {p.why}</li>)}
+                {preview.badCells.length > 50 && <li className="t-cap text-rust-deep">…and {preview.badCells.length - 50} more.</li>}
+              </ul>
+            )}
             {preview.problems.length > 0 && (
               <ul className="mt-2 space-y-1">
                 {preview.problems.slice(0, 50).map(p => (
@@ -83,7 +106,7 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
                 <table className="w-full text-left text-[15px]">
                   <thead>
                     <tr className="border-b border-line">
-                      {['Name', 'Member number', 'GUI number', 'Email'].map(h => <th key={h} scope="col" className="t-eyebrow text-ink/65 px-3 py-2 font-normal">{h}</th>)}
+                      {['Name', 'Member number', 'GUI number', 'Email', ...(preview.people ? ['Gender', 'Born', 'Membership'] : [])].map(h => <th key={h} scope="col" className="t-eyebrow text-ink/65 px-3 py-2 font-normal">{h}</th>)}
                     </tr>
                   </thead>
                   <tbody>
@@ -93,6 +116,11 @@ export default function PasteSheet({ clubId, startText, onClose, onDone }: {
                         <td className="px-3 py-2 text-ink/80 tabular-nums">{r.memberNumber ?? ''}</td>
                         <td className="px-3 py-2 text-ink/80 tabular-nums">{r.guiNumber ?? ''}</td>
                         <td className="px-3 py-2 text-ink/80 break-all">{r.email ?? ''}</td>
+                        {preview.people && <>
+                          <td className="px-3 py-2 text-ink/80">{r.extras.extras.gender === undefined ? '' : r.extras.extras.gender ? GENDER_WORDS[r.extras.extras.gender] : NOT_GIVEN}</td>
+                          <td className="px-3 py-2 text-ink/80 tabular-nums">{r.extras.extras.birthDate === undefined ? '' : r.extras.extras.birthDate ? birthDateLabel(r.extras.extras.birthDate) : NOT_GIVEN}</td>
+                          <td className="px-3 py-2 text-ink/80">{r.extras.extras.categoryId === undefined ? '' : categories.find(c => c.id === r.extras.extras.categoryId)?.name ?? 'None'}</td>
+                        </>}
                       </tr>
                     ))}
                   </tbody>

@@ -56,6 +56,13 @@ export default function Overview() {
               <Figure href={members('plays')} label="Plays here" value={c.playsHere} />
               <Figure href={members('officer')} label="Officers" value={c.officer} />
               <Figure href={members('clubhouse')} label="Clubhouse" value={c.clubhouse} />
+              {c.byCategory && Object.keys(c.byCategory).length > 0 && (
+                <>
+                  <li aria-hidden="true" className="h-px bg-line my-2" />
+                  {Object.entries(c.byCategory).map(([name, n]) => <Figure key={name} href={clubhouseHref(face.slug, 'memberships')} label={name} value={n} />)}
+                  {!!c.noCategory && <Figure href={`${clubhouseHref(face.slug, 'members')}?category=none`} label="No membership" value={c.noCategory} />}
+                </>
+              )}
             </ul>
           )}
         </section>
