@@ -45,8 +45,10 @@ function useOrganiser(tripCode: string, pinSet: boolean) {
 
 export function MatchArrange({
   tripId, tripCode, matchId, pinSet, inMatch, people,
-  courseId, playedOn, tees, underWay = false,
+  courseId, playedOn, tees, underWay = false, fixedCourse = null,
 }: {
+  /** A club match play's home course (Ross, 18 Nov 2026): the only course, so only the day and tees are asked. */
+  fixedCourse?: { id: string; name: string } | null
   /** The card has a score on it: the course and tees are fixed until it is voided. */
   underWay?: boolean
   tripId: string
@@ -63,7 +65,7 @@ export function MatchArrange({
   const router = useRouter()
   const { organiser, unlock } = useOrganiser(tripCode, pinSet)
   const [open, setOpen] = useState(false)
-  const [course, setCourse] = useState(courseId ?? '')
+  const [course, setCourse] = useState(courseId ?? fixedCourse?.id ?? '')
   const [day, setDay] = useState(playedOn ?? '')
   const [chosen, setChosen] = useState<MatchTees>(tees)
   const [courseTees, setCourseTees] = useState<TeeOption[]>([])
@@ -74,7 +76,7 @@ export function MatchArrange({
   useEffect(() => { setScored(underWay) }, [underWay])
   const [confirmVoid, setConfirmVoid] = useState(false)
   const [voiding, setVoiding] = useState(false)
-  const { courses } = usePlatformCourses(open && !scored)
+  const { courses } = usePlatformCourses(open && !scored && !fixedCourse)
   const [added, setAdded] = useState<DirectoryCourse[]>([])
   const allCourses = useMemo(() => {
     const known = new Set(courses.map(c => c.id))
@@ -102,7 +104,7 @@ export function MatchArrange({
     .map(p => [p.homeCourseId as string, p])).values()]
 
   function openSheet() {
-    setCourse(courseId ?? '')
+    setCourse(fixedCourse?.id ?? courseId ?? '')
     setDay(playedOn ?? '')
     setChosen(tees)
     setError(null)
@@ -156,7 +158,7 @@ export function MatchArrange({
   return (
     <>
       <button type="button" onClick={openSheet} className={buttonClass('secondary')}>
-        {courseId ? 'Change the venue or tees' : 'Choose the venue'}
+        {fixedCourse ? (courseId ? 'Change the day or tees' : 'Choose the day and tees') : courseId ? 'Change the venue or tees' : 'Choose the venue'}
       </button>
 
       {open && (
@@ -204,7 +206,10 @@ export function MatchArrange({
             </div>
           )}
 
-          {!scored && (
+          {!scored && fixedCourse && (
+            <p className="t-cap text-ink/80">Played at {fixedCourse.name}, the club’s home course.</p>
+          )}
+          {!scored && !fixedCourse && (
           <div>
             <label className={FIELD_LABEL}>Course</label>
             {homes.length > 0 && (

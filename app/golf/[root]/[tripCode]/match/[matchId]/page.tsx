@@ -1,3 +1,4 @@
+import { readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
@@ -80,7 +81,14 @@ export default async function MatchPage({
   const arrangeable = !arrangedRes.error
   const me = await currentPlayer(tripCode, players)
 
-  const view = await readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+  // A club match play is played on the club's home course (Ross, 18 Nov 2026): the arrange sheet asks the day and tees only.
+  const homeCourseId = readClubMatchPlay((trip as { bracket_setup?: unknown }).bracket_setup)?.homeCourseId ?? null
+  const [view, fixedCourse] = await Promise.all([
+    readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players),
+    homeCourseId
+      ? db.from('courses').select('id, name').eq('id', homeCourseId).maybeSingle().then(r => (r.data as { id: string; name: string } | null) ?? null)
+      : Promise.resolve(null),
+  ])
   const match = view?.matches.find(m => m.id === matchId)
   if (!view || !match) notFound()
 
@@ -257,6 +265,7 @@ export default async function MatchPage({
                     return p ? [{ id, name: p.name, gender: p.gender, homeCourseId: homeOf.get(id) ?? null }] : []
                   })}
                   courseId={arranged?.course_id ?? null}
+                  fixedCourse={fixedCourse}
                   playedOn={arranged?.played_on ?? null}
                   tees={tees}
                   underWay={underWay}

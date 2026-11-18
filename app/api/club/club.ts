@@ -264,7 +264,7 @@ export type ClubBody = {
    * header's next club and its dot. Only asked for an account on more than one.
    */
   myClubs?: { slug: string; name: string; toSign: number }[]
-  /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, Needs you, a bulk change's outcome, the file. */
+  /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, the Alerts, a bulk change's outcome, the file. */
   grid?: GridRow[]
   total?: number
   counts?: ListCounts

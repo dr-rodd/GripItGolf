@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { cardClass } from '@/app/components/ui'
 import { PHASE_WORDS, type CompSection } from '@/lib/compPhase'
-import { clubEventDates, irishToday } from '@/lib/clubs'
+import { irishToday } from '@/lib/clubs'
 import { tripBase } from '@/lib/tripPaths'
 import { compHome } from '@/lib/clubBar'
 import { matchPlayPhase, roundInPlayLine } from '@/lib/clubMatchPlay'
@@ -10,6 +10,7 @@ import { readClubDraw } from '@/app/api/club/matchPlayDraw'
 import { IconChevronLeft } from '@/app/components/icons'
 import CompShell from './CompShell'
 import MyMatch, { type ClubMatchRow } from './MyMatch'
+import DrawView from './DrawView'
 import { MatchPlayMark } from '../../ClubBarContext'
 import type { MatchPlayPage } from './read'
 
@@ -69,59 +70,15 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
         <p className="text-ink/80 text-[15px] leading-relaxed mt-6">The matches appear here once the draw is made.</p>
       )}
 
-      {section === 'scoring' && draw && (
-        <>
-          <MyMatch code={code} matches={rows} matchHref={`${base}/match`} />
-          {inPlay && (
-            <section className="mt-6">
-              <h2 className="t-h2 text-ink">{inPlay.roundName}</h2>
-              {inPlay.deadline && <p className="t-cap text-ink/65 mt-1">Play by {clubEventDates(inPlay.deadline, inPlay.deadline)} · {inPlay.played} of {inPlay.total} played</p>}
-              <MatchRows rows={rows.filter(m => m.roundNumber === inPlay.roundNumber)} href={`${base}/match`} />
-            </section>
-          )}
-        </>
+      {section === 'scoring' && draw && <MyMatch code={code} matches={rows} matchHref={`${base}/match`} />}
+      {section !== 'tee' && draw && (
+        <DrawView rows={rows} matchHref={`${base}/match`} today={today}
+          rounds={draw.rounds.map(r => ({ roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline, played: r.played, total: r.total }))}
+          startRound={section === 'scoring' ? inPlay?.roundNumber ?? null : null} />
       )}
-
       {section === 'board' && draw && (
-        <>
-          {draw.rounds.map(r => (
-            <section key={r.roundNumber} className="mt-6">
-              <h2 className="t-h2 text-ink">{r.roundName}</h2>
-              <p className="t-cap text-ink/65 mt-1">
-                {[r.deadline ? `${r.deadline < today && r.played < r.total ? 'Was due' : 'Play by'} ${clubEventDates(r.deadline, r.deadline)}` : null, `${r.played} of ${r.total} played`].filter(Boolean).join(' · ')}
-              </p>
-              <MatchRows rows={rows.filter(m => m.roundNumber === r.roundNumber)} href={`${base}/match`} />
-            </section>
-          ))}
-          <Link href={`${base}/matchplay`} className="t-label text-club-deep inline-flex mt-6 press">See the full bracket</Link>
-        </>
+        <Link href={`${base}/matchplay`} className="t-label text-club-deep inline-flex mt-6 press">See the full bracket</Link>
       )}
     </CompShell>
-  )
-}
-
-/** A round's matches, one row each — the winner's name in bold with the margin; a match with both sides known opens its page. */
-function MatchRows({ rows, href }: { rows: ClubMatchRow[]; href: string }) {
-  if (!rows.length) return null
-  return (
-    <ul className={`${cardClass()} mt-3 divide-y divide-line`}>
-      {rows.map(m => {
-        const body = (
-          <span className="flex items-baseline gap-2 px-4 py-3">
-            <span className="flex-1 min-w-0 text-[15px] text-ink">
-              <span className={`t-data ${m.winner && m.winner === m.sideA ? 'font-semibold' : ''}`}>{m.aName}</span>
-              <span className="text-ink/65"> v </span>
-              <span className={`t-data ${m.winner && m.winner === m.sideB ? 'font-semibold' : ''}`}>{m.bName}</span>
-            </span>
-            {m.result && <span className="t-cap text-ink/80 whitespace-nowrap">{m.result}</span>}
-          </span>
-        )
-        return (
-          <li key={m.id}>
-            {m.sideA && m.sideB ? <Link href={`${href}/${m.id}`} className="block press">{body}</Link> : body}
-          </li>
-        )
-      })}
-    </ul>
   )
 }

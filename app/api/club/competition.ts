@@ -470,7 +470,7 @@ export async function runNewMatchPlay(
       kind: 'tournament',
       formats: { ...NO_FORMATS, league: { ...NO_FORMATS.league }, matchplay: { ...NO_FORMATS.matchplay } },
       leaderboards: [matchPlayBoard(form)],
-      bracket_setup: matchPlaySeed(form),
+      bracket_setup: matchPlaySeed(form, who.club.homeCourseId ?? null),
       event_permissions: matchPlayPermissions(),
       competition: 'club',
     }

@@ -7,7 +7,7 @@
 //   there, whether they are staff, and the other clubs they may open. Staff
 //   opening a club is logged and shown to it as "Green Dot staff".
 // * `find` — staff only: verified clubs by name.
-// * `overview` — the list's counts, competitions by phase, "Needs you".
+// * `overview` — the list's counts, competitions by phase, the Alerts.
 // * `page` — 50 rows of the list, searched, filtered and ordered by the
 //   database, numbers whole, each with its index and standing.
 // * `export` — the whole list as a file, logged.

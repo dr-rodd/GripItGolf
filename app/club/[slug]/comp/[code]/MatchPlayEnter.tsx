@@ -9,7 +9,7 @@ import { askMatchPlay, type MatchPlayEntryAnswer } from '@/lib/accountClient'
  * A club match play's one action on its Summary (stage 2; Ross, 17 Nov
  * 2026): **Enter** for a member who may, **Withdraw** for one who is in, or
  * the reason neither is offered — in the competition's own words — and the
- * field so far, the club's Officers able to take anybody out until the draw.
+ * field so far. Taking anybody else out is the Clubhouse's alone.
  * Asked after the page paints: the server cannot see who is holding the
  * phone. Once entries have closed and the draw is due, the page asks for it
  * to be made (the platform's draw job, once — `makeDueDraw`), so nobody waits
@@ -76,9 +76,6 @@ export default function MatchPlayEnter({ code, drawDue }: { code: string; drawDu
             {me.entrants.map(e => (
               <li key={e.rowId ?? e.name} className="flex items-center gap-3 px-3 py-2">
                 <span className={`flex-1 min-w-0 truncate text-[15px] ${e.rowId === me.myRowId ? 'text-ink font-semibold' : 'text-ink'}`}>{e.name}</span>
-                {me.admin && e.rowId && e.rowId !== me.myRowId && (
-                  <button type="button" disabled={busy} onClick={() => void act('withdraw', e.rowId!)} className="t-label text-ink/80 px-2 min-h-11 press">Take out</button>
-                )}
               </li>
             ))}
           </ul>

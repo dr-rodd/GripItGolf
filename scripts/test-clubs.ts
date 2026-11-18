@@ -1994,13 +1994,13 @@ async function matchPlayTests() {
   eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: qual }, store(true), NOW)).status, 200, 'the club’s own Spring Medal qualifies them')
 
   section('Entering a club match play (stage 2, /api/club/matchplay)')
-  const open = readClubMatchPlay(matchPlaySeed({ ...form, format: 'singles', maxField: 8, deadlines: ['2027-04-30', '2027-05-31', '2027-07-31'] }))!
+  const open = readClubMatchPlay(matchPlaySeed({ ...form, format: 'singles', maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
   const beforeClose = NOW
   const afterClose = new Date('2027-04-01T00:00:00Z')
   eq(enterIssue(open, { now: beforeClose, drawn: false, entered: 3, admin: false }), null, 'singles, before the close, room left: anybody may enter')
   ok(/closed/.test(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: false }) ?? ''), 'after the close: refused')
   eq(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: true }), null, '…but an Officer may still put somebody in until the draw')
-  ok(/full — 8 of 8/.test(enterIssue(open, { now: beforeClose, drawn: false, entered: 8, admin: true }) ?? ''), 'never past the biggest field, Officers included')
+  ok(/full — 16 of 16/.test(enterIssue(open, { now: beforeClose, drawn: false, entered: 16, admin: true }) ?? ''), 'never past the biggest field, the Clubhouse included')
   ok(/draw is made/.test(enterIssue(open, { now: beforeClose, drawn: true, entered: 3, admin: true }) ?? ''), 'never once drawn')
   ok(/partner/.test(enterIssue(back!, { now: beforeClose, drawn: false, entered: 0, admin: false }) ?? ''), 'a fourball waits for stage 4 (partners)')
   eq(withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: true, admin: false }), null, 'you take yourself out until the close')
@@ -2049,9 +2049,9 @@ async function matchPlayTests() {
   eq((await go('dave', 'enter', {}, afterClose)).status, 409, 'after the close nobody enters themselves')
   eq((await go('dave', 'withdraw', { memberId: 'r-ross' })).status, 403, 'Dave cannot take Ross out')
   eq((await go('ross', 'withdraw', {}, afterClose)).status, 403, 'Ross cannot take himself out after the close…')
-  const offOut = await go('off', 'withdraw', { memberId: 'r-ross' }, afterClose)
-  ok(offOut.status === 200 && field.length === 0, '…an Officer can, until the draw')
-  const full: Entrant[] = Array.from({ length: 7 }, (_, i) => ({ playerId: `p${i}`, rowId: `x${i}`, name: `P${i}` }))
+  eq((await go('off', 'withdraw', { memberId: 'r-ross' }, afterClose)).status, 403, '…nor can an Officer — taking somebody out is the Clubhouse’s alone (Ross, 18 Nov 2026)')
+  field.splice(0, field.length)
+  const full: Entrant[] = Array.from({ length: 15 }, (_, i) => ({ playerId: `p${i}`, rowId: `x${i}`, name: `P${i}` }))
   const race = entryStore(mpComp, full, {
     async insertPlayer(r) { full.push({ playerId: 'p-race', rowId: 'x-race', name: 'Racer' }, { playerId: `p-${r.club_member_id}`, rowId: r.club_member_id, name: r.name }); return `p-${r.club_member_id}` },
   })

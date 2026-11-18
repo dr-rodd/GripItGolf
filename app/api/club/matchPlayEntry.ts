@@ -6,9 +6,9 @@
 // index (D179) — the draw seeds on it and the match page reads it. Every
 // player needs their own account (D94's exception), plays here (D209) and
 // may enter by the competition's rules (`entryRefusal`, judged on the day
-// entries close). They take themselves out until entries close; the club's
-// Officers take anybody out until the draw, and the Clubhouse does the same
-// from the office (`office.state`, `office.withdraw`, `keep_calendar`, logged). Singles only
+// entries close). They take themselves out until entries close; only the
+// Clubhouse takes anybody else out, until the draw (Ross, 18 Nov 2026 —
+// not the Officers), from the office (`office.state`, `office.withdraw`, `keep_calendar`, logged). Singles only
 // for now: a pair enters together in stage 4.
 //
 // Every answer to a member on the list carries the members-only door's
@@ -113,7 +113,7 @@ export async function runMatchPlayEntry(
     const mine = field.find(e => e.rowId === me.id)?.playerId ?? null
     const refused = refusalOf(me)
     const closed = enterIssue(mp.setup, { now, drawn: mp.drawn, entered: field.length, admin: false })
-    const stuck = mine ? withdrawEntryIssue(mp.setup, { now, drawn: mp.drawn, mine: true, admin }) : null
+    const stuck = mine ? withdrawEntryIssue(mp.setup, { now, drawn: mp.drawn, mine: true, admin: false }) : null
     return {
       status: 200, door,
       body: {
@@ -168,7 +168,8 @@ export async function runMatchPlayEntry(
 
   if (action === 'withdraw') {
     const rowId = str(input.memberId) || me.id
-    return withdraw({ store, mp, user, rowId, mine: rowId === me.id, admin, byName: me.name, byStaff: false, now, answer })
+    // Your own entry only, until entries close: taking anybody else out is the Clubhouse's (Ross, 18 Nov 2026).
+    return withdraw({ store, mp, user, rowId, mine: rowId === me.id, admin: false, byName: me.name, byStaff: false, now, answer })
   }
 
   return fail(400, 'Unknown request.')

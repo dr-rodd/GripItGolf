@@ -172,7 +172,7 @@ last year's finish; a member arranging a match by message inside Green Dot
 
 **Deadlines passed** (Q6): informational, as everywhere else — the round's
 line turns to "Was due Fri 5 Jun", the Officers see the overdue matches on
-Clubhouse's **Needs you** and award a walkover or put both out (the
+Clubhouse's **Alerts** and award a walkover or put both out (the
 existing award). Nothing happens on its own.
 
 ### Part 2 — Golfer of the Year
@@ -218,7 +218,7 @@ rules beside it.
    seeded by account index).
 3. **Matches in the club area.** The Matches segment, Home's row, the match
    page and card inside the club shell, the competition's own footer set,
-   result confirmation (P11), deadlines on Needs you.
+   result confirmation (P11), deadlines on Alerts.
 4. **Partners.** Fourball and Foursomes entries on the seat sheet, "Entered
    with X", looking for a partner; **the knockout card learns Foursomes**
    (one ball a side — `foursomesStrokes` exists for session cards; the
@@ -227,6 +227,23 @@ rules beside it.
    seeding off its certified Results.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
+
+### After testing stage 3 (Ross, 18 Nov 2026)
+
+- **Every club member sees every match play's draw**, with filters on the
+  Matches and Draw sections (`DrawView`): a round, to play or played, a
+  player's name. The Matches section opens on the round in play.
+- **The biggest field is 16, 32, 64 or 128**, or no limit (`FIELD_CAPS`);
+  `MAX_BRACKET` is 128 platform-wide and a draw has up to seven rounds.
+- **Every match is on the club's home course** — the venue question is gone.
+  The match page asks only the day and tees (`MatchArrange fixedCourse`).
+  Other clubs' courses belong to interclub match play, below.
+- **Only the Clubhouse takes an entry out** — an Officer no longer can; a
+  member still takes themselves out until entries close.
+- **Matches stay on the event's own pages** for now (the match page and card).
+- **"Needs you" is Alerts**, in the Clubhouse's Overview.
+- **The Clubhouse calendar filters match plays**: Every event, Without match
+  play, Match play only.
 
 ### Stage 3 as built (18 Nov 2026) — the draw in the club area
 
@@ -245,7 +262,7 @@ match play the card's Finalise says "This puts the result into the draw.
 Nobody else is asked, so check it with the other side first." (D268). The
 Clubhouse's page lists matches past their play-by date, filtered by round
 and by how overdue, each opening its match page in a new tab for an Officer
-to decide; Needs you says how many (D271). **No migration.** Pairs, a
+to decide; Alerts says how many (D271). **No migration.** Pairs, a
 qualifier acted on, and Golfer of the Year are stages 4 to 6.
 
 ### Stage 2 as built (18 Nov 2026) — entering
@@ -311,8 +328,32 @@ the account's index (players' `handicap` today).
 - **D270 (Q5)** — Golfer of the Year is **points by position**, the table
   chosen in the Clubhouse.
 - **D271 (Q6)** — a deadline passing is **informational**: the Officers
-  see overdue matches on Needs you and decide, **with filters** (by
+  see overdue matches on Alerts and decide, **with filters** (by
   competition, by round, by how overdue) because a club may have hundreds.
+
+## Interclub match play (Ross, 18 Nov 2026) — named, not built
+
+A club's match play keeps every match on its own home course. A match play
+between clubs — a team from one club against a team from another, home and
+away legs, or a pennant-style league of clubs — is a different competition
+and needs the other club's course. Ross: "Extra courses would go under
+interclub matchplay not yet created."
+
+What it would need, when asked for:
+
+- **Two clubs in one competition** — today a club event belongs to one club
+  (`trip_private.club_id`). Either both clubs' Officers run it, or the host
+  club does and the other is invited.
+- **A venue a match** — home or away, from the two clubs' home courses
+  (`clubs.home_course_id`), which is the course question `MatchArrange`
+  already knows how to ask before `fixedCourse` narrowed it.
+- **Teams of the club's players**, picked by each club from its own list — a
+  tag a club, as the Ryder Cup model already does (`lib/tagBoards.ts`), and
+  Matches sessions (`session_matches`) scoring each tie, the Overall summing
+  them.
+- **Handicaps** across clubs: each player's one index (D179), as now.
+- Questions to ask Ross first: one fixture or a league of clubs; who picks the
+  team and when; whether a club's members watch the other club's matches.
 
 ## Casual tee sheets at a club — what is still to come
 

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
-import { buttonClass, cardClass } from '@/app/components/ui'
+import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 import { eventHref, eventsOn, isOfficeOnly, monthGrid, opensOutside, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
 import { typeLabel, type ClubNote } from '@/lib/clubEvents'
 import EventPanel from '../events/EventPanel'
@@ -13,6 +13,8 @@ import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+
+type MatchPlayShown = 'all' | 'without' | 'only'
 
 /**
  * Calendar (stage (k2), D215): every event under the club — competitions
@@ -31,7 +33,10 @@ export default function ClubCalendar() {
   const weeks = useMemo(() => monthGrid(year, month), [year, month])
   const title = new Intl.DateTimeFormat('en-IE', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)))
   const days = weeks.flat().filter((d): d is string => !!d)
-  const busyDays = days.map(d => ({ d, on: eventsOn(events ?? [], d) })).filter(x => x.on.length > 0)
+  // Ross, 18 Nov 2026: match plays mark many days (entries, the draw, each play-by date) — filtered here so the month stays readable.
+  const [mp, setMp] = useState<MatchPlayShown>('all')
+  const shown = useMemo(() => (events ?? []).filter(e => mp === 'all' || (mp === 'only') === !!e.competition?.matchPlay), [events, mp])
+  const busyDays = days.map(d => ({ d, on: eventsOn(shown, d) })).filter(x => x.on.length > 0)
 
   // Stage c1: an event's type is said in words, never by colour alone; a
   // club event opens its panel here (the office's), a competition or other
@@ -57,6 +62,12 @@ export default function ClubCalendar() {
     <>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="t-h1 text-ink flex-1">Calendar</h1>
+        <label htmlFor="cal-mp" className="sr-only">Match play</label>
+        <select id="cal-mp" value={mp} onChange={e => setMp(e.target.value as MatchPlayShown)} className={`${FIELD} ch-focus w-[220px]`}>
+          <option value="all">Every event</option>
+          <option value="without">Without match play</option>
+          <option value="only">Match play only</option>
+        </select>
         {office && <Link href={`/clubhouse/${face.slug}/calendar/import`} className={`${buttonClass('secondary', false)} ch-focus hidden md:inline-flex`}>Import a calendar</Link>}
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setYm(stepMonth(year, month, -1))} aria-label="The month before" className={`${buttonClass('quiet', false)} ch-focus`}><IconChevronLeft size={20} /></button>
@@ -85,7 +96,7 @@ export default function ClubCalendar() {
                     <p className={`text-[13px] tabular-nums mb-1 inline-flex items-center justify-center w-6 h-6 rounded-full ${d === today ? 'ring-2 ring-accent-deep text-ink font-semibold' : 'text-ink/65'}`}>
                       {Number(d.slice(8))}
                     </p>
-                    <div className="space-y-1">{eventsOn(events ?? [], d).map(chip)}</div>
+                    <div className="space-y-1">{eventsOn(shown, d).map(chip)}</div>
                   </>
                 )}
               </div>

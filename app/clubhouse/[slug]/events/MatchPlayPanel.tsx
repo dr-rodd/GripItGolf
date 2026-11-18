@@ -157,7 +157,7 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
                   <label htmlFor="mp-qualify" className={FIELD_LABEL}>How many qualify</label>
                   <select id="mp-qualify" className={`${FIELD} ch-focus`} value={form.qualifier.qualify}
                     onChange={e => set('qualifier', { ...form.qualifier!, qualify: Number(e.target.value) })}>
-                    {[2, 4, 8, 16, 32, 64].filter(n => !form.maxField || n <= form.maxField).map(n => <option key={n} value={n}>Top {n}</option>)}
+                    {[2, 4, 8, 16, 32, 64, 128].filter(n => !form.maxField || n <= form.maxField).map(n => <option key={n} value={n}>Top {n}</option>)}
                   </select>
                 </div>
               </div>
@@ -229,11 +229,7 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
           )}
 
           <h3 className="t-card text-ink pt-1">Rules</h3>
-          <div>
-            <p className={FIELD_LABEL}>Where matches are played</p>
-            <Segmented label="Where matches are played" value={form.venue} onChange={v => set('venue', v)}
-              options={[{ value: 'home', label: 'Home course' }, { value: 'any', label: 'Any course' }] as const} />
-          </div>
+          <p className="t-cap text-ink/65 -mt-3">Every match is played on the club’s home course.</p>
           <div>
             <p className={FIELD_LABEL}>Level after 18</p>
             <Segmented label="Level after 18" value={form.tie} onChange={v => set('tie', v)}

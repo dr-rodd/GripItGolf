@@ -39,11 +39,11 @@ export const MATCH_PLAY_FORMATS: { key: MatchPlayFormat; label: string; hint: st
   { key: 'foursomes', label: 'Foursomes', hint: 'Pairs, one ball a side, alternate shots.', allowance: 50 },
 ]
 
-/** The biggest fields offered (D264) — or no limit, `null`. */
-export const FIELD_CAPS = [8, 16, 32, 64] as const
+/** The biggest fields offered (D264; Ross, 18 Nov 2026: 16 to 128) — or no limit, `null`. */
+export const FIELD_CAPS = [16, 32, 64, 128] as const
 
-/** With no limit, at most this many rounds of deadlines (a field of 64). */
-export const MAX_MATCH_ROUNDS = 6
+/** With no limit, at most this many rounds of deadlines (a field of 128). */
+export const MAX_MATCH_ROUNDS = 7
 
 /** How the field is made: members enter by a closing date, or the top of a qualifier. */
 export type MatchPlayField = 'entries' | 'qualifier'
@@ -154,7 +154,7 @@ export function matchPlayFormIssue(f: MatchPlayForm, now: Date, today: string): 
   if (!f.name) return 'Name the competition.'
   if (f.name.length > COMP_NAME_MAX) return `Keep the name under ${COMP_NAME_MAX} characters.`
   if (!Number.isInteger(f.allowance) || f.allowance < MIN_ALLOWANCE || f.allowance > FULL_ALLOWANCE) return `The handicap allowance is a whole percentage, ${MIN_ALLOWANCE} to ${FULL_ALLOWANCE}.`
-  if (f.maxField !== null && !(FIELD_CAPS as readonly number[]).includes(f.maxField)) return 'Choose the biggest field — 8, 16, 32, 64 or no limit.'
+  if (f.maxField !== null && !(FIELD_CAPS as readonly number[]).includes(f.maxField)) return 'Choose the biggest field — 16, 32, 64, 128 or no limit.'
 
   if (f.field === 'entries') {
     const at = closesAt(f)
@@ -163,7 +163,7 @@ export function matchPlayFormIssue(f: MatchPlayForm, now: Date, today: string): 
   } else {
     if (!f.qualifier || !validEventCode(f.qualifier.code)) return 'Choose the qualifying competition.'
     const q = f.qualifier.qualify
-    if (!Number.isInteger(q) || q < 2 || (q & (q - 1)) !== 0 || q > 64) return 'Choose how many qualify — 2, 4, 8, 16, 32 or 64.'
+    if (!Number.isInteger(q) || q < 2 || (q & (q - 1)) !== 0 || q > 128) return 'Choose how many qualify — 2, 4, 8, 16, 32, 64 or 128.'
     if (f.maxField !== null && q > f.maxField) return `No more can qualify than the biggest field, ${f.maxField}.`
     if (f.draw.seeding === 'handicap') return 'A qualifier’s draw goes by its finish, or at random.'
   }
@@ -208,6 +208,12 @@ export interface ClubMatchPlaySetup {
   venue: MatchPlayVenue
   tie: MatchPlayTie
   handicap: MatchPlayHandicap
+  /**
+   * The club's home course (Ross, 18 Nov 2026: home course only — another
+   * club's course is interclub match play, not built): every match is
+   * arranged on it. Null where the club has none set.
+   */
+  homeCourseId?: string | null
 }
 
 /** The draw's own board — a pairs draw on a sheet of its own, the allowance kept only when it is not the full one. */
@@ -245,13 +251,14 @@ export function matchPlayDrawPlan(f: MatchPlayForm): DrawPlan {
 }
 
 /** `trips.bracket_setup` for a new club match play: the knockout's own keys, and the club's answers. */
-export function matchPlaySeed(f: MatchPlayForm): Record<string, unknown> {
+export function matchPlaySeed(f: MatchPlayForm, homeCourseId: string | null = null): Record<string, unknown> {
   const club: ClubMatchPlaySetup = {
+    homeCourseId,
     format: f.format, field: f.field,
     closes: f.field === 'entries' ? f.closes : null,
     qualify: f.field === 'qualifier' ? f.qualifier?.qualify ?? null : null,
     maxField: f.maxField, drawWhen: f.draw.when, seeding: f.draw.seeding,
-    venue: f.venue, tie: f.tie, handicap: f.handicap,
+    venue: 'home', tie: f.tie, handicap: f.handicap,
   }
   return {
     format: 'match_play',
@@ -302,6 +309,7 @@ export function readClubMatchPlay(raw: unknown): ClubMatchPlay | null {
     venue: pick(c.venue, ['home', 'any'] as const, 'home'),
     tie: pick(c.tie, ['extra', 'replay'] as const, 'extra'),
     handicap: pick(c.handicap, ['on_day', 'at_draw'] as const, 'on_day'),
+    homeCourseId: typeof c.homeCourseId === 'string' && c.homeCourseId ? c.homeCourseId : null,
     qualifierCode: q && typeof q.eventCode === 'string' && validEventCode(q.eventCode) ? q.eventCode : null,
     drawOn: draw && draw.when === 'date' && typeof draw.on === 'string' && DATE.test(draw.on)
       ? { date: draw.on, time: typeof draw.at === 'string' && TIME.test(draw.at) ? draw.at : null } : null,
@@ -374,7 +382,7 @@ export function matchPlayRules(m: ClubMatchPlay, opts: { allowance: number; qual
       : m.drawOn ? `${whenOf(m.drawOn.date, m.drawOn.time)} · ${seeding}`
       : m.field === 'qualifier' ? `When the qualifier’s results are certified · ${seeding}` : `When entries close · ${seeding}`,
   })
-  lines.push({ label: 'Where', value: m.venue === 'home' ? 'The home course' : 'Any course the players agree' })
+  lines.push({ label: 'Where', value: m.venue === 'any' ? 'Any course the players agree' : 'The club’s home course' })
   lines.push({ label: 'Level after 18', value: m.tie === 'extra' ? 'Down the 19th until a hole is won' : 'Halved — replayed' })
   lines.push({ label: 'Handicap', value: m.handicap === 'on_day' ? 'Your index on the day you play' : 'Your index when the draw is made' })
   const names = matchRoundNames(m.deadlines.length)
@@ -410,7 +418,7 @@ export function enterIssue(m: ClubMatchPlay, o: { now: Date; drawn: boolean; ent
   return null
 }
 
-/** Why this entry cannot be taken out now, or null: your own until entries close, anybody's by an Officer until the draw. */
+/** Why this entry cannot be taken out now, or null: your own until entries close, anybody's by the Clubhouse (`admin`) until the draw. */
 export function withdrawEntryIssue(m: ClubMatchPlay, o: { now: Date; drawn: boolean; mine: boolean; admin: boolean }): string | null {
   if (o.drawn) return 'The draw is made — a player who can’t play now gives a walkover.'
   if (!o.mine && !o.admin) return 'You can only take yourself out.'

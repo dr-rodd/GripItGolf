@@ -1,7 +1,7 @@
 // The Clubhouse's rules — the only copy (stage (k1); D202, D207, D217,
 // D224). The desktop office where a club's Clubhouse holders and Green Dot
 // staff keep the list: its standings, filters and order, the search, the
-// page size, the file it downloads, and what "Needs you" says. Pure: the
+// page size, the file it downloads, and what the Alerts say (was "Needs you", Ross, 18 Nov 2026). Pure: the
 // server (`app/api/club/clubhouse.ts`) and the screens (`app/clubhouse/`)
 // both read it. Who may do what is lib/clubMay.ts, never here.
 //
@@ -150,14 +150,14 @@ export interface ListCounts {
   byCategory?: Record<string, number>
 }
 
-/** One line of "Needs you", and where it goes. */
+/** One line of the Alerts, and where it goes. */
 export interface Need { key: string; line: string; href: string }
 
 /**
- * What needs the office (the Overview's "Needs you"): competitions waiting
+ * What needs the office (the Overview's Alerts — "Needs you" until Ross, 18 Nov 2026): competitions waiting
  * to be certified, people who could be emailed their code and never have
  * been, and people with no email to send one to. Only what is there; none
- * is "Nothing needs you."
+ * is "No alerts."
  */
 export function needsYou(o: {
   base: string

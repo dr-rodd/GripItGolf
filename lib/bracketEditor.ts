@@ -30,7 +30,7 @@ export type BracketLayout = {
   cells: (string | null)[][]
 }
 
-/** The most rounds a draw can have — a draw of 64 (lib/matchplay.ts). */
+/** The most rounds a draw can have — a draw of 128 (lib/matchplay.ts). */
 export const MAX_ROUNDS = Math.log2(MAX_BRACKET)
 
 /** The rounds a draw of this many needs: the field rounded up to a power of two. */
