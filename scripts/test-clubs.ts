@@ -2135,6 +2135,12 @@ async function matchPlayTests() {
       'sixteen pairs of sixteen: no new pair, but joining one still looking takes no place')
   }
 
+  {
+    const door = read('app/club/[slug]/comp/[code]/CompDoor.tsx')
+    ok(/matchPlay \? await askMatchPlay\('state'/.test(door) && /matchPlay=\{page\.kind === 'matchplay'\}/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
+      'a match play’s members-only door is opened by its own route — the booking route knows no match play (it said “No such competition”)')
+  }
+
   section('A qualifier’s field (stage 5, P8)')
   {
     const qm = readClubMatchPlay(matchPlaySeed({ ...qual, maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
