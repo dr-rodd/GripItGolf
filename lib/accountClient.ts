@@ -658,6 +658,8 @@ export interface ClubAnswer {
   tops?: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member. */
   toSign?: { code: string; name: string; count: number }[]
+  /** Stage 3 (D266): this member's place in each club match play. */
+  matches?: import('./clubMatchPlay').MyClubMatch[]
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */

@@ -1,8 +1,12 @@
 import { cardClass } from '@/app/components/ui'
 import { PHASE_WORDS } from '@/lib/compPhase'
-import { clubEventDates } from '@/lib/clubs'
+import { clubEventDates, irishToday } from '@/lib/clubs'
 import { formatLine } from '@/lib/clubhouse'
-import { drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules } from '@/lib/clubMatchPlay'
+import { drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules, roundInPlayLine } from '@/lib/clubMatchPlay'
+import { tripBase } from '@/lib/tripPaths'
+import { readClubDraw } from '@/app/api/club/matchPlayStore'
+import MyMatch, { type ClubMatchRow } from './MyMatch'
+import { MatchPlayMark } from '../../ClubBarContext'
 import MatchPlayEnter from './MatchPlayEnter'
 import CompShell from './CompShell'
 import type { MatchPlayPage } from './read'
@@ -14,13 +18,21 @@ import type { MatchPlayPage } from './read'
  * enter (P7), and Enter or Withdraw with the field so far (stage 2). The
  * matches inside the club area come in stage 3.
  */
-export default function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
+export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
   const { mp } = page
   const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, new Date())
+  // Drawn (stage 3): the round in play, and this phone's own match asked after it paints.
+  const draw = mp.drawn ? await readClubDraw(mp.code) : null
+  const nameOf = (id: string | null, bye: boolean) => (bye ? 'Bye' : id ? draw?.view.names[id] ?? 'A player' : 'To be decided')
+  const rows: ClubMatchRow[] = (draw?.rounds ?? []).flatMap(r => r.matches.map(m => ({
+    id: m.id, roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline,
+    sideA: m.sideA, sideB: m.sideB, aName: nameOf(m.sideA, m.aIsBye), bName: nameOf(m.sideB, m.bIsBye), winner: m.winner, result: m.result,
+  })))
   const rules = matchPlayRules(mp.setup, { allowance: mp.allowance, qualifierName: mp.qualifierName, entryLine: mp.entryLine })
   const pairs = mp.setup.format !== 'singles'
   return (
     <CompShell page={page}>
+      <MatchPlayMark code={mp.code} />
       <h1 className="t-h1 text-ink mt-6 break-words">{mp.name}</h1>
       <p className="t-cap text-ink/65 mt-1">
         {[formatLine({ scoring: 'stableford', allowance: mp.allowance, matchPlay: { format: mp.setup.format } }),
@@ -29,9 +41,11 @@ export default function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
 
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <p className="text-[13px] font-semibold text-club-deep">{PHASE_WORDS[phase]}</p>
-        <p className="text-ink text-[17px] leading-snug mt-1">{matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName })}</p>
+        <p className="text-ink text-[17px] leading-snug mt-1">{draw ? roundInPlayLine(draw.rounds, irishToday(new Date())) : matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName })}</p>
         {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} />}
       </section>
+
+      {draw && <MyMatch code={mp.code} matches={rows} matchHref={`${tripBase(mp.code, 'tournament')}/match`} />}
 
       <section className="mt-6">
         <h2 className="t-h2 text-ink">Rules</h2>

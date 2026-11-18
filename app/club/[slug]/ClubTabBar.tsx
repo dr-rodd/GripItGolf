@@ -6,7 +6,7 @@ import { useState } from 'react'
 import {
   IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers,
 } from '@/app/components/icons'
-import { barOf, compSectionHref, compsBack, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
+import { barOf, compSectionHref, compsBack, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
 import type { CompSection } from '@/lib/compPhase'
 import { useClubBar, type ClubTab } from './ClubBarContext'
 
@@ -38,7 +38,7 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
  */
 export default function ClubTabBar({ slug }: { slug: string }) {
   const pathname = usePathname()
-  const { members, tab, choose, setTab, going } = useClubBar()
+  const { members, tab, choose, setTab, going, matchPlays } = useClubBar()
   // Where a tap is taking this phone counts from the touch (D198).
   const state = barOf(going ?? pathname ?? '', slug) ?? barOf(pathname ?? '', slug)
   const comp = state?.set === 'comp' ? state : null
@@ -115,7 +115,7 @@ export default function ClubTabBar({ slug }: { slug: string }) {
                   {code && (
                     <Tab href={compSectionHref(slug, code, s)} prefetch={!!comp}
                       replace={!!comp && comp.active !== 'summary'}
-                      lit={comp?.active === s} label={SECTION_LABEL[s]}>
+                      lit={comp?.active === s} label={(code && matchPlays.has(code) ? MATCH_PLAY_SECTION_LABEL : SECTION_LABEL)[s]}>
                       <Icon size={22} />
                     </Tab>
                   )}

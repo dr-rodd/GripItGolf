@@ -22,6 +22,7 @@ import { seasonOf, selfClaimedLine, type SeasonRow } from '@/lib/cardSummary'
 import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
+import type { MyClubMatch } from '@/lib/clubMatchPlay'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
@@ -153,7 +154,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, credentials: r.club.credentials, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
         courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
-        notes: r.notes ?? [],
+        notes: r.notes ?? [], matches: r.matches ?? [],
       }
       setMembers(fresh)
       keepClubHome(face.slug, fresh)
@@ -417,6 +418,8 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   // Stage c1, M6: the club's own events sit on the calendar with its golf.
   const calendar = calendarItems(g.upcoming, m.notes ?? [], irishToday(now)).slice(0, 5)
   const [opened, setOpened] = useState<ClubNote | null>(null)
+  // A match play runs for weeks: it is your next match on Home, never Live now (D266).
+  const live = g.now.filter(e => !e.competition?.matchPlay)
   return (
     <>
       <div className="h-[168px]" aria-hidden="true" />
@@ -443,17 +446,29 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
+      {/* Stage 3 (D266): your next match play match, first and foremost. */}
+      {(m.matches ?? []).filter(x => x.state === 'next').slice(0, 1).map(x => (
+        <section key={x.code} className="mt-6">
+          <h2 className="t-h2 text-ink">Your next match</h2>
+          <Link href={matchHref(x, face.slug)} className={`${cardClass('floating', true)} block p-4 mt-3`}>
+            <p className="t-cap text-ink/65">{x.name} · {x.roundName}</p>
+            <p className="t-data text-ink text-[19px] mt-1">{x.opponent ? `v ${x.opponent}` : 'Opponent to be decided'}</p>
+            {x.playBy && <p className="t-cap text-club-deep font-semibold mt-1">Play by {clubEventDates(x.playBy, x.playBy)}</p>}
+          </Link>
+        </section>
+      ))}
+
       {/* Stage (h): the front page's way into an event, and making one —
           the club's own for its admins, asked at the gate (Q3, D153). */}
       <CodeBox />
       <ButtonLink href="/create" variant="secondary" className="mt-3">Make an event</ButtonLink>
 
       {/* Never from the copy (D194): Live now waits for the fresh answer. */}
-      {!m.fromCopy && g.now.length > 0 && (
+      {!m.fromCopy && live.length > 0 && (
         <section className="mt-6 club-fresh-in">
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
           <div className="mt-3 space-y-3">
-            {g.now.map(e => (
+            {live.map(e => (
               <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`}>
                 <p className="t-card text-ink">{e.name}</p>
                 <p className={`t-cap mt-1 ${m.entries.includes(e.code) ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>
@@ -492,7 +507,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
-      {g.now.length === 0 && calendar.length === 0 && m.season.length === 0 && m.outside.length === 0 && (
+      {live.length === 0 && !(m.matches ?? []).some(x => x.state === 'next') && calendar.length === 0 && m.season.length === 0 && m.outside.length === 0 && (
         <p className="text-ink/65 text-[15px] leading-relaxed mt-6">
           {face.name}’s events show here once its admins put them under the club.
         </p>
@@ -526,7 +541,7 @@ function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: bool
   )
 }
 
-type CompsView = 'upcoming' | 'mine' | 'results'
+type CompsView = 'upcoming' | 'mine' | 'matches' | 'results'
 
 /** D159: Competitions — Upcoming, My entries, Results — a featured card and the rest in rows. No booking until (d). */
 function Comps({ m, slug }: { m: Members; slug: string }) {
@@ -542,12 +557,14 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
   const lists: Record<CompsView, ClubEvent[]> = {
     upcoming: [...g.now, ...g.upcoming],
     mine: [...g.now, ...g.upcoming, ...g.past].filter(e => m.entries.includes(e.code)),
+    matches: [],
     results: g.past,
   }
   const upcomingTypes = [...new Set<EventType>([...lists.upcoming.map(eventType), ...notes.map(n => n.type)])]
   const list = view === 'upcoming' && type !== 'all' ? lists.upcoming.filter(e => eventType(e) === type) : lists[view]
   const shownNotes = view === 'upcoming' ? notes.filter(n => type === 'all' || n.type === type) : []
   const [featured, ...rest] = list
+  const liveHere = g.now.find(e => !e.competition?.matchPlay)
   // The featured card is a golf event; the rest run in date order with the club's own events among them.
   const restItems = view === 'upcoming' ? calendarItems(rest, shownNotes, today) : rest.map(e => ({ key: e.code, day: e.startDate ?? '', e }) as CalItem)
   return (
@@ -558,17 +575,22 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       {clubMay('run_events', { row: m.credentials ?? null }) && (
         <button type="button" onClick={() => setMaking(true)} className={`${buttonClass('secondary')} mt-4`}>New competition</button>
       )}
-      {g.now[0] && (
+      {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
-        <Link href={boardHref(g.now[0], slug)} className={`${cardClass('floating', true)} block p-4 mt-4`}>
+        <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`}>
           <p className="t-cap text-ink/65">Live now</p>
-          <p className="t-card text-ink mt-1 break-words">{g.now[0].name}</p>
+          <p className="t-card text-ink mt-1 break-words">{liveHere.name}</p>
           <p className="t-label text-club-deep mt-2">Open the leaderboard</p>
         </Link>
       )}
       <Segmented className="mt-4" label="Which competitions" value={view} onChange={setView}
-        options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' }, { value: 'results', label: 'Results' }] as const} />
+        options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' },
+          // Stage 3 (D266): your match play matches, apart from the competitions you entered.
+          ...((m.matches ?? []).length ? [{ value: 'matches' as const, label: 'Matches' }] : []),
+          { value: 'results', label: 'Results' }]} />
+      {view === 'matches' && <MatchList matches={m.matches ?? []} slug={slug} />}
       {view === 'upcoming' && <TypeChips types={upcomingTypes} value={type} onChange={setType} />}
+      {view !== 'matches' && (<>
       {!featured && restItems.length > 0 ? (
         <ListGroup className="mt-5">
           {restItems.map(x => <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
@@ -610,8 +632,28 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
           )}
         </>
       )}
+      </>)}
       {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </>
+  )
+}
+
+/** Where a match play row goes: the match's own page once the opponent is known, else the competition. */
+function matchHref(x: MyClubMatch, slug: string): string {
+  return x.state === 'next' && x.opponent ? `${tripBase(x.code, 'tournament')}/match/${x.matchId}` : clubEventHref({ code: x.code, competition: { phase: 'in_play', membersOnly: true } }, slug)
+}
+
+/** Comps' Matches (stage 3, D266): your place in each club match play — the next match to play, soonest due first, then how the rest ended. */
+function MatchList({ matches, slug }: { matches: MyClubMatch[]; slug: string }) {
+  return (
+    <ListGroup className="mt-5">
+      {matches.map(x => (
+        <ListRow key={x.code} href={matchHref(x, slug)} label={x.name}
+          hint={x.state === 'next'
+            ? [x.roundName, x.opponent ? `v ${x.opponent}` : 'opponent to be decided', x.playBy ? `play by ${clubEventDates(x.playBy, x.playBy)}` : null].filter(Boolean).join(' · ')
+            : x.state === 'won' ? `Won the ${x.roundName}${x.opponent ? ` against ${x.opponent}` : ''}` : `Out in the ${x.roundName}${x.opponent ? ` to ${x.opponent}` : ''}${x.result ? `, ${x.result}` : ''}`} />
+      ))}
+    </ListGroup>
   )
 }
 

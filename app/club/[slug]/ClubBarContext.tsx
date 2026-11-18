@@ -28,6 +28,8 @@ export interface ClubMembers {
   tops: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
   toSign: { code: string; name: string; count: number }[]
+  /** Stage 3 (D266): this member's place in each club match play — none in a copy kept before. */
+  matches?: import('@/lib/clubMatchPlay').MyClubMatch[]
   /** Stage c1, M6: the club's own events this member sees (filtered on the server) — none in a copy kept before. */
   notes?: import('@/lib/clubEvents').ClubNote[]
   /** Drawn from the copy kept on this phone (D193): the live parts wait for the fresh answer (D194). */
@@ -49,6 +51,9 @@ interface ClubBar {
    * and slides its set at once instead of waiting on the server.
    */
   going: string | null
+  /** The club match plays this phone has seen (Ross, 17 Nov 2026) — their sections wear their own names. */
+  matchPlays: ReadonlySet<string>
+  markMatchPlay: (code: string) => void
 }
 
 const Context = createContext<ClubBar | null>(null)
@@ -97,9 +102,18 @@ export function ClubBarProvider({ children }: { children: React.ReactNode }) {
     window.scrollTo({ top: 0 })
   }, [])
 
+  const [marked, setMarked] = useState<ReadonlySet<string>>(() => new Set())
+  const markMatchPlay = useCallback((code: string) => {
+    setMarked(s => (s.has(code) ? s : new Set([...s, code])))
+  }, [])
+  // A match play known from the members home's events, as well as from its own pages.
+  const matchPlays = useMemo<ReadonlySet<string>>(() => new Set([
+    ...marked, ...(members?.events ?? []).filter(e => e.competition?.matchPlay).map(e => e.code),
+  ]), [marked, members])
+
   const value = useMemo<ClubBar>(() => ({
-    members, setMembers, tab, choose, setTab, going,
-  }), [members, tab, choose, going])
+    members, setMembers, tab, choose, setTab, going, matchPlays, markMatchPlay,
+  }), [members, tab, choose, going, matchPlays, markMatchPlay])
   return <Context.Provider value={value}>{children}</Context.Provider>
 }
 
@@ -107,6 +121,13 @@ export function useClubBar(): ClubBar {
   const c = useContext(Context)
   if (!c) throw new Error('useClubBar outside the club layout')
   return c
+}
+
+/** Drawn by a club match play's pages so the footer names its sections Field, Matches and Draw. */
+export function MatchPlayMark({ code }: { code: string }) {
+  const { markMatchPlay } = useClubBar()
+  useEffect(() => { markMatchPlay(code) }, [code, markMatchPlay])
+  return null
 }
 
 /**

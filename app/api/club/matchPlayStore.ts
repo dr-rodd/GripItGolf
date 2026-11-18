@@ -1,7 +1,11 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
-import { readClubMatchPlay, type ClubMatchPlay } from '@/lib/clubMatchPlay'
+import { myClubMatch, readClubMatchPlay, type ClubMatchPlay, type MyClubMatch } from '@/lib/clubMatchPlay'
+import { drawDeadlines } from '@/lib/bracketSetup'
 import { entryLine, readEntryRules, type EntryRules } from '@/lib/clubMembership'
 import { readEntryRulesOf } from './entryRules'
+import { eventReader } from '@/lib/eventReader'
+import { portalRounds, type PortalRound } from '@/lib/knockoutPortal'
+import { readKnockout, type KnockoutView } from '@/app/golf/[root]/[tripCode]/knockout'
 import { readCategories } from './store'
 
 // A club match play read on the service role (Ross, 17 Nov 2026) — the
@@ -97,4 +101,63 @@ export async function refreshEntrantIndexes(db: Db, tripId: string): Promise<num
     if (!e) changed++
   }
   return changed
+}
+
+/**
+ * A club match play's draw, read for the club area and the office (stage
+ * 3): the platform's own knockout reader (`readKnockout`) on the event's
+ * reader, sorted into rounds with their play-by dates (`portalRounds`).
+ * Nobody's own match here — the server cannot see who is holding the phone;
+ * the page asks for that after it paints.
+ */
+export async function readClubDraw(code: string): Promise<{ view: KnockoutView; rounds: PortalRound[] } | null> {
+  const db = eventReader(code)
+  const [{ data: trip }, { data: players }] = await Promise.all([
+    db.from('trips').select('id, leaderboards, formats, team_scoring, bracket_setup').eq('trip_code', code).maybeSingle(),
+    db.from('players').select('id, name').eq('is_composite', false),
+  ])
+  const t = trip as { id: string; leaderboards: unknown; formats: unknown; team_scoring: unknown; bracket_setup: unknown } | null
+  if (!t) return null
+  const view = await readKnockout(db, t, t.bracket_setup, null, (players ?? []) as { id: string; name: string }[])
+  if (!view) return null
+  return { view, rounds: portalRounds(view.matches, null, view.deadlines) }
+}
+
+/**
+ * This list row's place in each of a club's match plays (stage 3, D266) —
+ * one read of the draws, their players and their deadlines, for the
+ * members home's Matches and next match. Every read fails soft: nothing
+ * drawn, nothing to show.
+ */
+export async function readMyClubMatches(db: Db, rowId: string, codes: string[]): Promise<MyClubMatch[]> {
+  if (!codes.length) return []
+  const { data: ts } = await db.from('trips').select('id, trip_code, name, bracket_setup').in('trip_code', codes)
+  const trips = (ts ?? []) as { id: string; trip_code: string; name: string; bracket_setup: unknown }[]
+  if (!trips.length) return []
+  const ids = trips.map(t => t.id)
+  const [{ data: mine }, { data: ms }] = await Promise.all([
+    db.from('players').select('id, trip_id').in('trip_id', ids).eq('club_member_id', rowId),
+    db.from('matchplay_matches').select('id, trip_id, round_number, round_name, player_a_id, player_b_id, winner_player_id, result').in('trip_id', ids),
+  ])
+  const meOf = new Map(((mine ?? []) as { id: string; trip_id: string }[]).map(p => [p.trip_id, p.id]))
+  const rows = (ms ?? []) as { id: string; trip_id: string; round_number: number; round_name: string; player_a_id: string | null; player_b_id: string | null; winner_player_id: string | null; result: string | null }[]
+  const others = [...new Set(rows.filter(r => meOf.get(r.trip_id) && (r.player_a_id === meOf.get(r.trip_id) || r.player_b_id === meOf.get(r.trip_id)))
+    .flatMap(r => [r.player_a_id, r.player_b_id]).filter((x): x is string => !!x))]
+  const { data: ps } = others.length ? await db.from('players').select('id, name').in('id', others) : { data: [] }
+  const names = Object.fromEntries(((ps ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+  const out: MyClubMatch[] = []
+  for (const t of trips) {
+    const me = meOf.get(t.id)
+    if (!me) continue
+    const inTrip = rows.filter(r => r.trip_id === t.id)
+    const rounds = [...new Set(inTrip.map(r => r.round_number))].sort((a, b) => a - b)
+    const deadlines = drawDeadlines(readClubMatchPlay(t.bracket_setup)?.deadlines ?? [], rounds.length)
+    const m = myClubMatch({ code: t.trip_code, name: t.name }, inTrip.map(r => ({
+      id: r.id, roundNumber: r.round_number, roundName: r.round_name, sideA: r.player_a_id, sideB: r.player_b_id,
+      winner: r.winner_player_id, result: r.result, deadline: deadlines[rounds.indexOf(r.round_number)] ?? null,
+    })), me, names)
+    if (m) out.push(m)
+  }
+  // Matches to play first, soonest due first; then results.
+  return out.sort((a, b) => Number(a.state !== 'next') - Number(b.state !== 'next') || (a.playBy ?? '9999').localeCompare(b.playBy ?? '9999'))
 }

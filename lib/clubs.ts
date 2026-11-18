@@ -437,7 +437,7 @@ export interface ClubEvent {
    * is for members only (D164) — watching told apart from editing for
    * competitions only (D184). Absent on every other event.
    */
-  competition?: { phase: import('./compPhase').CompPhase; membersOnly: boolean }
+  competition?: { phase: import('./compPhase').CompPhase; membersOnly: boolean; /** A club match play (Ross, 17 Nov 2026). */ matchPlay?: true }
 }
 
 export type ClubEventWhen = 'now' | 'upcoming' | 'past'

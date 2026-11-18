@@ -437,3 +437,97 @@ export function drawDueNow(m: ClubMatchPlay, phase: MatchPlayPhase, now: Date): 
   const at = m.drawOn ? irishInstant(m.drawOn.date, m.drawOn.time ?? '00:00') : m.closes ? irishInstant(m.closes.date, m.closes.time) : null
   return !!at && now.getTime() >= at.getTime()
 }
+
+// ─── The draw in play (stage 3; Ross, 17 Nov 2026) ─────────────
+
+/** A drawn round as the club area reads it — its name, play-by date, and whether every match in it is decided. */
+export interface DrawnRound { roundName: string; deadline: string | null; played: number; total: number }
+
+/** "Quarter-Final · play by Wed 31 Mar" — the round in play, for the Summary's line; "Every match played" once done. */
+export function roundInPlayLine(rounds: readonly DrawnRound[], today: string): string {
+  const now = rounds.find(r => r.played < r.total)
+  if (!now) return rounds.length ? 'Every match played' : 'The draw is made'
+  if (!now.deadline) return now.roundName
+  return `${now.roundName} · ${now.deadline < today ? 'was due' : 'play by'} ${clubEventDates(now.deadline, now.deadline)}`
+}
+
+/** One match past its round's play-by date with no result — the Officers' to decide (D271). */
+export interface OverdueMatch {
+  id: string
+  roundNumber: number
+  roundName: string
+  deadline: string
+  /** Whole days since the play-by date. */
+  daysOver: number
+  sideA: string
+  sideB: string
+}
+
+const dayNumber = (d: string) => Math.round(Date.parse(`${d}T12:00:00Z`) / 86_400_000)
+
+/**
+ * The matches past their play-by date with no result: both sides known
+ * (a match still waiting on the one before is not overdue — that one is),
+ * no bye, the deadline before today. Most overdue first.
+ */
+export function overdueMatches(
+  rounds: readonly { roundNumber: number; roundName: string; deadline: string | null; matches: readonly { id: string; sideA: string | null; sideB: string | null; aIsBye: boolean; bIsBye: boolean; winner: string | null }[] }[],
+  names: Readonly<Record<string, string>>,
+  today: string,
+): OverdueMatch[] {
+  const out: OverdueMatch[] = []
+  for (const r of rounds) {
+    if (!r.deadline || r.deadline >= today) continue
+    for (const m of r.matches) {
+      if (m.winner || m.aIsBye || m.bIsBye || !m.sideA || !m.sideB) continue
+      out.push({
+        id: m.id, roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline,
+        daysOver: dayNumber(today) - dayNumber(r.deadline),
+        sideA: names[m.sideA] ?? 'A player', sideB: names[m.sideB] ?? 'A player',
+      })
+    }
+  }
+  return out.sort((a, b) => b.daysOver - a.daysOver || a.roundNumber - b.roundNumber)
+}
+
+/** The filters on the office's overdue list (D271): a round, and how far past its date. */
+export function filterOverdue(list: readonly OverdueMatch[], f: { round: number | null; minDays: number }): OverdueMatch[] {
+  return list.filter(m => (f.round === null || m.roundNumber === f.round) && m.daysOver >= f.minDays)
+}
+
+/** A member's place in one club match play, for Comps' Matches and Home (stage 3; D266). */
+export interface MyClubMatch {
+  code: string
+  name: string
+  /** The match to open — the next one, else the last played. */
+  matchId: string
+  roundName: string
+  /** The opponent's name, or null while the match before decides it. */
+  opponent: string | null
+  playBy: string | null
+  state: 'next' | 'won' | 'out'
+  result: string | null
+}
+
+/**
+ * Where this player stands in one draw: their next match (the earliest with
+ * no result), else the last one — the Final won, or the match that put them
+ * out. Null when they are in no match of it.
+ */
+export function myClubMatch(
+  comp: { code: string; name: string },
+  matches: readonly { id: string; roundNumber: number; roundName: string; sideA: string | null; sideB: string | null; winner: string | null; result: string | null; deadline: string | null }[],
+  me: string,
+  names: Readonly<Record<string, string>>,
+): MyClubMatch | null {
+  const mine = matches.filter(m => m.sideA === me || m.sideB === me).sort((a, b) => a.roundNumber - b.roundNumber)
+  if (!mine.length) return null
+  const next = mine.find(m => !m.winner)
+  const m = next ?? mine[mine.length - 1]
+  const them = m.sideA === me ? m.sideB : m.sideA
+  return {
+    code: comp.code, name: comp.name, matchId: m.id, roundName: m.roundName,
+    opponent: them ? names[them] ?? 'A player' : null, playBy: m.deadline,
+    state: next ? 'next' : m.winner === me ? 'won' : 'out', result: next ? null : m.result,
+  }
+}

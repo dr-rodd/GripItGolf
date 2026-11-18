@@ -2,6 +2,7 @@
 // closed to phones (migration 086); only this reaches them.
 
 import { matchPlayKeyDates, matchPlayPhase, readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { readMyClubMatches } from './matchPlayStore'
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
 import { handicapStore } from '../handicaps/store'
@@ -67,12 +68,12 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
   const [{ data: trips, error: e }, comps] = await Promise.all([
     db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', ids),
     // Stage (d2): which are competitions, and members only (089 — fail-soft).
-    db.from('trips').select('id, competition, public_passcode_hash').in('id', ids).eq('competition', 'club'),
+    db.from('trips').select('id, competition, public_passcode_hash, bracket_setup').in('id', ids).eq('competition', 'club'),
   ])
   if (e) throw e
-  const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null }[]
+  const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null; bracket_setup?: unknown }[]
   const phases = compRows.length ? await competitionPhases(db, compRows.map(c => c.id)) : new Map<string, CompPhase>()
-  const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash }]))
+  const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash, ...(readClubMatchPlay(c.bracket_setup) ? { matchPlay: true as const } : {}) }]))
   return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
     .map(t => ({
       code: t.trip_code, name: t.name,
@@ -338,14 +339,14 @@ export function clubStore(db: Db): ClubStore {
         db.from('clubs').select(`${CLUB_COLS}, art_path, art_dark_path, home_course_id`).eq('slug', slug).maybeSingle(),
         withTicks(t => db.from('club_members').select(`${rowCols(t)}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1)),
         db.from('trip_private')
-          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash)')
+          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash, bracket_setup)')
           .eq('clubs.slug', slug),
       ])
       if (c.error || r.error || p.error) return null
       const cr = c.data as (ClubRow & { art_path: string | null; art_dark_path: string | null; home_course_id: string | null }) | null
       const club = cr ? { ...asClub(cr), artPath: cr.art_path, artDarkPath: cr.art_dark_path, homeCourseId: cr.home_course_id } : null
       const row = ((r.data ?? []) as unknown as RowRow[])[0]
-      type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null }
+      type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null; bracket_setup?: unknown }
       const privs = (p.data ?? []) as unknown as { club_access: string | null; trips: Trip | Trip[] | null }[]
       const trips = privs.flatMap(x => {
         const t = Array.isArray(x.trips) ? x.trips[0] : x.trips
@@ -355,11 +356,12 @@ export function clubStore(db: Db): ClubStore {
         code: t.trip_code, name: t.name,
         kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
         startDate: t.start_date, endDate: t.end_date, access,
-        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash } } : {}),
+        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash, ...(readClubMatchPlay(t.bracket_setup) ? { matchPlay: true as const } : {}) } } : {}),
       }))
       const comps = trips.filter(x => x.t.competition === 'club').map(x => ({ tripId: x.t.id, code: x.t.trip_code }))
       return { club, row: row ? asRow(row) : null, events, comps }
     },
+    myMatches: (rowId, codes) => readMyClubMatches(db, rowId, codes),
     async compPhases(comps) {
       const byTrip = await competitionPhases(db, comps.map(c => c.tripId))
       return new Map(comps.flatMap(c => (byTrip.has(c.tripId) ? [[c.code, byTrip.get(c.tripId)!] as [string, CompPhase]] : [])))

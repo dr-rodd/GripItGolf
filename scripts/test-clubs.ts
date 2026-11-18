@@ -55,6 +55,7 @@ import {
   matchPlayBoard, matchPlayFormIssue, matchPlayKeyDates, matchPlayLine, matchPlayPhase, matchPlayRules, matchPlaySeed,
   readClubMatchPlay, readMatchPlayForm, type MatchPlayForm,
   enterIssue, overCap, withdrawEntryIssue, drawDueNow,
+  myClubMatch, overdueMatches, filterOverdue, roundInPlayLine,
 } from '../lib/clubMatchPlay'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
@@ -1793,7 +1794,7 @@ function snappyTests() {
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<div className="club-public-face"><PublicFace face=\{face\} \/><\/div>/.test(view) && /<MembersWait \/>/.test(view), 'the public face and the stand-in are both in the HTML, the mark choosing')
   ok(/setMembers\(m => \(m && m\.slug === face\.slug \? m : readClubHome\(face\.slug\)\)\)/.test(view), 'a hinted phone draws its copy before the first paint of the page — never another club’s (D223)')
-  ok(/!m\.fromCopy && g\.now\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
+  ok(/!m\.fromCopy && live\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
   ok(/forgetClubHome\(face\.slug\)\s*\n\s*if \(clubs\.includes\(face\.slug\)\)/.test(view) && /router\.replace\(`\/club\/\$\{rest\[0\]\}`\)/.test(view)
     && /window\.location\.replace\('\/home'\)/.test(view) && /return\n\s*\}\n\s*notClubMember\(\)/.test(view),
     'taken off the list: the copy goes, and the phone moves to its next club, else the personal page; a visitor sees the public face (D223)')
@@ -2067,6 +2068,28 @@ async function matchPlayTests() {
   ok(os.status === 200 && os.body.ok && os.body.entrants.map(e => e.name).join() === 'Dave', 'the Clubhouse reads who has entered')
   ok(drawDueNow(open, 'draw_pending', afterClose) && !drawDueNow(open, 'draw_pending', NOW) && !drawDueNow({ ...open, drawWhen: 'manual' }, 'draw_pending', afterClose),
     'the draw is due once entries close — never one the club makes by hand')
+
+  section('The draw in the club area (stage 3, D266, D271)')
+  const r16 = (id: string, a: string | null, b: string | null, winner: string | null = null, round = 1) =>
+    ({ id, roundNumber: round, roundName: round === 1 ? 'Quarter-Final' : round === 2 ? 'Semi-Final' : 'Final', sideA: a, sideB: b, winner, result: winner ? '3&2' : null, deadline: round === 1 ? '2027-04-30' : round === 2 ? '2027-05-31' : '2027-06-30' })
+  const names = { ross: 'Ross', dave: 'Dave', ann: 'Ann', sam: 'Sam' }
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave'), r16('m2', 'ann', 'sam')], 'ross', names),
+    { code: 'C', name: 'Singles', matchId: 'm1', roundName: 'Quarter-Final', opponent: 'Dave', playBy: '2027-04-30', state: 'next', result: null }, 'your next match: the round, the opponent, the play-by date')
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave', 'ross'), r16('s1', 'ross', null, null, 2)], 'ross', names)?.opponent, null, 'through, the next opponent still to be decided')
+  const beaten = myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave', 'dave')], 'ross', names)
+  ok(beaten?.state === 'out' && beaten.opponent === 'Dave' && beaten.result === '3&2', 'beaten: out, by whom and by how much')
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ann', 'sam')], 'ross', names), null, 'not in the draw: nothing')
+  eq(roundInPlayLine([{ roundName: 'Quarter-Final', deadline: '2027-04-30', played: 1, total: 4 }], '2027-04-01'), `Quarter-Final · play by ${clubEventDates('2027-04-30', '2027-04-30')}`, 'the round in play and its date')
+  ok(/was due/.test(roundInPlayLine([{ roundName: 'Quarter-Final', deadline: '2027-04-30', played: 1, total: 4 }], '2027-05-02')), '…past it, "was due"')
+  const rounds = [{ roundNumber: 1, roundName: 'Quarter-Final', deadline: '2027-04-30', matches: [
+    { id: 'a', sideA: 'ross', sideB: 'dave', aIsBye: false, bIsBye: false, winner: null },
+    { id: 'b', sideA: 'ann', sideB: 'sam', aIsBye: false, bIsBye: false, winner: 'ann' },
+    { id: 'c', sideA: 'ann', sideB: null, aIsBye: false, bIsBye: true, winner: null },
+  ] }, { roundNumber: 2, roundName: 'Semi-Final', deadline: '2027-05-31', matches: [{ id: 'd', sideA: 'ann', sideB: null, aIsBye: false, bIsBye: false, winner: null }] }]
+  const overdue = overdueMatches(rounds, names, '2027-05-10')
+  eq(overdue.map(m => [m.id, m.daysOver, m.sideA, m.sideB]), [['a', 10, 'Ross', 'Dave']], 'overdue: a match with both sides and no result past its date — not a result, a bye, or a match still waiting on the one before')
+  eq(filterOverdue(overdue, { round: null, minDays: 14 }).length, 0, 'the office filters by how overdue (D271)')
+  eq(filterOverdue(overdue, { round: 2, minDays: 0 }).length, 0, '…and by round')
 }
 
 async function copyTests() {
