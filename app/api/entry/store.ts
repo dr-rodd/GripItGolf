@@ -91,7 +91,12 @@ export function serviceStore(db: ReturnType<typeof createAdminClient>): EntrySto
       const pids = ps.error ? [] : (ps.data ?? []).map(r => (r as { id: string }).id)
       if (!pids.length) return null
       const ta = await db.from('tee_assignments').select('player_id').eq('trip_id', tripId).in('player_id', pids).limit(1)
-      return ta.error ? null : ((ta.data ?? [])[0] as { player_id?: string } | undefined)?.player_id ?? null
+      const onSheet = ta.error ? null : ((ta.data ?? [])[0] as { player_id?: string } | undefined)?.player_id ?? null
+      if (onSheet) return onSheet
+      // A club match play has no tee sheet (Ross, 17 Nov 2026): its entrants play.
+      const kb = await db.from('trips').select('bracket_setup').eq('id', tripId).maybeSingle()
+      const fmt = (kb.data as { bracket_setup?: { format?: unknown } | null } | null)?.bracket_setup?.format
+      return !kb.error && fmt === 'match_play' ? pids[0] : null
     },
     async linkPlayer(userId, tripId, playerId) {
       // Only a Green Dot member — a confirmed email, never an anonymous phone.

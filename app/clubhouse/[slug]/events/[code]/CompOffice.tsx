@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconChevronLeft, IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
-import { askClub } from '@/lib/accountClient'
+import { askClub, askMatchPlay } from '@/lib/accountClient'
 import { describeTime } from '@/lib/itinerary'
 import { formatHandicap } from '@/lib/handicap'
 import { courseLabel } from '@/lib/courseDirectory'
@@ -94,7 +94,7 @@ export default function CompOffice({ code }: { code: string }) {
           <button type="button" onClick={again} className={`${buttonClass('secondary', false)} ch-focus mt-3`}>Try again</button>
         </div>
       )}
-      {mp && <MatchPlayOffice mp={mp} />}
+      {mp && <MatchPlayOffice mp={mp} code={code} />}
       {!sheet && !lost && !mp && <div className="skeleton h-96 rounded-card mt-4" />}
       {sheet && (
         <>
@@ -284,7 +284,25 @@ function BookPanel({ code, slot, onClose, onBooked }: { code: string; slot: Offi
 }
 
 /** A club match play from the office (Ross, 17 Nov 2026): where it stands, its rules and play-by dates. The draw and the matches come in later stages. */
-function MatchPlayOffice({ mp }: { mp: MatchPlayOfficeBody }) {
+function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }) {
+  // Stage 2: who has entered, and the office taking an entry out until the draw (logged).
+  const [field, setField] = useState<{ rowId: string | null; name: string }[] | null>(null)
+  const [phase, setPhase] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let live = true
+    void askMatchPlay('office.state', { code }).then(r => { if (live && r.ok) { setField(r.entrants); setPhase(r.phase) } })
+    return () => { live = false }
+  }, [code])
+  async function takeOut(rowId: string) {
+    setBusy(true); setError('')
+    const r = await askMatchPlay('office.withdraw', { code, memberId: rowId })
+    setBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    setField(r.entrants)
+  }
+  const open = phase === 'entries' || phase === 'draw_pending'
   return (
     <>
       <div className="mt-2">
@@ -297,6 +315,24 @@ function MatchPlayOffice({ mp }: { mp: MatchPlayOfficeBody }) {
         <p className="t-cap text-ink/65 mt-2">{mp.entered} entered{mp.cap ? ` of ${mp.cap}` : ''}</p>
       </div>
       <div className="grid md:grid-cols-2 gap-5 mt-5 max-w-4xl">
+        <section className="md:col-span-2">
+          <h2 className="t-h2 text-ink">Entered{field ? ` · ${field.length}${mp.cap ? ` of ${mp.cap}` : ''}` : ''}</h2>
+          {!field && <div className="skeleton h-24 rounded-card mt-3" />}
+          {field && field.length === 0 && <p className="text-ink/80 text-[15px] mt-2">Nobody has entered yet.</p>}
+          {field && field.length > 0 && (
+            <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-xl`}>
+              {field.map(e => (
+                <li key={e.rowId ?? e.name} className="flex items-center gap-3 px-4 py-2">
+                  <span className="flex-1 min-w-0 truncate text-ink text-[15px]">{e.name}</span>
+                  {open && e.rowId && (
+                    <button type="button" disabled={busy} onClick={() => void takeOut(e.rowId!)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Take out</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {error && <p role="alert" className="t-cap text-rust-deep mt-2">{error}</p>}
+        </section>
         <section>
           <h2 className="t-h2 text-ink">Rules</h2>
           <dl className={`${cardClass()} mt-3 divide-y divide-line`}>

@@ -924,3 +924,29 @@ export async function askTeeTimes<T = Record<string, unknown>>(action: string, b
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach, status: r.status }
   return { ok: true, ...(r.body as T) }
 }
+
+// ─── A club match play's entries (stage 2; Ross, 17 Nov 2026) ──
+
+/** What /api/club/matchplay answers a member: who is in, and what this account may do. */
+export type MatchPlayEntryAnswer = {
+  myRowId?: string
+  myPlayerId?: string | null
+  admin?: boolean
+  myRefusal?: string
+  closed?: string
+  stuck?: string
+  entrants: { rowId: string | null; name: string }[]
+  cap: number | null
+  phase: string
+}
+
+/** One ask of /api/club/matchplay — `state`, `enter`, `withdraw`, or the Clubhouse's `office.state` and `office.withdraw`. Never throws. */
+export async function askMatchPlay(action: 'state' | 'enter' | 'withdraw' | 'office.state' | 'office.withdraw', body: Record<string, unknown>):
+  Promise<({ ok: true } & MatchPlayEntryAnswer) | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
+  const r = await askServer(token, { ...body, action }, '/api/club/matchplay')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as unknown as MatchPlayEntryAnswer) }
+}

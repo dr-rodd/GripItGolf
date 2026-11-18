@@ -380,3 +380,60 @@ export function matchPlayRules(m: ClubMatchPlay, opts: { allowance: number; qual
   const names = matchRoundNames(m.deadlines.length)
   return { lines, deadlines: m.deadlines.map((d, i) => ({ round: names[i], date: dayOf(d) })) }
 }
+
+// ─── Entering (stage 2; Ross, 17 Nov 2026) ─────────────────────
+
+/** Entering opens for singles now; a pair enters together in stage 4. */
+export const PAIRS_ENTRY_LATER = 'Entering with a partner opens soon — ask the club in the meantime.'
+
+/** Whether entries are past their closing time. */
+export function entriesClosed(m: Pick<ClubMatchPlay, 'closes'>, now: Date): boolean {
+  const at = m.closes ? irishInstant(m.closes.date, m.closes.time) : null
+  return !!at && now.getTime() >= at.getTime()
+}
+
+/** The day a member's entry is judged on (age, a membership's days): the day entries close. */
+export function entryDay(m: Pick<ClubMatchPlay, 'closes'>, today: string): string {
+  return m.closes?.date ?? today
+}
+
+/**
+ * Why nobody more can enter now, or null. Officers (`admin`) may still put
+ * somebody in after the close, until the draw — never past the field's cap.
+ */
+export function enterIssue(m: ClubMatchPlay, o: { now: Date; drawn: boolean; entered: number; admin: boolean }): string | null {
+  if (m.field === 'qualifier') return 'The field comes from the qualifier — nobody enters.'
+  if (o.drawn) return 'The draw is made, so entries are closed.'
+  if (m.format !== 'singles') return PAIRS_ENTRY_LATER
+  if (entriesClosed(m, o.now) && !o.admin) return 'Entries have closed.'
+  if (m.maxField !== null && o.entered >= m.maxField) return `Entries are full — ${m.maxField} of ${m.maxField}.`
+  return null
+}
+
+/** Why this entry cannot be taken out now, or null: your own until entries close, anybody's by an Officer until the draw. */
+export function withdrawEntryIssue(m: ClubMatchPlay, o: { now: Date; drawn: boolean; mine: boolean; admin: boolean }): string | null {
+  if (o.drawn) return 'The draw is made — a player who can’t play now gives a walkover.'
+  if (!o.mine && !o.admin) return 'You can only take yourself out.'
+  if (entriesClosed(m, o.now) && !o.admin) return 'Entries have closed — ask the club to take you out.'
+  return null
+}
+
+/**
+ * Who stays in when two members took the last place together: the field
+ * in the order it entered, the first `cap` kept. An entry beyond them is
+ * taken back.
+ */
+export function overCap(entrants: readonly { id: string }[], cap: number | null): string[] {
+  return cap === null ? [] : entrants.slice(cap).map(e => e.id)
+}
+
+/**
+ * Whether the draw is due to be made now: waiting for it, made
+ * automatically, and its moment — the day and time set, else entries
+ * closing — come. The platform's draw job makes it once (`makeDueDraw`).
+ */
+export function drawDueNow(m: ClubMatchPlay, phase: MatchPlayPhase, now: Date): boolean {
+  if (phase !== 'draw_pending' || m.drawWhen === 'manual' || m.field !== 'entries') return false
+  const at = m.drawOn ? irishInstant(m.drawOn.date, m.drawOn.time ?? '00:00') : m.closes ? irishInstant(m.closes.date, m.closes.time) : null
+  return !!at && now.getTime() >= at.getTime()
+}

@@ -2,7 +2,8 @@ import { cardClass } from '@/app/components/ui'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { clubEventDates } from '@/lib/clubs'
 import { formatLine } from '@/lib/clubhouse'
-import { matchPlayLine, matchPlayPhase, matchPlayRules } from '@/lib/clubMatchPlay'
+import { drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules } from '@/lib/clubMatchPlay'
+import MatchPlayEnter from './MatchPlayEnter'
 import CompShell from './CompShell'
 import type { MatchPlayPage } from './read'
 
@@ -10,7 +11,8 @@ import type { MatchPlayPage } from './read'
  * A club match play's Summary (Ross, 17 Nov 2026; stage 1 of the plan in
  * docs/pending-concepts.md): its name and format, where it stands, then its
  * rules and every round's play-by date, as members read them before they
- * enter (P7). Entering, the draw and the matches come in the next stages.
+ * enter (P7), and Enter or Withdraw with the field so far (stage 2). The
+ * matches inside the club area come in stage 3.
  */
 export default function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
   const { mp } = page
@@ -28,12 +30,7 @@ export default function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <p className="text-[13px] font-semibold text-club-deep">{PHASE_WORDS[phase]}</p>
         <p className="text-ink text-[17px] leading-snug mt-1">{matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName })}</p>
-        {mp.setup.field === 'entries' && (
-          <p className="t-cap text-ink/65 mt-2">
-            {mp.entered === 0 ? `Nobody has entered yet.` : `${mp.entered} ${mp.entered === 1 ? 'player has' : 'players have'} entered.`}
-            {phase === 'entries' ? ` Entering here opens soon — ask the club in the meantime.` : ''}
-          </p>
-        )}
+        {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} />}
       </section>
 
       <section className="mt-6">

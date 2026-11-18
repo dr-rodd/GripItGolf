@@ -228,6 +228,24 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 2 as built (18 Nov 2026) — entering
+
+The Summary's card carries **Enter** for a member who may (Plays here,
+their own account, the competition's entry rules judged on the day entries
+close), **Withdraw** once in — until entries close — or the reason in the
+competition's words, and the field so far (an Officer's **Take out** beside
+each name until the draw). Entering makes the player from the list row with
+the account's index; the field is capped, the later of two entries on the
+last place taken back. The Clubhouse's page lists the field and takes an
+entry out, logged. **Singles only** — a fourball or foursomes says entering
+with a partner opens soon. Entrants are players to the event (so their match
+cards open to them in stage 3). The draw: the platform's draw job, as
+planned at creation, made the first time the Summary is opened after
+entries close (else the 3am run), each entrant's index refreshed first.
+**No migration.** Not yet: the bracket and matches inside the club area
+(stage 3 — until then a drawn match play's Summary says "The draw is made"
+and no more).
+
 ### Stage 1 as built (17 Nov 2026)
 
 Made in the Clubhouse: Events → New competition asks **Stroke play** or

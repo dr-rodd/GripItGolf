@@ -49,9 +49,12 @@ import { runNewCompetition, type CompetitionStore } from '../app/api/club/compet
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
 import type { CreateStore } from '../app/api/trip/create/create'
 import { runNewMatchPlay } from '../app/api/club/competition'
+import { runMatchPlayEntry, type Entrant, type MatchPlayEntryStore } from '../app/api/club/matchPlayEntry'
+import type { MatchPlayComp } from '../app/api/club/matchPlayStore'
 import {
   matchPlayBoard, matchPlayFormIssue, matchPlayKeyDates, matchPlayLine, matchPlayPhase, matchPlayRules, matchPlaySeed,
   readClubMatchPlay, readMatchPlayForm, type MatchPlayForm,
+  enterIssue, overCap, withdrawEntryIssue, drawDueNow,
 } from '../lib/clubMatchPlay'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
@@ -1988,6 +1991,82 @@ async function matchPlayTests() {
   const lateQual = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: { ...qual, deadlines: ['2027-04-05', ...qual.deadlines.slice(1)] } }, store(true), NOW)
   ok(lateQual.status === 400 && !lateQual.body.ok && /before the first round/.test(lateQual.body.error), '…as is one played after the first round is due')
   eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: qual }, store(true), NOW)).status, 200, 'the club’s own Spring Medal qualifies them')
+
+  section('Entering a club match play (stage 2, /api/club/matchplay)')
+  const open = readClubMatchPlay(matchPlaySeed({ ...form, format: 'singles', maxField: 8, deadlines: ['2027-04-30', '2027-05-31', '2027-07-31'] }))!
+  const beforeClose = NOW
+  const afterClose = new Date('2027-04-01T00:00:00Z')
+  eq(enterIssue(open, { now: beforeClose, drawn: false, entered: 3, admin: false }), null, 'singles, before the close, room left: anybody may enter')
+  ok(/closed/.test(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: false }) ?? ''), 'after the close: refused')
+  eq(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: true }), null, '…but an Officer may still put somebody in until the draw')
+  ok(/full — 8 of 8/.test(enterIssue(open, { now: beforeClose, drawn: false, entered: 8, admin: true }) ?? ''), 'never past the biggest field, Officers included')
+  ok(/draw is made/.test(enterIssue(open, { now: beforeClose, drawn: true, entered: 3, admin: true }) ?? ''), 'never once drawn')
+  ok(/partner/.test(enterIssue(back!, { now: beforeClose, drawn: false, entered: 0, admin: false }) ?? ''), 'a fourball waits for stage 4 (partners)')
+  eq(withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: true, admin: false }), null, 'you take yourself out until the close')
+  ok(!!withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: true, admin: false }) && withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: false, admin: true }) === null,
+    'after it only an Officer takes anybody out, until the draw')
+  ok(!!withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: false, admin: false }), 'never somebody else, as a member')
+  eq(overCap([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 2), ['c'], 'two on the last place at once: the later entry is taken back')
+
+  const mpComp: MatchPlayComp = {
+    tripId: 'trip-mp', code: 'MATCH1', name: 'Club Singles', clubId: 'c1', publicHash: 's1$x', setup: open, allowance: 100,
+    entryLine: null, entry: null, entered: 0, drawn: false, won: false, qualifierName: null, endDate: '2027-07-31',
+  }
+  const listRow2 = (id: string, name: string, userId: string, extra: Partial<MemberRecord> = {}): MemberRecord =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true, playsHere: true, officer: false, clubhouse: false, ...extra })
+  const listed: Record<string, MemberRecord> = {
+    ross: listRow2('r-ross', 'Ross', 'ross'), dave: listRow2('r-dave', 'Dave', 'dave', { gender: 'M' }), ann: listRow2('r-ann', 'Ann', 'ann', { gender: 'F' }),
+    off: listRow2('r-off', 'Officer', 'off', { officer: true }), nope: listRow2('r-nope', 'Sam', 'nope', { playsHere: false }),
+  }
+  const entryStore = (comp: MatchPlayComp, field: Entrant[], extra: Partial<MatchPlayEntryStore> = {}): MatchPlayEntryStore => ({
+    async userFromToken(t) { return listed[t.slice(4)] ? member(t.slice(4), `${t.slice(4)}@x.ie`) : null },
+    async matchPlay(code) { return code === comp.code ? comp : null },
+    async myRow(_c, u) { return listed[u] ?? null },
+    async rowsByIds(_c, ids) { return Object.values(listed).filter(r => ids.includes(r.id)) },
+    async indexOf() { return 12.4 },
+    async entrants() { return [...field] },
+    async insertPlayer(r) { if (field.some(e => e.rowId === r.club_member_id)) return 'clash'; field.push({ playerId: `p-${r.club_member_id}`, rowId: r.club_member_id, name: r.name }); return `p-${r.club_member_id}` },
+    async deletePlayer(_t, id) { const i = field.findIndex(e => e.playerId === id); if (i >= 0) field.splice(i, 1) },
+    async linkAccount() {},
+    doorToken: (h, c) => (h ? `door-${c}` : null),
+    ...extra,
+  })
+  const field: Entrant[] = []
+  const st = entryStore(mpComp, field)
+  const go = (who: string, action: string, extra: Record<string, unknown> = {}, now = NOW, s = st) => runMatchPlayEntry({ token: `tok-${who}`, action, code: 'MATCH1', ...extra }, s, now)
+  const s0 = await go('ross', 'state')
+  ok(s0.status === 200 && s0.body.ok && s0.body.entrants.length === 0 && s0.door?.value === 'door-MATCH1', 'state: nobody in yet, and the members-only door opened for a member')
+  const e1 = await go('ross', 'enter')
+  ok(e1.status === 200 && e1.body.ok && e1.body.myPlayerId === 'p-r-ross' && field.length === 1, 'Ross enters: his player made from his place on the list')
+  ok((await go('ross', 'enter')).status === 200 && field.length === 1, 'entering twice changes nothing')
+  eq((await go('nope', 'enter')).status, 409, 'somebody not ticked as playing here is refused (D209)')
+  eq((await go('stranger', 'state')).status, 403, 'somebody not on the list is refused')
+  const ladies = entryStore({ ...mpComp, entry: { genders: ['F'] } }, [])
+  const dl = await go('dave', 'enter', {}, NOW, ladies)
+  ok(dl.status === 409 && !dl.body.ok && dl.body.error.length > 0, 'a ladies’ match play refuses Dave in a sentence')
+  eq((await go('ann', 'enter', {}, NOW, ladies)).status, 200, '…and lets Ann in')
+  eq((await go('dave', 'enter', {}, afterClose)).status, 409, 'after the close nobody enters themselves')
+  eq((await go('dave', 'withdraw', { memberId: 'r-ross' })).status, 403, 'Dave cannot take Ross out')
+  eq((await go('ross', 'withdraw', {}, afterClose)).status, 403, 'Ross cannot take himself out after the close…')
+  const offOut = await go('off', 'withdraw', { memberId: 'r-ross' }, afterClose)
+  ok(offOut.status === 200 && field.length === 0, '…an Officer can, until the draw')
+  const full: Entrant[] = Array.from({ length: 7 }, (_, i) => ({ playerId: `p${i}`, rowId: `x${i}`, name: `P${i}` }))
+  const race = entryStore(mpComp, full, {
+    async insertPlayer(r) { full.push({ playerId: 'p-race', rowId: 'x-race', name: 'Racer' }, { playerId: `p-${r.club_member_id}`, rowId: r.club_member_id, name: r.name }); return `p-${r.club_member_id}` },
+  })
+  const late = await go('dave', 'enter', {}, NOW, race)
+  ok(late.status === 409 && !late.body.ok && /just filled/.test(late.body.error) && !full.some(e => e.rowId === 'r-dave'),
+    'the last place taken by somebody else a moment before: Dave’s entry is taken back')
+  const logged2: ActivityEntry[] = []
+  const office = entryStore(mpComp, [{ playerId: 'p-ann', rowId: 'r-ann', name: 'Ann' }], { async logActivity(e) { logged2.push(...e) }, async isStaff(u) { return u === 'stf' } })
+  eq((await go('off', 'office.withdraw', { memberId: 'r-ann' }, NOW, office)).status, 403, 'the Clubhouse’s take-out is refused to an Officer without Clubhouse')
+  listed.stf = listRow2('r-stf', 'Staff', 'stf', { clubhouse: true })
+  const ow = await go('stf', 'office.withdraw', { memberId: 'r-ann' }, NOW, office)
+  ok(ow.status === 200 && logged2.some(l => l.action === 'comp.withdraw' && l.memberName === 'Ann'), 'the Clubhouse takes an entry out, logged')
+  const os = await go('stf', 'office.state', {}, NOW, entryStore(mpComp, [{ playerId: 'p-dave', rowId: 'r-dave', name: 'Dave' }], { async isStaff() { return false } }))
+  ok(os.status === 200 && os.body.ok && os.body.entrants.map(e => e.name).join() === 'Dave', 'the Clubhouse reads who has entered')
+  ok(drawDueNow(open, 'draw_pending', afterClose) && !drawDueNow(open, 'draw_pending', NOW) && !drawDueNow({ ...open, drawWhen: 'manual' }, 'draw_pending', afterClose),
+    'the draw is due once entries close — never one the club makes by hand')
 }
 
 async function copyTests() {

@@ -1,3 +1,5 @@
+import { readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { refreshEntrantIndexes } from '../club/matchPlayStore'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { needsPairings } from '@/lib/leaderboards'
@@ -40,6 +42,8 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
   const kind = needsPairings(boards) ? 'pair' as const : 'player' as const
   // On the job's own service-role client, not the browser's key, which from
   // row-level security stage 3 reads nothing for a server with no phone.
+  // A club match play seeds on each entrant's index as it stands now (D179, D269).
+  if (!dryRun && readClubMatchPlay(trip.bracket_setup)) await refreshEntrantIndexes(admin, trip.id).catch(e => console.error('index refresh failed:', e))
   const entrants = await fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET, admin)
   const field = entrants.map(e => e.id)
 
