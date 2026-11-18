@@ -960,3 +960,26 @@ export async function askMatchPlay(action: 'state' | 'enter' | 'withdraw' | 'nam
   if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
   return { ok: true, ...(r.body as unknown as MatchPlayEntryAnswer) }
 }
+
+/** Golfer of the Year as it reaches a phone (stage 6). */
+export type AwardAnswer = {
+  ready?: boolean
+  awards?: { id: string; year: number; name: string; rules: import('./clubAward').AwardRules }[]
+  award?: { id: string; year: number; name: string; rules: import('./clubAward').AwardRules }
+  standing?: import('./clubAward').StandingRow[]
+  mayKeep?: boolean
+  myRowId?: string | null
+  mine?: { id: string; name: string; line: string | null }[]
+  id?: string
+}
+
+/** One ask of /api/club/awards — `list`, `standing`, `mine`, and the Clubhouse's `save` and `delete`. Never throws. */
+export async function askAwards(action: 'list' | 'standing' | 'mine' | 'save' | 'delete', body: Record<string, unknown>):
+  Promise<({ ok: true } & AwardAnswer) | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { ...body, action }, '/api/club/awards')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as unknown as AwardAnswer) }
+}

@@ -37,6 +37,8 @@ import { describeTime } from '../lib/itinerary'
 import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
 import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
+import { runAwards, eligiblePeople, AwardsNotReady, type Award, type AwardsStore } from '../app/api/club/awards'
+import { awardIssue, awardStanding, bracketStages, defaultAwardRules, myStandingLine, placePoints, placeWords, readAwardRules, readPointsTable, type AwardResult } from '../lib/clubAward'
 import { inviteHash, linkDetails, provisionClub, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
@@ -1893,6 +1895,84 @@ async function clubhouseTests() {
   ok(staffEdit.status === 200 && s.list.get(ids[2])!.email === 'sean@x.ie', 'staff change a row at a club not theirs')
 }
 
+async function awardTests() {
+  section('Golfer of the Year (stage 6, P14)')
+  const r0 = defaultAwardRules()
+  eq(placePoints(r0.points, 1), 25, '1st: 25')
+  eq(placePoints(r0.points, 2, 2), 18, 'two level for 2nd share 2nd’s and 3rd’s — 20 and 16 make 18 each')
+  eq(placePoints(r0.points, 15), 1, '15th: 1')
+  eq(placePoints(r0.points, 16), 0, 'past the table: nothing')
+  eq([placeWords(1, 1), placeWords(2, 1), placeWords(3, 1), placeWords(11, 1), placeWords(22, 1), placeWords(4, 2)], ['1st', '2nd', '3rd', '11th', '22nd', 'T4'], 'places as members read them')
+  eq(readPointsTable('25, 20 16'), [25, 20, 16], 'a points table typed as a list')
+  eq(readPointsTable('25, x'), null, '…a figure that will not read refuses it')
+  const stages = bracketStages([
+    { roundNumber: 1, sideA: 'a', sideB: 'b', winner: 'a' }, { roundNumber: 1, sideA: 'c', sideB: 'd', winner: 'd' },
+    { roundNumber: 1, sideA: 'e', sideB: 'f', winner: 'e' }, { roundNumber: 1, sideA: 'g', sideB: 'h', winner: null },
+    { roundNumber: 2, sideA: 'a', sideB: 'd', winner: 'a' }, { roundNumber: 2, sideA: 'e', sideB: null, winner: null },
+    { roundNumber: 3, sideA: 'a', sideB: null, winner: null },
+  ])
+  eq(Object.fromEntries(stages), { b: 'quarter', c: 'quarter', f: 'quarter', d: 'semi' }, 'stages arrive as each round is decided — quarter-finalists and a semi-finalist out so far, the Final still to play')
+  const final = bracketStages([{ roundNumber: 1, sideA: 'a', sideB: 'b', winner: 'b' }])
+  eq(Object.fromEntries(final), { b: 'winner', a: 'runnerUp' }, 'a Final decided: winner and runner-up')
+
+  const results: AwardResult[] = [
+    { code: 'MEDAL1', name: 'Spring Medal', date: '2027-04-04', kind: 'stroke', finishers: [{ rowId: 'ra', place: 1, tied: 1 }, { rowId: 'rb', place: 2, tied: 2 }, { rowId: 'rc', place: 2, tied: 2 }] },
+    { code: 'MAJOR1', name: 'Captain’s Prize', date: '2027-06-01', kind: 'stroke', finishers: [{ rowId: 'rc', place: 1, tied: 1 }, { rowId: 'ra', place: 2, tied: 1 }] },
+    { code: 'MATCH1', name: 'Singles', date: '2027-08-01', kind: 'matchplay', stages: [{ rowId: 'rb', stage: 'winner' }, { rowId: 'ra', stage: 'semi' }] },
+  ]
+  const people = [{ rowId: 'ra', name: 'Ann' }, { rowId: 'rb', name: 'Bob' }, { rowId: 'rc', name: 'Cat' }]
+  const plain = awardStanding(r0, results, people)
+  eq(plain.map(r => [r.name, r.total]), [['Ann', 53], ['Bob', 43], ['Cat', 43]], 'every result counts: Ann 25 + 20 + 8; Bob 18 + 25; Cat 18 + 25')
+  eq(plain.map(r => r.place), [1, 2, 2], 'level players share a place')
+  const major = awardStanding({ ...r0, weights: { MAJOR1: 2 } }, results, people)
+  eq(major.map(r => [r.name, r.total]), [['Ann', 73], ['Cat', 68], ['Bob', 43]], 'a Major counts double — Ann 25 + 40 + 8, Cat 18 + 50: the table re-told at once')
+  eq(awardStanding({ ...r0, weights: { MAJOR1: 0 } }, results, people).find(r => r.name === 'Cat')?.total, 18, '×0 leaves a competition out')
+  const best1 = awardStanding({ ...r0, bestOf: 1 }, results, people)
+  ok(best1.find(r => r.name === 'Ann')!.total === 25 && best1.find(r => r.name === 'Ann')!.lines.filter(l => !l.counts).length === 2, 'best 1: one result counts, the rest shown and struck through')
+  eq(awardStanding({ ...r0, kinds: { stroke: true, matchPlay: false } }, results, people).find(r => r.name === 'Bob')?.total, 18, 'match play switched off: Bob’s win counts for nothing')
+  eq(awardStanding(r0, results, people.filter(p => p.rowId !== 'rc')).map(r => r.name), ['Ann', 'Bob'], 'somebody the award’s rules leave out is not listed')
+  eq(myStandingLine(plain, 'rb'), 'You’re T2, 10 behind', 'your line, behind')
+  eq(myStandingLine(plain, 'ra'), 'You lead by 10', '…leading')
+  eq(myStandingLine(plain, 'zz'), null, '…nothing yet')
+  eq(readAwardRules({ points: [10, 'x'], bestOf: 0, weights: { MEDAL1: 3, BAD: 2 } }), { ...r0 }, 'bad stored answers go back to their defaults, never the award refused')
+  ok(!!awardIssue({ name: '', year: 2027, rules: r0 }) && !!awardIssue({ name: 'G', year: 2027, rules: { ...r0, kinds: { stroke: false, matchPlay: false } } }) && awardIssue({ name: 'Golfer of the Year', year: 2027, rules: r0 }) === null,
+    'an award needs a name and something to count')
+
+  const row = (id: string, name: string, userId: string | null, extra: Partial<MemberRecord> = {}): MemberRecord =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true, playsHere: true, officer: false, clubhouse: false, ...extra })
+  const rows = [row('ra', 'Ann', 'ann', { gender: 'F' }), row('rb', 'Bob', 'bob', { gender: 'M' }), row('rc', 'Cat', null, { gender: 'F' }), row('rd', 'Dan', null, { playsHere: false }), row('rh', 'Hub', 'hub', { clubhouse: true })]
+  eq(eligiblePeople(rows, { ...r0, entry: { genders: ['F'] } }, 2027, { categories: [], ageDate: '01-01' }).map(p => p.name), ['Ann', 'Cat'], 'the ladies’ award: the ladies who play here')
+  eq(eligiblePeople(rows, r0, 2027, { categories: [], ageDate: '01-01' }).map(p => p.name), ['Ann', 'Bob', 'Cat', 'Hub'], 'nobody who doesn’t play here')
+
+  const saved: Award[] = []
+  const logged: ActivityEntry[] = []
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null } as unknown as ClubRecord
+  const store = (ready = true): AwardsStore => ({
+    async userFromToken(t) { const u = t.slice(4); return ['ann', 'bob', 'hub', 'out'].includes(u) ? member(u, `${u}@x.ie`) : null },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async awards(_c, year) { if (!ready) throw new AwardsNotReady(); return saved.filter(a => a.year === year) },
+    async saveAward(a) { if (!ready) throw new AwardsNotReady(); const id = a.id ?? `aw${saved.length + 1}`; const i = saved.findIndex(x => x.id === id); const v = { ...a, id }; if (i >= 0) saved[i] = v; else saved.push(v); return id },
+    async deleteAward(_c, id) { const i = saved.findIndex(a => a.id === id); if (i >= 0) saved.splice(i, 1) },
+    async yearResults() { return results },
+    async rows() { return rows },
+    async logActivity(e) { logged.push(...e) },
+  })
+  const go = (who: string, action: string, extra: Record<string, unknown> = {}, s = store()) => runAwards({ token: `tok-${who}`, action, clubId: 'c1', year: 2027, ...extra }, s, NOW)
+  eq((await go('ann', 'save', { name: 'Golfer of the Year', rules: r0 })).status, 403, 'a member does not make awards')
+  const made = await go('hub', 'save', { name: '  Golfer  of the Year ', rules: { ...r0, weights: { MAJOR1: 2 } } })
+  ok(made.status === 200 && made.body.ok && saved[0]?.name === 'Golfer of the Year' && logged.some(l => l.action === 'award.add'), 'the Clubhouse makes one, logged')
+  const st = await go('bob', 'standing', { id: saved[0].id })
+  ok(st.status === 200 && st.body.ok && st.body.standing?.[0]?.name === 'Ann' && st.body.myRowId === 'rb', 'a member reads the table')
+  const mine = await go('bob', 'mine', { year: undefined }, store())
+  ok(mine.status === 200 && mine.body.ok && Array.isArray(mine.body.mine), 'a member’s own line for this year')
+  eq((await go('out', 'list')).status, 403, 'somebody not on the list reads nothing')
+  const early = await go('hub', 'list', {}, store(false))
+  ok(early.status === 200 && early.body.ok && early.body.ready === false, 'before migration 097: "not set up yet", never an error')
+  eq((await go('hub', 'save', { name: 'X', rules: r0 }, store(false))).status, 503, '…and nothing saved')
+  ok((await go('hub', 'delete', { id: saved[0].id })).status === 200 && saved.length === 0 && logged.some(l => l.action === 'award.delete'), 'deleted, logged — no result touched')
+}
+
 async function matchPlayTests() {
   section('A club match play (Ross, 17 Nov 2026; D264–D271, lib/clubMatchPlay.ts)')
   const today = '2026-11-15'
@@ -2733,6 +2813,7 @@ async function main() {
   await membershipRouteTests()
   await copyTests()
   await matchPlayTests()
+  await awardTests()
   await routeTests()
   await eventTests()
   lookTests()

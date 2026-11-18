@@ -35,10 +35,12 @@ export async function readClubDraw(code: string): Promise<{ view: KnockoutView; 
  * A qualifier's finishing order (stage 5, P8): the players on its one
  * board in the order the board itself puts them — `buildRows`, so its
  * countback breaks ties exactly as its Results show — each with their place
- * on the club's list. Only players with a card in the round; a No return is
- * taken out by the caller, which reads that table on the service role.
+ * on the club's list and golf's place (two level share one — Golfer of the
+ * Year shares the points). Only players with a card in the round; a No
+ * return is taken out by the caller, which reads that table on the service
+ * role.
  */
-export async function readQualifierFinish(code: string): Promise<{ playerId: string; rowId: string | null }[] | null> {
+export async function readQualifierFinish(code: string): Promise<{ playerId: string; rowId: string | null; place: number }[] | null> {
   const db = eventReader(code)
   const { data: trip } = await db.from('trips').select('id, leaderboards, formats, team_scoring').eq('trip_code', code).maybeSingle()
   const t = trip as { id: string; leaderboards: unknown; formats: unknown; team_scoring: unknown } | null
@@ -51,5 +53,5 @@ export async function readQualifierFinish(code: string): Promise<{ playerId: str
   ])
   if (!ctx) return null
   const rowOf = new Map(((players ?? []) as { id: string; club_member_id: string | null }[]).map(p => [p.id, p.club_member_id]))
-  return buildRows(board, ctx).filter(r => r.playedRounds.length > 0).map(r => ({ playerId: r.id, rowId: rowOf.get(r.id) ?? null }))
+  return buildRows(board, ctx).filter(r => r.playedRounds.length > 0).map((r, i) => ({ playerId: r.id, rowId: rowOf.get(r.id) ?? null, place: r.place ?? i + 1 }))
 }

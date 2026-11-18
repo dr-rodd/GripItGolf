@@ -228,6 +228,34 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 6 as built (18 Nov 2026) — Golfer of the Year
+
+- **Migration 097**: `club_awards` (club, year, name, rules jsonb), server
+  only. Before it is pasted the Clubhouse's section says "not set up yet"
+  and members see no award (`AwardsNotReady`).
+- **The rules, the only copy, `lib/clubAward.ts`**: points by finish (25,
+  20, 16, 13, 11, 10 … 1 by default, typed as a list), **shared on a tie**
+  (`placePoints`); match play by stage reached (winner 25, runner-up 15,
+  semi-finalist 8, quarter-finalist 4 — `bracketStages`, given as each round
+  is decided, both players of a pair); stroke, match play or both; **each
+  competition's weight** by its code (×0 leaves it out, ×1, ×1.5, ×2 a
+  Major); best N or every result; who appears — the competitions' own entry
+  rules, ages on 31 December, playing here (`eligiblePeople`).
+- **Never stored**: `awardStanding` on every read, from the year's certified
+  stroke Results in their own order with No returns out, and the match play
+  draws (`readYearResults`). A weight changed re-tells the table at once; a
+  reopened competition drops out until certified again.
+- **The Clubhouse** (`/clubhouse/[slug]/awards`, `keep_calendar`): a year at
+  a time, the awards down the side, each table with a row opening on every
+  result and what it was worth (struck through outside the best N); **New
+  award** and **Change** in a side panel (`AwardPanel`), Delete taking only
+  the rules. Every change on the activity log.
+- **Members**: at the head of Comps → Results, each award they may appear in
+  with their line — "You’re 4th, 12 behind" (`AwardsCard`, `myStandingLine`)
+  — opening the award's own page (`/club/[slug]/awards/[id]`) with the table
+  and each player's results. Gold only for the leader.
+- `test:clubs` holds the rules and the route on a stand-in.
+
 ### Stage 5 as built (18 Nov 2026) — qualifiers
 
 - **Picking or making one.** The Clubhouse panel's "From a qualifier" picks

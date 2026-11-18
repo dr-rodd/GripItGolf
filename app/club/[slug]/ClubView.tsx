@@ -30,6 +30,7 @@ import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClub
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
 import NewCompetition from './NewCompetition'
+import AwardsCard from './AwardsCard'
 import ClubTeeTimes from './ClubTeeTimes'
 import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
 import { noteTimeLine, noteWhen, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
@@ -594,6 +595,8 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
           ...((m.matches ?? []).length ? [{ value: 'matches' as const, label: 'Matches' }] : []),
           { value: 'results', label: 'Results' }]} />
       {view === 'matches' && <MatchList matches={m.matches ?? []} slug={slug} />}
+      {/* Stage 6 (P14): Golfer of the Year, this member's line, at the head of Results. */}
+      {view === 'results' && !m.fromCopy && <AwardsCard clubId={m.clubId} slug={slug} />}
       {view === 'upcoming' && <TypeChips types={upcomingTypes} value={type} onChange={setType} />}
       {view !== 'matches' && (<>
       {!featured && restItems.length > 0 ? (
