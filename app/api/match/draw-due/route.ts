@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const report = await makeDueDraw(admin, trip, new Date(), false)
-    return NextResponse.json({ made: report.outcome === 'drawn', why: report.why ?? null })
+    return NextResponse.json({ made: report.outcome === 'drawn' || !!report.fielded, why: report.why ?? null })
   } catch (e) {
     console.error('draw-due failed:', tripCode, e)
     return NextResponse.json({ made: false }, { status: 500 })

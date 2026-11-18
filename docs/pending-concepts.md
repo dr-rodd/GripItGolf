@@ -228,6 +228,43 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 5 as built (18 Nov 2026) — qualifiers
+
+- **Picking or making one.** The Clubhouse panel's "From a qualifier" picks
+  one of the club's stroke competitions this year, or **Make a new
+  qualifier** opens New competition's own panel over it (`CompPanel`, which
+  now hands back what it made) and chooses it on return. How many qualify
+  (2 to 128, never more than the biggest field) and the seeding (by their
+  finish, or at random) as stage 1 asked. **Singles only** — a Fourball or
+  Foursomes match play's field is members entering (the panel offers only
+  that, and `matchPlayFormIssue` refuses the rest), because the club's
+  competitions are singles (P13).
+- **The field, once the qualifier is certified** (`makeQualifiedField` in
+  `app/api/club/qualifierField.ts`): every round of the qualifier certified,
+  its finishers in its Results' own order (`readQualifierFinish` — the
+  board's `buildRows`, so its countback breaks ties exactly as members read
+  it), No returns out, and the first N who are still on the club's list and
+  play here (`qualifiedField`) become the match play's players — each from
+  their list row with the one index, linked to their account, a name on the
+  list twice told apart. **Made once**: `club.fieldingAt` claimed by a
+  compare-and-set, `club.fieldAt` stamped when done, a field already there
+  never touched. Reopening the qualifier afterwards changes nothing.
+- **Then the draw** (`qualifiedDrawPlan`): on the results — at once,
+  seeded by the finish (`order`) or at random; on a date — that day; by
+  hand — left for the club. The platform's draw job makes it
+  (`makeDueDraw`, which now makes a qualifier's field first).
+- **Three doors ask for it**: certifying the qualifier
+  (`CertifyStore.afterCertified` → `afterQualifierCertified`, never in the
+  way of certifying), anybody opening the match play's Summary once the
+  qualifier is certified (`DrawDueAsk`, `drawDueNow`'s `qualifierCertified`),
+  and the nightly job (`runDueDraws` also reads every club match play still
+  waiting on its qualifier).
+- **Where it stands**: "The top 16 from the Spring Medal, Sat 4 Apr — once
+  its results are certified" (`matchPlayLine` with the qualifier's day),
+  then waiting on the draw once the field is made (`matchPlayPhase` reads
+  `fieldAt`), then in play.
+- **No migration.** `test:clubs` holds the rules.
+
 ### Stage 4 as built (18 Nov 2026) — partners
 
 - **A Fourball or Foursomes entry is a pair**: a team on the draw's own

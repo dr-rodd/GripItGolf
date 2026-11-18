@@ -57,6 +57,7 @@ import {
   enterIssue, overCap, withdrawEntryIssue, drawDueNow,
   myClubMatch, overdueMatches, filterOverdue, roundInPlayLine,
   joinIssue, mayTakeOutOfPair, drawnPairs, partnerName, enteredWithLine, type PairEntry,
+  qualifiedField, qualifiedDrawPlan,
 } from '../lib/clubMatchPlay'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
@@ -1915,10 +1916,11 @@ async function matchPlayTests() {
     'a dated draw before entries close is refused (D265)')
   eq(matchPlayFormIssue({ ...form, draw: { when: 'manual', date: null, time: null, seeding: 'random' } }, NOW, today), null, 'a draw by hand passes (D265)')
   ok(!!matchPlayFormIssue({ ...form, allowance: 5 }, NOW, today), 'an allowance under 10% is refused')
-  const qual: MatchPlayForm = { ...form, field: 'qualifier', closes: null, qualifier: { code: 'MEDAL1', qualify: 16 }, draw: { when: 'auto', date: null, time: null, seeding: 'qualifier' } }
+  const qual: MatchPlayForm = { ...form, format: 'singles', allowance: 100, field: 'qualifier', closes: null, qualifier: { code: 'MEDAL1', qualify: 16 }, draw: { when: 'auto', date: null, time: null, seeding: 'qualifier' } }
   eq(matchPlayFormIssue(qual, NOW, today), null, 'a qualifier: the top 16 of a club competition, seeded by its finish')
   ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 12 } }, NOW, today), '…12 qualifying is no bracket')
   ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 32 } }, NOW, today), '…nor more than the biggest field')
+  ok(/singles/.test(matchPlayFormIssue({ ...qual, format: 'fourball' }, NOW, today) ?? ''), '…and a pairs match play cannot qualify from a singles competition (stage 5)')
   eq(readMatchPlayForm({ name: '  A   B ', maxField: null })?.name, 'A B', 'answers read and tidied')
   eq(readMatchPlayForm({ maxField: null })?.maxField, null, '…no limit reads as null')
 
@@ -2131,6 +2133,30 @@ async function matchPlayTests() {
     const fullAnswer = await runMatchPlayEntry({ token: 'tok-dave', action: 'state', code: 'PAIRS1' }, fullSt, NOW)
     ok(fullAnswer.status === 200 && fullAnswer.body.ok && /full/.test(fullAnswer.body.closed ?? '') && fullAnswer.body.mayJoin === true,
       'sixteen pairs of sixteen: no new pair, but joining one still looking takes no place')
+  }
+
+  section('A qualifier’s field (stage 5, P8)')
+  {
+    const qm = readClubMatchPlay(matchPlaySeed({ ...qual, maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
+    const finish = [{ playerId: 'a', rowId: 'ra' }, { playerId: 'b', rowId: 'rb' }, { playerId: 'c', rowId: null }, { playerId: 'd', rowId: 'rd' }, { playerId: 'e', rowId: 'ra' }, { playerId: 'f', rowId: 'rf' }]
+    eq(qualifiedField(finish, new Set(['ra', 'rd', 'rf']), 2).map(p => p.playerId), ['a', 'd'],
+      'the top finishers still on the list and playing here, in the Results’ own order — somebody off the list passed over')
+    eq(qualifiedField(finish, new Set(['ra', 'rb', 'rd', 'rf']), 8).map(p => p.playerId), ['a', 'b', 'd', 'f'], '…a row once, and fewer than asked when fewer finished')
+    eq(qualifiedDrawPlan(qm, ['a', 'd'], '2027-04-05'), { when: 'date', on: '2027-04-05', at: '00:00', seeding: 'order', order: ['a', 'd'] },
+      'on the results: drawn at once, seeded by the finish')
+    eq(qualifiedDrawPlan({ ...qm, seeding: 'random' }, ['a', 'd'], '2027-04-05'), { when: 'date', on: '2027-04-05', at: '00:00', seeding: 'random' }, '…or at random')
+    eq(qualifiedDrawPlan({ ...qm, drawWhen: 'date', drawOn: { date: '2027-04-10', time: '19:00' } }, ['a'], '2027-04-05').on, '2027-04-10', 'on a date: that day')
+    eq(qualifiedDrawPlan({ ...qm, drawWhen: 'manual' }, ['a'], '2027-04-05'), { when: 'later' }, 'by hand: the club makes it')
+    eq(matchPlayPhase(qm, { drawn: false, won: false }, NOW), 'qualifier', 'waiting on the qualifier')
+    eq(matchPlayPhase({ ...qm, fieldAt: NOW.toISOString() }, { drawn: false, won: false }, NOW), 'draw_pending', 'the field made: waiting on the draw')
+    ok(!drawDueNow(qm, 'qualifier', NOW) && drawDueNow(qm, 'qualifier', NOW, { qualifierCertified: true }), 'due the moment the qualifier is certified')
+    ok(/once its results are certified/.test(matchPlayLine(qm, 'qualifier', { qualifierName: 'Spring Medal', qualifierDate: '2027-04-04' })) &&
+      matchPlayLine(qm, 'qualifier', { qualifierName: 'Spring Medal', qualifierDate: '2027-04-04' }).includes(clubEventDates('2027-04-04', '2027-04-04')),
+      '"The top 16 from the Spring Medal, Sun 4 Apr — once its results are certified"')
+    const certify = read('app/api/card/certify.ts')
+    ok(/afterCertified\?\.|store\.afterCertified/.test(certify), 'certifying a competition asks its match plays to make their field')
+    const due = read('app/api/match/dueDraws.ts')
+    ok(/makeQualifiedField/.test(due) && /bracket_setup->club->>field', 'qualifier'/.test(due), 'the draw job makes a qualifier’s field first, and the night looks for one waiting')
   }
 
   section('The draw in the club area (stage 3, D266, D271)')

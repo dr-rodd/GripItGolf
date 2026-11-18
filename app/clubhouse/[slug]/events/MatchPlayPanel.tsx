@@ -5,12 +5,14 @@ import { IconX } from '@/app/components/icons'
 import EntryRulesFields from '@/app/components/EntryRulesFields'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
 import { entryRulesIssue, readEntryRules, type Category } from '@/lib/clubMembership'
-import { irishToday } from '@/lib/clubs'
+import { clubEventDates, irishToday } from '@/lib/clubs'
 import {
   FIELD_CAPS, MATCH_PLAY_FORMATS, MAX_MATCH_ROUNDS, matchPlayFormIssue, matchRoundNames, roundsFor,
   type MatchPlayForm, type MatchPlayFormat,
 } from '@/lib/clubMatchPlay'
 import { makeClubMatchPlay } from '../../clubhouseClient'
+import CompPanel from './CompPanel'
+import type { Preset } from '@/lib/clubPresets'
 
 /** One of the club's own stroke competitions, offered as a qualifier. */
 export type QualifierChoice = { code: string; name: string; date: string }
@@ -25,8 +27,12 @@ export type QualifierChoice = { code: string; name: string; date: string }
  * rules: where matches are played, a match level after 18, and which
  * handicap index counts.
  */
-export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onClose, onDone }: {
+export default function MatchPlayPanel({ clubId, slug, homeCourseId, presets, cats, ageDate, qualifiers: listed, onClose, onDone }: {
   clubId: string
+  slug: string
+  homeCourseId: string | null
+  /** For a qualifier made here (stage 5) — New competition's own panel. */
+  presets: Preset[]
   cats: Category[]
   ageDate: string
   qualifiers: QualifierChoice[]
@@ -43,18 +49,29 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
   })
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  // Stage 5 (P8): a qualifier made there and then, through New competition's own panel, chosen on return.
+  const [makingQualifier, setMakingQualifier] = useState(false)
+  const [madeHere, setMadeHere] = useState<QualifierChoice[]>([])
+  const qualifiers = useMemo(() => [...listed, ...madeHere.filter(m => !listed.some(q => q.code === m.code))], [listed, madeHere])
   const set = <K extends keyof MatchPlayForm>(k: K, v: MatchPlayForm[K]) => setForm(f => ({ ...f, [k]: v }))
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // While New competition is open over it, Escape is that panel's alone.
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !makingQualifier) onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [onClose, makingQualifier])
 
   // The deadlines line up from the Final back (D264): a field made smaller or bigger keeps the later dates.
   const fit = (deadlines: string[], n: number) => Array.from({ length: n }, (_, i) => deadlines[deadlines.length - n + i] ?? '')
   const setCap = (cap: number | null) => setForm(f => ({ ...f, maxField: cap, deadlines: fit(f.deadlines, cap ? roundsFor(cap) : Math.max(1, Math.min(f.deadlines.length, MAX_MATCH_ROUNDS))) }))
-  const setFormat = (format: MatchPlayFormat) => setForm(f => ({ ...f, format, allowance: MATCH_PLAY_FORMATS.find(x => x.key === format)!.allowance }))
+  const setFormat = (format: MatchPlayFormat) => setForm(f => {
+    const next = { ...f, format, allowance: MATCH_PLAY_FORMATS.find(x => x.key === format)!.allowance }
+    // A pair cannot qualify from a singles competition: back to members entering.
+    return format !== 'singles' && f.field === 'qualifier'
+      ? { ...next, field: 'entries', closes: { date: '', time: '20:00' }, qualifier: null, draw: { ...f.draw, seeding: 'random' } }
+      : next
+  })
   const setField = (field: MatchPlayForm['field']) => setForm(f => ({
     ...f, field,
     closes: field === 'entries' ? f.closes ?? { date: '', time: '20:00' } : null,
@@ -78,6 +95,7 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="mp-panel-title">
       <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/30" />
       <form onSubmit={e => { e.preventDefault(); void save() }}
@@ -125,7 +143,9 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
           <div>
             <p className={FIELD_LABEL}>How the field is made</p>
             <Segmented label="How the field is made" value={form.field} onChange={setField}
-              options={[{ value: 'entries', label: 'Members enter' }, { value: 'qualifier', label: 'From a qualifier' }] as const} />
+              options={pairs ? [{ value: 'entries', label: 'Members enter' }] as const
+                : [{ value: 'entries', label: 'Members enter' }, { value: 'qualifier', label: 'From a qualifier' }] as const} />
+            {pairs && <p className="t-cap text-ink/65 mt-1.5">Pairs enter themselves — the club’s qualifiers are singles.</p>}
           </div>
           {form.field === 'entries' && form.closes && (
             <div className="grid grid-cols-2 gap-3">
@@ -143,7 +163,7 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
           )}
           {form.field === 'qualifier' && form.qualifier && (
             qualifiers.length === 0 ? (
-              <p className="t-cap text-ink/80">The club has no competition to qualify from yet. Make one with New competition first.</p>
+              <p className="t-cap text-ink/80">The club has no competition to qualify from yet — make one below.</p>
             ) : (
               <div className="grid grid-cols-[1fr_7rem] gap-3">
                 <div>
@@ -162,6 +182,12 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
                 </div>
               </div>
             )
+          )}
+          {form.field === 'qualifier' && (
+            <div>
+              <button type="button" onClick={() => setMakingQualifier(true)} className={`${buttonClass('secondary')} ch-focus`}>Make a new qualifier</button>
+              <p className="t-cap text-ink/65 mt-1.5">The top finishers become the field the moment its results are certified.</p>
+            </div>
           )}
           <div>
             <label htmlFor="mp-cap" className={FIELD_LABEL}>Biggest field{pairs ? ' (pairs)' : ''}</label>
@@ -252,5 +278,17 @@ export default function MatchPlayPanel({ clubId, cats, ageDate, qualifiers, onCl
         {issue && form.name && !error && <p className="t-cap text-ink/65 mt-3">{issue}</p>}
       </form>
     </div>
+    {/* Stage 5 (P8): a qualifier made there and then — New competition's own panel over this one, chosen on return. */}
+    {makingQualifier && (
+      <CompPanel clubId={clubId} slug={slug} code={null} homeCourseId={homeCourseId} cats={cats} ageDate={ageDate} presets={presets}
+        onClose={() => setMakingQualifier(false)}
+        onDone={made => {
+          if (!made) return
+          setMadeHere(m => [...m, { code: made.code, name: made.name, date: clubEventDates(made.date, made.date) }])
+          setForm(f => ({ ...f, qualifier: { code: made.code, qualify: f.qualifier?.qualify ?? Math.min(16, f.maxField ?? 16) } }))
+          onDone()
+        }} />
+    )}
+    </>
   )
 }

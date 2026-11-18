@@ -25,7 +25,7 @@ import type { MatchPlayPage } from './read'
  */
 export default async function MatchPlaySection({ page, section }: { page: MatchPlayPage; section: CompSection }) {
   const { mp, slug, code } = page
-  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, new Date())
+  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, new Date())
   const today = irishToday(new Date())
   const base = tripBase(code, 'tournament')
   const pairsMode = mp.setup.format !== 'singles'

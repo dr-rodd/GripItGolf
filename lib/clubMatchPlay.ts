@@ -161,6 +161,8 @@ export function matchPlayFormIssue(f: MatchPlayForm, now: Date, today: string): 
     if (!at) return 'Choose when entries close — a day and a time.'
     if (at.getTime() <= now.getTime()) return 'Entries must close in the future.'
   } else {
+    // The club's stroke competitions are singles, so a pair cannot qualify from one (P8, P13).
+    if (f.format !== 'singles') return 'A Fourball or Foursomes field is made by members entering — the club’s qualifiers are singles.'
     if (!f.qualifier || !validEventCode(f.qualifier.code)) return 'Choose the qualifying competition.'
     const q = f.qualifier.qualify
     if (!Number.isInteger(q) || q < 2 || (q & (q - 1)) !== 0 || q > 128) return 'Choose how many qualify — 2, 4, 8, 16, 32, 64 or 128.'
@@ -288,6 +290,8 @@ export interface ClubMatchPlay extends ClubMatchPlaySetup {
   /** The draw's day and time, when it is set to one. */
   drawOn: { date: string; time: string | null } | null
   deadlines: string[]
+  /** When a qualifier's field was made from its certified results (stage 5, `club.fieldAt`) — null before. */
+  fieldAt: string | null
 }
 
 export function readClubMatchPlay(raw: unknown): ClubMatchPlay | null {
@@ -317,6 +321,7 @@ export function readClubMatchPlay(raw: unknown): ClubMatchPlay | null {
     drawOn: draw && draw.when === 'date' && typeof draw.on === 'string' && DATE.test(draw.on)
       ? { date: draw.on, time: typeof draw.at === 'string' && TIME.test(draw.at) ? draw.at : null } : null,
     deadlines: Array.isArray(r.deadlines) ? r.deadlines.filter((d): d is string => validDeadline(d)) : [],
+    fieldAt: typeof c.fieldAt === 'string' && c.fieldAt ? c.fieldAt : null,
   }
 }
 
@@ -330,31 +335,35 @@ export function matchPlayKeyDates(m: ClubMatchPlay): string[] {
 /** Where it stands — the platform's competition phases (lib/compPhase.ts), so every list says it one way. */
 export type MatchPlayPhase = Extract<CompPhase, 'entries' | 'draw_pending' | 'qualifier' | 'in_play' | 'finished'>
 
-/** The facts it is read from: the setup, whether a draw exists, and whether it has a winner. */
-export function matchPlayPhase(m: ClubMatchPlay, facts: { drawn: boolean; won: boolean }, now: Date): MatchPlayPhase {
+/**
+ * The facts it is read from: the setup, whether a draw exists, whether it
+ * has a winner — and, from a qualifier, whether the field has been made
+ * from its certified results (stage 5), after which it waits for the draw.
+ */
+export function matchPlayPhase(m: ClubMatchPlay, facts: { drawn: boolean; won: boolean; fielded?: boolean }, now: Date): MatchPlayPhase {
   if (facts.won) return 'finished'
   if (facts.drawn) return 'in_play'
-  if (m.field === 'qualifier') return 'qualifier'
+  if (m.field === 'qualifier') return (facts.fielded || !!m.fieldAt) ? 'draw_pending' : 'qualifier'
   const at = m.closes ? irishInstant(m.closes.date, m.closes.time) : null
   return at && now.getTime() < at.getTime() ? 'entries' : 'draw_pending'
 }
 
-/** "The top 16 from the Spring Medal". */
-function qualifierLine(m: Pick<ClubMatchPlay, 'qualify'>, name: string | null | undefined): string {
-  return `The top ${m.qualify ?? 'players'} from ${name ?? 'the qualifier'}`
+/** "The top 16 from the Spring Medal, Sat 4 Apr". */
+function qualifierLine(m: Pick<ClubMatchPlay, 'qualify'>, name: string | null | undefined, date?: string | null): string {
+  return `The top ${m.qualify ?? 'players'} from ${name ?? 'the qualifier'}${date ? `, ${clubEventDates(date, date)}` : ''}`
 }
 
 const dayOf = (d: string) => clubEventDates(d, d)
 const whenOf = (date: string, time: string | null) => `${dayOf(date)}${time ? `, ${describeTime(time)}` : ''}`
 
 /** The phase's one line — "Entries close Fri 5 Jun, 8:00 pm". */
-export function matchPlayLine(m: ClubMatchPlay, phase: MatchPlayPhase, opts: { qualifierName?: string | null } = {}): string {
+export function matchPlayLine(m: ClubMatchPlay, phase: MatchPlayPhase, opts: { qualifierName?: string | null; qualifierDate?: string | null } = {}): string {
   switch (phase) {
     case 'entries': return m.closes ? `Entries close ${whenOf(m.closes.date, m.closes.time)}` : 'Entries are open'
     case 'draw_pending':
       return m.drawWhen === 'manual' ? 'The club makes the draw'
         : m.drawOn ? `The draw is made ${whenOf(m.drawOn.date, m.drawOn.time)}` : 'The draw is to come'
-    case 'qualifier': return qualifierLine(m, opts.qualifierName)
+    case 'qualifier': return `${qualifierLine(m, opts.qualifierName, opts.qualifierDate)} — once its results are certified`
     case 'in_play': return 'The draw is made'
     case 'finished': return 'Finished'
   }
@@ -440,10 +449,13 @@ export function overCap(entrants: readonly { id: string }[], cap: number | null)
 /**
  * Whether the draw is due to be made now: waiting for it, made
  * automatically, and its moment — the day and time set, else entries
- * closing — come. The platform's draw job makes it once (`makeDueDraw`).
+ * closing — come. From a qualifier, first its field: due once the
+ * qualifier is certified. The platform's draw job makes it once (`makeDueDraw`).
  */
-export function drawDueNow(m: ClubMatchPlay, phase: MatchPlayPhase, now: Date): boolean {
-  if (phase !== 'draw_pending' || m.drawWhen === 'manual' || m.field !== 'entries') return false
+export function drawDueNow(m: ClubMatchPlay, phase: MatchPlayPhase, now: Date, opts: { qualifierCertified?: boolean } = {}): boolean {
+  // From a qualifier (stage 5): its field is due the moment its results are certified.
+  if (m.field === 'qualifier' && phase === 'qualifier') return !!opts.qualifierCertified
+  if (phase !== 'draw_pending' || m.drawWhen === 'manual') return false
   const at = m.drawOn ? irishInstant(m.drawOn.date, m.drawOn.time ?? '00:00') : m.closes ? irishInstant(m.closes.date, m.closes.time) : null
   return !!at && now.getTime() >= at.getTime()
 }
@@ -607,3 +619,36 @@ export function enteredWithLine(partner: string | null): string {
 
 /** Said on a pairs match play's Summary before the draw. */
 export const LONE_NOT_DRAWN = 'A pair still looking for a partner when the draw is made isn’t in it.'
+
+// ─── A qualifier's field (stage 5; P8, Ross, 17 Nov 2026) ─────
+
+/**
+ * The field from a qualifier's certified results: the finishers in the
+ * board's own order (its countback breaking ties), each who is still on the
+ * club's list and plays here (`eligible`) taken in turn until `qualify` are
+ * in. A No return is never in the order handed here; a row twice counts once.
+ */
+export function qualifiedField<T extends { rowId: string | null }>(order: readonly T[], eligible: ReadonlySet<string>, qualify: number): T[] {
+  const out: T[] = []
+  const seen = new Set<string>()
+  for (const p of order) {
+    if (out.length >= qualify) break
+    if (!p.rowId || seen.has(p.rowId) || !eligible.has(p.rowId)) continue
+    seen.add(p.rowId)
+    out.push(p)
+  }
+  return out
+}
+
+/**
+ * The draw plan once a qualifier's field is made — handed the field's player
+ * ids in finishing order. Made at once (`auto`: today, from midnight, so it
+ * is due now), on its date, or left for the club by hand; seeded by the
+ * finish (`order`) or at random.
+ */
+export function qualifiedDrawPlan(m: Pick<ClubMatchPlay, 'drawWhen' | 'drawOn' | 'seeding'>, finish: readonly string[], today: string): DrawPlan {
+  const seeding = m.seeding === 'qualifier' ? { seeding: 'order' as const, order: [...finish] } : { seeding: 'random' as const }
+  if (m.drawWhen === 'manual') return { when: 'later' }
+  if (m.drawWhen === 'date' && m.drawOn) return { when: 'date', on: m.drawOn.date, ...(m.drawOn.time ? { at: m.drawOn.time } : {}), ...seeding }
+  return { when: 'date', on: today, at: '00:00', ...seeding }
+}

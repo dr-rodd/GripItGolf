@@ -28,6 +28,9 @@ export interface MatchPlayComp {
   drawn: boolean
   won: boolean
   qualifierName: string | null
+  /** Stage 5: the qualifier's day, and whether every round of it is certified. */
+  qualifierDate?: string | null
+  qualifierCertified?: boolean
   endDate: string | null
 }
 
@@ -50,8 +53,14 @@ export async function readMatchPlayComp(db: Db, code: string): Promise<MatchPlay
       ? db.from('players').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id)
       : db.from('teams').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id).eq('team_set', 'set-2'),
     db.from('matchplay_matches').select('next_match_id, winner_player_id, winner_team_id').eq('trip_id', trip.id),
+    // The qualifier (stage 5): its name, its day, and whether its results are certified.
     setup.qualifierCode
-      ? db.from('trips').select('name').eq('trip_code', setup.qualifierCode).maybeSingle().then(r => (r.data as { name: string } | null)?.name ?? null)
+      ? db.from('trips').select('name, rounds(scheduled_date, certified_at)').eq('trip_code', setup.qualifierCode).maybeSingle().then(r => {
+          const q = r.data as { name: string; rounds?: { scheduled_date: string | null; certified_at: string | null }[] } | null
+          if (!q) return null
+          const rs = q.rounds ?? []
+          return { name: q.name, date: rs.map(x => x.scheduled_date).filter((d): d is string => !!d).sort()[0] ?? null, certified: rs.length > 0 && rs.every(x => !!x.certified_at) }
+        })
       : Promise.resolve(null),
   ])
   const clubId = (priv as { club_id?: string | null } | null)?.club_id
@@ -71,7 +80,9 @@ export async function readMatchPlayComp(db: Db, code: string): Promise<MatchPlay
     entered: players.count ?? 0,
     drawn: rows.length > 0,
     won: rows.some(r => !r.next_match_id && !!(r.winner_player_id || r.winner_team_id)),
-    qualifierName: qualifier,
+    qualifierName: qualifier?.name ?? null,
+    qualifierDate: qualifier?.date ?? null,
+    qualifierCertified: qualifier?.certified ?? false,
     endDate: trip.end_date,
   }
 }

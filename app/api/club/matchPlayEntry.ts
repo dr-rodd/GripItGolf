@@ -116,7 +116,7 @@ export async function runMatchPlayEntry(
       const field = await store.entrants(mp.tripId)
       const pairs = isPairsMatchPlay(mp.setup) && store.pairs ? await store.pairs(mp.tripId) : null
       return { status: 200, door: null, body: {
-        ok: true, entrants: field.map(e => ({ rowId: e.rowId, name: e.name })), cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now),
+        ok: true, entrants: field.map(e => ({ rowId: e.rowId, name: e.name })), cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now),
         ...(pairs ? { pairs: pairs.map(p => ({ teamId: p.teamId, members: p.members.map(x => ({ rowId: x.rowId, name: x.name })) })) } : {}),
       } }
     }
@@ -160,7 +160,7 @@ export async function runMatchPlayEntry(
         ...(stuck ? { stuck } : {}),
         entrants: field.map(e => ({ rowId: e.rowId, name: e.name })),
         cap: mp.setup.maxField,
-        phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now),
+        phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now),
         mySide: pairsMode ? myPair?.teamId ?? null : mine,
         ...(pairsMode ? {
           pairs: pairs.map(p => ({ teamId: p.teamId, members: p.members.map(x => ({ rowId: x.rowId, name: x.name })) })),
@@ -211,7 +211,7 @@ export async function runMatchPlayEntry(
   if (action === 'names') {
     if (!pairsMode || !store.searchRows) return fail(400, 'Unknown request.')
     const q = str(input.q).trim()
-    if (q.length < 2) return { status: 200, door, body: { ok: true, entrants: [], cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now), names: [] } }
+    if (q.length < 2) return { status: 200, door, body: { ok: true, entrants: [], cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now), names: [] } }
     const [rows, field, pairs] = await Promise.all([store.searchRows(mp.clubId, q.slice(0, 40), 20), store.entrants(mp.tripId), readPairs()])
     const entered = new Set(field.map(e => e.rowId))
     const names = rows.filter(r => r.id !== me.id).map(r => {
@@ -221,7 +221,7 @@ export async function runMatchPlayEntry(
           : f ? refusalWords(f, r.name) : null
       return { id: r.id, name: r.name, ...(why ? { why } : {}) }
     })
-    return { status: 200, door, body: { ok: true, entrants: [], cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now), names } }
+    return { status: 200, door, body: { ok: true, entrants: [], cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now), names } }
   }
 
   if (action === 'enter' || action === 'join' || action === 'partner') {
@@ -409,6 +409,6 @@ async function withdraw(o: {
   const rest = field.filter(e => e.playerId !== entry.playerId)
   return {
     status: 200, door: null,
-    body: { ok: true, entrants: rest.map(e => ({ rowId: e.rowId, name: e.name })), cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, o.now) },
+    body: { ok: true, entrants: rest.map(e => ({ rowId: e.rowId, name: e.name })), cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, o.now) },
   }
 }

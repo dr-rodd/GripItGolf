@@ -526,14 +526,14 @@ export async function runReadMatchPlay(
   if (!who.ok) return no(403, who.error)
   const mp = store.matchPlayComp && typeof input.code === 'string' ? await store.matchPlayComp(input.code.trim().toUpperCase()) : null
   if (!mp || mp.clubId !== who.club.id) return no(404, 'No such match play at this club.')
-  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now)
+  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now)
   const draw = mp.drawn && store.matchPlayDraw ? await store.matchPlayDraw(mp.code).catch(() => null) : null
   return {
     status: 200,
     body: {
       ok: true, name: mp.name,
       format: formatLine({ scoring: 'stableford', allowance: mp.allowance, matchPlay: { format: mp.setup.format } }),
-      phase: PHASE_WORDS[phase], line: matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName }),
+      phase: PHASE_WORDS[phase], line: matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName, qualifierDate: mp.qualifierDate }),
       entered: mp.entered, cap: mp.setup.maxField,
       rules: matchPlayRules(mp.setup, { allowance: mp.allowance, qualifierName: mp.qualifierName, entryLine: mp.entryLine }),
       overdue: draw ? overdueMatches(draw.rounds, draw.view.names, irishToday(now)) : [],

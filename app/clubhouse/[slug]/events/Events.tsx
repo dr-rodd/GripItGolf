@@ -251,7 +251,7 @@ export default function Events() {
 
       {comp && <CompPanel clubId={club.id} slug={face.slug} code={comp === 'new' ? null : comp} homeCourseId={club.homeCourseId ?? null}
         cats={categories ?? []} ageDate={ageDate} presets={presets ?? []} onClose={() => setComp(null)} onDone={again} />}
-      {matchPlay && <MatchPlayPanel clubId={club.id} cats={categories ?? []} ageDate={ageDate}
+      {matchPlay && <MatchPlayPanel clubId={club.id} slug={face.slug} homeCourseId={club.homeCourseId ?? null} presets={presets ?? []} cats={categories ?? []} ageDate={ageDate}
         qualifiers={(events ?? []).filter(e => e.competition && !e.competition.matchPlay && e.startDate && e.startDate >= `${thisYear}-01-01`)
           .map(e => ({ code: e.code, name: e.name, date: clubEventDates(e.startDate, e.startDate) }))}
         onClose={() => setMatchPlay(false)} onDone={again} />}

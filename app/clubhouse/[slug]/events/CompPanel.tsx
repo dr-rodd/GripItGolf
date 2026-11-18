@@ -35,7 +35,8 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   ageDate: string
   presets: Preset[]
   onClose: () => void
-  onDone: () => void
+  /** Handed the new competition when one was made (a match play's qualifier, stage 5). */
+  onDone: (made?: { code: string; name: string; date: string }) => void
 }) {
   const { courses: listed } = usePlatformCourses()
   const [added, setAdded] = useState<DirectoryCourse[]>([])
@@ -94,11 +95,11 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   async function save() {
     if (!form || issue) { setError(issue ?? ''); return }
     setBusy(true); setError(''); setProblems([])
-    const r: { ok: true } | { ok: false; error: string; problems?: { name: string; why: string }[] } = code
+    const r: { ok: true; code?: string } | { ok: false; error: string; problems?: { name: string; why: string }[] } = code
       ? await changeCompetition(clubId, code, form) : await makeClubhouseCompetition(clubId, form)
     setBusy(false)
     if (!r.ok) { setError(r.error); setProblems(r.problems ?? []); return }
-    onDone()
+    onDone(!code && r.code ? { code: r.code, name: form.name, date: form.date } : undefined)
     onClose()
   }
 

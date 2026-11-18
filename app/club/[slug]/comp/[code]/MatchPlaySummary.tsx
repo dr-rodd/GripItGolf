@@ -8,6 +8,7 @@ import { readClubDraw } from '@/app/api/club/matchPlayDraw'
 import MyMatch, { type ClubMatchRow } from './MyMatch'
 import { MatchPlayMark } from '../../ClubBarContext'
 import MatchPlayEnter from './MatchPlayEnter'
+import DrawDueAsk from './DrawDueAsk'
 import CompShell from './CompShell'
 import type { MatchPlayPage } from './read'
 
@@ -20,7 +21,7 @@ import type { MatchPlayPage } from './read'
  */
 export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }) {
   const { mp } = page
-  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, new Date())
+  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, new Date())
   // Drawn (stage 3): the round in play, and this phone's own match asked after it paints.
   const draw = mp.drawn ? await readClubDraw(mp.code) : null
   const nameOf = (id: string | null, bye: boolean) => (bye ? 'Bye' : id ? draw?.view.names[id] ?? 'A player' : 'To be decided')
@@ -41,7 +42,8 @@ export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }
 
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <p className="text-[13px] font-semibold text-club-deep">{PHASE_WORDS[phase]}</p>
-        <p className="text-ink text-[17px] leading-snug mt-1">{draw ? roundInPlayLine(draw.rounds, irishToday(new Date())) : matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName })}</p>
+        <p className="text-ink text-[17px] leading-snug mt-1">{draw ? roundInPlayLine(draw.rounds, irishToday(new Date())) : matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName, qualifierDate: mp.qualifierDate })}</p>
+        {mp.setup.field === 'qualifier' && drawDueNow(mp.setup, phase, new Date(), { qualifierCertified: mp.qualifierCertified }) && <DrawDueAsk code={mp.code} />}
         {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} pairs={pairs} loneNote={LONE_NOT_DRAWN} />}
       </section>
 

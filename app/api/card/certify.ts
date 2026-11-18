@@ -70,6 +70,8 @@ export interface CertifyStore {
   writeSummaries(code: string, roundId: string): Promise<void>
   /** …and let go (reopen). */
   dropSummaries(roundId: string): Promise<void>
+  /** Stage 5: a club match play qualifying from this competition makes its field and draw — never in the way of certifying. */
+  afterCertified?(code: string): Promise<void>
 }
 
 export interface StatePlayer {
@@ -241,6 +243,7 @@ export async function runCertify(
       await store.setCertified(comp.roundId, at)
       await store.logCertification(comp.roundId, 'certify', user.id, at)
       await store.writeSummaries(comp.code, comp.roundId).catch(e => console.error('summary write on certify failed:', e))
+      if (store.afterCertified) await store.afterCertified(comp.code).catch(e => console.error('qualified field on certify failed:', e))
       return { status: 200, body: { ok: true, certifiedAt: at } }
     }
   } catch (e) {
