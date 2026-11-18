@@ -5,6 +5,8 @@ import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconChevronLeft, IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { askClub, askMatchPlay } from '@/lib/accountClient'
+import { filterOverdue } from '@/lib/clubMatchPlay'
+import { tripBase } from '@/lib/tripPaths'
 import { describeTime } from '@/lib/itinerary'
 import { formatHandicap } from '@/lib/handicap'
 import { courseLabel } from '@/lib/courseDirectory'
@@ -303,6 +305,10 @@ function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }
     setField(r.entrants)
   }
   const open = phase === 'entries' || phase === 'draw_pending'
+  // Stage 3 (D271): the matches past their play-by date, filtered — a club may have hundreds.
+  const [round, setRound] = useState<number | null>(null)
+  const [minDays, setMinDays] = useState(0)
+  const late = filterOverdue(mp.overdue ?? [], { round, minDays })
   return (
     <>
       <div className="mt-2">
@@ -315,6 +321,43 @@ function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }
         <p className="t-cap text-ink/65 mt-2">{mp.entered} entered{mp.cap ? ` of ${mp.cap}` : ''}</p>
       </div>
       <div className="grid md:grid-cols-2 gap-5 mt-5 max-w-4xl">
+        {(mp.overdue ?? []).length > 0 && (
+          <section className="md:col-span-2">
+            <h2 className="t-h2 text-ink">Past the play-by date · {(mp.overdue ?? []).length}</h2>
+            <p className="t-cap text-ink/65 mt-1">Nothing happens on its own: an Officer decides each on its match page — a walkover, or both out.</p>
+            <div className="flex flex-wrap items-end gap-3 mt-3">
+              <div>
+                <label htmlFor="od-round" className={FIELD_LABEL}>Round</label>
+                <select id="od-round" value={round ?? ''} onChange={e => setRound(e.target.value ? Number(e.target.value) : null)} className={`${FIELD} ch-focus w-[200px]`}>
+                  <option value="">Every round</option>
+                  {(mp.rounds ?? []).map(r => <option key={r.roundNumber} value={r.roundNumber}>{r.roundName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="od-days" className={FIELD_LABEL}>Overdue by</label>
+                <select id="od-days" value={minDays} onChange={e => setMinDays(Number(e.target.value))} className={`${FIELD} ch-focus w-[200px]`}>
+                  <option value={0}>Any time</option>
+                  <option value={7}>A week or more</option>
+                  <option value={14}>Two weeks or more</option>
+                  <option value={30}>A month or more</option>
+                </select>
+              </div>
+            </div>
+            {late.length === 0
+              ? <p className="text-ink/80 text-[15px] mt-3">None like that.</p>
+              : (
+                <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-3xl`}>
+                  {late.map(m => (
+                    <li key={m.id} className="flex flex-wrap items-baseline gap-3 px-4 py-2.5">
+                      <span className="flex-1 min-w-[12rem] text-ink text-[15px]">{m.sideA} <span className="text-ink/65">v</span> {m.sideB}</span>
+                      <span className="t-cap text-ink/65 whitespace-nowrap">{m.roundName} · {m.daysOver} {m.daysOver === 1 ? 'day' : 'days'} over</span>
+                      <a href={`${tripBase(code, 'tournament')}/match/${m.id}`} target="_blank" rel="noopener" className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9 inline-flex items-center">Open the match</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </section>
+        )}
         <section className="md:col-span-2">
           <h2 className="t-h2 text-ink">Entered{field ? ` · ${field.length}${mp.cap ? ` of ${mp.cap}` : ''}` : ''}</h2>
           {!field && <div className="skeleton h-24 rounded-card mt-3" />}

@@ -1,8 +1,9 @@
 // The service-role store behind /api/club (./club.ts). Every club table is
 // closed to phones (migration 086); only this reaches them.
 
-import { matchPlayKeyDates, matchPlayPhase, readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { readMyClubMatches } from './matchPlayStore'
+import { readClubDraw } from './matchPlayDraw'
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
 import { handicapStore } from '../handicaps/store'
@@ -362,6 +363,10 @@ export function clubStore(db: Db): ClubStore {
       return { club, row: row ? asRow(row) : null, events, comps }
     },
     myMatches: (rowId, codes) => readMyClubMatches(db, rowId, codes),
+    async overdueCount(code, today) {
+      const draw = await readClubDraw(code)
+      return draw ? overdueMatches(draw.rounds, draw.view.names, today).length : 0
+    },
     async compPhases(comps) {
       const byTrip = await competitionPhases(db, comps.map(c => c.tripId))
       return new Map(comps.flatMap(c => (byTrip.has(c.tripId) ? [[c.code, byTrip.get(c.tripId)!] as [string, CompPhase]] : [])))

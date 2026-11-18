@@ -2090,6 +2090,8 @@ async function matchPlayTests() {
   eq(overdue.map(m => [m.id, m.daysOver, m.sideA, m.sideB]), [['a', 10, 'Ross', 'Dave']], 'overdue: a match with both sides and no result past its date — not a result, a bye, or a match still waiting on the one before')
   eq(filterOverdue(overdue, { round: null, minDays: 14 }).length, 0, 'the office filters by how overdue (D271)')
   eq(filterOverdue(overdue, { round: 2, minDays: 0 }).length, 0, '…and by round')
+  const nOverdue = needsYou({ base: '/clubhouse/pints', counts: { joined: 0, invited: 0, notJoined: 0, noEmail: 0, removed: 0, officers: 0, clubhouse: 0, total: 0 } as unknown as ListCounts, phases: [], clubSlug: 'pints', officer: false, overdue: [{ code: 'MATCH1', name: 'Club Singles', count: 3 }] })
+  ok(nOverdue.some(n => n.href === '/clubhouse/pints/events/MATCH1' && /3 matches are past the play-by date\. An Officer decides them\./.test(n.line)), 'Needs you: a match play’s overdue matches, on the Clubhouse’s own page (D271)')
 }
 
 async function copyTests() {

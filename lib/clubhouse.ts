@@ -167,8 +167,17 @@ export function needsYou(o: {
   officer: boolean
   /** Stage (m): whether the club has any memberships yet. */
   hasCategories?: boolean
+  /** Stage 3 (D271): each club match play's matches past their play-by date. */
+  overdue?: { code: string; name: string; count: number }[]
 }): Need[] {
   const out: Need[] = []
+  for (const c of (o.overdue ?? []).filter(x => x.count > 0)) {
+    out.push({
+      key: `overdue-${c.code}`,
+      line: `${c.name}: ${c.count} ${c.count === 1 ? 'match is' : 'matches are'} past the play-by date. ${o.officer ? 'Decide them on the match pages.' : 'An Officer decides them.'}`,
+      href: `${o.base}/events/${c.code}`,
+    })
+  }
   for (const c of o.phases.filter(p => p.phase === 'awaiting')) {
     out.push({
       key: `certify-${c.code}`,

@@ -228,6 +228,26 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 3 as built (18 Nov 2026) — the draw in the club area
+
+A match play's footer reads **Field · Matches · Draw** in the slots a stroke
+competition's Tee times, Scoring and Leaderboard hold. **Field** lists who
+has entered; **Matches** shows your match and the round in play's matches;
+**Draw** every round with its play-by date and results, and a link to the
+full bracket. The Summary, once drawn, says the round in play and shows your
+match — round, opponent, play-by date and **Open your match**. **The match
+page and card are the event's own** (`/golf/event/<code>/match/<id>`),
+exactly as a stroke competition's card opens on the event's scoring page:
+arranging the course and day, contacts, the card, a walkover — all built and
+tested there. Comps gains **Matches** beside My entries; Home leads with
+**Your next match** (D266) — a match play is never "Live now". On a club
+match play the card's Finalise says "This puts the result into the draw.
+Nobody else is asked, so check it with the other side first." (D268). The
+Clubhouse's page lists matches past their play-by date, filtered by round
+and by how overdue, each opening its match page in a new tab for an Officer
+to decide; Needs you says how many (D271). **No migration.** Pairs, a
+qualifier acted on, and Golfer of the Year are stages 4 to 6.
+
 ### Stage 2 as built (18 Nov 2026) — entering
 
 The Summary's card carries **Enter** for a member who may (Plays here,

@@ -23,6 +23,7 @@ import { NO_FORMATS } from '@/lib/formats'
 import { toItemRow } from '@/lib/itinerarySync'
 import { unheldPin } from '@/lib/pinHash'
 import { entryRulesIssue, type Category, type EntryRules } from '@/lib/clubMembership'
+import { overdueMatches, type OverdueMatch } from '@/lib/clubMatchPlay'
 import { matchPlayBoard, matchPlayDates, matchPlayFormIssue, matchPlayLine, matchPlayPermissions, matchPlayPhase, matchPlayRules, matchPlaySeed, readMatchPlayForm } from '@/lib/clubMatchPlay'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { formatLine } from '@/lib/clubhouse'
@@ -504,13 +505,17 @@ export async function runNewMatchPlay(
 }
 
 export type MatchPlayReadOutcome =
-  | { status: 200; body: { ok: true; name: string; format: string; phase: string; line: string; entered: number; cap: number | null; rules: ReturnType<typeof matchPlayRules> } }
+  | { status: 200; body: { ok: true; name: string; format: string; phase: string; line: string; entered: number; cap: number | null; rules: ReturnType<typeof matchPlayRules>; overdue: OverdueMatch[]; rounds: { roundNumber: number; roundName: string }[] } }
   | { status: 400 | 401 | 403 | 404 | 503; body: { ok: false; error: string } }
 
 /** A club match play as the Clubhouse reads it (Ross, 17 Nov 2026): where it stands, its rules and its dates — the office's (`keep_calendar`). */
 export async function runReadMatchPlay(
   input: { token: string | null; clubId: unknown; code: unknown },
-  store: CompetitionStore & { matchPlayComp?(code: string): Promise<import('./matchPlayStore').MatchPlayComp | null> },
+  store: CompetitionStore & {
+    matchPlayComp?(code: string): Promise<import('./matchPlayStore').MatchPlayComp | null>
+    /** Stage 3 (D271): its draw, for the overdue matches. */
+    matchPlayDraw?(code: string): Promise<{ view: { names: Record<string, string> }; rounds: Parameters<typeof overdueMatches>[0] } | null>
+  },
   now: Date,
 ): Promise<MatchPlayReadOutcome> {
   const no = (status: 400 | 401 | 403 | 404 | 503, error: string): MatchPlayReadOutcome => ({ status, body: { ok: false, error } })
@@ -522,6 +527,7 @@ export async function runReadMatchPlay(
   const mp = store.matchPlayComp && typeof input.code === 'string' ? await store.matchPlayComp(input.code.trim().toUpperCase()) : null
   if (!mp || mp.clubId !== who.club.id) return no(404, 'No such match play at this club.')
   const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, now)
+  const draw = mp.drawn && store.matchPlayDraw ? await store.matchPlayDraw(mp.code).catch(() => null) : null
   return {
     status: 200,
     body: {
@@ -530,6 +536,8 @@ export async function runReadMatchPlay(
       phase: PHASE_WORDS[phase], line: matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName }),
       entered: mp.entered, cap: mp.setup.maxField,
       rules: matchPlayRules(mp.setup, { allowance: mp.allowance, qualifierName: mp.qualifierName, entryLine: mp.entryLine }),
+      overdue: draw ? overdueMatches(draw.rounds, draw.view.names, irishToday(now)) : [],
+      rounds: (draw?.rounds ?? []).map(r => ({ roundNumber: r.roundNumber, roundName: r.roundName })),
     },
   }
 }

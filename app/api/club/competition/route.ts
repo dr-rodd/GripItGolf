@@ -15,6 +15,7 @@ import { compFormFrom, type CompForm } from '@/lib/clubComp'
 import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
 import { readMatchPlayComp } from '../matchPlayStore'
+import { readClubDraw } from '../matchPlayDraw'
 
 // POST /api/club/competition — `{ clubId, form }` with a Green Dot member's
 // token: a verified club's owner or admin makes a competition (D162). The
@@ -107,7 +108,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
     }
     if (body?.action === 'matchplay.read') {
-      const read = await runReadMatchPlay({ token, clubId: body.clubId, code: body.code }, { ...store, matchPlayComp: code => readMatchPlayComp(db, code) }, new Date())
+      const read = await runReadMatchPlay({ token, clubId: body.clubId, code: body.code }, { ...store, matchPlayComp: code => readMatchPlayComp(db, code), matchPlayDraw: code => readClubDraw(code) }, new Date())
       return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
     }
     if (body?.action === 'change') {

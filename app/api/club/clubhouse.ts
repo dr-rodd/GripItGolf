@@ -54,6 +54,8 @@ export interface ListQuery {
 
 /** What the Clubhouse asks of the store beyond the club route's own (all optional: absent, the Clubhouse says it is not set up). */
 export interface ClubhouseStore {
+  /** Stage 3 (D271): how many of a club match play's matches are past their play-by date. */
+  overdueCount?(code: string, today: string): Promise<number>
   /** This account's row at the club, linked and not taken off. */
   rowOf?(clubId: string, userId: string): Promise<MemberRecord | null>
   /** Whether this account is Green Dot staff (093; false before it). */
@@ -218,7 +220,12 @@ export async function runClubhouse(
     const phases = comps.map(e => ({ code: e.code, name: e.name, phase: e.competition!.phase, date: e.startDate }))
     const byPhase: Record<string, number> = {}
     for (const p of phases) if (p.phase !== 'certified' || (p.date ?? '').startsWith(year)) byPhase[p.phase] = (byPhase[p.phase] ?? 0) + 1
-    const needs = needsYou({ base: `/clubhouse/${club.slug}`, counts, phases, clubSlug: club.slug, officer: clubMay('run_events', asker), hasCategories: cats.length > 0 })
+    // Stage 3 (D271): a match play in play, its matches past their play-by date.
+    const playing = comps.filter(e => e.competition!.matchPlay && e.competition!.phase === 'in_play')
+    const overdue = store.overdueCount
+      ? await Promise.all(playing.map(async e => ({ code: e.code, name: e.name, count: await store.overdueCount!(e.code, irishToday(now)).catch(() => 0) })))
+      : []
+    const needs = needsYou({ base: `/clubhouse/${club.slug}`, counts, phases, clubSlug: club.slug, officer: clubMay('run_events', asker), hasCategories: cats.length > 0, overdue })
     return { status: 200, body: { ok: true, counts, byPhase, needs } }
   }
 

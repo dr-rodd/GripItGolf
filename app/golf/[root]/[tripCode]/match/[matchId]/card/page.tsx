@@ -82,6 +82,7 @@ export default async function MatchCardPage({
             extraPlan={card.extraPlan}
             mySide={mySide}
             pinSet={isLocked((trip as { settings_passcode_hash?: string | null }).settings_passcode_hash ?? null)}
+            soleSay={(trip as { competition?: string | null }).competition === 'club'}
             stored={{ winner: match.winner, result: match.result }}
             colours={sideColours(
               match.sideA ? view.colours[match.sideA] : null,
