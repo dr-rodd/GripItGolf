@@ -56,6 +56,7 @@ import {
   readClubMatchPlay, readMatchPlayForm, type MatchPlayForm,
   enterIssue, overCap, withdrawEntryIssue, drawDueNow,
   myClubMatch, overdueMatches, filterOverdue, roundInPlayLine,
+  joinIssue, mayTakeOutOfPair, drawnPairs, partnerName, enteredWithLine, type PairEntry,
 } from '../lib/clubMatchPlay'
 import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
@@ -2002,7 +2003,7 @@ async function matchPlayTests() {
   eq(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: true }), null, '…but an Officer may still put somebody in until the draw')
   ok(/full — 16 of 16/.test(enterIssue(open, { now: beforeClose, drawn: false, entered: 16, admin: true }) ?? ''), 'never past the biggest field, the Clubhouse included')
   ok(/draw is made/.test(enterIssue(open, { now: beforeClose, drawn: true, entered: 3, admin: true }) ?? ''), 'never once drawn')
-  ok(/partner/.test(enterIssue(back!, { now: beforeClose, drawn: false, entered: 0, admin: false }) ?? ''), 'a fourball waits for stage 4 (partners)')
+  eq(enterIssue(back!, { now: beforeClose, drawn: false, entered: 0, admin: false }), null, 'a fourball takes entries (stage 4, partners)')
   eq(withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: true, admin: false }), null, 'you take yourself out until the close')
   ok(!!withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: true, admin: false }) && withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: false, admin: true }) === null,
     'after it only an Officer takes anybody out, until the draw')
@@ -2068,6 +2069,69 @@ async function matchPlayTests() {
   ok(os.status === 200 && os.body.ok && os.body.entrants.map(e => e.name).join() === 'Dave', 'the Clubhouse reads who has entered')
   ok(drawDueNow(open, 'draw_pending', afterClose) && !drawDueNow(open, 'draw_pending', NOW) && !drawDueNow({ ...open, drawWhen: 'manual' }, 'draw_pending', afterClose),
     'the draw is due once entries close — never one the club makes by hand')
+
+  section('Partners — a Fourball or Foursomes entry (stage 4)')
+  {
+    const four = readClubMatchPlay(matchPlaySeed({ ...form, format: 'foursomes', maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
+    eq(matchPlayBoard({ format: 'foursomes', allowance: 50 }).teamFormat, 'foursomes', 'a foursomes draw is one ball a side on the card')
+    eq(matchPlayBoard({ format: 'fourball', allowance: 90 }).teamFormat, undefined, '…a fourball, better ball as every pairs draw always was')
+    eq(parseLeaderboards([matchPlayBoard({ format: 'foursomes', allowance: 50 })])[0]?.teamFormat, 'foursomes', 'foursomes survives being read back')
+    const lone: PairEntry = { teamId: 't1', members: [{ playerId: 'p1', rowId: 'r1', name: 'Ross', addedBy: 'p1' }] }
+    const whole: PairEntry = { teamId: 't2', members: [{ playerId: 'p2', rowId: 'r2', name: 'Dave', addedBy: 'p2' }, { playerId: 'p3', rowId: 'r3', name: 'Ann', addedBy: 'p2' }] }
+    eq(joinIssue(lone, 'r9'), null, 'a pair one short may be joined')
+    ok(!!joinIssue(whole, 'r9') && !!joinIssue(lone, 'r1') && !!joinIssue(null, 'r9'), '…never a whole pair, your own, or one taken out')
+    ok(mayTakeOutOfPair(whole, 'p2', 'p3') && mayTakeOutOfPair(whole, 'p3', 'p3') && !mayTakeOutOfPair(whole, 'p3', 'p2'),
+      'you take out yourself and a partner you put in — never the one who put you in')
+    eq(drawnPairs([lone, whole]).map(p => p.teamId), ['t2'], 'a pair still looking for a partner is not drawn')
+    eq(partnerName(whole, 'r3'), 'Dave', 'the partner sees who they are entered with')
+    eq(enteredWithLine('Dave'), 'Entered with Dave', '"Entered with Dave"')
+    eq(enteredWithLine(null), 'Entered — looking for a partner', '…or still looking')
+
+    const pmp: MatchPlayComp = { ...mpComp, code: 'PAIRS1', setup: four, allowance: 50 }
+    const pField: Entrant[] = []
+    const pairsHeld: PairEntry[] = []
+    listed.tom = listRow2('r-tom', 'Tom', 'tom')
+    listed.nolink = listRow2('r-nolink', 'Una', '', { userId: null })
+    const pst = entryStore(pmp, pField, {
+      async pairs() { return pairsHeld.map(p => ({ ...p, members: p.members.filter(m => pField.some(f => f.playerId === m.playerId)) })) },
+      async makePair(_t, _n, members) { const id = `team-${pairsHeld.length + 1}`; pairsHeld.push({ teamId: id, members: members.map(m => ({ playerId: m.playerId, rowId: pField.find(f => f.playerId === m.playerId)?.rowId ?? null, name: pField.find(f => f.playerId === m.playerId)?.name ?? '', addedBy: m.addedBy })) }); return id },
+      async addToPair(_t, teamId, playerId, addedBy) { const p = pairsHeld.find(x => x.teamId === teamId)!; const f = pField.find(x => x.playerId === playerId)!; p.members.push({ playerId, rowId: f.rowId, name: f.name, addedBy }) },
+      async renamePair() {},
+      async deletePair(_t, teamId) { const i = pairsHeld.findIndex(p => p.teamId === teamId); if (i >= 0) pairsHeld.splice(i, 1) },
+      async searchRows(_c, q) { return Object.values(listed).filter(r => r.name.toLowerCase().includes(q.toLowerCase())).map(r => ({ id: r.id, name: r.name, linked: !!r.userId, gender: r.gender, birthDate: r.birthDate, categoryId: r.categoryId })) },
+    })
+    const pgo = (who: string, action: string, extra: Record<string, unknown> = {}, now = NOW) => runMatchPlayEntry({ token: `tok-${who}`, action, code: 'PAIRS1', ...extra }, pst, now)
+    const withDave = await pgo('ross', 'enter', { partnerRowId: 'r-dave' })
+    ok(withDave.status === 200 && withDave.body.ok && withDave.body.partner === 'Dave' && withDave.body.partnerRowId === 'r-dave' && pairsHeld[0].members.length === 2,
+      'Ross enters with Dave: one pair, Dave in it, Ross may take him out')
+    const daveSees = await pgo('dave', 'state')
+    ok(daveSees.status === 200 && daveSees.body.ok && daveSees.body.partner === 'Ross' && !daveSees.body.partnerRowId && daveSees.body.mySide === pairsHeld[0].teamId,
+      'Dave sees "Entered with Ross" without accepting, and cannot take Ross out')
+    eq((await pgo('ann', 'enter', { partnerRowId: 'r-dave' })).status, 409, 'Dave cannot be picked twice')
+    eq((await pgo('ann', 'enter', { partnerRowId: 'r-nolink' })).status, 409, 'a partner with no Green Dot account cannot be picked')
+    const alone = await pgo('ann', 'enter')
+    ok(alone.status === 200 && alone.body.ok && alone.body.partner === null && pairsHeld.length === 2, 'Ann enters on her own, looking for a partner')
+    const tomSees = await pgo('tom', 'state')
+    ok(tomSees.status === 200 && tomSees.body.ok && tomSees.body.mayJoin === true && tomSees.body.pairs?.length === 2, 'Tom may join a pair still looking')
+    eq((await pgo('tom', 'join', { teamId: pairsHeld[0].teamId })).status, 409, '…not a whole pair')
+    const joined = await pgo('tom', 'join', { teamId: pairsHeld[1].teamId })
+    ok(joined.status === 200 && joined.body.ok && joined.body.partner === 'Ann' && pairsHeld[1].members.length === 2, 'Tom joins Ann')
+    const names2 = await pgo('ross', 'names', { q: 'a' })
+    eq(names2.status, 200, 'names asks for two letters…')
+    const found = await pgo('ross', 'names', { q: 'un' })
+    ok(found.status === 200 && found.body.ok && !!found.body.names?.some(n => n.name === 'Una' && /Green Dot/.test(n.why ?? '')), '…and says why Una cannot be picked')
+    eq((await pgo('ann', 'withdraw', { memberId: 'r-tom' })).status, 403, 'Ann cannot take out Tom, who put himself in')
+    const daveOut = await pgo('ross', 'withdraw', { memberId: 'r-dave' })
+    ok(daveOut.status === 200 && daveOut.body.ok && daveOut.body.partner === null && (await pst.pairs!('trip-mp'))[0].members.length === 1, 'Ross takes Dave out: Ross is looking again')
+    const rossOut = await pgo('ross', 'withdraw')
+    ok(rossOut.status === 200 && pairsHeld.length === 1, 'Ross takes himself out: the pair with nobody left goes')
+    const tight: MatchPlayComp = { ...pmp, setup: { ...four, maxField: 16 } }
+    const fullPairs: PairEntry[] = Array.from({ length: 16 }, (_, i) => ({ teamId: `f${i}`, members: [{ playerId: `fp${i}`, rowId: `fr${i}`, name: `F${i}`, addedBy: null }] }))
+    const fullSt = entryStore(tight, [], { async pairs() { return fullPairs }, async makePair() { return 'x' }, async addToPair() {}, async renamePair() {}, async deletePair() {} })
+    const fullAnswer = await runMatchPlayEntry({ token: 'tok-dave', action: 'state', code: 'PAIRS1' }, fullSt, NOW)
+    ok(fullAnswer.status === 200 && fullAnswer.body.ok && /full/.test(fullAnswer.body.closed ?? '') && fullAnswer.body.mayJoin === true,
+      'sixteen pairs of sixteen: no new pair, but joining one still looking takes no place')
+  }
 
   section('The draw in the club area (stage 3, D266, D271)')
   const r16 = (id: string, a: string | null, b: string | null, winner: string | null = null, round = 1) =>

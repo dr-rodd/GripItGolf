@@ -32,7 +32,7 @@ export default function MyMatch({ code, matches, matchHref }: { code: string; ma
   const [me, setMe] = useState<string | null>(null)
   useEffect(() => {
     let live = true
-    askMatchPlay('state', { code }).then(r => { if (live && r.ok) setMe(r.myPlayerId ?? null) })
+    askMatchPlay('state', { code }).then(r => { if (live && r.ok) setMe(r.mySide ?? r.myPlayerId ?? null) })
     return () => { live = false }
   }, [code])
   if (!me) return null

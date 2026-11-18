@@ -660,6 +660,7 @@ export interface ClubAnswer {
   toSign?: { code: string; name: string; count: number }[]
   /** Stage 3 (D266): this member's place in each club match play. */
   matches?: import('./clubMatchPlay').MyClubMatch[]
+  partners?: Record<string, string | null>
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
@@ -940,10 +941,17 @@ export type MatchPlayEntryAnswer = {
   entrants: { rowId: string | null; name: string }[]
   cap: number | null
   phase: string
+  /** Stage 4, a pairs match play. */
+  pairs?: { teamId: string; members: { rowId: string | null; name: string }[] }[]
+  mySide?: string | null
+  partner?: string | null
+  partnerRowId?: string | null
+  mayJoin?: boolean
+  names?: { id: string; name: string; why?: string }[]
 }
 
-/** One ask of /api/club/matchplay — `state`, `enter`, `withdraw`, or the Clubhouse's `office.state` and `office.withdraw`. Never throws. */
-export async function askMatchPlay(action: 'state' | 'enter' | 'withdraw' | 'office.state' | 'office.withdraw', body: Record<string, unknown>):
+/** One ask of /api/club/matchplay — `state`, `enter`, `withdraw`, a pair's `names`, `join` and `partner`, or the Clubhouse's `office.state` and `office.withdraw`. Never throws. */
+export async function askMatchPlay(action: 'state' | 'enter' | 'withdraw' | 'names' | 'join' | 'partner' | 'office.state' | 'office.withdraw', body: Record<string, unknown>):
   Promise<({ ok: true } & MatchPlayEntryAnswer) | { ok: false; error: string; status?: number }> {
   const token = await accountToken()
   if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }

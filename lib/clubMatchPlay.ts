@@ -224,6 +224,9 @@ export function matchPlayBoard(f: Pick<MatchPlayForm, 'format' | 'allowance'>): 
     audience: pairs ? 'team' : 'individual',
     competition: 'matchplay',
     ...(pairs ? { teamSet: 'set-2' } : {}),
+    // Foursomes is one ball a side on the knockout card (stage 4); a
+    // fourball reads as better ball, as every pairs draw always has.
+    ...(f.format === 'foursomes' ? { teamFormat: 'foursomes' as const } : {}),
     ...(f.allowance !== 100 ? { handicapAllowance: f.allowance } : {}),
   }
 }
@@ -392,8 +395,6 @@ export function matchPlayRules(m: ClubMatchPlay, opts: { allowance: number; qual
 // ─── Entering (stage 2; Ross, 17 Nov 2026) ─────────────────────
 
 /** Entering opens for singles now; a pair enters together in stage 4. */
-export const PAIRS_ENTRY_LATER = 'Entering with a partner opens soon — ask the club in the meantime.'
-
 /** Whether entries are past their closing time. */
 export function entriesClosed(m: Pick<ClubMatchPlay, 'closes'>, now: Date): boolean {
   const at = m.closes ? irishInstant(m.closes.date, m.closes.time) : null
@@ -406,13 +407,14 @@ export function entryDay(m: Pick<ClubMatchPlay, 'closes'>, today: string): strin
 }
 
 /**
- * Why nobody more can enter now, or null. Officers (`admin`) may still put
+ * Why nobody more can enter now, or null. On a pairs match play `entered`
+ * counts the pairs, a pair still looking for a partner among them — joining
+ * one takes no new place (`joinIssue`). Officers (`admin`) may still put
  * somebody in after the close, until the draw — never past the field's cap.
  */
 export function enterIssue(m: ClubMatchPlay, o: { now: Date; drawn: boolean; entered: number; admin: boolean }): string | null {
   if (m.field === 'qualifier') return 'The field comes from the qualifier — nobody enters.'
   if (o.drawn) return 'The draw is made, so entries are closed.'
-  if (m.format !== 'singles') return PAIRS_ENTRY_LATER
   if (entriesClosed(m, o.now) && !o.admin) return 'Entries have closed.'
   if (m.maxField !== null && o.entered >= m.maxField) return `Entries are full — ${m.maxField} of ${m.maxField}.`
   return null
@@ -539,3 +541,69 @@ export function myClubMatch(
     state: next ? 'next' : m.winner === me ? 'won' : 'out', result: next ? null : m.result,
   }
 }
+
+// ─── Partners (stage 4; Ross, 17–18 Nov 2026) ─────────────────
+
+// A Fourball or Foursomes entry is a pair: a team on the draw's own sheet
+// (`set-2`, `matchPlayBoard`), its two players made from their places on
+// the club's list. A member enters with a partner they pick, or on their
+// own "looking for a partner" — another eligible member taps Join beside
+// them. The partner does not accept (Q2): they see "Entered with Ross" and
+// may take themselves out, which leaves Ross looking again. Each takes out
+// themselves and whoever they put in (`team_members.added_by`, the tee
+// sheet's medium security); the Clubhouse anybody. A pair still one short
+// when the draw is made is not drawn — said beforehand.
+
+export interface PairMember { playerId: string; rowId: string | null; name: string; addedBy: string | null }
+export interface PairEntry { teamId: string; members: PairMember[] }
+
+export const PAIR_PLACES = 2
+
+/** Whether this match play's entries are pairs. */
+export function isPairsMatchPlay(m: Pick<ClubMatchPlay, 'format'>): boolean {
+  return m.format !== 'singles'
+}
+
+/** The pair this player is in, if any. */
+export function pairOf(pairs: readonly PairEntry[], playerId: string | null): PairEntry | null {
+  if (!playerId) return null
+  return pairs.find(p => p.members.some(x => x.playerId === playerId)) ?? null
+}
+
+/** The pair this list row is in, if any. */
+export function pairOfRow(pairs: readonly PairEntry[], rowId: string): PairEntry | null {
+  return pairs.find(p => p.members.some(x => x.rowId === rowId)) ?? null
+}
+
+/** Why this member cannot join that pair, or null — only a pair one short, and never your own. */
+export function joinIssue(pair: PairEntry | null, myRowId: string): string | null {
+  if (!pair) return 'That entry has been taken out.'
+  if (pair.members.some(x => x.rowId === myRowId)) return 'You’re already in that pair.'
+  if (pair.members.length >= PAIR_PLACES) return 'That pair already has a partner.'
+  return null
+}
+
+/** Whether `me` may take `them` out of their pair: themselves, or a partner they put in. */
+export function mayTakeOutOfPair(pair: PairEntry, me: string, them: string): boolean {
+  if (me === them) return true
+  const m = pair.members.find(x => x.playerId === them)
+  return !!m && m.addedBy === me
+}
+
+/** The pairs the draw is made between — whole pairs only. */
+export function drawnPairs<T extends { members: readonly unknown[] }>(pairs: readonly T[]): T[] {
+  return pairs.filter(p => p.members.length >= PAIR_PLACES)
+}
+
+/** The partner's name for this member, or null while they are looking for one. */
+export function partnerName(pair: PairEntry | null, myRowId: string): string | null {
+  return pair?.members.find(x => x.rowId !== myRowId)?.name ?? null
+}
+
+/** "Entered with Dave Byrne" — or "Entered — looking for a partner". */
+export function enteredWithLine(partner: string | null): string {
+  return partner ? `Entered with ${partner}` : 'Entered — looking for a partner'
+}
+
+/** Said on a pairs match play's Summary before the draw. */
+export const LONE_NOT_DRAWN = 'A pair still looking for a partner when the draw is made isn’t in it.'

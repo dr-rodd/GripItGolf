@@ -1,6 +1,7 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { myClubMatch, readClubMatchPlay, type ClubMatchPlay, type MyClubMatch } from '@/lib/clubMatchPlay'
 import { drawDeadlines } from '@/lib/bracketSetup'
+import { joinNames } from '@/lib/matchplayEntrants'
 import { entryLine, readEntryRules, type EntryRules } from '@/lib/clubMembership'
 import { readEntryRulesOf } from './entryRules'
 import { readCategories } from './store'
@@ -44,7 +45,10 @@ export async function readMatchPlayComp(db: Db, code: string): Promise<MatchPlay
   const [{ data: priv }, entry, players, matches, qualifier] = await Promise.all([
     db.from('trip_private').select('club_id').eq('trip_id', trip.id).maybeSingle(),
     readEntryRulesOf(db, trip.id),
-    db.from('players').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id),
+    // A pairs match play counts its pairs (stage 4), singles its players.
+    setup.format === 'singles'
+      ? db.from('players').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id)
+      : db.from('teams').select('id', { count: 'exact', head: true }).eq('trip_id', trip.id).eq('team_set', 'set-2'),
     db.from('matchplay_matches').select('next_match_id, winner_player_id, winner_team_id').eq('trip_id', trip.id),
     setup.qualifierCode
       ? db.from('trips').select('name').eq('trip_code', setup.qualifierCode).maybeSingle().then(r => (r.data as { name: string } | null)?.name ?? null)
@@ -114,14 +118,35 @@ export async function readMyClubMatches(db: Db, rowId: string, codes: string[]):
   const ids = trips.map(t => t.id)
   const [{ data: mine }, { data: ms }] = await Promise.all([
     db.from('players').select('id, trip_id').in('trip_id', ids).eq('club_member_id', rowId),
-    db.from('matchplay_matches').select('id, trip_id, round_number, round_name, player_a_id, player_b_id, winner_player_id, result').in('trip_id', ids),
+    db.from('matchplay_matches').select('id, trip_id, round_number, round_name, player_a_id, player_b_id, winner_player_id, team_a_id, team_b_id, winner_team_id, result').in('trip_id', ids),
   ])
-  const meOf = new Map(((mine ?? []) as { id: string; trip_id: string }[]).map(p => [p.trip_id, p.id]))
-  const rows = (ms ?? []) as { id: string; trip_id: string; round_number: number; round_name: string; player_a_id: string | null; player_b_id: string | null; winner_player_id: string | null; result: string | null }[]
-  const others = [...new Set(rows.filter(r => meOf.get(r.trip_id) && (r.player_a_id === meOf.get(r.trip_id) || r.player_b_id === meOf.get(r.trip_id)))
-    .flatMap(r => [r.player_a_id, r.player_b_id]).filter((x): x is string => !!x))]
-  const { data: ps } = others.length ? await db.from('players').select('id, name').in('id', others) : { data: [] }
-  const names = Object.fromEntries(((ps ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+  const myPlayers = (mine ?? []) as { id: string; trip_id: string }[]
+  // A pairs draw (stage 4) is between teams on the draw's sheet: this row's pair is its side.
+  const { data: myTeams } = myPlayers.length
+    ? await db.from('team_members').select('team_id, player_id').in('player_id', myPlayers.map(p => p.id)).eq('team_set', 'set-2')
+    : { data: [] }
+  const teamOfPlayer = new Map(((myTeams ?? []) as { team_id: string; player_id: string }[]).map(t => [t.player_id, t.team_id]))
+  type Row = { id: string; trip_id: string; round_number: number; round_name: string; player_a_id: string | null; player_b_id: string | null; winner_player_id: string | null; team_a_id?: string | null; team_b_id?: string | null; winner_team_id?: string | null; result: string | null }
+  const rows = (ms ?? []) as Row[]
+  const pairsTrip = new Set(rows.filter(r => r.team_a_id || r.team_b_id).map(r => r.trip_id))
+  const meOf = new Map(myPlayers.map(p => [p.trip_id, pairsTrip.has(p.trip_id) ? teamOfPlayer.get(p.id) ?? p.id : p.id]))
+  const sideA = (r: Row) => (pairsTrip.has(r.trip_id) ? r.team_a_id ?? null : r.player_a_id)
+  const sideB = (r: Row) => (pairsTrip.has(r.trip_id) ? r.team_b_id ?? null : r.player_b_id)
+  const others = [...new Set(rows.filter(r => meOf.get(r.trip_id) && (sideA(r) === meOf.get(r.trip_id) || sideB(r) === meOf.get(r.trip_id)))
+    .flatMap(r => [sideA(r), sideB(r)]).filter((x): x is string => !!x))]
+  // team_members names players twice (player_id, and 066's added_by), so no embed — the pair's players read by id.
+  const { data: tm } = others.length ? await db.from('team_members').select('team_id, player_id').in('team_id', others) : { data: [] }
+  const memberRows = (tm ?? []) as { team_id: string; player_id: string }[]
+  const nameIds = [...new Set([...others, ...memberRows.map(m => m.player_id)])]
+  const { data: ps } = nameIds.length ? await db.from('players').select('id, name').in('id', nameIds) : { data: [] }
+  const names: Record<string, string> = Object.fromEntries(((ps ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+  // A pair reads as its two players ("Ross Byrne & Dave Kelly").
+  const teamNames = new Map<string, string[]>()
+  for (const m of memberRows) {
+    const n = names[m.player_id]
+    if (n) teamNames.set(m.team_id, [...(teamNames.get(m.team_id) ?? []), n])
+  }
+  for (const [id, list] of teamNames) names[id] = joinNames(list)
   const out: MyClubMatch[] = []
   for (const t of trips) {
     const me = meOf.get(t.id)
@@ -130,11 +155,45 @@ export async function readMyClubMatches(db: Db, rowId: string, codes: string[]):
     const rounds = [...new Set(inTrip.map(r => r.round_number))].sort((a, b) => a - b)
     const deadlines = drawDeadlines(readClubMatchPlay(t.bracket_setup)?.deadlines ?? [], rounds.length)
     const m = myClubMatch({ code: t.trip_code, name: t.name }, inTrip.map(r => ({
-      id: r.id, roundNumber: r.round_number, roundName: r.round_name, sideA: r.player_a_id, sideB: r.player_b_id,
-      winner: r.winner_player_id, result: r.result, deadline: deadlines[rounds.indexOf(r.round_number)] ?? null,
+      id: r.id, roundNumber: r.round_number, roundName: r.round_name, sideA: sideA(r), sideB: sideB(r),
+      winner: pairsTrip.has(r.trip_id) ? r.winner_team_id ?? null : r.winner_player_id, result: r.result, deadline: deadlines[rounds.indexOf(r.round_number)] ?? null,
     })), me, names)
     if (m) out.push(m)
   }
   // Matches to play first, soonest due first; then results.
   return out.sort((a, b) => Number(a.state !== 'next') - Number(b.state !== 'next') || (a.playBy ?? '9999').localeCompare(b.playBy ?? '9999'))
+}
+
+/**
+ * This list row's partner in each pairs match play it has entered (stage
+ * 4) — the name, or null while it is looking for one — for "Entered with
+ * Dave" on the members home. A singles match play is left out. Fail-soft:
+ * nothing read, nothing said.
+ */
+export async function readPairPartners(db: Db, rowId: string, codes: string[]): Promise<Record<string, string | null>> {
+  if (!codes.length) return {}
+  const { data: ts } = await db.from('trips').select('id, trip_code, bracket_setup').in('trip_code', codes)
+  const trips = ((ts ?? []) as { id: string; trip_code: string; bracket_setup: unknown }[])
+    .filter(t => { const m = readClubMatchPlay(t.bracket_setup); return !!m && m.format !== 'singles' })
+  if (!trips.length) return {}
+  const { data: mine } = await db.from('players').select('id, trip_id').in('trip_id', trips.map(t => t.id)).eq('club_member_id', rowId)
+  const me = (mine ?? []) as { id: string; trip_id: string }[]
+  if (!me.length) return {}
+  const { data: tm } = await db.from('team_members').select('team_id, player_id').in('player_id', me.map(p => p.id)).eq('team_set', 'set-2')
+  const teamOf = new Map(((tm ?? []) as { team_id: string; player_id: string }[]).map(t => [t.player_id, t.team_id]))
+  const teamIds = [...new Set(teamOf.values())]
+  const { data: all } = teamIds.length ? await db.from('team_members').select('team_id, player_id').in('team_id', teamIds) : { data: [] }
+  const others = ((all ?? []) as { team_id: string; player_id: string }[]).filter(r => !me.some(p => p.id === r.player_id))
+  const { data: ps } = others.length ? await db.from('players').select('id, name').in('id', others.map(o => o.player_id)) : { data: [] }
+  const nameOf = new Map(((ps ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+  const codeOf = new Map(trips.map(t => [t.id, t.trip_code]))
+  const out: Record<string, string | null> = {}
+  for (const p of me) {
+    const code = codeOf.get(p.trip_id)
+    if (!code) continue
+    const team = teamOf.get(p.id)
+    const partner = team ? others.find(o => o.team_id === team) : undefined
+    out[code] = partner ? nameOf.get(partner.player_id) ?? null : null
+  }
+  return out
 }

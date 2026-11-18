@@ -228,6 +228,40 @@ rules beside it.
 6. **Golfer of the Year.** Migration 097, the Clubhouse section, the
    standing, the members' card and page.
 
+### Stage 4 as built (18 Nov 2026) — partners
+
+- **A Fourball or Foursomes entry is a pair**: a team on the draw's own
+  sheet (`set-2`), its two players made from their places on the club's list.
+  On the Summary a member searches the list for a partner (`names` — names
+  only, each greyed with why: entered already, no Green Dot account, the
+  competition's rules) and taps **Enter with Dave**, or **Enter on my own —
+  find me a partner**. The partner does not accept (Q2): they see **"You’re
+  in with Ross"** on the Summary and **"Entered with Ross"** on Comps' rows
+  and Home's calendar (`/api/club` home `partners`, `readPairPartners`).
+- **Looking for a partner**: the field is drawn as pair tickets, two seats
+  across a seam; a pair one short has a dashed seat with **+ Join** for any
+  member who may enter (`join`). Joining takes no new place, so a full field
+  still lets a member in beside somebody. A pair one short may also add a
+  partner later (`partner`).
+- **Taking out**: yourself, and a partner you put in (`team_members.added_by`,
+  `mayTakeOutOfPair`) — never the one who put you in. A pair left with one is
+  looking again; with nobody, it goes. The Clubhouse takes out anybody, each
+  member on their own, and sees which pairs are still one short.
+- **The cap counts pairs** (`enterIssue`'s `entered`, the Events table's
+  booked column, the office's count). **A pair still one short when the draw
+  is made isn't in it** (`drawnPairs`, in `makeDueDraw`) — said on the
+  Summary beforehand.
+- **Your next match** finds a pair's matches by its team (`readMyClubMatches`,
+  `mySide` on the Summary), the opponent named as both players.
+- **The knockout card plays Foursomes**: the board carries `teamFormat:
+  'foursomes'` (kept by `parseLeaderboards` on a pairs draw); the card is one
+  ball a side off the allowance of the partners' combined handicaps
+  (`foursomesStrokes`), the side one entry with its score under its first
+  player — exactly a Matches session's foursomes card. The match page says the
+  side's shots under the side ("One ball · receives 3"). A Fourball stays
+  better ball.
+- **No migration.** `test:clubs` holds the rules and the route on a stand-in.
+
 ### After testing stage 3 (Ross, 18 Nov 2026)
 
 - **Every club member sees every match play's draw**, with filters on the

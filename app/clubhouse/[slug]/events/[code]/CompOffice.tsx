@@ -289,12 +289,14 @@ function BookPanel({ code, slot, onClose, onBooked }: { code: string; slot: Offi
 function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }) {
   // Stage 2: who has entered, and the office taking an entry out until the draw (logged).
   const [field, setField] = useState<{ rowId: string | null; name: string }[] | null>(null)
+  // Stage 4: a Fourball or Foursomes match play's pairs, each member taken out on their own.
+  const [pairs, setPairs] = useState<{ teamId: string; members: { rowId: string | null; name: string }[] }[] | null>(null)
   const [phase, setPhase] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   useEffect(() => {
     let live = true
-    void askMatchPlay('office.state', { code }).then(r => { if (live && r.ok) { setField(r.entrants); setPhase(r.phase) } })
+    void askMatchPlay('office.state', { code }).then(r => { if (live && r.ok) { setField(r.entrants); setPairs(r.pairs ?? null); setPhase(r.phase) } })
     return () => { live = false }
   }, [code])
   async function takeOut(rowId: string) {
@@ -303,6 +305,7 @@ function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }
     setBusy(false)
     if (!r.ok) { setError(r.error); return }
     setField(r.entrants)
+    setPairs(r.pairs ?? null)
   }
   const open = phase === 'entries' || phase === 'draw_pending'
   // Stage 3 (D271): the matches past their play-by date, filtered — a club may have hundreds.
@@ -359,10 +362,27 @@ function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }
           </section>
         )}
         <section className="md:col-span-2">
-          <h2 className="t-h2 text-ink">Entered{field ? ` · ${field.length}${mp.cap ? ` of ${mp.cap}` : ''}` : ''}</h2>
+          <h2 className="t-h2 text-ink">Entered{pairs ? ` · ${pairs.length}${mp.cap ? ` of ${mp.cap}` : ''} ${pairs.length === 1 ? 'pair' : 'pairs'}` : field ? ` · ${field.length}${mp.cap ? ` of ${mp.cap}` : ''}` : ''}</h2>
           {!field && <div className="skeleton h-24 rounded-card mt-3" />}
           {field && field.length === 0 && <p className="text-ink/80 text-[15px] mt-2">Nobody has entered yet.</p>}
-          {field && field.length > 0 && (
+          {pairs && pairs.length > 0 && (
+            <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-2xl`}>
+              {pairs.map(p => (
+                <li key={p.teamId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
+                  {p.members.map(m => (
+                    <span key={m.rowId ?? m.name} className="inline-flex items-center gap-1">
+                      <span className="text-ink text-[15px]">{m.name}</span>
+                      {open && m.rowId && (
+                        <button type="button" disabled={busy} onClick={() => void takeOut(m.rowId!)} className="ch-hover ch-focus t-cap text-ink/80 rounded-tile px-2 min-h-9">Take out</button>
+                      )}
+                    </span>
+                  ))}
+                  {p.members.length < 2 && <span className="t-cap text-ink/65">Looking for a partner — not drawn unless one joins</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!pairs && field && field.length > 0 && (
             <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-xl`}>
               {field.map(e => (
                 <li key={e.rowId ?? e.name} className="flex items-center gap-3 px-4 py-2">

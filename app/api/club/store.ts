@@ -2,7 +2,7 @@
 // closed to phones (migration 086); only this reaches them.
 
 import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } from '@/lib/clubMatchPlay'
-import { readMyClubMatches } from './matchPlayStore'
+import { readMyClubMatches, readPairPartners } from './matchPlayStore'
 import { readClubDraw } from './matchPlayDraw'
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
@@ -275,8 +275,14 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
   const entrants = matchPlayOf.size
     ? await db.from('players').select('trip_id').in('trip_id', [...matchPlayOf.keys()])
     : { data: [] }
+  // A Fourball or Foursomes match play counts its pairs (stage 4) — a team each on the draw's sheet.
+  const pairTrips = [...matchPlayOf].filter(([, m]) => m.format !== 'singles').map(([id]) => id)
+  const pairRows = pairTrips.length
+    ? await db.from('teams').select('trip_id').in('trip_id', pairTrips).eq('team_set', 'set-2')
+    : { data: [] }
   const enteredOf = new Map<string, number>()
-  for (const p of (entrants.data ?? []) as { trip_id: string }[]) enteredOf.set(p.trip_id, (enteredOf.get(p.trip_id) ?? 0) + 1)
+  for (const p of (entrants.data ?? []) as { trip_id: string }[]) if (!pairTrips.includes(p.trip_id)) enteredOf.set(p.trip_id, (enteredOf.get(p.trip_id) ?? 0) + 1)
+  for (const t of (pairRows.data ?? []) as { trip_id: string }[]) enteredOf.set(t.trip_id, (enteredOf.get(t.trip_id) ?? 0) + 1)
   const { data: rounds } = tripRows.length ? await db.from('rounds').select('id, trip_id, course_id, tee_sheet').in('trip_id', tripRows.map(t => t.id)) : { data: [] }
   const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string; tee_sheet?: unknown }[]
   const [courses, seats, entries, cats] = await Promise.all([
@@ -363,6 +369,7 @@ export function clubStore(db: Db): ClubStore {
       return { club, row: row ? asRow(row) : null, events, comps }
     },
     myMatches: (rowId, codes) => readMyClubMatches(db, rowId, codes),
+    pairPartners: (rowId, codes) => readPairPartners(db, rowId, codes),
     async overdueCount(code, today) {
       const draw = await readClubDraw(code)
       return draw ? overdueMatches(draw.rounds, draw.view.names, today).length : 0

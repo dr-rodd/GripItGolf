@@ -1133,6 +1133,9 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       // before it reads back exactly as it did.
       const allowance = clampAllowance(r.handicapAllowance)
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
+      // A pairs draw played as foursomes — one ball a side on the knockout
+      // card (stage 4). Absent, a pairs draw is better ball, as ever.
+      if (audience === 'team' && r.teamFormat === 'foursomes') lb.teamFormat = 'foursomes'
     }
 
     if (competition === 'league') {

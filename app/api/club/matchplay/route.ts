@@ -6,9 +6,13 @@ import { runMatchPlayEntry, type MatchPlayEntryStore } from '../matchPlayEntry'
 import { bookingStore } from '../bookingStore'
 import { clubStore } from '../store'
 import { readMatchPlayComp } from '../matchPlayStore'
+import { PRESET_COLORS } from '@/lib/teamColors'
+
+const PAIRS_SET = 'set-2'
 
 // POST /api/club/matchplay — `{ action, code, … }` with a Green Dot member's
-// token: a club match play's `state`, `enter`, `withdraw`, and the
+// token: a club match play's `state`, `enter`, `withdraw`, a pair's
+// `names`, `join` and `partner` (stage 4), and the
 // Clubhouse's `office.withdraw` (../matchPlayEntry.ts). Every answer to a
 // member on the club's list carries the members-only door's cookie (D164).
 
@@ -51,6 +55,47 @@ export async function POST(req: NextRequest) {
       memberships: clubId => booking.memberships ? booking.memberships(clubId) : Promise.resolve({ categories: [], ageDate: '01-01' }),
       logActivity: entries => clubs.logActivity ? clubs.logActivity(entries) : Promise.resolve(),
       isStaff: userId => clubs.isStaff ? clubs.isStaff(userId) : Promise.resolve(false),
+      searchRows: (clubId, q, limit) => booking.searchRows(clubId, q, limit),
+      // Stage 4: a pair is a team on the draw's own sheet (`matchPlayBoard`).
+      async pairs(tripId) {
+        const [teams, members, players] = await Promise.all([
+          db.from('teams').select('id, created_at').eq('trip_id', tripId).eq('team_set', PAIRS_SET).order('created_at').order('id'),
+          db.from('team_members').select('team_id, player_id, added_by').eq('trip_id', tripId).eq('team_set', PAIRS_SET),
+          db.from('players').select('id, name, club_member_id, created_at').eq('trip_id', tripId).order('created_at').order('id'),
+        ])
+        if (teams.error) throw teams.error
+        if (members.error) throw members.error
+        if (players.error) throw players.error
+        const byId = new Map(((players.data ?? []) as { id: string; name: string; club_member_id: string | null }[]).map((p, i) => [p.id, { ...p, i }]))
+        const rows = (members.data ?? []) as { team_id: string; player_id: string; added_by: string | null }[]
+        return ((teams.data ?? []) as { id: string }[]).map(t => ({
+          teamId: t.id,
+          members: rows.filter(r => r.team_id === t.id && byId.has(r.player_id))
+            .sort((a, b) => byId.get(a.player_id)!.i - byId.get(b.player_id)!.i)
+            .map(r => { const p = byId.get(r.player_id)!; return { playerId: p.id, rowId: p.club_member_id, name: p.name, addedBy: r.added_by } }),
+        }))
+      },
+      async makePair(tripId, name, members) {
+        const { data, error } = await db.from('teams').insert({ trip_id: tripId, team_set: PAIRS_SET, name, color: PRESET_COLORS[0] }).select('id').single()
+        if (error || !data) throw error ?? new Error('no team')
+        const id = (data as { id: string }).id
+        const { error: mErr } = await db.from('team_members').insert(members.map(m => ({ trip_id: tripId, team_id: id, team_set: PAIRS_SET, player_id: m.playerId, added_by: m.addedBy })))
+        if (mErr) { await db.from('teams').delete().eq('trip_id', tripId).eq('id', id); throw mErr }
+        return id
+      },
+      async addToPair(tripId, teamId, playerId, addedBy) {
+        const { error } = await db.from('team_members').insert({ trip_id: tripId, team_id: teamId, team_set: PAIRS_SET, player_id: playerId, added_by: addedBy })
+        if (error) throw error
+      },
+      async renamePair(tripId, teamId, name) {
+        const { error } = await db.from('teams').update({ name }).eq('trip_id', tripId).eq('id', teamId)
+        if (error) throw error
+      },
+      async deletePair(tripId, teamId) {
+        // Only before the draw — a drawn team's matches go with it (019's cascade); entries are closed by then.
+        const { error } = await db.from('teams').delete().eq('trip_id', tripId).eq('id', teamId)
+        if (error) throw error
+      },
     }
     const out = await runMatchPlayEntry({ ...(body ?? {}), token, action: body?.action }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })

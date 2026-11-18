@@ -30,6 +30,8 @@ export interface ClubMembers {
   toSign: { code: string; name: string; count: number }[]
   /** Stage 3 (D266): this member's place in each club match play — none in a copy kept before. */
   matches?: import('@/lib/clubMatchPlay').MyClubMatch[]
+  /** Stage 4: each pairs match play this member entered — their partner's name, or null while looking for one. */
+  partners?: Record<string, string | null>
   /** Stage c1, M6: the club's own events this member sees (filtered on the server) — none in a copy kept before. */
   notes?: import('@/lib/clubEvents').ClubNote[]
   /** Drawn from the copy kept on this phone (D193): the live parts wait for the fresh answer (D194). */

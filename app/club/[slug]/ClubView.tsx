@@ -22,7 +22,7 @@ import { seasonOf, selfClaimedLine, type SeasonRow } from '@/lib/cardSummary'
 import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
-import type { MyClubMatch } from '@/lib/clubMatchPlay'
+import { enteredWithLine, type MyClubMatch } from '@/lib/clubMatchPlay'
 import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
@@ -325,15 +325,20 @@ function PublicFace({ face }: { face: ClubFace }) {
   )
 }
 
-function EventRows({ events, slug, entries = [], tops = {} }: { events: ClubEvent[]; slug: string; entries?: string[]; tops?: Members['tops'] }) {
+/** "You’re in" — or, on a pairs match play, "Entered with Dave Byrne" / "Entered — looking for a partner" (stage 4). */
+function inWords(partners: Members['partners'], code: string): string {
+  return partners && code in partners ? enteredWithLine(partners[code]) : 'You’re in'
+}
+
+function EventRows({ events, slug, entries = [], tops = {}, partners }: { events: ClubEvent[]; slug: string; entries?: string[]; tops?: Members['tops']; partners?: Members['partners'] }) {
   return (
     <ListGroup className="mt-4">
-      {events.map(e => <EventRow key={e.code} e={e} slug={slug} entries={entries} tops={tops} />)}
+      {events.map(e => <EventRow key={e.code} e={e} slug={slug} entries={entries} tops={tops} partners={partners} />)}
     </ListGroup>
   )
 }
 
-function EventRow({ e, slug, entries, tops }: { e: ClubEvent; slug: string; entries: string[]; tops: Members['tops'] }) {
+function EventRow({ e, slug, entries, tops, partners }: { e: ClubEvent; slug: string; entries: string[]; tops: Members['tops']; partners?: Members['partners'] }) {
   return (
         <ListRow
           href={clubEventHref(e, slug)}
@@ -341,7 +346,7 @@ function EventRow({ e, slug, entries, tops }: { e: ClubEvent; slug: string; entr
           hint={
             <>
               {[clubEventDates(e.startDate, e.endDate), e.competition ? PHASE_WORDS[e.competition.phase] : KIND[e.kind]].filter(Boolean).join(' · ')}
-              {entries.includes(e.code) && <span className="text-club-deep font-semibold"> · You’re in</span>}
+              {entries.includes(e.code) && <span className="text-club-deep font-semibold"> · {inWords(partners, e.code)}</span>}
               {tops[e.code] && (
                 <span className="block text-gold-deep font-semibold">
                   Top score: <span className="t-data">{tops[e.code].name} {tops[e.code].points}</span> pts
@@ -485,7 +490,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           <h2 className="t-h2 text-ink">Club calendar</h2>
           <ul className="mt-3 space-y-2">
             {calendar.map(x => x.e
-              ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code)} />
+              ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code) ? inWords(m.partners, x.e.code) : null} />
               : <NoteRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
           </ul>
         </section>
@@ -518,7 +523,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
 }
 
 /** A date tile, 52×56, and the event beside it. */
-function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: boolean }) {
+function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: string | null }) {
   const d = e.startDate ? new Date(`${e.startDate}T12:00:00Z`) : null
   return (
     <li>
@@ -532,7 +537,7 @@ function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: bool
         <span className="flex-1 min-w-0">
           <span className="block text-[17px] font-medium leading-snug text-ink">{e.name}</span>
           <span className="block t-cap text-ink/65">
-            {KIND[e.kind]}{mine && <span className="text-club-deep font-semibold"> · You’re in</span>}
+            {KIND[e.kind]}{mine && <span className="text-club-deep font-semibold"> · {mine}</span>}
           </span>
         </span>
         {membersOnly(e) ? <MembersOnly /> : <IconChevronRight size={20} className="text-ink/50" />}
@@ -609,7 +614,7 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
               </div>
               {membersOnly(featured) && <MembersOnly />}
             </div>
-            {m.entries.includes(featured.code) && <p className="t-cap text-club-deep font-semibold mt-2">You’re in</p>}
+            {m.entries.includes(featured.code) && <p className="t-cap text-club-deep font-semibold mt-2">{inWords(m.partners, featured.code)}</p>}
             {m.tops[featured.code] && (
               <p className="t-cap text-gold-deep font-semibold mt-2">
                 Top score: <span className="t-data">{m.tops[featured.code].name} {m.tops[featured.code].points}</span> pts
@@ -622,11 +627,11 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
               {restItems.some(x => x.n) ? (
                 <ListGroup className="mt-4">
                   {restItems.map(x => x.e
-                    ? <EventRow key={x.key} e={x.e} slug={slug} entries={m.entries} tops={{}} />
+                    ? <EventRow key={x.key} e={x.e} slug={slug} entries={m.entries} tops={{}} partners={m.partners} />
                     : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
                 </ListGroup>
               ) : (
-                <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} />
+                <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} partners={m.partners} />
               )}
             </section>
           )}

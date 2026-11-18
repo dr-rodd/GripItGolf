@@ -123,6 +123,8 @@ export interface ClubStore extends ClubhouseStore {
   compPhases?(comps: { tripId: string; code: string }[]): Promise<Map<string, import('@/lib/compPhase').CompPhase>>
   /** Stage 3 (D266): this list row's place in each club match play — its next match, or how it ended. */
   myMatches?(rowId: string, codes: string[]): Promise<import('@/lib/clubMatchPlay').MyClubMatch[]>
+  /** Stage 4: this row's partner in each pairs match play it entered — a name, or null while looking for one. */
+  pairPartners?(rowId: string, codes: string[]): Promise<Record<string, string | null>>
   /** The rows this account is linked to and not removed from, with their clubs. */
   clubsOf(userId: string): Promise<{ club: ClubRecord; row: MemberRecord }[]>
   /** Slugs already taken that start with this one. */
@@ -524,7 +526,7 @@ export async function runClub(
     const compList = first?.comps.map(c => ({ ...c, name: events.find(e => e.code === c.code)?.name })) ?? undefined
     const clubId = club.id
     const matchCodes = events.filter(e => e.competition?.matchPlay).map(e => e.code)
-    const [entries, season, outside, tops, toSign, phases, myClubs, notes, matches] = await Promise.all([
+    const [entries, season, outside, tops, toSign, phases, myClubs, notes, matches, partners] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
       store.outsideEvents(user.id, events.map(e => e.code)),
@@ -537,6 +539,8 @@ export async function runClub(
       membersNotes(store, clubId, user.id, today).catch(() => [] as ClubNote[]),
       // Stage 3 (D266): this member's matches, for Comps' Matches and Home.
       matchCodes.length && store.myMatches ? store.myMatches(row.id, matchCodes).catch(() => []) : Promise.resolve([]),
+      // Stage 4: "Entered with Dave" on a pairs match play.
+      matchCodes.length && store.pairPartners ? store.pairPartners(row.id, matchCodes).catch(() => ({})) : Promise.resolve({}),
     ])
     if (phases) {
       events = events.map(e => (e.competition ? { ...e, competition: { ...e.competition, phase: phases.get(e.code) ?? e.competition.phase } } : e))
@@ -554,6 +558,7 @@ export async function runClub(
         ok: true, club: summary(full ?? club, row), events, entries, me: { name: mineRowName },
         season: seasonHere, courses: season.courses, outside, tops, toSign, notes,
         ...(matches.length ? { matches } : {}),
+        ...(Object.keys(partners).length ? { partners } : {}),
         ...(myClubs && myClubs.length > 1 ? { myClubs } : {}),
       },
     }

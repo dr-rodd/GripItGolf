@@ -2,7 +2,7 @@ import { cardClass } from '@/app/components/ui'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { formatLine } from '@/lib/clubhouse'
-import { drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules, roundInPlayLine } from '@/lib/clubMatchPlay'
+import { LONE_NOT_DRAWN, drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules, roundInPlayLine } from '@/lib/clubMatchPlay'
 import { tripBase } from '@/lib/tripPaths'
 import { readClubDraw } from '@/app/api/club/matchPlayDraw'
 import MyMatch, { type ClubMatchRow } from './MyMatch'
@@ -42,7 +42,7 @@ export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <p className="text-[13px] font-semibold text-club-deep">{PHASE_WORDS[phase]}</p>
         <p className="text-ink text-[17px] leading-snug mt-1">{draw ? roundInPlayLine(draw.rounds, irishToday(new Date())) : matchPlayLine(mp.setup, phase, { qualifierName: mp.qualifierName })}</p>
-        {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} />}
+        {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} pairs={pairs} loneNote={LONE_NOT_DRAWN} />}
       </section>
 
       {draw && <MyMatch code={mp.code} matches={rows} matchHref={`${tripBase(mp.code, 'tournament')}/match`} />}
@@ -57,7 +57,7 @@ export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }
             </div>
           ))}
         </dl>
-        {pairs && <p className="t-cap text-ink/65 mt-2">You enter with a partner; both of you must be able to enter.</p>}
+        {pairs && <p className="t-cap text-ink/65 mt-2">You enter with a partner from the club’s list — they don’t need to accept, and both of you must be able to enter. Or enter on your own and another member can join you.</p>}
       </section>
 
       <section className="mt-6">

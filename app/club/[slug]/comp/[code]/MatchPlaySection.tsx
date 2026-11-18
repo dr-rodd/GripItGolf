@@ -28,12 +28,23 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
   const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won }, new Date())
   const today = irishToday(new Date())
   const base = tripBase(code, 'tournament')
-  const [draw, field] = await Promise.all([
+  const pairsMode = mp.setup.format !== 'singles'
+  const db = eventReader(code)
+  const [draw, field, pairRows] = await Promise.all([
     mp.drawn ? readClubDraw(code) : Promise.resolve(null),
     section === 'tee'
-      ? eventReader(code).from('players').select('id, name').eq('is_composite', false).order('created_at').then(r => (r.data ?? []) as { id: string; name: string }[])
+      ? db.from('players').select('id, name').eq('is_composite', false).order('created_at').then(r => (r.data ?? []) as { id: string; name: string }[])
       : Promise.resolve([] as { id: string; name: string }[]),
+    // Stage 4: a Fourball or Foursomes field is its pairs, each a team on the draw's sheet.
+    section === 'tee' && pairsMode
+      ? Promise.all([
+          db.from('teams').select('id').eq('team_set', 'set-2').order('created_at').order('id'),
+          db.from('team_members').select('team_id, player_id').eq('team_set', 'set-2'),
+        ]).then(([t, m]) => ({ teams: (t.data ?? []) as { id: string }[], members: (m.data ?? []) as { team_id: string; player_id: string }[] }))
+      : Promise.resolve(null),
   ])
+  const nameById = new Map(field.map(p => [p.id, p.name]))
+  const pairs = pairRows ? pairRows.teams.map(t => pairRows.members.filter(m => m.team_id === t.id).map(m => nameById.get(m.player_id)).filter((n): n is string => !!n)).filter(p => p.length > 0) : null
   const names = draw?.view.names ?? {}
   const nameOf = (id: string | null, bye: boolean) => (bye ? 'Bye' : id ? names[id] ?? 'A player' : 'To be decided')
   const rows: ClubMatchRow[] = (draw?.rounds ?? []).flatMap(r => r.matches.map(m => ({
@@ -53,7 +64,24 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
       <h1 className="t-h1 text-ink mt-2 break-words">{title}</h1>
       <p className="t-cap text-ink/65 mt-1">{mp.name} · {PHASE_WORDS[phase]}{draw ? ` · ${roundInPlayLine(draw.rounds, today)}` : ''}</p>
 
-      {section === 'tee' && (
+      {section === 'tee' && pairs && (
+        pairs.length === 0
+          ? <p className="text-ink/80 text-[15px] mt-6">Nobody has entered yet.</p>
+          : (
+            <>
+              <p className="t-label text-ink mt-6">{pairs.length}{mp.setup.maxField ? ` of ${mp.setup.maxField}` : ''} {pairs.length === 1 ? 'pair' : 'pairs'} entered</p>
+              <ol className={`${cardClass()} mt-2 divide-y divide-line`}>
+                {pairs.map((p, i) => (
+                  <li key={i} className="px-4 py-3 text-[15px] text-ink">
+                    <span className="t-data">{p.join(' & ')}</span>
+                    {p.length < 2 && <span className="t-cap text-ink/65"> · looking for a partner</span>}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )
+      )}
+      {section === 'tee' && !pairs && (
         field.length === 0
           ? <p className="text-ink/80 text-[15px] mt-6">Nobody has entered yet.</p>
           : (
