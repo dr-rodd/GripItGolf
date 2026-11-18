@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers,
 } from '@/app/components/icons'
 import { barOf, compSectionHref, compsBack, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
 import type { CompSection } from '@/lib/compPhase'
 import { useClubBar, type ClubTab } from './ClubBarContext'
+import { CLUB_MEMBER_ATTR } from '@/lib/clubHomeCopy'
 
 export type { ClubTab } from './ClubBarContext'
 
@@ -46,6 +47,17 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   // while they slide back behind Comps on the way out.
   const [shown, setShown] = useState(comp?.code ?? null)
   if (comp && comp.code !== shown) setShown(comp.code)
+
+  // Inside a competition's open pages this phone is a member (the door let it
+  // through). Say so for the stylesheet, so Comps — back to the club — brings
+  // the club footer with it at once, even when this phone came straight to the
+  // competition by a link or code and has not loaded the club's home yet.
+  const inComp = !!comp
+  useEffect(() => {
+    if (!inComp || document.querySelector('[data-no-club-bar]')) return
+    document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '')
+  }, [inComp, comp?.code])
+
   if (!state) return null
   // The club set before the page has said this phone is on the list: drawn,
   // but shown only to a phone hinted to this club (D197), with the stand-in.

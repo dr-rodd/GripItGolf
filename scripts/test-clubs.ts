@@ -2221,6 +2221,12 @@ async function matchPlayTests() {
       'a match play’s members-only door is opened by its own route — the booking route knows no match play (it said “No such competition”)')
   }
 
+  {
+    const bar = read('app/club/[slug]/ClubTabBar.tsx')
+    ok(/setAttribute\(CLUB_MEMBER_ATTR/.test(bar) && /data-no-club-bar/.test(bar),
+      'inside an open competition the footer marks this phone a member, so Comps brings the club footer back at once even from a direct link (never on the members-only door)')
+  }
+
   section('A qualifier’s field (stage 5, P8)')
   {
     const qm = readClubMatchPlay(matchPlaySeed({ ...qual, maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
