@@ -658,6 +658,9 @@ export interface ClubAnswer {
   tops?: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member. */
   toSign?: { code: string; name: string; count: number }[]
+  /** Stage 3 (D266): this member's place in each club match play. */
+  matches?: import('./clubMatchPlay').MyClubMatch[]
+  partners?: Record<string, string | null>
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
@@ -923,4 +926,60 @@ export async function askTeeTimes<T = Record<string, unknown>>(action: string, b
   if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
   if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach, status: r.status }
   return { ok: true, ...(r.body as T) }
+}
+
+// ─── A club match play's entries (stage 2; Ross, 17 Nov 2026) ──
+
+/** What /api/club/matchplay answers a member: who is in, and what this account may do. */
+export type MatchPlayEntryAnswer = {
+  myRowId?: string
+  myPlayerId?: string | null
+  admin?: boolean
+  myRefusal?: string
+  closed?: string
+  stuck?: string
+  entrants: { rowId: string | null; name: string }[]
+  cap: number | null
+  phase: string
+  /** Stage 4, a pairs match play. */
+  pairs?: { teamId: string; members: { rowId: string | null; name: string }[] }[]
+  mySide?: string | null
+  partner?: string | null
+  partnerRowId?: string | null
+  mayJoin?: boolean
+  names?: { id: string; name: string; why?: string }[]
+}
+
+/** One ask of /api/club/matchplay — `state`, `enter`, `withdraw`, a pair's `names`, `join` and `partner`, or the Clubhouse's `office.state` and `office.withdraw`. Never throws. */
+export async function askMatchPlay(action: 'state' | 'enter' | 'withdraw' | 'names' | 'join' | 'partner' | 'office.state' | 'office.withdraw', body: Record<string, unknown>):
+  Promise<({ ok: true } & MatchPlayEntryAnswer) | { ok: false; error: string; status?: number }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.', status: 401 }
+  const r = await askServer(token, { ...body, action }, '/api/club/matchplay')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, status: r.status, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as unknown as MatchPlayEntryAnswer) }
+}
+
+/** Golfer of the Year as it reaches a phone (stage 6). */
+export type AwardAnswer = {
+  ready?: boolean
+  awards?: { id: string; year: number; name: string; rules: import('./clubAward').AwardRules }[]
+  award?: { id: string; year: number; name: string; rules: import('./clubAward').AwardRules }
+  standing?: import('./clubAward').StandingRow[]
+  mayKeep?: boolean
+  myRowId?: string | null
+  mine?: { id: string; name: string; line: string | null }[]
+  id?: string
+}
+
+/** One ask of /api/club/awards — `list`, `standing`, `mine`, and the Clubhouse's `save` and `delete`. Never throws. */
+export async function askAwards(action: 'list' | 'standing' | 'mine' | 'save' | 'delete', body: Record<string, unknown>):
+  Promise<({ ok: true } & AwardAnswer) | { ok: false; error: string }> {
+  const token = await accountToken()
+  if (!token) return { ok: false, error: 'Sign in to your Green Dot account first.' }
+  const r = await askServer(token, { ...body, action }, '/api/club/awards')
+  if (!r) return { ok: false, error: ACCOUNT_WORDS.noReach }
+  if (r.status !== 200) return { ok: false, error: typeof r.body.error === 'string' ? r.body.error : ACCOUNT_WORDS.noReach }
+  return { ok: true, ...(r.body as unknown as AwardAnswer) }
 }

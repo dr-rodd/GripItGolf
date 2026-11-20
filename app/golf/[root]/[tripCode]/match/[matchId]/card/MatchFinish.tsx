@@ -21,8 +21,13 @@ import type { SideColour } from '@/lib/matchSides'
  */
 export default function MatchFinish({
   phase, bloom, a, b, colours, holes, outcomes, scores, headline, winner, saving, error,
-  onFinalise, onFix, onClose, canContinue, onContinue, decide = null,
+  onFinalise, onFix, onClose, canContinue, onContinue, decide = null, soleSay = false,
 }: {
+  /**
+   * A club match play (Ross, 17 Nov 2026, D268): whoever finalises puts
+   * the result in and nobody else is asked, so the sheet says so first.
+   */
+  soleSay?: boolean
   /**
    * A session match level after 18 whose tie is picked by hand (Ross, 13
    * Nov 2026): the two sides to choose from, and Finalise waits for one.
@@ -86,6 +91,11 @@ export default function MatchFinish({
                     </button>
                   ))}
                 </div>
+              )}
+              {soleSay && (
+                <p className="text-ink/80 text-[15px] text-center leading-snug mt-4">
+                  This puts the result into the draw. Nobody else is asked, so check it with the other side first.
+                </p>
               )}
               {error && <p className="text-rust-deep text-sm text-center leading-snug mt-3">{error}</p>}
               <button type="button" onClick={onFinalise} disabled={saving || (!!decide && !decide.pick)} className={`${buttonClass('primary')} mt-5`}>

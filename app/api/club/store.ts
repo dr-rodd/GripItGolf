@@ -1,6 +1,9 @@
 // The service-role store behind /api/club (./club.ts). Every club table is
 // closed to phones (migration 086); only this reaches them.
 
+import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { readMyClubMatches, readPairPartners } from './matchPlayStore'
+import { readClubDraw } from './matchPlayDraw'
 import { randomBytes } from 'crypto'
 import { Resend } from 'resend'
 import { handicapStore } from '../handicaps/store'
@@ -66,12 +69,12 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
   const [{ data: trips, error: e }, comps] = await Promise.all([
     db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', ids),
     // Stage (d2): which are competitions, and members only (089 — fail-soft).
-    db.from('trips').select('id, competition, public_passcode_hash').in('id', ids).eq('competition', 'club'),
+    db.from('trips').select('id, competition, public_passcode_hash, bracket_setup').in('id', ids).eq('competition', 'club'),
   ])
   if (e) throw e
-  const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null }[]
+  const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null; bracket_setup?: unknown }[]
   const phases = compRows.length ? await competitionPhases(db, compRows.map(c => c.id)) : new Map<string, CompPhase>()
-  const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash }]))
+  const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash, ...(readClubMatchPlay(c.bracket_setup) ? { matchPlay: true as const } : {}) }]))
   return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
     .map(t => ({
       code: t.trip_code, name: t.name,
@@ -135,6 +138,26 @@ async function competitionPhases(db: Db, tripIds: string[]): Promise<Map<string,
       booked: bookedOf.get(r.id)?.size ?? 0, finished: doneOf.get(r.id)?.size ?? 0,
       cardsStarted: started.has(r.id), certifiedAt: certifiedOf.get(r.id) ?? null,
     }, now))
+  }
+  // A club match play has no round (Ross, 17 Nov 2026): its phase is read
+  // off its setup and its draw — drawn once a match exists, finished once
+  // the Final (the match that feeds nothing) has a winner.
+  const rest = tripIds.filter(id => !out.has(id))
+  if (rest.length) {
+    const [{ data: setups }, { data: matches }] = await Promise.all([
+      db.from('trips').select('id, bracket_setup').in('id', rest),
+      db.from('matchplay_matches').select('trip_id, next_match_id, winner_player_id, winner_team_id').in('trip_id', rest),
+    ])
+    const drawn = new Set<string>()
+    const won = new Set<string>()
+    for (const m of (matches ?? []) as { trip_id: string; next_match_id: string | null; winner_player_id: string | null; winner_team_id?: string | null }[]) {
+      drawn.add(m.trip_id)
+      if (!m.next_match_id && (m.winner_player_id || m.winner_team_id)) won.add(m.trip_id)
+    }
+    for (const t of (setups ?? []) as { id: string; bracket_setup: unknown }[]) {
+      const mp = readClubMatchPlay(t.bracket_setup)
+      if (mp) out.set(t.id, matchPlayPhase(mp, { drawn: drawn.has(t.id), won: won.has(t.id) }, new Date(now)))
+    }
   }
   return out
 }
@@ -245,8 +268,21 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
   const comps = events.filter(e => e.competition)
   const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null })
   if (!comps.length) return events.map(base)
-  const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards').in('trip_code', comps.map(c => c.code))
-  const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown }[]
+  const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards, bracket_setup').in('trip_code', comps.map(c => c.code))
+  const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown; bracket_setup?: unknown }[]
+  // A club match play (Ross, 17 Nov 2026): no round, its own facts, and how many have entered.
+  const matchPlayOf = new Map(tripRows.flatMap(t => { const m = readClubMatchPlay(t.bracket_setup); return m ? [[t.id, m] as const] : [] }))
+  const entrants = matchPlayOf.size
+    ? await db.from('players').select('trip_id').in('trip_id', [...matchPlayOf.keys()])
+    : { data: [] }
+  // A Fourball or Foursomes match play counts its pairs (stage 4) — a team each on the draw's sheet.
+  const pairTrips = [...matchPlayOf].filter(([, m]) => m.format !== 'singles').map(([id]) => id)
+  const pairRows = pairTrips.length
+    ? await db.from('teams').select('trip_id').in('trip_id', pairTrips).eq('team_set', 'set-2')
+    : { data: [] }
+  const enteredOf = new Map<string, number>()
+  for (const p of (entrants.data ?? []) as { trip_id: string }[]) if (!pairTrips.includes(p.trip_id)) enteredOf.set(p.trip_id, (enteredOf.get(p.trip_id) ?? 0) + 1)
+  for (const t of (pairRows.data ?? []) as { trip_id: string }[]) enteredOf.set(t.trip_id, (enteredOf.get(t.trip_id) ?? 0) + 1)
   const { data: rounds } = tripRows.length ? await db.from('rounds').select('id, trip_id, course_id, tee_sheet').in('trip_id', tripRows.map(t => t.id)) : { data: [] }
   const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string; tee_sheet?: unknown }[]
   const [courses, seats, entries, cats] = await Promise.all([
@@ -266,7 +302,8 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
     if (!e.competition) return base(e)
     const trip = tripRows.find(t => t.trip_code === e.code)
     const round = trip ? roundRows.find(r => r.trip_id === trip.id) : undefined
-    const board = (Array.isArray(trip?.leaderboards) ? trip!.leaderboards : []).find(b => (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: string; handicapAllowance?: number } | undefined
+    const mp = trip ? matchPlayOf.get(trip.id) : undefined
+    const board = (Array.isArray(trip?.leaderboards) ? trip!.leaderboards : []).find(b => mp ? (b as { competition?: string }).competition === 'matchplay' : (b as { clubCompetition?: boolean }).clubCompetition) as { scoring?: string; handicapAllowance?: number } | undefined
     const rules = parseTeeRules(round?.tee_sheet)
     return {
       ...base(e),
@@ -279,6 +316,7 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
         capacity: rules ? sheetCapacity(rules) : 0,
         membersOnly: e.competition.membersOnly,
         ...(trip && entryOf.get(trip.id) ? { entry: entryOf.get(trip.id)! } : {}),
+        ...(trip && mp ? { matchPlay: { format: mp.format, cap: mp.maxField, entered: enteredOf.get(trip.id) ?? 0, keyDates: matchPlayKeyDates(mp) } } : {}),
       },
     }
   })
@@ -308,14 +346,14 @@ export function clubStore(db: Db): ClubStore {
         db.from('clubs').select(`${CLUB_COLS}, art_path, art_dark_path, home_course_id`).eq('slug', slug).maybeSingle(),
         withTicks(t => db.from('club_members').select(`${rowCols(t)}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1)),
         db.from('trip_private')
-          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash)')
+          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash, bracket_setup)')
           .eq('clubs.slug', slug),
       ])
       if (c.error || r.error || p.error) return null
       const cr = c.data as (ClubRow & { art_path: string | null; art_dark_path: string | null; home_course_id: string | null }) | null
       const club = cr ? { ...asClub(cr), artPath: cr.art_path, artDarkPath: cr.art_dark_path, homeCourseId: cr.home_course_id } : null
       const row = ((r.data ?? []) as unknown as RowRow[])[0]
-      type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null }
+      type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null; bracket_setup?: unknown }
       const privs = (p.data ?? []) as unknown as { club_access: string | null; trips: Trip | Trip[] | null }[]
       const trips = privs.flatMap(x => {
         const t = Array.isArray(x.trips) ? x.trips[0] : x.trips
@@ -325,10 +363,16 @@ export function clubStore(db: Db): ClubStore {
         code: t.trip_code, name: t.name,
         kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
         startDate: t.start_date, endDate: t.end_date, access,
-        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash } } : {}),
+        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash, ...(readClubMatchPlay(t.bracket_setup) ? { matchPlay: true as const } : {}) } } : {}),
       }))
       const comps = trips.filter(x => x.t.competition === 'club').map(x => ({ tripId: x.t.id, code: x.t.trip_code }))
       return { club, row: row ? asRow(row) : null, events, comps }
+    },
+    myMatches: (rowId, codes) => readMyClubMatches(db, rowId, codes),
+    pairPartners: (rowId, codes) => readPairPartners(db, rowId, codes),
+    async overdueCount(code, today) {
+      const draw = await readClubDraw(code)
+      return draw ? overdueMatches(draw.rounds, draw.view.names, today).length : 0
     },
     async compPhases(comps) {
       const byTrip = await competitionPhases(db, comps.map(c => c.tripId))

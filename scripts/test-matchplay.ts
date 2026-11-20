@@ -158,8 +158,8 @@ section('Invalid player counts')
 throws(() => generateBracket(makePlayers(0)), 'rejects zero players')
 throws(() => generateBracket(makePlayers(1)), 'rejects a single player')
 throws(() => bracketShape(1), 'bracketShape rejects a single player')
-throws(() => generateBracket(makePlayers(65)), 'rejects more than 64 players')
-eq(generateBracket(makePlayers(64)).length, 63, '64 players → 63 matches, the largest draw')
+throws(() => generateBracket(makePlayers(129)), 'rejects more than 128 players')
+eq(generateBracket(makePlayers(128)).length, 127, '128 players → 127 matches, the largest draw')
 eq(generateBracket(makePlayers(33)).filter(m => m.roundNumber === 1).length, 32, '33 players → a draw of 64, byes and all')
 throws(
   () => generateBracket([{ id: 'p1', name: 'A' }, { id: 'p1', name: 'A again' }]),
@@ -750,7 +750,7 @@ guard('draw', () => {
 
   // The bracket, by hand (Ross, 5 Nov 2026)
   const five = ['a', 'b', 'c', 'd', 'e']
-  eq([roundsFor(5), roundsFor(2), roundsFor(64), MAX_ROUNDS], [3, 1, 6, 6], 'the bracket the field needs: five make three rounds, eight places')
+  eq([roundsFor(5), roundsFor(2), roundsFor(64), MAX_ROUNDS], [3, 1, 6, 7], 'the bracket the field needs: five make three rounds, eight places')
   let lay = emptyLayout(3)
   eq(lay.cells.map(r => r.length), [8, 4, 2], '  …eight places in the first round, four in the next, two in the Final')
   lay = placeAt(lay, 0, 0, 'a')

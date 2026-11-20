@@ -16,6 +16,7 @@ import { useSeason } from '../useSeason'
 import EventPanel from './EventPanel'
 import CompPanel from './CompPanel'
 import PresetPanel from './PresetPanel'
+import MatchPlayPanel from './MatchPlayPanel'
 import { useCategories } from '../useCategories'
 import { askClub } from '@/lib/accountClient'
 import { planLine, type Preset } from '@/lib/clubPresets'
@@ -43,6 +44,9 @@ export default function Events() {
   const [editing, setEditing] = useState<ClubNote | 'new' | null>(null)
   // Stage c1, M7, M10–M11: competitions made and changed here, from presets.
   const [comp, setComp] = useState<string | 'new' | null>(null)
+  // Ross, 17 Nov 2026: New competition asks first — stroke play on a day, or match play over weeks.
+  const [choosing, setChoosing] = useState(false)
+  const [matchPlay, setMatchPlay] = useState(false)
   const [presetOpen, setPresetOpen] = useState<Preset | 'new' | null>(null)
   const [presets, setPresets] = useState<Preset[] | null>(null)
   const [presetsReady, setPresetsReady] = useState(false)
@@ -78,7 +82,22 @@ export default function Events() {
             <button type="button" onClick={() => setEditing('new')} disabled={!notesReady}
               title={notesReady ? undefined : 'The club’s calendar isn’t set up yet.'}
               className={`${buttonClass('secondary', false)} ch-focus`}>New event</button>
-            <button type="button" onClick={() => setComp('new')} className={`${buttonClass('primary', false)} ch-focus`}>New competition</button>
+            <div className="relative">
+              <button type="button" onClick={() => setChoosing(c => !c)} aria-expanded={choosing} aria-haspopup="menu"
+                className={`${buttonClass('primary', false)} ch-focus`}>New competition</button>
+              {choosing && (
+                <div role="menu" className={`${cardClass('floating')} absolute right-0 top-full mt-2 z-30 w-72 p-2`}>
+                  <button type="button" role="menuitem" onClick={() => { setChoosing(false); setComp('new') }} className="ch-hover ch-focus w-full text-left rounded-tile px-3 py-2">
+                    <span className="block text-ink text-[15px] font-medium">Stroke play</span>
+                    <span className="block t-cap text-ink/65">One day on the tee sheet — Stableford or strokes.</span>
+                  </button>
+                  <button type="button" role="menuitem" onClick={() => { setChoosing(false); setMatchPlay(true) }} className="ch-hover ch-focus w-full text-left rounded-tile px-3 py-2">
+                    <span className="block text-ink text-[15px] font-medium">Match play</span>
+                    <span className="block t-cap text-ink/65">A knockout over weeks, each round by its play-by date.</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -153,12 +172,12 @@ export default function Events() {
                       </td>
                       <td className="px-3 text-ink/80 text-[15px]">{c?.courseName ? <CourseName name={c.courseName} /> : n?.place ?? '—'}</td>
                       <td className="px-3 text-ink/80 text-[15px]">{c ? c.entry ?? 'Everybody' : '—'}</td>
-                      <td className="px-3 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c ? (c.capacity ? `${c.booked} of ${c.capacity}` : c.booked) : '—'}</td>
+                      <td className="px-3 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c ? (c.matchPlay ? `${c.matchPlay.entered}${c.matchPlay.cap ? ` of ${c.matchPlay.cap}` : ''}` : c.capacity ? `${c.booked} of ${c.capacity}` : c.booked) : '—'}</td>
                       <td className="px-3 whitespace-nowrap">
                         {c ? <Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill> : isOfficeOnly(e) ? <Pill>Office only</Pill> : null}
                       </td>
                       <td className="px-3 text-right whitespace-nowrap">
-                        {c && office && (
+                        {c && office && !c.matchPlay && (
                           <>
                             <button type="button" onClick={() => setComp(e.code)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Change</button>
                             <button type="button" onClick={() => setCopying(e)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Copy</button>
@@ -190,7 +209,7 @@ export default function Events() {
                       ? <button type="button" onClick={() => setEditing(e.note!)} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</button>
                       : <div className="flex items-center gap-3 min-h-14 px-4 py-3">{body}</div>)
                     : <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
-                  {e.competition && office && (
+                  {e.competition && office && !e.competition.matchPlay && (
                     <div className="flex gap-1 px-3 pb-2 -mt-1">
                       <button type="button" onClick={() => setComp(e.code)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Change</button>
                       <button type="button" onClick={() => setCopying(e)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Copy</button>
@@ -239,6 +258,10 @@ export default function Events() {
 
       {comp && <CompPanel clubId={club.id} slug={face.slug} code={comp === 'new' ? null : comp} homeCourseId={club.homeCourseId ?? null}
         cats={categories ?? []} ageDate={ageDate} presets={presets ?? []} onClose={() => setComp(null)} onDone={again} />}
+      {matchPlay && <MatchPlayPanel clubId={club.id} slug={face.slug} homeCourseId={club.homeCourseId ?? null} presets={presets ?? []} cats={categories ?? []} ageDate={ageDate}
+        qualifiers={(events ?? []).filter(e => e.competition && !e.competition.matchPlay && e.startDate && e.startDate >= `${thisYear}-01-01`)
+          .map(e => ({ code: e.code, name: e.name, date: clubEventDates(e.startDate, e.startDate) }))}
+        onClose={() => setMatchPlay(false)} onDone={again} />}
       {presetOpen && <PresetPanel clubId={club.id} preset={presetOpen === 'new' ? null : presetOpen} presets={presets ?? []} homeCourseId={club.homeCourseId ?? null}
         cats={categories ?? []} ageDate={ageDate} onClose={() => setPresetOpen(null)} onSaved={setPresets} />}
       {copying && <CopyPanel clubId={club.id} slug={face.slug} event={copying} onClose={() => setCopying(null)} onMade={again} />}

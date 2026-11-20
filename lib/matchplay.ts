@@ -38,12 +38,13 @@ export type BracketMatch = {
 
 export const MIN_PLAYERS = 2
 /**
- * The largest draw. Up to 64 for now (docs/event-use-cases.md, story 2):
- * nothing in the draw, the names or the storage stops at a power of two,
- * but the bracket screen's columns grow 98px a tile, so a 128 field's first
- * column is some 6,300px tall. Past 64 is a screen job, not a rule change.
+ * The largest draw: 128 (Ross, 18 Nov 2026 — a club match play's biggest
+ * field). Nothing in the draw, the names or the storage stops at a power of
+ * two; the bracket screen's columns grow 98px a tile, so a 128 field's first
+ * column is some 6,300px tall — it swipes a round at a time, and the club
+ * area reads the draw as a list.
  */
-export const MAX_BRACKET  = 64
+export const MAX_BRACKET  = 128
 
 // ─── Bracket shape ─────────────────────────────────────────────
 

@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
+import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
 import { parseTeeRules } from '@/lib/teeSheet'
 import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
@@ -14,6 +14,8 @@ import { runCalendarImport, type ImportStore } from '../calendarImport'
 import { compFormFrom, type CompForm } from '@/lib/clubComp'
 import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
+import { readMatchPlayComp } from '../matchPlayStore'
+import { readClubDraw } from '../matchPlayDraw'
 
 // POST /api/club/competition — `{ clubId, form }` with a Green Dot member's
 // token: a verified club's owner or admin makes a competition (D162). The
@@ -105,11 +107,18 @@ export async function POST(req: NextRequest) {
       const read = await runReadCompetition({ token, clubId: body.clubId, code: body.code }, store)
       return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
     }
+    if (body?.action === 'matchplay.read') {
+      const read = await runReadMatchPlay({ token, clubId: body.clubId, code: body.code }, { ...store, matchPlayComp: code => readMatchPlayComp(db, code), matchPlayDraw: code => readClubDraw(code) }, new Date())
+      return NextResponse.json(read.body, { status: read.status, headers: NO_STORE })
+    }
     if (body?.action === 'change') {
       const changed = await runChangeCompetition({ token, clubId: body.clubId, code: body.code, form: body.form }, store, new Date())
       return NextResponse.json(changed.body, { status: changed.status, headers: NO_STORE })
     }
-    const out = await runNewCompetition({ token, clubId: body?.clubId, form: body?.form, from: body?.from === 'clubhouse' ? 'clubhouse' : 'app' }, store, new Date())
+    // A club match play (Ross, 17 Nov 2026), made in the Clubhouse.
+    const out = body?.action === 'matchplay.new'
+      ? await runNewMatchPlay({ token, clubId: body.clubId, form: body.form }, store, new Date())
+      : await runNewCompetition({ token, clubId: body?.clubId, form: body?.form, from: body?.from === 'clubhouse' ? 'clubhouse' : 'app' }, store, new Date())
     const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
     if (out.status === 200 && out.doorCookie) {
       res.cookies.set(entryCookie(out.body.code), out.doorCookie, {

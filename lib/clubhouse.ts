@@ -1,7 +1,7 @@
 // The Clubhouse's rules — the only copy (stage (k1); D202, D207, D217,
 // D224). The desktop office where a club's Clubhouse holders and Green Dot
 // staff keep the list: its standings, filters and order, the search, the
-// page size, the file it downloads, and what "Needs you" says. Pure: the
+// page size, the file it downloads, and what the Alerts say (was "Needs you", Ross, 18 Nov 2026). Pure: the
 // server (`app/api/club/clubhouse.ts`) and the screens (`app/clubhouse/`)
 // both read it. Who may do what is lib/clubMay.ts, never here.
 //
@@ -150,14 +150,14 @@ export interface ListCounts {
   byCategory?: Record<string, number>
 }
 
-/** One line of "Needs you", and where it goes. */
+/** One line of the Alerts, and where it goes. */
 export interface Need { key: string; line: string; href: string }
 
 /**
- * What needs the office (the Overview's "Needs you"): competitions waiting
+ * What needs the office (the Overview's Alerts — "Needs you" until Ross, 18 Nov 2026): competitions waiting
  * to be certified, people who could be emailed their code and never have
  * been, and people with no email to send one to. Only what is there; none
- * is "Nothing needs you."
+ * is "No alerts."
  */
 export function needsYou(o: {
   base: string
@@ -167,8 +167,17 @@ export function needsYou(o: {
   officer: boolean
   /** Stage (m): whether the club has any memberships yet. */
   hasCategories?: boolean
+  /** Stage 3 (D271): each club match play's matches past their play-by date. */
+  overdue?: { code: string; name: string; count: number }[]
 }): Need[] {
   const out: Need[] = []
+  for (const c of (o.overdue ?? []).filter(x => x.count > 0)) {
+    out.push({
+      key: `overdue-${c.code}`,
+      line: `${c.name}: ${c.count} ${c.count === 1 ? 'match is' : 'matches are'} past the play-by date. ${o.officer ? 'Decide them on the match pages.' : 'An Officer decides them.'}`,
+      href: `${o.base}/events/${c.code}`,
+    })
+  }
   for (const c of o.phases.filter(p => p.phase === 'awaiting')) {
     out.push({
       key: `certify-${c.code}`,
@@ -218,6 +227,7 @@ export const SECTIONS = [
   { key: 'events', label: 'Events', path: '/events' },
   { key: 'calendar', label: 'Calendar', path: '/calendar' },
   { key: 'teesheet', label: 'Tee sheet', path: '/tee-sheet' },
+  { key: 'awards', label: 'Golfer of the Year', path: '/awards' },
   { key: 'settings', label: 'Club settings', path: '/settings' },
 ] as const
 
@@ -265,6 +275,8 @@ export interface SeasonEvent {
     membersOnly: boolean
     /** Stage (m): who may enter, said short — absent, everybody. */
     entry?: string
+    /** A club match play (Ross, 17 Nov 2026): its format, biggest field, entries so far, and the days the calendar marks. */
+    matchPlay?: { format: import('./clubMatchPlay').MatchPlayFormat; cap: number | null; entered: number; keyDates: string[] }
   } | null
 }
 
@@ -284,7 +296,11 @@ export function isOfficeOnly(e: Pick<SeasonEvent, 'note'>): boolean {
 }
 
 /** The format as the table says it: "Stableford · 95%". */
-export function formatLine(c: { scoring: 'stableford' | 'strokes'; allowance: number }): string {
+export function formatLine(c: { scoring: 'stableford' | 'strokes'; allowance: number; matchPlay?: { format: string } }): string {
+  if (c.matchPlay) {
+    const f = c.matchPlay.format
+    return `${f === 'singles' ? 'Singles' : f === 'fourball' ? 'Fourball' : 'Foursomes'} match play${c.allowance !== 100 ? ` · ${c.allowance}%` : ''}`
+  }
   return `${c.scoring === 'strokes' ? 'Strokes' : 'Stableford'}${c.allowance !== 100 ? ` · ${c.allowance}%` : ''}`
 }
 
@@ -317,7 +333,10 @@ export function monthGrid(year: number, month: number): (string | null)[][] {
 
 /** The events on a day: starting on it, or running across it. */
 export function eventsOn(events: SeasonEvent[], day: string): SeasonEvent[] {
-  return events.filter(e => e.startDate && e.startDate <= day && (e.endDate ?? e.startDate) >= day)
+  // A match play runs for months: the calendar marks only its own days — entries closing, the draw, each play-by date.
+  return events.filter(e => e.competition?.matchPlay
+    ? e.competition.matchPlay.keyDates.includes(day)
+    : e.startDate && e.startDate <= day && (e.endDate ?? e.startDate) >= day)
 }
 
 /** The month after or before, as [year, month]. */

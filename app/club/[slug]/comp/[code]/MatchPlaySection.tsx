@@ -1,0 +1,112 @@
+import Link from 'next/link'
+import { cardClass } from '@/app/components/ui'
+import { PHASE_WORDS, type CompSection } from '@/lib/compPhase'
+import { irishToday } from '@/lib/clubs'
+import { tripBase } from '@/lib/tripPaths'
+import { compHome } from '@/lib/clubBar'
+import { matchPlayPhase, roundInPlayLine } from '@/lib/clubMatchPlay'
+import { eventReader } from '@/lib/eventReader'
+import { readClubDraw } from '@/app/api/club/matchPlayDraw'
+import { IconChevronLeft } from '@/app/components/icons'
+import CompShell from './CompShell'
+import MyMatch, { type ClubMatchRow } from './MyMatch'
+import DrawView from './DrawView'
+import { MatchPlayMark } from '../../ClubBarContext'
+import type { MatchPlayPage } from './read'
+
+/**
+ * A club match play's three sections (stage 3; Ross, 17 Nov 2026), in the
+ * slots a stroke competition's Tee times, Scoring and Leaderboard hold:
+ * **Field** — who has entered; **Matches** — your match, then the round in
+ * play's matches; **Draw** — every round with its play-by date and results.
+ * A match opens its own page (`/golf/event/<code>/match/<id>`) — arranging,
+ * contacts, the card and a walkover — as a stroke competition's card opens
+ * its own; "See the full bracket" opens the event's bracket.
+ */
+export default async function MatchPlaySection({ page, section }: { page: MatchPlayPage; section: CompSection }) {
+  const { mp, slug, code } = page
+  const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, new Date())
+  const today = irishToday(new Date())
+  const base = tripBase(code, 'tournament')
+  const pairsMode = mp.setup.format !== 'singles'
+  const db = eventReader(code)
+  const [draw, field, pairRows] = await Promise.all([
+    mp.drawn ? readClubDraw(code) : Promise.resolve(null),
+    section === 'tee'
+      ? db.from('players').select('id, name').eq('is_composite', false).order('created_at').then(r => (r.data ?? []) as { id: string; name: string }[])
+      : Promise.resolve([] as { id: string; name: string }[]),
+    // Stage 4: a Fourball or Foursomes field is its pairs, each a team on the draw's sheet.
+    section === 'tee' && pairsMode
+      ? Promise.all([
+          db.from('teams').select('id').eq('team_set', 'set-2').order('created_at').order('id'),
+          db.from('team_members').select('team_id, player_id').eq('team_set', 'set-2'),
+        ]).then(([t, m]) => ({ teams: (t.data ?? []) as { id: string }[], members: (m.data ?? []) as { team_id: string; player_id: string }[] }))
+      : Promise.resolve(null),
+  ])
+  const nameById = new Map(field.map(p => [p.id, p.name]))
+  const pairs = pairRows ? pairRows.teams.map(t => pairRows.members.filter(m => m.team_id === t.id).map(m => nameById.get(m.player_id)).filter((n): n is string => !!n)).filter(p => p.length > 0) : null
+  const names = draw?.view.names ?? {}
+  const nameOf = (id: string | null, bye: boolean) => (bye ? 'Bye' : id ? names[id] ?? 'A player' : 'To be decided')
+  const rows: ClubMatchRow[] = (draw?.rounds ?? []).flatMap(r => r.matches.map(m => ({
+    id: m.id, roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline,
+    sideA: m.sideA, sideB: m.sideB, aName: nameOf(m.sideA, m.aIsBye), bName: nameOf(m.sideB, m.bIsBye),
+    winner: m.winner, result: m.result,
+  })))
+  const inPlay = draw?.rounds.find(r => r.played < r.total) ?? null
+  const title = section === 'tee' ? 'Field' : section === 'scoring' ? 'Matches' : 'Draw'
+
+  return (
+    <CompShell page={page}>
+      <MatchPlayMark code={code} />
+      <Link href={compHome(slug, code)} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press">
+        <IconChevronLeft size={16} /> Summary
+      </Link>
+      <h1 className="t-h1 text-ink mt-2 break-words">{title}</h1>
+      <p className="t-cap text-ink/65 mt-1">{mp.name} · {PHASE_WORDS[phase]}{draw ? ` · ${roundInPlayLine(draw.rounds, today)}` : ''}</p>
+
+      {section === 'tee' && pairs && (
+        pairs.length === 0
+          ? <p className="text-ink/80 text-[15px] mt-6">Nobody has entered yet.</p>
+          : (
+            <>
+              <p className="t-label text-ink mt-6">{pairs.length}{mp.setup.maxField ? ` of ${mp.setup.maxField}` : ''} {pairs.length === 1 ? 'pair' : 'pairs'} entered</p>
+              <ol className={`${cardClass()} mt-2 divide-y divide-line`}>
+                {pairs.map((p, i) => (
+                  <li key={i} className="px-4 py-3 text-[15px] text-ink">
+                    <span className="t-data">{p.join(' & ')}</span>
+                    {p.length < 2 && <span className="t-cap text-ink/65"> · looking for a partner</span>}
+                  </li>
+                ))}
+              </ol>
+            </>
+          )
+      )}
+      {section === 'tee' && !pairs && (
+        field.length === 0
+          ? <p className="text-ink/80 text-[15px] mt-6">Nobody has entered yet.</p>
+          : (
+            <>
+              <p className="t-label text-ink mt-6">{field.length}{mp.setup.maxField ? ` of ${mp.setup.maxField}` : ''} entered</p>
+              <ol className={`${cardClass()} mt-2 divide-y divide-line`}>
+                {field.map(p => <li key={p.id} className="px-4 py-3 t-data text-[15px] text-ink">{p.name}</li>)}
+              </ol>
+            </>
+          )
+      )}
+
+      {section !== 'tee' && !draw && (
+        <p className="text-ink/80 text-[15px] leading-relaxed mt-6">The matches appear here once the draw is made.</p>
+      )}
+
+      {section === 'scoring' && draw && <MyMatch code={code} matches={rows} matchHref={`${base}/match`} />}
+      {section !== 'tee' && draw && (
+        <DrawView rows={rows} matchHref={`${base}/match`} today={today}
+          rounds={draw.rounds.map(r => ({ roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline, played: r.played, total: r.total }))}
+          startRound={section === 'scoring' ? inPlay?.roundNumber ?? null : null} />
+      )}
+      {section === 'board' && draw && (
+        <Link href={`${base}/matchplay`} className="t-label text-club-deep inline-flex mt-6 press">See the full bracket</Link>
+      )}
+    </CompShell>
+  )
+}

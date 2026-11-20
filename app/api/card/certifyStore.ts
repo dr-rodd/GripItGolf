@@ -7,6 +7,8 @@ import { writeRoundSummaries } from '../stats/summaries'
 import { signStore } from './store'
 import type { CertifyStore } from './certify'
 import { readRoundLock } from './signatures'
+import { afterQualifierCertified } from '../club/qualifierField'
+import { makeDueDraw } from '../match/dueDraws'
 export { certifiedRounds } from './signatures'
 
 // Certify, Reopen and No return on the service role (stage (d4)). Every read
@@ -82,6 +84,14 @@ export function certifyStore(db: Db): CertifyStore {
     async dropSummaries(roundId) {
       const { error } = await db.from('card_summaries').delete().eq('round_id', roundId)
       if (error && !['42P01', 'PGRST205'].includes(error.code ?? '')) throw error
+    },
+    // Stage 5: a club match play qualifying from this competition makes its field and draw.
+    async afterCertified(code) {
+      const now = new Date()
+      await afterQualifierCertified(db, code, now, async tripId => {
+        const { data } = await db.from('trips').select('id, leaderboards, formats, team_scoring, bracket_setup').eq('id', tripId).maybeSingle()
+        if (data) await makeDueDraw(db, data as Parameters<typeof makeDueDraw>[1], now, false)
+      })
     },
   }
 }

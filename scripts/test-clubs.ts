@@ -24,6 +24,7 @@ import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
+import { clubEventDates } from '../lib/clubs'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
@@ -36,6 +37,8 @@ import { describeTime } from '../lib/itinerary'
 import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
 import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
+import { runAwards, eligiblePeople, AwardsNotReady, type Award, type AwardsStore } from '../app/api/club/awards'
+import { awardIssue, awardStanding, bracketStages, defaultAwardRules, myStandingLine, placePoints, placeWords, readAwardRules, readPointsTable, type AwardResult } from '../lib/clubAward'
 import { inviteHash, linkDetails, provisionClub, runClub, runUpload, type ActivityEntry, type ClubRecord, type ClubStore, type ImageWork, type MemberRecord, type RowPatch } from '../app/api/club/club'
 import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from '../lib/clubColour'
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
@@ -47,6 +50,18 @@ import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, 
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
 import type { CreateStore } from '../app/api/trip/create/create'
+import { runNewMatchPlay } from '../app/api/club/competition'
+import { runMatchPlayEntry, type Entrant, type MatchPlayEntryStore } from '../app/api/club/matchPlayEntry'
+import type { MatchPlayComp } from '../app/api/club/matchPlayStore'
+import {
+  matchPlayBoard, matchPlayFormIssue, matchPlayKeyDates, matchPlayLine, matchPlayPhase, matchPlayRules, matchPlaySeed,
+  readClubMatchPlay, readMatchPlayForm, type MatchPlayForm,
+  enterIssue, overCap, withdrawEntryIssue, drawDueNow,
+  myClubMatch, overdueMatches, filterOverdue, roundInPlayLine,
+  joinIssue, mayTakeOutOfPair, drawnPairs, partnerName, enteredWithLine, type PairEntry,
+  qualifiedField, qualifiedDrawPlan,
+} from '../lib/clubMatchPlay'
+import { parseBracketSetup } from '../lib/bracketSetup'
 import { mergeGrant } from '../lib/membership'
 import { cardScoreRows, nrGross, type CommitHole } from '../lib/cardCommit'
 import { runSign, signedOff, type CardHole, type NewSignature, type Signature, type SignPlayer, type SignStore } from '../app/api/card/sign'
@@ -1792,7 +1807,7 @@ function snappyTests() {
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<div className="club-public-face"><PublicFace face=\{face\} \/><\/div>/.test(view) && /<MembersWait \/>/.test(view), 'the public face and the stand-in are both in the HTML, the mark choosing')
   ok(/setMembers\(m => \(m && m\.slug === face\.slug \? m : readClubHome\(face\.slug\)\)\)/.test(view), 'a hinted phone draws its copy before the first paint of the page — never another club’s (D223)')
-  ok(/!m\.fromCopy && g\.now\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
+  ok(/!m\.fromCopy && live\.length > 0/.test(view) && /club-fresh-in/.test(view), 'Live now never from the copy; the live parts fade in')
   ok(/forgetClubHome\(face\.slug\)\s*\n\s*if \(clubs\.includes\(face\.slug\)\)/.test(view) && /router\.replace\(`\/club\/\$\{rest\[0\]\}`\)/.test(view)
     && /window\.location\.replace\('\/home'\)/.test(view) && /return\n\s*\}\n\s*notClubMember\(\)/.test(view),
     'taken off the list: the copy goes, and the phone moves to its next club, else the personal page; a visitor sees the public face (D223)')
@@ -1887,6 +1902,387 @@ async function clubhouseTests() {
   ok(slim.status === 200 && !slim.body.list && s.list.get(ids[2])!.name === 'Seán Byrne', 'a cell changed in place answers without the whole list')
   const staffEdit = await ask('tok-gd', 'update', { clubId, memberId: ids[2], email: 'sean@x.ie', slim: true })
   ok(staffEdit.status === 200 && s.list.get(ids[2])!.email === 'sean@x.ie', 'staff change a row at a club not theirs')
+}
+
+async function awardTests() {
+  section('Golfer of the Year (stage 6, P14)')
+  const r0 = defaultAwardRules()
+  eq(placePoints(r0.points, 1), 25, '1st: 25')
+  eq(placePoints(r0.points, 2, 2), 18, 'two level for 2nd share 2nd’s and 3rd’s — 20 and 16 make 18 each')
+  eq(placePoints(r0.points, 15), 1, '15th: 1')
+  eq(placePoints(r0.points, 16), 0, 'past the table: nothing')
+  eq([placeWords(1, 1), placeWords(2, 1), placeWords(3, 1), placeWords(11, 1), placeWords(22, 1), placeWords(4, 2)], ['1st', '2nd', '3rd', '11th', '22nd', 'T4'], 'places as members read them')
+  eq(readPointsTable('25, 20 16'), [25, 20, 16], 'a points table typed as a list')
+  eq(readPointsTable('25, x'), null, '…a figure that will not read refuses it')
+  const stages = bracketStages([
+    { roundNumber: 1, sideA: 'a', sideB: 'b', winner: 'a' }, { roundNumber: 1, sideA: 'c', sideB: 'd', winner: 'd' },
+    { roundNumber: 1, sideA: 'e', sideB: 'f', winner: 'e' }, { roundNumber: 1, sideA: 'g', sideB: 'h', winner: null },
+    { roundNumber: 2, sideA: 'a', sideB: 'd', winner: 'a' }, { roundNumber: 2, sideA: 'e', sideB: null, winner: null },
+    { roundNumber: 3, sideA: 'a', sideB: null, winner: null },
+  ])
+  eq(Object.fromEntries(stages), { b: 'quarter', c: 'quarter', f: 'quarter', d: 'semi' }, 'stages arrive as each round is decided — quarter-finalists and a semi-finalist out so far, the Final still to play')
+  const final = bracketStages([{ roundNumber: 1, sideA: 'a', sideB: 'b', winner: 'b' }])
+  eq(Object.fromEntries(final), { b: 'winner', a: 'runnerUp' }, 'a Final decided: winner and runner-up')
+
+  const results: AwardResult[] = [
+    { code: 'MEDAL1', name: 'Spring Medal', date: '2027-04-04', kind: 'stroke', finishers: [{ rowId: 'ra', place: 1, tied: 1 }, { rowId: 'rb', place: 2, tied: 2 }, { rowId: 'rc', place: 2, tied: 2 }] },
+    { code: 'MAJOR1', name: 'Captain’s Prize', date: '2027-06-01', kind: 'stroke', finishers: [{ rowId: 'rc', place: 1, tied: 1 }, { rowId: 'ra', place: 2, tied: 1 }] },
+    { code: 'MATCH1', name: 'Singles', date: '2027-08-01', kind: 'matchplay', stages: [{ rowId: 'rb', stage: 'winner' }, { rowId: 'ra', stage: 'semi' }] },
+  ]
+  const people = [{ rowId: 'ra', name: 'Ann' }, { rowId: 'rb', name: 'Bob' }, { rowId: 'rc', name: 'Cat' }]
+  const plain = awardStanding(r0, results, people)
+  eq(plain.map(r => [r.name, r.total]), [['Ann', 53], ['Bob', 43], ['Cat', 43]], 'every result counts: Ann 25 + 20 + 8; Bob 18 + 25; Cat 18 + 25')
+  eq(plain.map(r => r.place), [1, 2, 2], 'level players share a place')
+  const major = awardStanding({ ...r0, weights: { MAJOR1: 2 } }, results, people)
+  eq(major.map(r => [r.name, r.total]), [['Ann', 73], ['Cat', 68], ['Bob', 43]], 'a Major counts double — Ann 25 + 40 + 8, Cat 18 + 50: the table re-told at once')
+  eq(awardStanding({ ...r0, weights: { MAJOR1: 0 } }, results, people).find(r => r.name === 'Cat')?.total, 18, '×0 leaves a competition out')
+  const best1 = awardStanding({ ...r0, bestOf: 1 }, results, people)
+  ok(best1.find(r => r.name === 'Ann')!.total === 25 && best1.find(r => r.name === 'Ann')!.lines.filter(l => !l.counts).length === 2, 'best 1: one result counts, the rest shown and struck through')
+  eq(awardStanding({ ...r0, kinds: { stroke: true, matchPlay: false } }, results, people).find(r => r.name === 'Bob')?.total, 18, 'match play switched off: Bob’s win counts for nothing')
+  eq(awardStanding(r0, results, people.filter(p => p.rowId !== 'rc')).map(r => r.name), ['Ann', 'Bob'], 'somebody the award’s rules leave out is not listed')
+  eq(myStandingLine(plain, 'rb'), 'You’re T2, 10 behind', 'your line, behind')
+  eq(myStandingLine(plain, 'ra'), 'You lead by 10', '…leading')
+  eq(myStandingLine(plain, 'zz'), null, '…nothing yet')
+  eq(readAwardRules({ points: [10, 'x'], bestOf: 0, weights: { MEDAL1: 3, BAD: 2 } }), { ...r0 }, 'bad stored answers go back to their defaults, never the award refused')
+  ok(!!awardIssue({ name: '', year: 2027, rules: r0 }) && !!awardIssue({ name: 'G', year: 2027, rules: { ...r0, kinds: { stroke: false, matchPlay: false } } }) && awardIssue({ name: 'Golfer of the Year', year: 2027, rules: r0 }) === null,
+    'an award needs a name and something to count')
+
+  const row = (id: string, name: string, userId: string | null, extra: Partial<MemberRecord> = {}): MemberRecord =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true, playsHere: true, officer: false, clubhouse: false, ...extra })
+  const rows = [row('ra', 'Ann', 'ann', { gender: 'F' }), row('rb', 'Bob', 'bob', { gender: 'M' }), row('rc', 'Cat', null, { gender: 'F' }), row('rd', 'Dan', null, { playsHere: false }), row('rh', 'Hub', 'hub', { clubhouse: true })]
+  eq(eligiblePeople(rows, { ...r0, entry: { genders: ['F'] } }, 2027, { categories: [], ageDate: '01-01' }).map(p => p.name), ['Ann', 'Cat'], 'the ladies’ award: the ladies who play here')
+  eq(eligiblePeople(rows, r0, 2027, { categories: [], ageDate: '01-01' }).map(p => p.name), ['Ann', 'Bob', 'Cat', 'Hub'], 'nobody who doesn’t play here')
+
+  const saved: Award[] = []
+  const logged: ActivityEntry[] = []
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null } as unknown as ClubRecord
+  const store = (ready = true): AwardsStore => ({
+    async userFromToken(t) { const u = t.slice(4); return ['ann', 'bob', 'hub', 'out'].includes(u) ? member(u, `${u}@x.ie`) : null },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async awards(_c, year) { if (!ready) throw new AwardsNotReady(); return saved.filter(a => a.year === year) },
+    async saveAward(a) { if (!ready) throw new AwardsNotReady(); const id = a.id ?? `aw${saved.length + 1}`; const i = saved.findIndex(x => x.id === id); const v = { ...a, id }; if (i >= 0) saved[i] = v; else saved.push(v); return id },
+    async deleteAward(_c, id) { const i = saved.findIndex(a => a.id === id); if (i >= 0) saved.splice(i, 1) },
+    async yearResults() { return results },
+    async rows() { return rows },
+    async logActivity(e) { logged.push(...e) },
+  })
+  const go = (who: string, action: string, extra: Record<string, unknown> = {}, s = store()) => runAwards({ token: `tok-${who}`, action, clubId: 'c1', year: 2027, ...extra }, s, NOW)
+  eq((await go('ann', 'save', { name: 'Golfer of the Year', rules: r0 })).status, 403, 'a member does not make awards')
+  const made = await go('hub', 'save', { name: '  Golfer  of the Year ', rules: { ...r0, weights: { MAJOR1: 2 } } })
+  ok(made.status === 200 && made.body.ok && saved[0]?.name === 'Golfer of the Year' && logged.some(l => l.action === 'award.add'), 'the Clubhouse makes one, logged')
+  const st = await go('bob', 'standing', { id: saved[0].id })
+  ok(st.status === 200 && st.body.ok && st.body.standing?.[0]?.name === 'Ann' && st.body.myRowId === 'rb', 'a member reads the table')
+  const mine = await go('bob', 'mine', { year: undefined }, store())
+  ok(mine.status === 200 && mine.body.ok && Array.isArray(mine.body.mine), 'a member’s own line for this year')
+  eq((await go('out', 'list')).status, 403, 'somebody not on the list reads nothing')
+  const early = await go('hub', 'list', {}, store(false))
+  ok(early.status === 200 && early.body.ok && early.body.ready === false, 'before migration 097: "not set up yet", never an error')
+  eq((await go('hub', 'save', { name: 'X', rules: r0 }, store(false))).status, 503, '…and nothing saved')
+  ok((await go('hub', 'delete', { id: saved[0].id })).status === 200 && saved.length === 0 && logged.some(l => l.action === 'award.delete'), 'deleted, logged — no result touched')
+}
+
+async function matchPlayTests() {
+  section('A club match play (Ross, 17 Nov 2026; D264–D271, lib/clubMatchPlay.ts)')
+  const today = '2026-11-15'
+  const form: MatchPlayForm = {
+    name: 'Captain’s Prize Matchplay', format: 'fourball', allowance: 90, watch: 'members', entry: null,
+    field: 'entries', closes: { date: '2027-03-31', time: '20:00' }, qualifier: null, maxField: 16,
+    draw: { when: 'auto', date: null, time: null, seeding: 'handicap' },
+    deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'],
+    venue: 'home', tie: 'extra', handicap: 'on_day',
+  }
+  eq(matchPlayFormIssue(form, NOW, today), null, 'a whole form passes: fourball, 16 pairs, four play-by dates')
+  ok(/each of the 4 rounds/.test(matchPlayFormIssue({ ...form, deadlines: form.deadlines.slice(1) }, NOW, today) ?? ''), 'a field of 16 needs four dates')
+  eq(matchPlayFormIssue({ ...form, maxField: null, deadlines: ['2027-07-31'] }, NOW, today), null, 'no limit (D264): the Final alone is enough')
+  ok(!!matchPlayFormIssue({ ...form, maxField: null, deadlines: [] }, NOW, today), '…but not no dates at all')
+  ok(/before the draw/.test(matchPlayFormIssue({ ...form, deadlines: ['2027-03-01', ...form.deadlines.slice(1)] }, NOW, today) ?? ''),
+    'a round due before entries close and the draw is refused')
+  ok(/cannot be due before the Quarter/.test(matchPlayFormIssue({ ...form, deadlines: ['2027-04-30', '2027-06-30', '2027-05-31', '2027-07-31'] }, NOW, today) ?? ''),
+    'deadlines never run backwards')
+  ok(!!matchPlayFormIssue({ ...form, closes: { date: '2026-11-01', time: '20:00' } }, NOW, today), 'entries closing in the past are refused')
+  ok(/before entries close/.test(matchPlayFormIssue({ ...form, draw: { when: 'date', date: '2027-03-30', time: '20:00', seeding: 'random' } }, NOW, today) ?? ''),
+    'a dated draw before entries close is refused (D265)')
+  eq(matchPlayFormIssue({ ...form, draw: { when: 'manual', date: null, time: null, seeding: 'random' } }, NOW, today), null, 'a draw by hand passes (D265)')
+  ok(!!matchPlayFormIssue({ ...form, allowance: 5 }, NOW, today), 'an allowance under 10% is refused')
+  const qual: MatchPlayForm = { ...form, format: 'singles', allowance: 100, field: 'qualifier', closes: null, qualifier: { code: 'MEDAL1', qualify: 16 }, draw: { when: 'auto', date: null, time: null, seeding: 'qualifier' } }
+  eq(matchPlayFormIssue(qual, NOW, today), null, 'a qualifier: the top 16 of a club competition, seeded by its finish')
+  ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 12 } }, NOW, today), '…12 qualifying is no bracket')
+  ok(!!matchPlayFormIssue({ ...qual, qualifier: { code: 'MEDAL1', qualify: 32 } }, NOW, today), '…nor more than the biggest field')
+  ok(/singles/.test(matchPlayFormIssue({ ...qual, format: 'fourball' }, NOW, today) ?? ''), '…and a pairs match play cannot qualify from a singles competition (stage 5)')
+  eq(readMatchPlayForm({ name: '  A   B ', maxField: null })?.name, 'A B', 'answers read and tidied')
+  eq(readMatchPlayForm({ maxField: null })?.maxField, null, '…no limit reads as null')
+
+  eq(matchPlayBoard(form), { id: 'lb-matchplay', audience: 'team', competition: 'matchplay', teamSet: 'set-2', handicapAllowance: 90 },
+    'a fourball draw: pairs, on a sheet of their own, 90%')
+  eq(matchPlayBoard({ format: 'singles', allowance: 100 }), { id: 'lb-matchplay', audience: 'individual', competition: 'matchplay' }, 'singles at 100%: the plain draw')
+  eq(parseLeaderboards([matchPlayBoard(form)])[0].handicapAllowance, 90, 'a draw keeps its allowance when read back')
+  eq(parseLeaderboards([{ id: 'lb-matchplay', audience: 'individual', competition: 'matchplay' }])[0].handicapAllowance, undefined, '…and a draw stored before reads exactly as it did')
+
+  const seed = matchPlaySeed(form)
+  const setup = parseBracketSetup(seed)
+  ok(setup?.schedule === 'continuous' && setup.entry === 'self_join' && setup.deadlines?.length === 4, 'stored as the platform’s continuous knockout: members enter themselves, four deadlines')
+  eq(setup?.draw, { when: 'date', on: '2027-03-31', at: '20:00', seeding: 'handicap' }, '…the draw made when entries close, seeded by handicap — the draw job reads it as ever')
+  eq(parseBracketSetup(matchPlaySeed({ ...form, draw: { when: 'manual', date: null, time: null, seeding: 'random' } }))?.draw, { when: 'later' }, 'a draw by hand waits')
+  eq(parseBracketSetup(matchPlaySeed(qual))?.qualifying, { eventCode: 'MEDAL1', seeding: 'seeded' }, 'a qualifier rides in the knockout’s own qualifying key')
+  const back = readClubMatchPlay(seed)
+  ok(!!back && back.format === 'fourball' && back.maxField === 16 && back.closes?.time === '20:00' && back.drawOn?.date === '2027-03-31', 'read back whole')
+  eq(readClubMatchPlay({ format: 'match_play', schedule: 'continuous' }), null, 'a knockout that is not a club’s is not one')
+  eq(matchPlayKeyDates(back!), ['2027-03-31', '2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'], 'its calendar marks: entries closing and the draw, then each play-by date')
+
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, NOW), 'entries', 'before entries close: open')
+  eq(matchPlayPhase(back!, { drawn: false, won: false }, new Date('2027-04-01T00:00:00Z')), 'draw_pending', 'after: closed, waiting for the draw')
+  eq(matchPlayPhase(back!, { drawn: true, won: false }, NOW), 'in_play', 'drawn: in play')
+  eq(matchPlayPhase(readClubMatchPlay(matchPlaySeed(qual))!, { drawn: false, won: false }, NOW), 'qualifier', 'a qualifier’s field waits for it')
+  eq(matchPlayLine(back!, 'entries'), `Entries close ${clubEventDates('2027-03-31', '2027-03-31')}, 8:00 pm`, 'the line says when entries close, Irish time')
+  const rules = matchPlayRules(back!, { allowance: 90 })
+  ok(rules.lines[0].value === 'Fourball match play · 90% handicap' && rules.lines.some(l => l.value === 'Your index on the day you play'),
+    'the rules as members read them, the handicap on the day (D269)')
+  eq(rules.deadlines.map(d => d.round), ['Round of 16', 'Quarter-Final', 'Semi-Final', 'Final'], '…each play-by date under its round')
+
+  section('Making a club match play (/api/club/competition matchplay.new)')
+  const rows: Record<string, unknown>[] = []
+  const pints = { id: 'c1', slug: 'pints', name: 'Pints', verifiedAt: NOW.toISOString(), refusedAt: null }
+  const rossRow = (clubhouse: boolean): MemberRecord => ({ id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role: 'member', userId: 'ross', removedAt: null, onBoards: true, playsHere: true, officer: true, clubhouse })
+  const logged: ActivityEntry[] = []
+  const store = (clubhouse: boolean, extra: Partial<CompetitionStore> = {}): CompetitionStore => ({
+    async userFromToken(t) { return t === 'tok-ross' ? member('ross', 'ross@x.ie') : null },
+    async clubsOf() { return [{ club: pints, row: rossRow(clubhouse) }] },
+    async club(id) { return id === 'c1' ? pints : null },
+    async rowOf() { return rossRow(clubhouse) },
+    async isStaff() { return false },
+    create: {
+      async userFromToken(t) { return t.slice(4) },
+      async isMember() { return true },
+      async insertTrip(row) { rows.push(row); return { id: 'trip-mp' } },
+      async writeMembership() {},
+      async writeLeadEmail() {},
+      async deleteTrip() { rows.pop() },
+      async adminClubs() { return [] },
+      async setEventClub() {},
+    },
+    async insertItem() { throw new Error('a match play has no golf item') },
+    async insertRound() { throw new Error('a match play has no round') },
+    async deleteTrip() {},
+    newCode: () => 'MATCH1',
+    newId: () => 'id',
+    async logActivity(e) { logged.push(...e) },
+    async compSource(code) { return code === 'MEDAL1' ? { clubId: 'c1', name: 'Spring Medal', date: '2027-04-10', courseId: 'k', board: null, teeSheet: null, membersOnly: true } : null },
+    ...extra,
+  })
+  eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form }, store(false), NOW)).status, 403, 'an Officer without Clubhouse makes none — it is the office’s')
+  const made = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form }, store(true), NOW)
+  ok(made.status === 200 && made.body.ok && made.body.code === 'MATCH1', 'Clubhouse makes one')
+  const row = rows[0]
+  ok(row.competition === 'club' && row.kind === 'tournament' && row.start_date === today && row.end_date === '2027-07-31',
+    '…a club competition from today to the Final’s play-by date, with no golf item or round')
+  ok(String(row.public_passcode_hash ?? '').startsWith('s1$'), '…members only (D164)')
+  ok((row.event_permissions as Record<string, unknown>).score_matches === false, '…a match is scored by its players and the Officers, not anybody with the code')
+  ok(logged.some(l => l.action === 'competition.add'), '…logged')
+  const badQual = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: { ...qual, qualifier: { code: 'OTHER1', qualify: 16 } } }, store(true), NOW)
+  ok(badQual.status === 400 && !badQual.body.ok && /club’s own/.test(badQual.body.error), 'a qualifier not the club’s own is refused')
+  const lateQual = await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: { ...qual, deadlines: ['2027-04-05', ...qual.deadlines.slice(1)] } }, store(true), NOW)
+  ok(lateQual.status === 400 && !lateQual.body.ok && /before the first round/.test(lateQual.body.error), '…as is one played after the first round is due')
+  eq((await runNewMatchPlay({ token: 'tok-ross', clubId: 'c1', form: qual }, store(true), NOW)).status, 200, 'the club’s own Spring Medal qualifies them')
+
+  section('Entering a club match play (stage 2, /api/club/matchplay)')
+  const open = readClubMatchPlay(matchPlaySeed({ ...form, format: 'singles', maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
+  const beforeClose = NOW
+  const afterClose = new Date('2027-04-01T00:00:00Z')
+  eq(enterIssue(open, { now: beforeClose, drawn: false, entered: 3, admin: false }), null, 'singles, before the close, room left: anybody may enter')
+  ok(/closed/.test(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: false }) ?? ''), 'after the close: refused')
+  eq(enterIssue(open, { now: afterClose, drawn: false, entered: 3, admin: true }), null, '…but an Officer may still put somebody in until the draw')
+  ok(/full — 16 of 16/.test(enterIssue(open, { now: beforeClose, drawn: false, entered: 16, admin: true }) ?? ''), 'never past the biggest field, the Clubhouse included')
+  ok(/draw is made/.test(enterIssue(open, { now: beforeClose, drawn: true, entered: 3, admin: true }) ?? ''), 'never once drawn')
+  eq(enterIssue(back!, { now: beforeClose, drawn: false, entered: 0, admin: false }), null, 'a fourball takes entries (stage 4, partners)')
+  eq(withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: true, admin: false }), null, 'you take yourself out until the close')
+  ok(!!withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: true, admin: false }) && withdrawEntryIssue(open, { now: afterClose, drawn: false, mine: false, admin: true }) === null,
+    'after it only an Officer takes anybody out, until the draw')
+  ok(!!withdrawEntryIssue(open, { now: beforeClose, drawn: false, mine: false, admin: false }), 'never somebody else, as a member')
+  eq(overCap([{ id: 'a' }, { id: 'b' }, { id: 'c' }], 2), ['c'], 'two on the last place at once: the later entry is taken back')
+
+  const mpComp: MatchPlayComp = {
+    tripId: 'trip-mp', code: 'MATCH1', name: 'Club Singles', clubId: 'c1', publicHash: 's1$x', setup: open, allowance: 100,
+    entryLine: null, entry: null, entered: 0, drawn: false, won: false, qualifierName: null, endDate: '2027-07-31',
+  }
+  const listRow2 = (id: string, name: string, userId: string, extra: Partial<MemberRecord> = {}): MemberRecord =>
+    ({ id, clubId: 'c1', name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true, playsHere: true, officer: false, clubhouse: false, ...extra })
+  const listed: Record<string, MemberRecord> = {
+    ross: listRow2('r-ross', 'Ross', 'ross'), dave: listRow2('r-dave', 'Dave', 'dave', { gender: 'M' }), ann: listRow2('r-ann', 'Ann', 'ann', { gender: 'F' }),
+    off: listRow2('r-off', 'Officer', 'off', { officer: true }), nope: listRow2('r-nope', 'Sam', 'nope', { playsHere: false }),
+  }
+  const entryStore = (comp: MatchPlayComp, field: Entrant[], extra: Partial<MatchPlayEntryStore> = {}): MatchPlayEntryStore => ({
+    async userFromToken(t) { return listed[t.slice(4)] ? member(t.slice(4), `${t.slice(4)}@x.ie`) : null },
+    async matchPlay(code) { return code === comp.code ? comp : null },
+    async myRow(_c, u) { return listed[u] ?? null },
+    async rowsByIds(_c, ids) { return Object.values(listed).filter(r => ids.includes(r.id)) },
+    async indexOf() { return 12.4 },
+    async entrants() { return [...field] },
+    async insertPlayer(r) { if (field.some(e => e.rowId === r.club_member_id)) return 'clash'; field.push({ playerId: `p-${r.club_member_id}`, rowId: r.club_member_id, name: r.name }); return `p-${r.club_member_id}` },
+    async deletePlayer(_t, id) { const i = field.findIndex(e => e.playerId === id); if (i >= 0) field.splice(i, 1) },
+    async linkAccount() {},
+    doorToken: (h, c) => (h ? `door-${c}` : null),
+    ...extra,
+  })
+  const field: Entrant[] = []
+  const st = entryStore(mpComp, field)
+  const go = (who: string, action: string, extra: Record<string, unknown> = {}, now = NOW, s = st) => runMatchPlayEntry({ token: `tok-${who}`, action, code: 'MATCH1', ...extra }, s, now)
+  const s0 = await go('ross', 'state')
+  ok(s0.status === 200 && s0.body.ok && s0.body.entrants.length === 0 && s0.door?.value === 'door-MATCH1', 'state: nobody in yet, and the members-only door opened for a member')
+  const e1 = await go('ross', 'enter')
+  ok(e1.status === 200 && e1.body.ok && e1.body.myPlayerId === 'p-r-ross' && field.length === 1, 'Ross enters: his player made from his place on the list')
+  ok((await go('ross', 'enter')).status === 200 && field.length === 1, 'entering twice changes nothing')
+  eq((await go('nope', 'enter')).status, 409, 'somebody not ticked as playing here is refused (D209)')
+  eq((await go('stranger', 'state')).status, 403, 'somebody not on the list is refused')
+  const ladies = entryStore({ ...mpComp, entry: { genders: ['F'] } }, [])
+  const dl = await go('dave', 'enter', {}, NOW, ladies)
+  ok(dl.status === 409 && !dl.body.ok && dl.body.error.length > 0, 'a ladies’ match play refuses Dave in a sentence')
+  eq((await go('ann', 'enter', {}, NOW, ladies)).status, 200, '…and lets Ann in')
+  eq((await go('dave', 'enter', {}, afterClose)).status, 409, 'after the close nobody enters themselves')
+  eq((await go('dave', 'withdraw', { memberId: 'r-ross' })).status, 403, 'Dave cannot take Ross out')
+  eq((await go('ross', 'withdraw', {}, afterClose)).status, 403, 'Ross cannot take himself out after the close…')
+  eq((await go('off', 'withdraw', { memberId: 'r-ross' }, afterClose)).status, 403, '…nor can an Officer — taking somebody out is the Clubhouse’s alone (Ross, 18 Nov 2026)')
+  field.splice(0, field.length)
+  const full: Entrant[] = Array.from({ length: 15 }, (_, i) => ({ playerId: `p${i}`, rowId: `x${i}`, name: `P${i}` }))
+  const race = entryStore(mpComp, full, {
+    async insertPlayer(r) { full.push({ playerId: 'p-race', rowId: 'x-race', name: 'Racer' }, { playerId: `p-${r.club_member_id}`, rowId: r.club_member_id, name: r.name }); return `p-${r.club_member_id}` },
+  })
+  const late = await go('dave', 'enter', {}, NOW, race)
+  ok(late.status === 409 && !late.body.ok && /just filled/.test(late.body.error) && !full.some(e => e.rowId === 'r-dave'),
+    'the last place taken by somebody else a moment before: Dave’s entry is taken back')
+  const logged2: ActivityEntry[] = []
+  const office = entryStore(mpComp, [{ playerId: 'p-ann', rowId: 'r-ann', name: 'Ann' }], { async logActivity(e) { logged2.push(...e) }, async isStaff(u) { return u === 'stf' } })
+  eq((await go('off', 'office.withdraw', { memberId: 'r-ann' }, NOW, office)).status, 403, 'the Clubhouse’s take-out is refused to an Officer without Clubhouse')
+  listed.stf = listRow2('r-stf', 'Staff', 'stf', { clubhouse: true })
+  const ow = await go('stf', 'office.withdraw', { memberId: 'r-ann' }, NOW, office)
+  ok(ow.status === 200 && logged2.some(l => l.action === 'comp.withdraw' && l.memberName === 'Ann'), 'the Clubhouse takes an entry out, logged')
+  const os = await go('stf', 'office.state', {}, NOW, entryStore(mpComp, [{ playerId: 'p-dave', rowId: 'r-dave', name: 'Dave' }], { async isStaff() { return false } }))
+  ok(os.status === 200 && os.body.ok && os.body.entrants.map(e => e.name).join() === 'Dave', 'the Clubhouse reads who has entered')
+  ok(drawDueNow(open, 'draw_pending', afterClose) && !drawDueNow(open, 'draw_pending', NOW) && !drawDueNow({ ...open, drawWhen: 'manual' }, 'draw_pending', afterClose),
+    'the draw is due once entries close — never one the club makes by hand')
+
+  section('Partners — a Fourball or Foursomes entry (stage 4)')
+  {
+    const four = readClubMatchPlay(matchPlaySeed({ ...form, format: 'foursomes', maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
+    eq(matchPlayBoard({ format: 'foursomes', allowance: 50 }).teamFormat, 'foursomes', 'a foursomes draw is one ball a side on the card')
+    eq(matchPlayBoard({ format: 'fourball', allowance: 90 }).teamFormat, undefined, '…a fourball, better ball as every pairs draw always was')
+    eq(parseLeaderboards([matchPlayBoard({ format: 'foursomes', allowance: 50 })])[0]?.teamFormat, 'foursomes', 'foursomes survives being read back')
+    const lone: PairEntry = { teamId: 't1', members: [{ playerId: 'p1', rowId: 'r1', name: 'Ross', addedBy: 'p1' }] }
+    const whole: PairEntry = { teamId: 't2', members: [{ playerId: 'p2', rowId: 'r2', name: 'Dave', addedBy: 'p2' }, { playerId: 'p3', rowId: 'r3', name: 'Ann', addedBy: 'p2' }] }
+    eq(joinIssue(lone, 'r9'), null, 'a pair one short may be joined')
+    ok(!!joinIssue(whole, 'r9') && !!joinIssue(lone, 'r1') && !!joinIssue(null, 'r9'), '…never a whole pair, your own, or one taken out')
+    ok(mayTakeOutOfPair(whole, 'p2', 'p3') && mayTakeOutOfPair(whole, 'p3', 'p3') && !mayTakeOutOfPair(whole, 'p3', 'p2'),
+      'you take out yourself and a partner you put in — never the one who put you in')
+    eq(drawnPairs([lone, whole]).map(p => p.teamId), ['t2'], 'a pair still looking for a partner is not drawn')
+    eq(partnerName(whole, 'r3'), 'Dave', 'the partner sees who they are entered with')
+    eq(enteredWithLine('Dave'), 'Entered with Dave', '"Entered with Dave"')
+    eq(enteredWithLine(null), 'Entered — looking for a partner', '…or still looking')
+
+    const pmp: MatchPlayComp = { ...mpComp, code: 'PAIRS1', setup: four, allowance: 50 }
+    const pField: Entrant[] = []
+    const pairsHeld: PairEntry[] = []
+    listed.tom = listRow2('r-tom', 'Tom', 'tom')
+    listed.nolink = listRow2('r-nolink', 'Una', '', { userId: null })
+    const pst = entryStore(pmp, pField, {
+      async pairs() { return pairsHeld.map(p => ({ ...p, members: p.members.filter(m => pField.some(f => f.playerId === m.playerId)) })) },
+      async makePair(_t, _n, members) { const id = `team-${pairsHeld.length + 1}`; pairsHeld.push({ teamId: id, members: members.map(m => ({ playerId: m.playerId, rowId: pField.find(f => f.playerId === m.playerId)?.rowId ?? null, name: pField.find(f => f.playerId === m.playerId)?.name ?? '', addedBy: m.addedBy })) }); return id },
+      async addToPair(_t, teamId, playerId, addedBy) { const p = pairsHeld.find(x => x.teamId === teamId)!; const f = pField.find(x => x.playerId === playerId)!; p.members.push({ playerId, rowId: f.rowId, name: f.name, addedBy }) },
+      async renamePair() {},
+      async deletePair(_t, teamId) { const i = pairsHeld.findIndex(p => p.teamId === teamId); if (i >= 0) pairsHeld.splice(i, 1) },
+      async searchRows(_c, q) { return Object.values(listed).filter(r => r.name.toLowerCase().includes(q.toLowerCase())).map(r => ({ id: r.id, name: r.name, linked: !!r.userId, gender: r.gender, birthDate: r.birthDate, categoryId: r.categoryId })) },
+    })
+    const pgo = (who: string, action: string, extra: Record<string, unknown> = {}, now = NOW) => runMatchPlayEntry({ token: `tok-${who}`, action, code: 'PAIRS1', ...extra }, pst, now)
+    const withDave = await pgo('ross', 'enter', { partnerRowId: 'r-dave' })
+    ok(withDave.status === 200 && withDave.body.ok && withDave.body.partner === 'Dave' && withDave.body.partnerRowId === 'r-dave' && pairsHeld[0].members.length === 2,
+      'Ross enters with Dave: one pair, Dave in it, Ross may take him out')
+    const daveSees = await pgo('dave', 'state')
+    ok(daveSees.status === 200 && daveSees.body.ok && daveSees.body.partner === 'Ross' && !daveSees.body.partnerRowId && daveSees.body.mySide === pairsHeld[0].teamId,
+      'Dave sees "Entered with Ross" without accepting, and cannot take Ross out')
+    eq((await pgo('ann', 'enter', { partnerRowId: 'r-dave' })).status, 409, 'Dave cannot be picked twice')
+    eq((await pgo('ann', 'enter', { partnerRowId: 'r-nolink' })).status, 409, 'a partner with no Green Dot account cannot be picked')
+    const alone = await pgo('ann', 'enter')
+    ok(alone.status === 200 && alone.body.ok && alone.body.partner === null && pairsHeld.length === 2, 'Ann enters on her own, looking for a partner')
+    const tomSees = await pgo('tom', 'state')
+    ok(tomSees.status === 200 && tomSees.body.ok && tomSees.body.mayJoin === true && tomSees.body.pairs?.length === 2, 'Tom may join a pair still looking')
+    eq((await pgo('tom', 'join', { teamId: pairsHeld[0].teamId })).status, 409, '…not a whole pair')
+    const joined = await pgo('tom', 'join', { teamId: pairsHeld[1].teamId })
+    ok(joined.status === 200 && joined.body.ok && joined.body.partner === 'Ann' && pairsHeld[1].members.length === 2, 'Tom joins Ann')
+    const names2 = await pgo('ross', 'names', { q: 'a' })
+    eq(names2.status, 200, 'names asks for two letters…')
+    const found = await pgo('ross', 'names', { q: 'un' })
+    ok(found.status === 200 && found.body.ok && !!found.body.names?.some(n => n.name === 'Una' && /Green Dot/.test(n.why ?? '')), '…and says why Una cannot be picked')
+    eq((await pgo('ann', 'withdraw', { memberId: 'r-tom' })).status, 403, 'Ann cannot take out Tom, who put himself in')
+    const daveOut = await pgo('ross', 'withdraw', { memberId: 'r-dave' })
+    ok(daveOut.status === 200 && daveOut.body.ok && daveOut.body.partner === null && (await pst.pairs!('trip-mp'))[0].members.length === 1, 'Ross takes Dave out: Ross is looking again')
+    const rossOut = await pgo('ross', 'withdraw')
+    ok(rossOut.status === 200 && pairsHeld.length === 1, 'Ross takes himself out: the pair with nobody left goes')
+    const tight: MatchPlayComp = { ...pmp, setup: { ...four, maxField: 16 } }
+    const fullPairs: PairEntry[] = Array.from({ length: 16 }, (_, i) => ({ teamId: `f${i}`, members: [{ playerId: `fp${i}`, rowId: `fr${i}`, name: `F${i}`, addedBy: null }] }))
+    const fullSt = entryStore(tight, [], { async pairs() { return fullPairs }, async makePair() { return 'x' }, async addToPair() {}, async renamePair() {}, async deletePair() {} })
+    const fullAnswer = await runMatchPlayEntry({ token: 'tok-dave', action: 'state', code: 'PAIRS1' }, fullSt, NOW)
+    ok(fullAnswer.status === 200 && fullAnswer.body.ok && /full/.test(fullAnswer.body.closed ?? '') && fullAnswer.body.mayJoin === true,
+      'sixteen pairs of sixteen: no new pair, but joining one still looking takes no place')
+  }
+
+  {
+    const door = read('app/club/[slug]/comp/[code]/CompDoor.tsx')
+    ok(/matchPlay \? await askMatchPlay\('state'/.test(door) && /matchPlay=\{page\.kind === 'matchplay'\}/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
+      'a match play’s members-only door is opened by its own route — the booking route knows no match play (it said “No such competition”)')
+  }
+
+  {
+    const bar = read('app/club/[slug]/ClubTabBar.tsx')
+    ok(/setAttribute\(CLUB_MEMBER_ATTR/.test(bar) && /data-no-club-bar/.test(bar),
+      'inside an open competition the footer marks this phone a member, so Comps brings the club footer back at once even from a direct link (never on the members-only door)')
+  }
+
+  section('A qualifier’s field (stage 5, P8)')
+  {
+    const qm = readClubMatchPlay(matchPlaySeed({ ...qual, maxField: 16, deadlines: ['2027-04-30', '2027-05-31', '2027-06-30', '2027-07-31'] }))!
+    const finish = [{ playerId: 'a', rowId: 'ra' }, { playerId: 'b', rowId: 'rb' }, { playerId: 'c', rowId: null }, { playerId: 'd', rowId: 'rd' }, { playerId: 'e', rowId: 'ra' }, { playerId: 'f', rowId: 'rf' }]
+    eq(qualifiedField(finish, new Set(['ra', 'rd', 'rf']), 2).map(p => p.playerId), ['a', 'd'],
+      'the top finishers still on the list and playing here, in the Results’ own order — somebody off the list passed over')
+    eq(qualifiedField(finish, new Set(['ra', 'rb', 'rd', 'rf']), 8).map(p => p.playerId), ['a', 'b', 'd', 'f'], '…a row once, and fewer than asked when fewer finished')
+    eq(qualifiedDrawPlan(qm, ['a', 'd'], '2027-04-05'), { when: 'date', on: '2027-04-05', at: '00:00', seeding: 'order', order: ['a', 'd'] },
+      'on the results: drawn at once, seeded by the finish')
+    eq(qualifiedDrawPlan({ ...qm, seeding: 'random' }, ['a', 'd'], '2027-04-05'), { when: 'date', on: '2027-04-05', at: '00:00', seeding: 'random' }, '…or at random')
+    eq(qualifiedDrawPlan({ ...qm, drawWhen: 'date', drawOn: { date: '2027-04-10', time: '19:00' } }, ['a'], '2027-04-05').on, '2027-04-10', 'on a date: that day')
+    eq(qualifiedDrawPlan({ ...qm, drawWhen: 'manual' }, ['a'], '2027-04-05'), { when: 'later' }, 'by hand: the club makes it')
+    eq(matchPlayPhase(qm, { drawn: false, won: false }, NOW), 'qualifier', 'waiting on the qualifier')
+    eq(matchPlayPhase({ ...qm, fieldAt: NOW.toISOString() }, { drawn: false, won: false }, NOW), 'draw_pending', 'the field made: waiting on the draw')
+    ok(!drawDueNow(qm, 'qualifier', NOW) && drawDueNow(qm, 'qualifier', NOW, { qualifierCertified: true }), 'due the moment the qualifier is certified')
+    ok(/once its results are certified/.test(matchPlayLine(qm, 'qualifier', { qualifierName: 'Spring Medal', qualifierDate: '2027-04-04' })) &&
+      matchPlayLine(qm, 'qualifier', { qualifierName: 'Spring Medal', qualifierDate: '2027-04-04' }).includes(clubEventDates('2027-04-04', '2027-04-04')),
+      '"The top 16 from the Spring Medal, Sun 4 Apr — once its results are certified"')
+    const certify = read('app/api/card/certify.ts')
+    ok(/afterCertified\?\.|store\.afterCertified/.test(certify), 'certifying a competition asks its match plays to make their field')
+    const due = read('app/api/match/dueDraws.ts')
+    ok(/makeQualifiedField/.test(due) && /bracket_setup->club->>field', 'qualifier'/.test(due), 'the draw job makes a qualifier’s field first, and the night looks for one waiting')
+  }
+
+  section('The draw in the club area (stage 3, D266, D271)')
+  const r16 = (id: string, a: string | null, b: string | null, winner: string | null = null, round = 1) =>
+    ({ id, roundNumber: round, roundName: round === 1 ? 'Quarter-Final' : round === 2 ? 'Semi-Final' : 'Final', sideA: a, sideB: b, winner, result: winner ? '3&2' : null, deadline: round === 1 ? '2027-04-30' : round === 2 ? '2027-05-31' : '2027-06-30' })
+  const names = { ross: 'Ross', dave: 'Dave', ann: 'Ann', sam: 'Sam' }
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave'), r16('m2', 'ann', 'sam')], 'ross', names),
+    { code: 'C', name: 'Singles', matchId: 'm1', roundName: 'Quarter-Final', opponent: 'Dave', playBy: '2027-04-30', state: 'next', result: null }, 'your next match: the round, the opponent, the play-by date')
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave', 'ross'), r16('s1', 'ross', null, null, 2)], 'ross', names)?.opponent, null, 'through, the next opponent still to be decided')
+  const beaten = myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ross', 'dave', 'dave')], 'ross', names)
+  ok(beaten?.state === 'out' && beaten.opponent === 'Dave' && beaten.result === '3&2', 'beaten: out, by whom and by how much')
+  eq(myClubMatch({ code: 'C', name: 'Singles' }, [r16('m1', 'ann', 'sam')], 'ross', names), null, 'not in the draw: nothing')
+  eq(roundInPlayLine([{ roundName: 'Quarter-Final', deadline: '2027-04-30', played: 1, total: 4 }], '2027-04-01'), `Quarter-Final · play by ${clubEventDates('2027-04-30', '2027-04-30')}`, 'the round in play and its date')
+  ok(/was due/.test(roundInPlayLine([{ roundName: 'Quarter-Final', deadline: '2027-04-30', played: 1, total: 4 }], '2027-05-02')), '…past it, "was due"')
+  const rounds = [{ roundNumber: 1, roundName: 'Quarter-Final', deadline: '2027-04-30', matches: [
+    { id: 'a', sideA: 'ross', sideB: 'dave', aIsBye: false, bIsBye: false, winner: null },
+    { id: 'b', sideA: 'ann', sideB: 'sam', aIsBye: false, bIsBye: false, winner: 'ann' },
+    { id: 'c', sideA: 'ann', sideB: null, aIsBye: false, bIsBye: true, winner: null },
+  ] }, { roundNumber: 2, roundName: 'Semi-Final', deadline: '2027-05-31', matches: [{ id: 'd', sideA: 'ann', sideB: null, aIsBye: false, bIsBye: false, winner: null }] }]
+  const overdue = overdueMatches(rounds, names, '2027-05-10')
+  eq(overdue.map(m => [m.id, m.daysOver, m.sideA, m.sideB]), [['a', 10, 'Ross', 'Dave']], 'overdue: a match with both sides and no result past its date — not a result, a bye, or a match still waiting on the one before')
+  eq(filterOverdue(overdue, { round: null, minDays: 14 }).length, 0, 'the office filters by how overdue (D271)')
+  eq(filterOverdue(overdue, { round: 2, minDays: 0 }).length, 0, '…and by round')
+  const nOverdue = needsYou({ base: '/clubhouse/pints', counts: { joined: 0, invited: 0, notJoined: 0, noEmail: 0, removed: 0, officers: 0, clubhouse: 0, total: 0 } as unknown as ListCounts, phases: [], clubSlug: 'pints', officer: false, overdue: [{ code: 'MATCH1', name: 'Club Singles', count: 3 }] })
+  ok(nOverdue.some(n => n.href === '/clubhouse/pints/events/MATCH1' && /3 matches are past the play-by date\. An Officer decides them\./.test(n.line)), 'Needs you: a match play’s overdue matches, on the Clubhouse’s own page (D271)')
 }
 
 async function copyTests() {
@@ -2431,6 +2827,8 @@ async function main() {
   membershipRuleTests()
   await membershipRouteTests()
   await copyTests()
+  await matchPlayTests()
+  await awardTests()
   await routeTests()
   await eventTests()
   lookTests()

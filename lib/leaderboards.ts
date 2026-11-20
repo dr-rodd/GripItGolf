@@ -1128,6 +1128,14 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
     if (competition === 'matchplay') {
       const links = parseRoundLinks(r.roundLinks)
       if (links.length > 0) lb.roundLinks = links
+      // A club match play's allowance (Ross, 17 Nov 2026 — fourball 90%,
+      // foursomes 50%): kept off the object at 100, so every draw stored
+      // before it reads back exactly as it did.
+      const allowance = clampAllowance(r.handicapAllowance)
+      if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
+      // A pairs draw played as foursomes — one ball a side on the knockout
+      // card (stage 4). Absent, a pairs draw is better ball, as ever.
+      if (audience === 'team' && r.teamFormat === 'foursomes') lb.teamFormat = 'foursomes'
     }
 
     if (competition === 'league') {

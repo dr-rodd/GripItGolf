@@ -18,7 +18,7 @@ import type { CompPage, OpenCompPage } from './read'
  * (D187), the club's frosted header — then the page. The footer is the
  * club layout's, never drawn here; the members-only door shows none.
  */
-export default function CompShell({ page, children }: { page: CompPage; children?: React.ReactNode }) {
+export default function CompShell({ page, children }: { page: Pick<CompPage, 'slug' | 'code' | 'clubFace' | 'here' | 'door' | 'kind'>; children?: React.ReactNode }) {
   const { slug, code, clubFace, here } = page
   return (
     <main data-club style={clubFace.style as React.CSSProperties}
@@ -31,7 +31,7 @@ export default function CompShell({ page, children }: { page: CompPage; children
           {page.door ? (
             <>
               <NoBar />
-              <CompDoor code={code} clubName={clubFace.name} here={here} />
+              <CompDoor code={code} clubName={clubFace.name} here={here} matchPlay={page.kind === 'matchplay'} />
             </>
           ) : (
             <>

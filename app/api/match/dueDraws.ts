@@ -1,3 +1,6 @@
+import { drawnPairs, readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { refreshEntrantIndexes } from '../club/matchPlayStore'
+import { makeQualifiedField } from '../club/qualifierField'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
 import { needsPairings } from '@/lib/leaderboards'
@@ -11,7 +14,7 @@ import { slotsIssue } from '@/lib/bracketEditor'
 import { fetchEntrants } from '@/lib/matchplayStore'
 import { readDrawState, writeDraw } from '@/lib/drawStore'
 
-export type DueDrawReport = { tripId: string; outcome: 'drawn' | 'would draw' | 'skipped'; why?: string }
+export type DueDrawReport = { tripId: string; outcome: 'drawn' | 'would draw' | 'skipped'; why?: string; /** A club qualifier's field made just now (stage 5). */ fielded?: boolean }
 
 type DueTrip = { id: string; leaderboards: unknown; formats: unknown; team_scoring: unknown; bracket_setup: unknown }
 
@@ -31,6 +34,20 @@ type DueTrip = { id: string; leaderboards: unknown; formats: unknown; team_scori
  * already made, by hand or before, is never touched.
  */
 export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Date, dryRun: boolean): Promise<DueDrawReport> {
+  // A club match play from a qualifier (stage 5): its field first, made once
+  // the qualifier is certified — which also sets the plan read below.
+  const club = readClubMatchPlay(trip.bracket_setup)
+  if (club?.field === 'qualifier' && !club.fieldAt && !dryRun) {
+    if (await makeQualifiedField(admin, trip.id, now) === 'made') {
+      const { data } = await admin.from('trips').select('bracket_setup').eq('id', trip.id).maybeSingle()
+      const fresh = { ...trip, bracket_setup: (data as { bracket_setup?: unknown } | null)?.bracket_setup ?? trip.bracket_setup }
+      return { ...(await drawIfDue(admin, fresh, now, dryRun)), fielded: true }
+    }
+  }
+  return drawIfDue(admin, trip, now, dryRun)
+}
+
+async function drawIfDue(admin: SupabaseClient, trip: DueTrip, now: Date, dryRun: boolean): Promise<DueDrawReport> {
   const plan = rawDrawPlan(trip.bracket_setup)
   const state = await readDrawState(admin, trip.id)
   if (!drawDue(plan, now, state.drawn) || !plan) return { tripId: trip.id, outcome: 'skipped', why: 'not due' }
@@ -40,7 +57,11 @@ export async function makeDueDraw(admin: SupabaseClient, trip: DueTrip, now: Dat
   const kind = needsPairings(boards) ? 'pair' as const : 'player' as const
   // On the job's own service-role client, not the browser's key, which from
   // row-level security stage 3 reads nothing for a server with no phone.
-  const entrants = await fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET, admin)
+  // A club match play seeds on each entrant's index as it stands now (D179, D269).
+  if (!dryRun && readClubMatchPlay(trip.bracket_setup)) await refreshEntrantIndexes(admin, trip.id).catch(e => console.error('index refresh failed:', e))
+  const read = await fetchEntrants(trip.id, kind, board ? setOf(board) : MAIN_SET, admin)
+  // A club match play's pair still looking for a partner is not drawn (stage 4, `drawnPairs`).
+  const entrants = kind === 'pair' && readClubMatchPlay(trip.bracket_setup) ? drawnPairs(read.map(e => ({ ...e, members: e.memberNames }))) : read
   const field = entrants.map(e => e.id)
 
   let slots: (string | null)[]
@@ -113,18 +134,25 @@ async function releaseClaim(admin: SupabaseClient, tripId: string, now: Date): P
  * area still offers the draw by hand.
  */
 export async function runDueDraws(admin: SupabaseClient, now: Date, dryRun: boolean): Promise<DueDrawReport[]> {
-  const { data, error } = await admin.from('trips')
-    .select('id, leaderboards, formats, team_scoring, bracket_setup')
-    .eq('bracket_setup->draw->>when', 'date')
+  const [{ data, error }, waiting] = await Promise.all([
+    admin.from('trips')
+      .select('id, leaderboards, formats, team_scoring, bracket_setup')
+      .eq('bracket_setup->draw->>when', 'date'),
+    // A club match play waiting on its qualifier's results (stage 5) — its field, then its draw.
+    admin.from('trips')
+      .select('id, leaderboards, formats, team_scoring, bracket_setup')
+      .eq('competition', 'club').eq('bracket_setup->club->>field', 'qualifier').is('bracket_setup->club->>fieldAt', null),
+  ])
   if (error) {
     console.error('due draws read failed:', error)
     return []
   }
+  const trips = [...(data ?? []), ...(waiting.error ? [] : waiting.data ?? [])] as DueTrip[]
   const out: DueDrawReport[] = []
-  for (const trip of (data ?? []) as DueTrip[]) {
+  for (const trip of trips.filter((t, i) => trips.findIndex(x => x.id === t.id) === i)) {
     try {
       const report = await makeDueDraw(admin, trip, now, dryRun)
-      if (report.why !== 'not due') out.push(report)
+      if (report.why !== 'not due' || report.fielded) out.push(report)
     } catch (e) {
       console.error('due draw failed:', trip.id, e)
       out.push({ tripId: trip.id, outcome: 'skipped', why: e instanceof Error ? e.message : String(e) })

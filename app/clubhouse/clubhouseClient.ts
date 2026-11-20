@@ -6,6 +6,7 @@ import { ACCOUNT_WORDS } from '@/lib/account'
 import { accountToken, askClub, askServer, describeStoredSession, readAccount, type ClubSummary } from '@/lib/accountClient'
 import { clubMay } from '@/lib/clubMay'
 import type { CompForm } from '@/lib/clubComp'
+import type { MatchPlayForm } from '@/lib/clubMatchPlay'
 
 /** The club this device last opened the Clubhouse at — a convenience, never authorising. */
 const LAST_KEY = 'gd.clubhouse.v1'
@@ -66,6 +67,21 @@ const errorOf = (b: Record<string, unknown>) => (typeof b.error === 'string' ? b
 export async function makeClubhouseCompetition(clubId: string, form: CompForm): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
   const r = await askCompetition({ clubId, form, from: 'clubhouse' })
   return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
+}
+
+/** A club match play from the Clubhouse (Ross, 17 Nov 2026) — the office's. */
+export async function makeClubMatchPlay(clubId: string, form: MatchPlayForm): Promise<{ ok: true; code: string } | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'matchplay.new', clubId, form })
+  return r.status === 200 ? { ok: true, code: String(r.body.code) } : { ok: false, error: errorOf(r.body) }
+}
+
+/** A club match play as the office reads it: where it stands, its rules and dates. */
+export type MatchPlayOfficeBody = { name: string; format: string; phase: string; line: string; entered: number; cap: number | null; rules: { lines: { label: string; value: string }[]; deadlines: { round: string; date: string }[] }
+  /** Stage 3 (D271): matches past their play-by date, most overdue first, and the rounds to filter by. */
+  overdue?: import('@/lib/clubMatchPlay').OverdueMatch[]; rounds?: { roundNumber: number; roundName: string }[] }
+export async function readClubMatchPlay(clubId: string, code: string): Promise<({ ok: true } & MatchPlayOfficeBody) | { ok: false; error: string }> {
+  const r = await askCompetition({ action: 'matchplay.read', clubId, code })
+  return r.status === 200 ? { ok: true, ...(r.body as unknown as MatchPlayOfficeBody) } : { ok: false, error: errorOf(r.body) }
 }
 
 /** Stage c1, M11: a competition as its form, for the Clubhouse's panel. */

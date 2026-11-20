@@ -27,6 +27,16 @@ export const SECTION_LABEL: Record<CompSection, string> = {
   board: 'Leaderboard',
 }
 
+/**
+ * A club match play's three, in the same slots and at the same addresses
+ * (Ross, 17 Nov 2026): who is in, the matches being played, the draw.
+ */
+export const MATCH_PLAY_SECTION_LABEL: Record<CompSection, string> = {
+  tee: 'Field',
+  scoring: 'Matches',
+  board: 'Draw',
+}
+
 /** A competition's Summary address. */
 export function compHome(slug: string, code: string): string {
   return `/club/${slug}/comp/${code.toUpperCase()}`

@@ -121,6 +121,10 @@ export interface ClubStore extends ClubhouseStore {
   clubHome?(slug: string, userId: string): Promise<ClubHomeFirst | null>
   /** Each competition's phase, by code — in the second wave with everything else. */
   compPhases?(comps: { tripId: string; code: string }[]): Promise<Map<string, import('@/lib/compPhase').CompPhase>>
+  /** Stage 3 (D266): this list row's place in each club match play — its next match, or how it ended. */
+  myMatches?(rowId: string, codes: string[]): Promise<import('@/lib/clubMatchPlay').MyClubMatch[]>
+  /** Stage 4: this row's partner in each pairs match play it entered — a name, or null while looking for one. */
+  pairPartners?(rowId: string, codes: string[]): Promise<Record<string, string | null>>
   /** The rows this account is linked to and not removed from, with their clubs. */
   clubsOf(userId: string): Promise<{ club: ClubRecord; row: MemberRecord }[]>
   /** Slugs already taken that start with this one. */
@@ -252,6 +256,8 @@ export type ClubBody = {
   outside?: ClubEvent[]
   tops?: Record<string, { name: string; points: number }>
   toSign?: { code: string; name: string; count: number }[]
+  /** Stage 3 (D266): the member's matches in the club's match plays. */
+  matches?: import('@/lib/clubMatchPlay').MyClubMatch[]
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
   /**
@@ -260,7 +266,7 @@ export type ClubBody = {
    * header's next club and its dot. Only asked for an account on more than one.
    */
   myClubs?: { slug: string; name: string; toSign: number }[]
-  /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, Needs you, a bulk change's outcome, the file. */
+  /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, the Alerts, a bulk change's outcome, the file. */
   grid?: GridRow[]
   total?: number
   counts?: ListCounts
@@ -519,7 +525,8 @@ export async function runClub(
     const comps = events.some(e => e.competition)
     const compList = first?.comps.map(c => ({ ...c, name: events.find(e => e.code === c.code)?.name })) ?? undefined
     const clubId = club.id
-    const [entries, season, outside, tops, toSign, phases, myClubs, notes] = await Promise.all([
+    const matchCodes = events.filter(e => e.competition?.matchPlay).map(e => e.code)
+    const [entries, season, outside, tops, toSign, phases, myClubs, notes, matches, partners] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
       store.outsideEvents(user.id, events.map(e => e.code)),
@@ -530,6 +537,10 @@ export async function runClub(
       // Stage c1, M3–M6: the club's own events this member may see — in this
       // wave, beside everything else, never a third.
       membersNotes(store, clubId, user.id, today).catch(() => [] as ClubNote[]),
+      // Stage 3 (D266): this member's matches, for Comps' Matches and Home.
+      matchCodes.length && store.myMatches ? store.myMatches(row.id, matchCodes).catch(() => []) : Promise.resolve([]),
+      // Stage 4: "Entered with Dave" on a pairs match play.
+      matchCodes.length && store.pairPartners ? store.pairPartners(row.id, matchCodes).catch(() => ({})) : Promise.resolve({}),
     ])
     if (phases) {
       events = events.map(e => (e.competition ? { ...e, competition: { ...e.competition, phase: phases.get(e.code) ?? e.competition.phase } } : e))
@@ -546,6 +557,8 @@ export async function runClub(
       body: {
         ok: true, club: summary(full ?? club, row), events, entries, me: { name: mineRowName },
         season: seasonHere, courses: season.courses, outside, tops, toSign, notes,
+        ...(matches.length ? { matches } : {}),
+        ...(Object.keys(partners).length ? { partners } : {}),
         ...(myClubs && myClubs.length > 1 ? { myClubs } : {}),
       },
     }

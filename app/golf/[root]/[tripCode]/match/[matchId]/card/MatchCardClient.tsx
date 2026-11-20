@@ -73,7 +73,7 @@ const MAX_GROSS = 20
 export default function MatchCardClient({
   tripId, tripCode, matchId, a, b, holes: baseHoles, extraPlan: planInitial = {}, mySide, pinSet,
   stored: storedInitial, colours = DEFAULT_SIDE_COLOURS, anyoneScores = true, backHref, roundName, club = null, courseId = null,
-  session = false, startOn = 'card', tie = 'half',
+  session = false, startOn = 'card', tie = 'half', soleSay = false,
 }: {
   /** A session match: how a match level after 18 is finished (Ross, 13 Nov 2026). */
   tie?: MatchTie
@@ -101,6 +101,8 @@ export default function MatchCardClient({
   /** This phone's side of the match, or null when they are not in it. */
   mySide: CardSideKey | null
   pinSet: boolean
+  /** A club match play: Finalise says nobody else is asked (D268). */
+  soleSay?: boolean
   stored: { winner: string | null; result: string | null }
   /** Top red, bottom blue — or the sides' team colours. */
   colours?: Record<CardSideKey, SideColour>
@@ -736,6 +738,7 @@ export default function MatchCardClient({
           saving={saving}
           error={error}
           onFinalise={finalise}
+          soleSay={soleSay}
           canContinue={settleHole !== null && settleHole < REGULATION_HOLES && !playedOut}
           onContinue={() => {
             setAsking(false)

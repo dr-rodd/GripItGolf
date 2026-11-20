@@ -8,6 +8,7 @@ import CompManage from './CompManage'
 import CompSummaryAction from './CompSummaryAction'
 import { readCompPage } from './read'
 import { summaryBoard } from './summaryBoard'
+import MatchPlaySummary from './MatchPlaySummary'
 
 /**
  * A club competition's Summary (D186; stage (d2), amended 16 Nov 2026) —
@@ -36,6 +37,7 @@ export default async function CompetitionSummary({ params, searchParams }: {
 
   const page = await readCompPage(slug, rawCode)
   if (page.door) return <CompShell page={page} />
+  if (page.kind === 'matchplay') return <MatchPlaySummary page={page} />
 
   const { code, comp, phase, slots, bookingOpensAt, firstTee } = page
   const certified = phase === 'certified'

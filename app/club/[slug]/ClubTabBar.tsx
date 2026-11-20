@@ -2,13 +2,14 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers,
 } from '@/app/components/icons'
-import { barOf, compSectionHref, compsBack, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
+import { barOf, compSectionHref, compsBack, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
 import type { CompSection } from '@/lib/compPhase'
 import { useClubBar, type ClubTab } from './ClubBarContext'
+import { CLUB_MEMBER_ATTR } from '@/lib/clubHomeCopy'
 
 export type { ClubTab } from './ClubBarContext'
 
@@ -38,7 +39,7 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
  */
 export default function ClubTabBar({ slug }: { slug: string }) {
   const pathname = usePathname()
-  const { members, tab, choose, setTab, going } = useClubBar()
+  const { members, tab, choose, setTab, going, matchPlays } = useClubBar()
   // Where a tap is taking this phone counts from the touch (D198).
   const state = barOf(going ?? pathname ?? '', slug) ?? barOf(pathname ?? '', slug)
   const comp = state?.set === 'comp' ? state : null
@@ -46,6 +47,17 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   // while they slide back behind Comps on the way out.
   const [shown, setShown] = useState(comp?.code ?? null)
   if (comp && comp.code !== shown) setShown(comp.code)
+
+  // Inside a competition's open pages this phone is a member (the door let it
+  // through). Say so for the stylesheet, so Comps — back to the club — brings
+  // the club footer with it at once, even when this phone came straight to the
+  // competition by a link or code and has not loaded the club's home yet.
+  const inComp = !!comp
+  useEffect(() => {
+    if (!inComp || document.querySelector('[data-no-club-bar]')) return
+    document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '')
+  }, [inComp, comp?.code])
+
   if (!state) return null
   // The club set before the page has said this phone is on the list: drawn,
   // but shown only to a phone hinted to this club (D197), with the stand-in.
@@ -115,7 +127,7 @@ export default function ClubTabBar({ slug }: { slug: string }) {
                   {code && (
                     <Tab href={compSectionHref(slug, code, s)} prefetch={!!comp}
                       replace={!!comp && comp.active !== 'summary'}
-                      lit={comp?.active === s} label={SECTION_LABEL[s]}>
+                      lit={comp?.active === s} label={(code && matchPlays.has(code) ? MATCH_PLAY_SECTION_LABEL : SECTION_LABEL)[s]}>
                       <Icon size={22} />
                     </Tab>
                   )}

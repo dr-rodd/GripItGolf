@@ -13,7 +13,7 @@ const PHASES: CompPhase[] = ['announced', 'booking', 'in_play', 'awaiting', 'cer
 
 /**
  * The Overview (stage (k1)): the list by standing and by credential, the
- * season's competitions by phase, and "Needs you" — each figure a way into
+ * season's competitions by phase, and "Alerts" (was "Needs you") — each figure a way into
  * the section that holds it. Read on the server, counts only, no rows.
  */
 export default function Overview() {
@@ -75,9 +75,9 @@ export default function Overview() {
           )}
         </section>
         <section className={`${cardClass()} p-5`} aria-labelledby="ov-needs">
-          <h2 id="ov-needs" className="t-card text-ink">Needs you</h2>
+          <h2 id="ov-needs" className="t-card text-ink">Alerts</h2>
           {!data ? <Skeleton /> : (data.needs ?? []).length === 0 ? (
-            <p className="text-ink/65 text-[15px] mt-3">Nothing needs you.</p>
+            <p className="text-ink/65 text-[15px] mt-3">No alerts.</p>
           ) : (
             <ul className="mt-2">
               {(data.needs ?? []).map((n: Need) => (

@@ -1,3 +1,4 @@
+import { readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
@@ -20,7 +21,7 @@ import { allowanceOf } from '@/lib/handicapAllowance'
 import { allowsParticipant } from '@/lib/eventPermissions'
 import { splitCourseName } from '@/lib/courseDirectory'
 import {
-  contactShown, describeReceives, matchStrokes, parseMatchTees, shotHoles, walkoverChoices,
+  contactShown, describeReceives, foursomesStrokes, matchStrokes, parseMatchTees, shotHoles, walkoverChoices,
 } from '@/lib/matchArrangements'
 import MyHandicap from './MyHandicap'
 import { MatchArrange, MatchWalkover } from './MatchActions'
@@ -80,7 +81,14 @@ export default async function MatchPage({
   const arrangeable = !arrangedRes.error
   const me = await currentPlayer(tripCode, players)
 
-  const view = await readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players)
+  // A club match play is played on the club's home course (Ross, 18 Nov 2026): the arrange sheet asks the day and tees only.
+  const homeCourseId = readClubMatchPlay((trip as { bracket_setup?: unknown }).bracket_setup)?.homeCourseId ?? null
+  const [view, fixedCourse] = await Promise.all([
+    readKnockout(db, trip, (trip as { bracket_setup?: unknown }).bracket_setup, me?.id ?? null, players),
+    homeCourseId
+      ? db.from('courses').select('id, name').eq('id', homeCourseId).maybeSingle().then(r => (r.data as { id: string; name: string } | null) ?? null)
+      : Promise.resolve(null),
+  ])
   const match = view?.matches.find(m => m.id === matchId)
   if (!view || !match) notFound()
 
@@ -126,12 +134,20 @@ export default async function MatchPage({
   const holes = ((holesRes.data ?? []) as { hole_number: number; stroke_index: number; stroke_index_ladies: number | null }[])
     .map(h => ({ holeNumber: h.hole_number, strokeIndex: h.stroke_index, strokeIndexLadies: h.stroke_index_ladies }))
   const draw = boardsForTrip(trip).find(lb => lb.competition === 'matchplay')
-  const strokes = matchStrokes(inMatchIds.map(id => {
+  const asPlayer = (id: string) => {
     const t = tees[id] ? teeById.get(tees[id]) : undefined
     const rated = t && t.slope != null && t.course_rating != null && t.par != null
       ? { slope: t.slope, course_rating: t.course_rating, par: t.par } : null
     return { playerId: id, index: playerById.get(id)?.handicap ?? null, tee: rated }
-  }), draw ? allowanceOf(draw) : 100)
+  }
+  // Foursomes (a club match play, stage 4): one ball a side, its shots the
+  // side's, said under the side rather than each player (`foursomesStrokes`).
+  const foursomes = draw?.teamFormat === 'foursomes' && sideIds.length === 2
+    ? foursomesStrokes(sideIds.map(sid => ({ key: sid, players: (view.members[sid] ?? []).map(asPlayer) })), allowanceOf(draw))
+    : null
+  const strokes = draw?.teamFormat === 'foursomes'
+    ? (foursomes ? [] : null)
+    : matchStrokes(inMatchIds.map(asPlayer), draw ? allowanceOf(draw) : 100)
   const strokeOf = new Map((strokes ?? []).map(s => [s.playerId, s]))
 
   // ── Who this phone is, against this match ──
@@ -193,6 +209,19 @@ export default async function MatchPage({
           })}
         </ul>
       )}
+      {id && foursomes && (() => {
+        const mine = foursomes.find(f => f.key === id)
+        if (!mine) return null
+        const members = view.members[id] ?? []
+        const gender = members.every(m => playerById.get(m)?.gender === 'F') ? 'F' : 'M'
+        const shotList = shotHoles(mine.receives, holes, gender)
+        return (
+          <p className="t-cap text-ink/80 mt-2">
+            One ball · {describeReceives(mine.receives)}
+            {shotList.length > 0 && ` · holes ${shotList.map(h => h.shots > 1 ? `${h.holeNumber} (${h.shots})` : `${h.holeNumber}`).join(', ')}`}
+          </p>
+        )
+      })()}
     </div>
   )
 
@@ -257,6 +286,7 @@ export default async function MatchPage({
                     return p ? [{ id, name: p.name, gender: p.gender, homeCourseId: homeOf.get(id) ?? null }] : []
                   })}
                   courseId={arranged?.course_id ?? null}
+                  fixedCourse={fixedCourse}
                   playedOn={arranged?.played_on ?? null}
                   tees={tees}
                   underWay={underWay}

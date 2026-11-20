@@ -4,13 +4,15 @@ import Link from 'next/link'
 import { useEffect, useRef, useState } from 'react'
 import { IconCheck, IconChevronLeft, IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
-import { askClub } from '@/lib/accountClient'
+import { askClub, askMatchPlay } from '@/lib/accountClient'
+import { filterOverdue } from '@/lib/clubMatchPlay'
+import { tripBase } from '@/lib/tripPaths'
 import { describeTime } from '@/lib/itinerary'
 import { formatHandicap } from '@/lib/handicap'
 import { courseLabel } from '@/lib/courseDirectory'
 import type { Preset } from '@/lib/clubPresets'
 import type { OfficeBody, OfficeSlot } from '@/app/api/club/booking'
-import { askCompOffice } from '../../../clubhouseClient'
+import { askCompOffice, readClubMatchPlay, type MatchPlayOfficeBody } from '../../../clubhouseClient'
 import { useShell } from '../../ShellContext'
 import { useCategories } from '../../useCategories'
 import CompPanel from '../CompPanel'
@@ -43,17 +45,24 @@ export default function CompOffice({ code }: { code: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [presets, setPresets] = useState<Preset[]>([])
+  const [mp, setMp] = useState<({ ok: true } & MatchPlayOfficeBody) | null>(null)
   const { categories, ageDate } = useCategories(club.id)
 
   useEffect(() => {
     let live = true
-    askCompOffice<OfficeBody>('sheet', code).then(r => {
+    askCompOffice<OfficeBody>('sheet', code).then(async r => {
       if (!live) return
-      if (!r.ok) { setLost(r.error); return }
+      if (!r.ok) {
+        // A club match play has no tee sheet (Ross, 17 Nov 2026): its own page.
+        const m = await readClubMatchPlay(club.id, code)
+        if (!live) return
+        if (m.ok) { setLost(null); setMp(m); return }
+        setLost(r.error); return
+      }
       setLost(null); setSheet(r)
     })
     return () => { live = false }
-  }, [code, n])
+  }, [code, n, club.id])
   useEffect(() => {
     let live = true
     void askClub('presets', { clubId: club.id }).then(r => { if (live && r.ok) setPresets(r.presets ?? []) })
@@ -89,7 +98,8 @@ export default function CompOffice({ code }: { code: string }) {
           <button type="button" onClick={again} className={`${buttonClass('secondary', false)} ch-focus mt-3`}>Try again</button>
         </div>
       )}
-      {!sheet && !lost && <div className="skeleton h-96 rounded-card mt-4" />}
+      {mp && <MatchPlayOffice mp={mp} code={code} />}
+      {!sheet && !lost && !mp && <div className="skeleton h-96 rounded-card mt-4" />}
       {sheet && (
         <>
           <div className="flex flex-wrap items-start gap-3 mt-2">
@@ -269,5 +279,143 @@ function BookPanel({ code, slot, onClose, onBooked }: { code: string; slot: Offi
         </div>
       </form>
     </div>
+  )
+}
+
+/** A club match play from the office (Ross, 17 Nov 2026): where it stands, its rules and play-by dates. The draw and the matches come in later stages. */
+function MatchPlayOffice({ mp, code }: { mp: MatchPlayOfficeBody; code: string }) {
+  // Stage 2: who has entered, and the office taking an entry out until the draw (logged).
+  const [field, setField] = useState<{ rowId: string | null; name: string }[] | null>(null)
+  // Stage 4: a Fourball or Foursomes match play's pairs, each member taken out on their own.
+  const [pairs, setPairs] = useState<{ teamId: string; members: { rowId: string | null; name: string }[] }[] | null>(null)
+  const [phase, setPhase] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let live = true
+    void askMatchPlay('office.state', { code }).then(r => { if (live && r.ok) { setField(r.entrants); setPairs(r.pairs ?? null); setPhase(r.phase) } })
+    return () => { live = false }
+  }, [code])
+  async function takeOut(rowId: string) {
+    setBusy(true); setError('')
+    const r = await askMatchPlay('office.withdraw', { code, memberId: rowId })
+    setBusy(false)
+    if (!r.ok) { setError(r.error); return }
+    setField(r.entrants)
+    setPairs(r.pairs ?? null)
+  }
+  const open = phase === 'entries' || phase === 'draw_pending'
+  // Stage 3 (D271): the matches past their play-by date, filtered — a club may have hundreds.
+  const [round, setRound] = useState<number | null>(null)
+  const [minDays, setMinDays] = useState(0)
+  const late = filterOverdue(mp.overdue ?? [], { round, minDays })
+  return (
+    <>
+      <div className="mt-2">
+        <h1 className="t-h1 text-ink break-words">{mp.name}</h1>
+        <p className="text-ink/80 text-[15px] mt-1">{mp.format}</p>
+      </div>
+      <div className={`${cardClass('floating')} p-4 mt-5 max-w-xl`}>
+        <p className="t-label text-ink">{mp.phase}</p>
+        <p className="text-ink/80 text-[15px] mt-1">{mp.line}</p>
+        <p className="t-cap text-ink/65 mt-2">{mp.entered} entered{mp.cap ? ` of ${mp.cap}` : ''}</p>
+      </div>
+      <div className="grid md:grid-cols-2 gap-5 mt-5 max-w-4xl">
+        {(mp.overdue ?? []).length > 0 && (
+          <section className="md:col-span-2">
+            <h2 className="t-h2 text-ink">Past the play-by date · {(mp.overdue ?? []).length}</h2>
+            <p className="t-cap text-ink/65 mt-1">Nothing happens on its own: an Officer decides each on its match page — a walkover, or both out.</p>
+            <div className="flex flex-wrap items-end gap-3 mt-3">
+              <div>
+                <label htmlFor="od-round" className={FIELD_LABEL}>Round</label>
+                <select id="od-round" value={round ?? ''} onChange={e => setRound(e.target.value ? Number(e.target.value) : null)} className={`${FIELD} ch-focus w-[200px]`}>
+                  <option value="">Every round</option>
+                  {(mp.rounds ?? []).map(r => <option key={r.roundNumber} value={r.roundNumber}>{r.roundName}</option>)}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="od-days" className={FIELD_LABEL}>Overdue by</label>
+                <select id="od-days" value={minDays} onChange={e => setMinDays(Number(e.target.value))} className={`${FIELD} ch-focus w-[200px]`}>
+                  <option value={0}>Any time</option>
+                  <option value={7}>A week or more</option>
+                  <option value={14}>Two weeks or more</option>
+                  <option value={30}>A month or more</option>
+                </select>
+              </div>
+            </div>
+            {late.length === 0
+              ? <p className="text-ink/80 text-[15px] mt-3">None like that.</p>
+              : (
+                <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-3xl`}>
+                  {late.map(m => (
+                    <li key={m.id} className="flex flex-wrap items-baseline gap-3 px-4 py-2.5">
+                      <span className="flex-1 min-w-[12rem] text-ink text-[15px]">{m.sideA} <span className="text-ink/65">v</span> {m.sideB}</span>
+                      <span className="t-cap text-ink/65 whitespace-nowrap">{m.roundName} · {m.daysOver} {m.daysOver === 1 ? 'day' : 'days'} over</span>
+                      <a href={`${tripBase(code, 'tournament')}/match/${m.id}`} target="_blank" rel="noopener" className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9 inline-flex items-center">Open the match</a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+          </section>
+        )}
+        <section className="md:col-span-2">
+          <h2 className="t-h2 text-ink">Entered{pairs ? ` · ${pairs.length}${mp.cap ? ` of ${mp.cap}` : ''} ${pairs.length === 1 ? 'pair' : 'pairs'}` : field ? ` · ${field.length}${mp.cap ? ` of ${mp.cap}` : ''}` : ''}</h2>
+          {!field && <div className="skeleton h-24 rounded-card mt-3" />}
+          {field && field.length === 0 && <p className="text-ink/80 text-[15px] mt-2">Nobody has entered yet.</p>}
+          {pairs && pairs.length > 0 && (
+            <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-2xl`}>
+              {pairs.map(p => (
+                <li key={p.teamId} className="flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-2">
+                  {p.members.map(m => (
+                    <span key={m.rowId ?? m.name} className="inline-flex items-center gap-1">
+                      <span className="text-ink text-[15px]">{m.name}</span>
+                      {open && m.rowId && (
+                        <button type="button" disabled={busy} onClick={() => void takeOut(m.rowId!)} className="ch-hover ch-focus t-cap text-ink/80 rounded-tile px-2 min-h-9">Take out</button>
+                      )}
+                    </span>
+                  ))}
+                  {p.members.length < 2 && <span className="t-cap text-ink/65">Looking for a partner — not drawn unless one joins</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {!pairs && field && field.length > 0 && (
+            <ul className={`${cardClass()} mt-3 divide-y divide-line max-w-xl`}>
+              {field.map(e => (
+                <li key={e.rowId ?? e.name} className="flex items-center gap-3 px-4 py-2">
+                  <span className="flex-1 min-w-0 truncate text-ink text-[15px]">{e.name}</span>
+                  {open && e.rowId && (
+                    <button type="button" disabled={busy} onClick={() => void takeOut(e.rowId!)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Take out</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {error && <p role="alert" className="t-cap text-rust-deep mt-2">{error}</p>}
+        </section>
+        <section>
+          <h2 className="t-h2 text-ink">Rules</h2>
+          <dl className={`${cardClass()} mt-3 divide-y divide-line`}>
+            {mp.rules.lines.map(l => (
+              <div key={l.label} className="px-4 py-2.5">
+                <dt className="t-cap text-ink/65">{l.label}</dt>
+                <dd className="text-ink text-[15px]">{l.value}</dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+        <section>
+          <h2 className="t-h2 text-ink">Play-by dates</h2>
+          <ol className={`${cardClass()} mt-3 divide-y divide-line`}>
+            {mp.rules.deadlines.map(d => (
+              <li key={d.round} className="flex items-baseline gap-3 px-4 py-2.5">
+                <span className="flex-1 text-ink text-[15px]">{d.round}</span>
+                <span className="text-ink text-[15px] tabular-nums">{d.date}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+    </>
   )
 }
