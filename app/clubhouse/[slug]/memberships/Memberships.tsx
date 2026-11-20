@@ -68,7 +68,7 @@ export default function Memberships() {
   return (
     <>
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-[min(18rem,100%)]">
           <h1 className="t-h1 text-ink">Memberships</h1>
           <p className="t-cap text-ink/65 mt-1">Each has a code for the list’s Category column and the days it plays.</p>
         </div>

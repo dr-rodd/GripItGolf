@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { accountLink } from '@/lib/account'
 import { askClub, describeStoredSession, readAccount, rememberWhyOut, signOutAccount, type ClubSummary } from '@/lib/accountClient'
 import { SECTIONS, clubhouseHref, sectionAt, type SectionKey } from '@/lib/clubhouse'
@@ -63,6 +63,14 @@ export default function ClubhouseShell({ face, children }: { face: ClubhouseFace
     [face, state],
   )
   const here = sectionAt(pathname ?? '', face.slug)
+  // A phone's menu is one row that scrolls sideways: the section open is brought into view, the page left where it is.
+  const navRef = useRef<HTMLElement | null>(null)
+  const inside = state.kind === 'in'
+  useEffect(() => {
+    const strip = navRef.current, el = strip?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!strip || !el || strip.scrollWidth <= strip.clientWidth) return
+    strip.scrollLeft += el.getBoundingClientRect().left - strip.getBoundingClientRect().left - (strip.clientWidth - el.clientWidth) / 2
+  }, [here, inside])
 
   async function signOut() {
     await signOutAccount()
@@ -75,7 +83,7 @@ export default function ClubhouseShell({ face, children }: { face: ClubhouseFace
 
   const clubs = state.kind === 'in' ? state.clubs : []
   const nav = (
-    <nav aria-label="Clubhouse" className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible -mx-1 px-1 lg:mx-0 lg:px-0">
+    <nav ref={navRef} aria-label="Clubhouse" className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible -mx-1 px-1 lg:mx-0 lg:px-0">
       {SECTIONS.map(s => {
         const Icon = ICON[s.key]
         return (

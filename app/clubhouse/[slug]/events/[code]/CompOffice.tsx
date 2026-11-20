@@ -112,7 +112,8 @@ export default function CompOffice({ code }: { code: string }) {
             {sheet.sun.sunrise && <p className="t-cap text-ink/65 px-4 py-2 border-b border-line">Sunrise {describeTime(sheet.sun.sunrise)}{sheet.sun.located ? '' : ' (Greenwich — the course has no location)'}</p>}
             <div className="text-[15px]">
                 {sheet.slots.map(slot => (
-                  <SheetRow key={slot.index} time={describeTime(slot.clock)} places={width} dim={slot.gone}>
+                  <SheetRow key={slot.index} time={describeTime(slot.clock)} places={width} dim={slot.gone}
+                    phonePlaces={slot.seats.length + (!locked && !slot.gone && slot.seats.length < slot.size ? 1 : 0)}>
                     {Array.from({ length: width }, (_, i) => {
                       const s = slot.seats[i]
                       if (i >= slot.size) return <div key={i} className="hidden md:block" />
@@ -139,9 +140,9 @@ export default function CompOffice({ code }: { code: string }) {
                           {i === slot.seats.length && !locked && !slot.gone ? (
                             <button type="button" onClick={() => { setBooking(slot); setError('') }} aria-label={`Book ${describeTime(slot.clock)}`}
                               className="ch-hover ch-focus w-full h-full min-h-11 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
-                              <IconPlus size={16} /> Book
+                              <IconPlus size={16} /> Book<span className="md:hidden">&nbsp;· {slot.size - slot.seats.length} free</span>
                             </button>
-                          ) : <span aria-hidden="true" className="block h-full min-h-10 rounded-tile border border-dashed border-line" />}
+                          ) : <span aria-hidden="true" className="hidden md:block h-full min-h-10 rounded-tile border border-dashed border-line" />}
                         </div>
                       )
                     })}

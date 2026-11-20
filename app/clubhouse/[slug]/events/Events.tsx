@@ -69,7 +69,7 @@ export default function Events() {
   return (
     <>
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-[min(18rem,100%)]">
           <h1 className="t-h1 text-ink">Events</h1>
           <p className="t-cap text-ink/65 mt-1">Competitions, and everything else on at the club.</p>
         </div>
@@ -206,7 +206,7 @@ export default function Events() {
       {office && presetsReady && presets && (
         <section className="mt-10">
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1">
+            <div className="flex-1 min-w-[min(18rem,100%)]">
               <h2 className="t-h2 text-ink">Presets</h2>
               <p className="t-cap text-ink/65 mt-1">What a competition starts from — its format, who can enter, its tee times. Changing one changes no competition already made.</p>
             </div>

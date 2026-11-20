@@ -51,6 +51,14 @@ export default function TeeSheet() {
   const [moveTo, setMoveTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const chosenDay = useRef<HTMLButtonElement | null>(null)
+
+  // On a phone the week scrolls sideways: the day shown is brought to the middle of the strip, the page left where it is.
+  useEffect(() => {
+    const el = chosenDay.current, strip = el?.parentElement
+    if (!el || !strip || strip.scrollWidth <= strip.clientWidth) return
+    strip.scrollLeft += el.getBoundingClientRect().left - strip.getBoundingClientRect().left - (strip.clientWidth - el.clientWidth) / 2
+  }, [day?.date])
 
   useEffect(() => {
     let live = true
@@ -117,7 +125,7 @@ export default function TeeSheet() {
               {(day.week ?? []).map(w => {
                 const on = w.date === date
                 return (
-                  <button key={w.date} type="button" onClick={() => go(w.date)} aria-pressed={on}
+                  <button key={w.date} type="button" onClick={() => go(w.date)} aria-pressed={on} ref={on ? chosenDay : undefined}
                     className={`ch-hover ch-focus rounded-tile border px-3 py-2 text-left flex-shrink-0 min-w-[7.5rem] md:min-w-0 ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'}`}>
                     <span className="block t-label text-ink">{w.date === today ? 'Today' : shortDay(w.date)}</span>
                     <span className="block t-cap text-ink/65 tabular-nums">{w.booked} of {w.places} places</span>
@@ -221,7 +229,7 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
   onBook: (() => void) | null
 }) {
   return (
-    <SheetRow time={describeTime(time)} places={size}>
+    <SheetRow time={describeTime(time)} places={size} phonePlaces={seats.length + (onBook && seats.length < size ? 1 : 0)}>
       {Array.from({ length: size }, (_, i) => {
         const b = seats[i]
         if (b) {
@@ -246,9 +254,9 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
             {i === seats.length && onBook ? (
               <button type="button" onClick={onBook} aria-label={`Book ${describeTime(time)}`}
                 className="ch-hover ch-focus w-full h-full min-h-11 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
-                <IconPlus size={16} /> Book
+                <IconPlus size={16} /> Book<span className="md:hidden">&nbsp;· {size - seats.length} free</span>
               </button>
-            ) : <span aria-hidden="true" className="block h-full min-h-10 rounded-tile border border-dashed border-line" />}
+            ) : <span aria-hidden="true" className="hidden md:block h-full min-h-10 rounded-tile border border-dashed border-line" />}
           </div>
         )
       })}
