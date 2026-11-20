@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { IconCheck, IconChevronLeft, IconChevronRight, IconPlus, IconX } from '@/app/components/icons'
-import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass, iconButtonClass } from '@/app/components/ui'
 import { askTeeTimes } from '@/lib/accountClient'
 import {
   CASUAL_LOOK_AHEAD_DAYS, MAX_CASUAL_DAYS_BEFORE, MAX_PER_DAY, casualSettingsIssue, overlayAt, overlaySpan, settingsLine, sheetRows,
@@ -17,6 +17,7 @@ import type { ClubNote } from '@/lib/clubEvents'
 import EventPanel from '../events/EventPanel'
 import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
+import SheetRow from '../SheetRow'
 
 type Day = { ok: true } & TeeDayBody
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
@@ -32,6 +33,9 @@ const shortDay = (d: string) => new Intl.DateTimeFormat('en-IE', { weekday: 'sho
  * an outing (a Golf or Course event that takes the sheet), and sets how the
  * sheet runs and which memberships book. Every rule is the server's
  * (`/api/club/tee-times`, `office.*`); every change is on the activity log.
+ * A phone does all of it too (Ross, 20 Nov 2026): the week scrolls
+ * sideways, a fourball is two by two beside its time, the panels fill the
+ * screen.
  */
 export default function TeeSheet() {
   const { face, club, may } = useShell()
@@ -89,12 +93,11 @@ export default function TeeSheet() {
     <>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="t-h1 text-ink flex-1">Tee sheet</h1>
-        <div className="hidden md:flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setBlocking('new')} className={`${buttonClass('secondary', false)} ch-focus`}>Block the tee sheet</button>
           <button type="button" onClick={() => setSettingsOpen(true)} className={`${buttonClass('quiet', false)} ch-focus`}>Settings</button>
         </div>
       </div>
-      <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to keep the tee sheet. Members book on the members app’s Tee times.</p>
 
       {lost && (
         <div role="alert" className="mt-4">
@@ -104,18 +107,18 @@ export default function TeeSheet() {
       )}
 
       {day && (
-        <div className="hidden md:block">
+        <div>
           {!day.ready && <p className="text-ink/80 text-[15px] mt-4">The tee sheet isn’t set up yet — it opens once the club’s calendar and tee sheet are in (migrations 095 and 096).</p>}
 
           {/* The week, Monday first: each day's places booked of all, and what has the course. */}
-          <div className="flex items-center gap-2 mt-6">
-            <button type="button" onClick={() => go(addDays(date, -7))} aria-label="The week before" className={`${buttonClass('quiet', false)} ch-focus`}><IconChevronLeft size={20} /></button>
-            <div className="grid grid-cols-7 gap-2 flex-1">
+          <div className="flex items-center gap-1 md:gap-2 mt-6">
+            <button type="button" onClick={() => go(addDays(date, -7))} aria-label="The week before" className={`${iconButtonClass(true)} ch-focus`}><IconChevronLeft size={20} /></button>
+            <div className="flex gap-2 flex-1 min-w-0 overflow-x-auto md:grid md:grid-cols-7 md:overflow-visible">
               {(day.week ?? []).map(w => {
                 const on = w.date === date
                 return (
                   <button key={w.date} type="button" onClick={() => go(w.date)} aria-pressed={on}
-                    className={`ch-hover ch-focus rounded-tile border px-3 py-2 text-left ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'}`}>
+                    className={`ch-hover ch-focus rounded-tile border px-3 py-2 text-left flex-shrink-0 min-w-[7.5rem] md:min-w-0 ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'}`}>
                     <span className="block t-label text-ink">{w.date === today ? 'Today' : shortDay(w.date)}</span>
                     <span className="block t-cap text-ink/65 tabular-nums">{w.booked} of {w.places} places</span>
                     {w.overlays > 0 && <span className="block t-cap text-ink/65">{w.overlays} taking the course</span>}
@@ -123,7 +126,7 @@ export default function TeeSheet() {
                 )
               })}
             </div>
-            <button type="button" onClick={() => go(addDays(date, 7))} aria-label="The next week" className={`${buttonClass('quiet', false)} ch-focus`}><IconChevronRight size={20} /></button>
+            <button type="button" onClick={() => go(addDays(date, 7))} aria-label="The next week" className={`${iconButtonClass(true)} ch-focus`}><IconChevronRight size={20} /></button>
           </div>
           <div className="flex flex-wrap items-center gap-3 mt-4">
             <div className="w-56"><input type="date" aria-label="Go to a day" value={date} onChange={e => e.target.value && go(e.target.value)} className={`${FIELD} ch-focus`} /></div>
@@ -145,14 +148,11 @@ export default function TeeSheet() {
           <div className={`${cardClass()} mt-4 overflow-hidden`}>
             {day.sun.sunrise && <p className="t-cap text-ink/65 px-4 py-2 border-b border-line">Sunrise {describeTime(day.sun.sunrise)}{day.sun.located ? '' : ' (Greenwich)'}</p>}
             {day.times.length === 0 && <p className="text-ink/80 text-[15px] px-4 py-3">No tee times this day.</p>}
-            <table className="w-full table-fixed text-[15px]">
-              <colgroup><col style={{ width: '7rem' }} />{Array.from({ length: day.settings.groupSize }, (_, i) => <col key={i} />)}</colgroup>
-              <thead className="sr-only"><tr><th>Time</th>{Array.from({ length: day.settings.groupSize }, (_, i) => <th key={i}>Place {i + 1}</th>)}</tr></thead>
-              <tbody>
+            <div className="text-[15px]">
                 {rows.map(row => row.kind === 'overlay' ? (
                   <Fragment key={`o-${row.overlay.kind}-${row.overlay.id}`}>
-                  <tr className="border-b border-line last:border-b-0 bg-tint">
-                    <td colSpan={day.settings.groupSize + 1} className="px-4 py-3">
+                  <div className="border-b border-line last:border-b-0 bg-tint">
+                    <div className="px-4 py-3">
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span className="t-cap text-ink/65 tabular-nums">{overlaySpan(row.overlay)}</span>
                         <span className="t-label text-ink">{row.overlay.title}</span>
@@ -164,8 +164,8 @@ export default function TeeSheet() {
                       </div>
                       {row.overlay.detail && row.overlay.kind === 'block' && <p className="t-cap text-ink/80 mt-1 break-words">{row.overlay.detail}</p>}
                       {row.caught.length > 0 && <p className="t-cap text-rust-deep mt-1">Booked before it took the course — tick them below to move them.</p>}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                   {row.caught.map(t => (
                     <TimeRow key={t} time={t} size={day.settings.groupSize} seats={day.bookings.filter(b => b.time === t)}
                       picked={picked} onToggle={toggle} onBook={null} />
@@ -175,8 +175,7 @@ export default function TeeSheet() {
                   <TimeRow key={row.time} time={row.time} size={day.settings.groupSize} seats={day.bookings.filter(b => b.time === row.time)}
                     picked={picked} onToggle={toggle} onBook={day.times.includes(row.time) ? () => { setBooking(row.time); setError('') } : null} />
                 ))}
-              </tbody>
-            </table>
+            </div>
             {day.sun.sunset && <p className="t-cap text-ink/65 px-4 py-2 border-t border-line">Sunset {describeTime(day.sun.sunset)}</p>}
           </div>
 
@@ -185,7 +184,7 @@ export default function TeeSheet() {
               <div className={`${cardClass('floating')} p-3 flex flex-wrap items-center gap-3`}>
                 <p className="t-label text-ink">{chosen.length} selected</p>
                 <label className="sr-only" htmlFor="move-to">Move to</label>
-                <div className="w-56"><select id="move-to" value={moveTo} onChange={e => setMoveTo(e.target.value)} className={`${FIELD} ch-focus`}>
+                <div className="w-full sm:w-56"><select id="move-to" value={moveTo} onChange={e => setMoveTo(e.target.value)} className={`${FIELD} ch-focus`}>
                   <option value="">Move to…</option>
                   {moveTimes.map(t => {
                     const free = day.settings.groupSize - day.bookings.filter(b => b.time === t && !picked.has(b.id)).length
@@ -222,14 +221,13 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
   onBook: (() => void) | null
 }) {
   return (
-    <tr className="border-b border-line last:border-b-0">
-      <th scope="row" className="t-label tabular-nums text-ink text-left px-4 py-2.5 w-28 align-top">{describeTime(time)}</th>
+    <SheetRow time={describeTime(time)} places={size}>
       {Array.from({ length: size }, (_, i) => {
         const b = seats[i]
         if (b) {
           const on = picked.has(b.id)
           return (
-            <td key={i} className="px-1 py-1.5 align-top">
+            <div key={i}>
               <button type="button" role="checkbox" aria-checked={on} onClick={() => onToggle(b.id)}
                 className={`ch-hover ch-focus w-full text-left rounded-tile border px-2.5 py-1.5 ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'}`}>
                 <span className="flex items-start gap-1.5">
@@ -240,21 +238,21 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
                   {on && <IconCheck size={16} className="text-accent-deep flex-shrink-0 mt-0.5" />}
                 </span>
               </button>
-            </td>
+            </div>
           )
         }
         return (
-          <td key={i} className="px-1 py-1.5 align-top">
+          <div key={i}>
             {i === seats.length && onBook ? (
               <button type="button" onClick={onBook} aria-label={`Book ${describeTime(time)}`}
-                className="ch-hover ch-focus w-full min-h-10 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
+                className="ch-hover ch-focus w-full h-full min-h-11 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
                 <IconPlus size={16} /> Book
               </button>
-            ) : <span aria-hidden="true" className="block min-h-10 rounded-tile border border-dashed border-line" />}
-          </td>
+            ) : <span aria-hidden="true" className="block h-full min-h-10 rounded-tile border border-dashed border-line" />}
+          </div>
         )
       })}
-    </tr>
+    </SheetRow>
   )
 }
 

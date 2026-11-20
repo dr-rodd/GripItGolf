@@ -150,8 +150,8 @@ export default function PrivacyPage() {
           the club&apos;s events and results. A member links their account themselves, with a code the
           club emails to the address on its list (the code is kept only in a scrambled form, and works
           once, for {INVITE_DAYS} days). Only the club&apos;s Clubhouse staff and owners see the list:
-          on a phone membership numbers are shown partly hidden, and in the Clubhouse, the club&apos;s
-          office on a computer, in full, and the list can be downloaded there as a file. Every change to the
+          in the members app membership numbers are shown partly hidden, and in the Clubhouse, the
+          club&apos;s office, in full, and the list can be downloaded there as a file. Every change to the
           list is recorded — who made it, when, and what it was — so the club can see its own history; the
           record is kept for {ACTIVITY_KEEP_MONTHS} months. One GUI number links to one account, and an
           account may be on several clubs&apos; lists. Green Dot checks each club before it is verified.

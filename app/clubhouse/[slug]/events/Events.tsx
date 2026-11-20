@@ -30,7 +30,7 @@ type Shown = 'all' | 'members' | 'office'
  * with where and when — filtered by type and by who sees it. The office
  * makes and changes the club's own events in a side panel here, and copies
  * a competition to another date or repeats it weekly. On a phone the table
- * is a list.
+ * is a list, and everything else is the same panels, full screen.
  */
 export default function Events() {
   const { face, club, may } = useShell()
@@ -74,7 +74,7 @@ export default function Events() {
           <p className="t-cap text-ink/65 mt-1">Competitions, and everything else on at the club.</p>
         </div>
         {office && (
-          <div className="hidden md:flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button type="button" onClick={() => setEditing('new')} disabled={!notesReady}
               title={notesReady ? undefined : 'The club’s calendar isn’t set up yet.'}
               className={`${buttonClass('secondary', false)} ch-focus`}>New event</button>
@@ -119,7 +119,7 @@ export default function Events() {
           <p className="t-card text-ink">{type === 'all' && shown === 'all' ? `Nothing in ${year}` : `None like that in ${year}`}</p>
           <p className="text-ink/80 text-[15px] mt-2">
             {type !== 'all' || shown !== 'all' ? 'Try every type, or members and office.'
-              : office ? 'Add an event, or make a competition in the members app and copy it across the season from here.' : 'Events show here once the club adds them.'}
+              : office ? 'Add an event, or make a competition and copy it across the season.' : 'Events show here once the club adds them.'}
           </p>
         </div>
       )}
@@ -186,19 +186,26 @@ export default function Events() {
               return (
                 <li key={e.code}>
                   {e.note
-                    ? <button type="button" onClick={() => setEditing(e.note!)} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</button>
+                    ? (office
+                      ? <button type="button" onClick={() => setEditing(e.note!)} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</button>
+                      : <div className="flex items-center gap-3 min-h-14 px-4 py-3">{body}</div>)
                     : <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
+                  {e.competition && office && (
+                    <div className="flex gap-1 px-3 pb-2 -mt-1">
+                      <button type="button" onClick={() => setComp(e.code)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Change</button>
+                      <button type="button" onClick={() => setCopying(e)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Copy</button>
+                    </div>
+                  )}
                 </li>
               )
             })}
           </ul>
-          {office && <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to add events, make, change or copy a competition, or keep the presets.</p>}
         </>
       )}
 
       {office && presetsReady && presets && (
-        <section className="mt-10 hidden md:block">
-          <div className="flex items-end gap-3">
+        <section className="mt-10">
+          <div className="flex flex-wrap items-end gap-3">
             <div className="flex-1">
               <h2 className="t-h2 text-ink">Presets</h2>
               <p className="t-cap text-ink/65 mt-1">What a competition starts from — its format, who can enter, its tee times. Changing one changes no competition already made.</p>
@@ -215,7 +222,7 @@ export default function Events() {
               {presets.map(p => (
                 <li key={p.id}>
                   <button type="button" onClick={() => setPresetOpen(p)} className="ch-hover ch-focus w-full text-left flex items-start gap-4 px-4 py-3">
-                    <span className="font-mono text-[15px] text-ink w-20 flex-shrink-0 pt-0.5">{p.code}</span>
+                    <span className="font-mono text-[15px] text-ink w-16 md:w-20 flex-shrink-0 pt-0.5 break-all">{p.code}</span>
                     <span className="flex-1 min-w-0">
                       <span className="block text-ink text-[15px] font-medium">{p.name}</span>
                       {p.usedFor && <span className="block t-cap text-ink/65">{p.usedFor}</span>}

@@ -653,7 +653,7 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
       <ListGroup className="mt-6">
         {clubMay('open_clubhouse', { row: m.credentials ?? null }) && (
           <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"
-            hint="The club’s list, its look and its season — best on a computer" />
+            hint="The club’s list, its look and its season" />
         )}
         <ListRow href="/home?tab=events" label="Your events"
           hint="Every event you’re in or run, and the players linked to you" />

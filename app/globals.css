@@ -404,7 +404,11 @@ html.club-switch-fade::view-transition-group(club-header) { animation-duration: 
    160ms ease-out; under Reduce Motion both only fade. Nothing in the grid
    moves while it is read. */
 .ch-hover { transition: background-color 120ms ease-out, color 120ms ease-out; }
-.ch-hover:hover { background-color: var(--color-tint); }
+/* A phone has no hover, and a tapped row would keep the tint until the next
+   tap elsewhere: the tint follows a pointer that hovers, and a finger's
+   press is the same tint while it is down (Ross, 20 Nov 2026). */
+@media (hover: hover) { .ch-hover:hover { background-color: var(--color-tint); } }
+@media (hover: none) { .ch-hover:active { background-color: var(--color-tint); } }
 .ch-nav[aria-current="page"], .ch-nav[aria-current="page"]:hover { background-color: var(--gd-club-tint); color: var(--gd-club-deep); }
 .ch-focus:focus-visible { outline: 2px solid var(--color-accent-deep); outline-offset: 2px; }
 .ch-row[aria-selected="true"] > td { background-color: var(--color-accent-tint); }

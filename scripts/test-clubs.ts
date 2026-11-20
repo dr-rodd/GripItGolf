@@ -931,7 +931,16 @@ function wiringTests() {
   const gridSrc = read('app/clubhouse/[slug]/members/MembersGrid.tsx')
   ok(/askClub\('page'/.test(gridSrc) && /askClub\('bulk'/.test(gridSrc) && /askClub\('export'/.test(gridSrc), 'the grid reads a page at a time and changes the ticked rows together')
   ok(/e\.key === '\/'/.test(gridSrc) && /e\.key\.toLowerCase\(\) === 'z'/.test(gridSrc) && /e\.key === 'Tab'/.test(gridSrc), 'keys: / to search, Ctrl+Z to undo, Enter, Escape and Tab in a cell')
-  ok(/Open this on a computer/.test(gridSrc) && /md:hidden/.test(gridSrc), 'a phone gets one column and is told what needs a computer (D202)')
+  ok(/md:hidden/.test(gridSrc) && /md:hidden flex items-center gap-3/.test(gridSrc), 'a phone gets one column, its rows ticked to change together (D202 amended, D264)')
+  {
+    // D264 (Ross, 20 Nov 2026): the Clubhouse works on a phone — nothing in it tells a phone to go to a computer.
+    const officeFiles = walk('app/clubhouse').filter(f => f.endsWith('.tsx'))
+    const sendsAway = officeFiles.filter(f => /on a computer/i.test(read(f)))
+    ok(sendsAway.length === 0, `no Clubhouse screen sends a phone to a computer (D264)${sendsAway.length ? `: ${sendsAway.join(', ')}` : ''}`)
+    const sheets = ['app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx', 'app/clubhouse/[slug]/events/[code]/CompOffice.tsx']
+    ok(sheets.every(f => /<SheetRow /.test(read(f)) && !/<table/.test(read(f))), 'both Clubhouse tee sheets lay each time out through SheetRow, two by two on a phone (D264)')
+    ok(/@media \(hover: hover\) \{ \.ch-hover:hover/.test(read('app/globals.css')), 'the Clubhouse hover tint follows a pointer that hovers, never a tapped finger (D264)')
+  }
   ok(/xlsx\?\|numbers\|ods/.test(read('app/clubhouse/[slug]/members/PasteSheet.tsx')), 'a spreadsheet’s own file is asked for as CSV — no library')
   ok(/ClubLook club=\{club\}/.test(read('app/clubhouse/[slug]/settings/ClubSettings.tsx')) && /ClubHomeCourse/.test(read('app/clubhouse/[slug]/settings/ClubSettings.tsx')), 'Club settings: the look and the home course, moved as they are')
   ok(/Green Dot staff/.test(room) && /\?find=1/.test(room), 'staff see that they are staff, and find another club')

@@ -57,7 +57,7 @@ export default function ClubCalendar() {
     <>
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="t-h1 text-ink flex-1">Calendar</h1>
-        {office && <Link href={`/clubhouse/${face.slug}/calendar/import`} className={`${buttonClass('secondary', false)} ch-focus hidden md:inline-flex`}>Import a calendar</Link>}
+        {office && <Link href={`/clubhouse/${face.slug}/calendar/import`} className={`${buttonClass('secondary', false)} ch-focus`}>Import a calendar</Link>}
         <div className="flex items-center gap-1">
           <button type="button" onClick={() => setYm(stepMonth(year, month, -1))} aria-label="The month before" className={`${buttonClass('quiet', false)} ch-focus`}><IconChevronLeft size={20} /></button>
           <p className="t-label text-ink min-w-[10rem] text-center" aria-live="polite">{title}</p>

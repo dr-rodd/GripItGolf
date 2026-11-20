@@ -119,15 +119,11 @@ export default function CalendarImport() {
         </div>
       </div>
 
-      <div className="md:hidden mt-6">
-        <p className="text-ink/80 text-[15px]">Open this on a computer to import a calendar.</p>
-      </div>
-
-      <div className="hidden md:block">
+      <div>
         {/* Step 1 — the prompt */}
         <section className={`${cardClass()} p-5 mt-6`}>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="flex-1 min-w-[16rem]">
+            <div className="flex-1 min-w-[min(16rem,100%)]">
               <h2 className="t-card text-ink">1. Copy the prompt</h2>
               <p className="t-cap text-ink/65 mt-1">Give it, with the club’s calendar file, to any chatbot. It answers with a CSV in {CALENDAR_FORMAT}. Or download the blank template and fill it in yourself.</p>
             </div>

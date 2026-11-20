@@ -51,8 +51,9 @@ type Toast = { text: string; tone: 'ok' | 'error'; undo?: () => void; skipped?: 
  * rises at the foot; a list is pasted or uploaded and shown whole before it
  * is saved; the list downloads as a file. The last change can be undone
  * (the toast's Undo, or Ctrl+Z). "/" goes to the search. On a phone the
- * list is one column and a row opens whole; the rest says to open it on a
- * computer (D202).
+ * list is one column — a row opens whole, its tick box beside it — the
+ * filters fold behind one button, and the ticked rows' bar scrolls sideways
+ * (Ross, 20 Nov 2026: the Clubhouse as good as is reasonable on a phone).
  */
 export default function MembersGrid() {
   const { face, club, may, staff } = useShell()
@@ -67,6 +68,7 @@ export default function MembersGrid() {
   const [lost, setLost] = useState(false)
   const [reload, setReload] = useState(0)
   const [ticked, setTicked] = useState<Set<string>>(new Set())
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [editing, setEditing] = useState<{ id: string; field: Field } | null>(null)
   const [draft, setDraft] = useState('')
   const [failedCell, setFailedCell] = useState<string | null>(null)
@@ -265,13 +267,13 @@ export default function MembersGrid() {
   }
 
   return (
-    <div className={ticked.size > 0 ? 'md:pb-28' : ''}>
+    <div className={ticked.size > 0 ? 'pb-36 md:pb-28' : ''}>
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-0">
           <h1 className="t-h1 text-ink">Members</h1>
           <p className="t-cap text-ink/65 mt-1">{data ? pageLine(page, total) : ' '}</p>
         </div>
-        <div className="hidden md:flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <button type="button" onClick={() => setPanel({ row: null })} className={`${buttonClass('secondary', false)} ch-focus`}>Add a person</button>
           <button type="button" onClick={() => setPaste('')} className={`${buttonClass('secondary', false)} ch-focus`}>Paste a list</button>
           <label className={`${buttonClass('secondary', false)} ch-focus cursor-pointer`}>
@@ -283,8 +285,15 @@ export default function MembersGrid() {
       </div>
 
       <div className="flex flex-wrap gap-3 mt-5">
-        <input ref={search} type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search names, emails, numbers"
-          aria-label="Search the list" className={`${FIELD} ch-focus md:max-w-sm`} />
+        <div className="flex gap-2 w-full md:w-auto md:max-w-sm md:flex-1">
+          <input ref={search} type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="Search names, emails, numbers"
+            aria-label="Search the list" className={`${FIELD} ch-focus flex-1 min-w-0`} />
+          <button type="button" onClick={() => setFiltersOpen(o => !o)} aria-expanded={filtersOpen}
+            className={`${buttonClass('secondary', false)} ch-focus md:hidden flex-shrink-0`}>
+            {filtersOpen ? 'Hide filters' : `Filters${filter !== 'all' || narrowed ? ' · on' : ''}`}
+          </button>
+        </div>
+        <div className={`${filtersOpen ? 'flex' : 'hidden'} md:contents flex-col gap-3 w-full`}>
         <select value={filter} onChange={e => chooseFilter(e.target.value as ListFilter)} aria-label="Show" className={`${FIELD} ch-focus md:max-w-[240px]`}>
           {LIST_FILTERS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
@@ -309,8 +318,8 @@ export default function MembersGrid() {
           <span className="w-24"><input type="number" inputMode="numeric" min={0} max={AGE_MAX} value={ageMax} onChange={e => setAgeMax(e.target.value)} placeholder="To"
             aria-label="Aged up to" className={`${FIELD} ch-focus`} /></span>
         </div>
+        </div>
       </div>
-      <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to paste a list, upload a file, download the list or change many at once.</p>
 
       {lost && (
         <div role="alert" className="mt-4">
@@ -433,13 +442,26 @@ export default function MembersGrid() {
             </table>
           </div>
 
-          {/* A phone: one column, a row opening whole (D202). */}
-          <ul className={`${cardClass()} mt-5 divide-y divide-line md:hidden overflow-hidden`}>
+          {/* A phone: one column, a row opening whole, its tick box beside it (D202). */}
+          {grid.length > 0 && (
+            <div className="md:hidden flex items-center gap-3 mt-5 px-4">
+              <TickBox label="Tick every row on this page" on={allTicked} onChange={v => setTicked(v ? new Set(grid.map(r => r.id)) : new Set())} />
+              <span className="t-cap text-ink/65">Tick rows to change them together</span>
+            </div>
+          )}
+          <ul className={`${cardClass()} mt-2 divide-y divide-line md:hidden overflow-hidden`}>
             {!data && [0, 1, 2, 3].map(i => <li key={i} className="p-3"><div className="skeleton h-10 rounded-tile" /></li>)}
-            {data && grid.length === 0 && <li className="p-4 text-ink/65 text-[15px]">Nobody matches.</li>}
+            {data && grid.length === 0 && (
+              <li className="p-4 text-ink/65 text-[15px]">
+                Nobody matches. <button type="button" onClick={showEveryone} className="underline underline-offset-2 text-ink ch-focus">Show everyone</button>
+              </li>
+            )}
             {grid.map(r => (
-              <li key={r.id}>
-                <button type="button" onClick={() => setPanel({ row: r })} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">
+              <li key={r.id} className={`flex items-center ${ticked.has(r.id) ? 'bg-accent-tint' : ''}`}>
+                <span className="pl-4 flex items-center">
+                  <TickBox label={`Tick ${r.name}`} on={ticked.has(r.id)} onChange={v => setTicked(s => { const n = new Set(s); if (v) n.add(r.id); else n.delete(r.id); return n })} />
+                </span>
+                <button type="button" onClick={() => setPanel({ row: r })} className="flex-1 min-w-0 text-left flex items-center gap-3 min-h-14 pl-3 pr-4 py-3 press">
                   <span className="flex-1 min-w-0">
                     <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}</span>
                     <span className="block t-cap text-ink/65 mt-0.5">{[r.memberNumber ? `No. ${r.memberNumber}` : null, r.handicapIndex !== null ? `Index ${indexLabel(r.handicapIndex)}` : null, catName(r.categoryId)].filter(Boolean).join(' · ') || (r.email ?? 'No email')}</span>
@@ -461,9 +483,9 @@ export default function MembersGrid() {
       )}
 
       {ticked.size > 0 && (
-        <div className="ch-bar-rise fixed left-4 right-4 bottom-4 lg:left-[calc(15rem+2rem)] z-30 hidden md:flex justify-center">
-          <div className={`${cardClass('floating')} px-4 py-3 flex flex-wrap items-center gap-2 max-w-full`}>
-            <span className="t-label text-ink mr-2">{ticked.size} ticked</span>
+        <div className="ch-bar-rise fixed left-4 right-4 bottom-4 lg:left-[calc(15rem+2rem)] z-30 flex justify-center">
+          <div className={`${cardClass('floating')} px-4 py-3 flex flex-nowrap md:flex-wrap items-center gap-2 max-w-full overflow-x-auto`}>
+            <span className="t-label text-ink mr-2 whitespace-nowrap">{ticked.size} ticked</span>
             {confirmOff ? (
               <>
                 <span className="t-cap text-ink/80">Take {ticked.size} off the list? Their accounts and golf are untouched.</span>

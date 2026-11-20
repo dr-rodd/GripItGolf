@@ -14,6 +14,7 @@ import { askCompOffice } from '../../../clubhouseClient'
 import { useShell } from '../../ShellContext'
 import { useCategories } from '../../useCategories'
 import CompPanel from '../CompPanel'
+import SheetRow from '../../SheetRow'
 
 type Sheet = { ok: true } & OfficeBody
 const longDay = (d: string) => new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))
@@ -26,7 +27,8 @@ const longDay = (d: string) => new Intl.DateTimeFormat('en-IE', { weekday: 'long
  * and who is on it, sunrise at its head and sunset at its foot. The office
  * books anybody (Book anyway for somebody the entry rules refuse, logged),
  * ticks players to move them to another time or take them off. Every write
- * is the server's (`/api/club/booking`, `office.*`).
+ * is the server's (`/api/club/booking`, `office.*`). On a phone the same,
+ * each time's places two by two beside it (Ross, 20 Nov 2026).
  */
 export default function CompOffice({ code }: { code: string }) {
   const { face, club, may } = useShell()
@@ -96,34 +98,29 @@ export default function CompOffice({ code }: { code: string }) {
               <p className="text-ink/80 text-[15px] mt-1">{[longDay(sheet.comp.date), sheet.comp.courseName ? courseLabel(sheet.comp.courseName) : null].filter(Boolean).join(' · ')}</p>
               {sheet.entry && <p className="t-cap text-ink/65 mt-1">Open to: {sheet.entry}</p>}
             </div>
-            <button type="button" onClick={() => setChanging(true)} className={`${buttonClass('secondary', false)} ch-focus hidden md:inline-flex`}>Change</button>
+            <button type="button" onClick={() => setChanging(true)} className={`${buttonClass('secondary', false)} ch-focus`}>Change</button>
           </div>
           {locked && <p className="text-ink/80 text-[15px] mt-3">The results are certified, so the tee sheet can’t change. An Officer reopens them first.</p>}
           {!locked && sheet.opening && <p className="t-cap text-ink/65 mt-3">Booking opens for members {sheet.opening}. The office books any time before.</p>}
           {!locked && sheet.cardsStarted && <p className="t-cap text-ink/65 mt-1">Cards have started: a player out on the course can’t be moved or taken off.</p>}
-          <p className="md:hidden t-cap text-ink/65 mt-3">Open this on a computer to keep the tee sheet.</p>
 
-          <div className={`${cardClass()} mt-5 overflow-hidden hidden md:block`}>
+          <div className={`${cardClass()} mt-5 overflow-hidden`}>
             <div className="flex items-baseline justify-between px-4 py-2 border-b border-line">
               <h2 className="t-label text-ink">Tee sheet</h2>
               <p className="t-cap text-ink/65">{seats.length} booked of {sheet.slots.reduce((a, s) => a + s.size, 0)}</p>
             </div>
             {sheet.sun.sunrise && <p className="t-cap text-ink/65 px-4 py-2 border-b border-line">Sunrise {describeTime(sheet.sun.sunrise)}{sheet.sun.located ? '' : ' (Greenwich — the course has no location)'}</p>}
-            <table className="w-full table-fixed text-[15px]">
-              <colgroup><col style={{ width: '7rem' }} />{Array.from({ length: width }, (_, i) => <col key={i} />)}</colgroup>
-              <thead className="sr-only"><tr><th>Time</th>{Array.from({ length: width }, (_, i) => <th key={i}>Place {i + 1}</th>)}</tr></thead>
-              <tbody>
+            <div className="text-[15px]">
                 {sheet.slots.map(slot => (
-                  <tr key={slot.index} className={`border-b border-line last:border-b-0 ${slot.gone ? 'opacity-60' : ''}`}>
-                    <th scope="row" className="t-label tabular-nums text-ink text-left px-4 py-2.5 align-top">{describeTime(slot.clock)}</th>
+                  <SheetRow key={slot.index} time={describeTime(slot.clock)} places={width} dim={slot.gone}>
                     {Array.from({ length: width }, (_, i) => {
                       const s = slot.seats[i]
-                      if (i >= slot.size) return <td key={i} />
+                      if (i >= slot.size) return <div key={i} className="hidden md:block" />
                       if (s) {
                         const on = !!s.rowId && picked.has(s.rowId)
                         const can = !!s.rowId && !s.started && !locked && !slot.gone
                         return (
-                          <td key={i} className="px-1 py-1.5 align-top">
+                          <div key={i}>
                             <button type="button" role="checkbox" aria-checked={on} disabled={!can} onClick={() => s.rowId && toggle(s.rowId)}
                               className={`ch-hover ch-focus w-full text-left rounded-tile border px-2.5 py-1.5 ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'} disabled:cursor-default`}>
                               <span className="flex items-start gap-1.5">
@@ -134,33 +131,32 @@ export default function CompOffice({ code }: { code: string }) {
                                 {on && <IconCheck size={16} className="text-accent-deep flex-shrink-0 mt-0.5" />}
                               </span>
                             </button>
-                          </td>
+                          </div>
                         )
                       }
                       return (
-                        <td key={i} className="px-1 py-1.5 align-top">
+                        <div key={i}>
                           {i === slot.seats.length && !locked && !slot.gone ? (
                             <button type="button" onClick={() => { setBooking(slot); setError('') }} aria-label={`Book ${describeTime(slot.clock)}`}
-                              className="ch-hover ch-focus w-full min-h-10 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
+                              className="ch-hover ch-focus w-full h-full min-h-11 rounded-tile border border-dashed border-line-strong flex items-center justify-center gap-1 t-label text-accent-deep">
                               <IconPlus size={16} /> Book
                             </button>
-                          ) : <span aria-hidden="true" className="block min-h-10 rounded-tile border border-dashed border-line" />}
-                        </td>
+                          ) : <span aria-hidden="true" className="block h-full min-h-10 rounded-tile border border-dashed border-line" />}
+                        </div>
                       )
                     })}
-                  </tr>
+                  </SheetRow>
                 ))}
-              </tbody>
-            </table>
+            </div>
             {sheet.sun.sunset && <p className="t-cap text-ink/65 px-4 py-2 border-t border-line">Sunset {describeTime(sheet.sun.sunset)}</p>}
           </div>
 
           {chosen.length > 0 && (
-            <div className="sticky bottom-4 mt-4 z-10 hidden md:block">
+            <div className="sticky bottom-4 mt-4 z-10">
               <div className={`${cardClass('floating')} p-3 flex flex-wrap items-center gap-3`}>
                 <p className="t-label text-ink">{chosen.length} selected</p>
                 <label className="sr-only" htmlFor="comp-move-to">Move to</label>
-                <div className="w-56">
+                <div className="w-full sm:w-56">
                   <select id="comp-move-to" value={moveTo} onChange={e => setMoveTo(e.target.value)} className={`${FIELD} ch-focus`}>
                     <option value="">Move to…</option>
                     {sheet.slots.filter(s => !s.gone && !chosen.every(c => c.slot === s.index)).map(s => {
