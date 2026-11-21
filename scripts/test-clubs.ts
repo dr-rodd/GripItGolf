@@ -27,6 +27,7 @@ import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
 import { clubEventDates } from '../lib/clubs'
 import { asRow, type RowRow } from '../app/api/club/rows'
+import { NO_YOURS, dayWord, matchTier, mondayOf, parseDay, periodRange, quietLine, searchEvents, whatsOn, yoursIn, type YoursFacts } from '../lib/clubOverview'
 import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidths, writeWidths } from '../lib/gridColumns'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
@@ -1759,6 +1760,61 @@ async function competitionBarTests() {
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function overviewTests() {
+  console.log('\nThe Overview as a control centre (D276)')
+  eq(mondayOf('2026-11-21'), '2026-11-16', 'a Saturday’s Monday')
+  eq(mondayOf('2026-11-16'), '2026-11-16', 'a Monday is its own')
+  eq(mondayOf('2026-11-22'), '2026-11-16', 'Sunday ends the week')
+  eq(periodRange('2026-11-21', 'today'), { from: '2026-11-21', to: '2026-11-21' }, 'Today is one day')
+  eq(periodRange('2026-11-21', 'week'), { from: '2026-11-16', to: '2026-11-22' }, 'This week is Monday to Sunday')
+  eq(dayWord('2026-11-21', '2026-11-21'), 'Today', 'today said so')
+  eq(dayWord('2026-11-22', '2026-11-21'), 'Tomorrow', '…and tomorrow')
+  eq(dayWord('2026-11-24', '2026-11-21'), 'Tue 24 Nov', 'any other day short')
+  const T = '2026-11-21' // a Saturday
+  eq(['today', 'tomorrow', 'sat', 'saturday', 'mon', 'sun', '21/11', '21/11/2026', '1/1', '21 nov', 'nov 21', '3rd dec', '2026-11-30', '31/2', 'medal', 'ma'].map(q => parseDay(q, T)),
+    ['2026-11-21', '2026-11-22', '2026-11-21', '2026-11-21', '2026-11-23', '2026-11-22', '2026-11-21', '2026-11-21', '2027-01-01', '2026-11-21', '2026-11-21', '2026-12-03', '2026-11-30', null, null, null],
+    'a date read off what was typed — a weekday the next one, a day and month without a year the next one; a name is no date')
+  eq([matchTier('November Medal', 'nov'), matchTier('November Medal', 'medal'), matchTier('November Medal', 'dal'), matchTier('November Medal', 'cup')], [0, 1, 2, null], 'how a name matches: its start, a word’s start, anywhere, not at all')
+  const ev = (code: string, name: string, date: string, extra: Partial<SeasonEvent> = {}): SeasonEvent =>
+    ({ code, name, kind: 'tournament', startDate: date, endDate: date, competition: { phase: 'booking', courseName: null, scoring: 'stableford', allowance: 95, booked: 10, capacity: 40, membersOnly: true }, ...extra })
+  const season = [
+    ev('OCT', 'October Medal', '2026-10-17'), ev('NOV', 'November Medal', '2026-11-21'), ev('DEC', 'December Medal', '2026-12-19'),
+    ev('SCR', 'Captain’s Medal Scramble', '2026-11-22'), ev('FB', 'Winter Fourball', '2026-11-18'),
+  ]
+  eq(searchEvents('medal', season, T).map(e => e.code), ['NOV', 'SCR', 'DEC', 'OCT'], '"medal": the medals, upcoming nearest first, past after — the medal today on top')
+  eq(searchEvents('nov', season, T).map(e => e.code), ['NOV'], '…and Enter opens the first')
+  const social: SeasonEvent = { code: 'ev-n1', name: 'Quiz night', kind: 'club', type: 'SOCIAL', startDate: '2026-11-19', endDate: '2026-11-19', competition: null,
+    note: { id: 'n1', ref: null, title: 'Quiz night', type: 'SOCIAL', startsOn: '2026-11-19', endsOn: null, startTime: '20:00', endTime: null, place: 'Bar', notes: null, visibility: 'members', blocksSheet: false } }
+  const mp = ev('MP', 'Club Singles', '2026-05-01', { endDate: '2026-12-31', competition: { phase: 'in_play', courseName: null, scoring: 'stableford', allowance: 100, booked: 0, capacity: 0, membersOnly: true, matchPlay: { format: 'singles', cap: 32, entered: 20, keyDates: ['2026-11-20'] } } })
+  const all = [...season, social, mp]
+  const day = whatsOn(all, T, T), week = whatsOn(all, '2026-11-16', '2026-11-22')
+  eq([day.comps.map(o => o.event.code), day.events.map(o => o.event.code)], [['NOV'], []], 'today: the medal; a match play running for months is not on today')
+  eq([week.comps.map(o => `${o.event.code}@${o.day}`), week.events.map(o => o.event.code)], [['FB@2026-11-18', 'MP@2026-11-20', 'NOV@2026-11-21', 'SCR@2026-11-22'], ['ev-n1']],
+    'this week: every competition on its day — the match play on its play-by date — and the club’s quiz night')
+  eq([quietLine('today', 4), quietLine('today', 0), quietLine('week', 0)], ['Nothing on today. This week: 4 events.', 'Nothing on today.', 'Nothing on this week.'], 'a quiet day says what the week holds')
+  const facts: YoursFacts = {
+    comps: [{ code: 'NOV', name: 'November Medal', date: T, time: '09:10', playing: true, bookedOthers: 1 }],
+    casual: [{ date: '2026-11-18', time: '10:00', playing: false, bookedOthers: 2 }],
+    entered: ['MP'], added: ['n1'], roles: [],
+  }
+  const base = '/clubhouse/pints'
+  eq(yoursIn(facts, all, T, T, base).map(y => `${y.kind}:${y.title}:${y.why}`), ['playing:November Medal:You’re playing · you booked 1'], 'Yours today: the medal you are playing in')
+  eq(yoursIn(facts, all, '2026-11-16', '2026-11-22', base).map(y => `${y.kind}:${y.date}:${y.href}`), [
+    `booked:2026-11-18:${base}/tee-sheet?day=2026-11-18`, `added:2026-11-19:${base}/events?event=n1`, `entered:2026-11-20:${base}/events/MP`, `playing:2026-11-21:${base}/events/NOV`,
+  ], 'Yours this week: a tee time you booked, the social event you added, your match play’s day and your medal — in date order')
+  eq(yoursIn(facts, all, '2026-11-19', '2026-11-19', base).map(y => y.kind), ['added'], 'a social event this account added shows under Yours on its day (M4)')
+  eq(yoursIn({ ...NO_YOURS, roles: [{ key: 'r1', date: T, time: '08:00', title: 'November Medal', role: 'Starter', href: `${base}/events/NOV` }] }, all, T, T, base).map(y => `${y.kind}:${y.why}`),
+    ['role:Starter'], 'the shape for roles: a role shows as soon as something supplies one')
+  eq(yoursIn(facts, all, '2026-12-01', '2026-12-07', base), [], 'nothing of yours outside the period')
+  const ov = read('app/clubhouse/[slug]/Overview.tsx')
+  ok(!/lg:grid-cols-3/.test(ov) && /columns-1 lg:columns-2/.test(ov) && /break-inside-avoid/.test(ov), 'no three equal cards: cards sized to what they hold, flowing in two columns (M1)')
+  ok(/keepsSheet && teeShown/.test(ov) && /keepsList && data\?\.counts/.test(ov), 'a card the account may not use is not drawn')
+  const search = read('app/clubhouse/[slug]/OverviewSearch.tsx')
+  ok(/e\.key !== '\/'/.test(search) && /\?row=\$\{p\.id\}/.test(search) && /\?event=\$\{e\.note\.id\}/.test(search) && /\?day=\$\{day\}/.test(search), 'search: "/" focuses it; a member, a club event and a day each open in their own section')
+  ok(/get\('row'\)/.test(read('app/clubhouse/[slug]/members/MembersGrid.tsx')) && /get\('event'\)/.test(read('app/clubhouse/[slug]/events/Events.tsx'))
+    && /get\('day'\)/.test(read('app/clubhouse/[slug]/calendar/ClubCalendar.tsx')) && /get\('day'\)/.test(read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')), '…and each section opens on what it was handed')
+}
+
 function playsFollowsMembershipTests() {
   console.log('\nPlays here follows the membership (D275)')
   eq([playsByMembership(null), playsByMembership(undefined), playsByMembership([2]), playsByMembership([0, 1, 2, 3, 4, 5, 6]), playsByMembership([])],
@@ -1961,6 +2017,19 @@ async function clubhouseTests() {
   const ov = await ask('tok-ross', 'overview', { clubId })
   ok(ov.status === 200 && ov.body.counts?.onList === 61 && ov.body.counts.joined === 2 && ov.body.counts.noEmail === 6, 'the Overview’s counts')
   ok(ov.status === 200 && (ov.body.needs ?? []).some(n => n.key === 'not-invited'), '…and what needs the office')
+  ok(ov.status === 200 && ov.body.today === irishToday(s.clock) && JSON.stringify(ov.body.yours) === JSON.stringify(NO_YOURS), 'D276: the Overview says its day, and nothing is yours before the store can say (fail-soft)')
+  const asked: unknown[] = []
+  const withYours = Object.assign(Object.create(Object.getPrototypeOf(s)), s, {
+    async yoursFacts(clubId: string, rowId: string | null, userId: string, from: string, to: string): Promise<YoursFacts> {
+      asked.push({ clubId, rowId, userId, from, to })
+      return { ...NO_YOURS, added: ['n1'] }
+    },
+  })
+  const ov2 = await runClub({ token: 'tok-ross', action: 'overview', address: 'a', clubId }, withYours, s.clock)
+  const rossList = [...s.list.values()].find(r => r.clubId === clubId && r.userId === 'ross')!
+  const wk = periodRange(irishToday(s.clock), 'week')
+  ok(ov2.status === 200 && ov2.body.yours?.added[0] === 'n1' && JSON.stringify(asked[0]) === JSON.stringify({ clubId, rowId: rossList.id, userId: 'ross', from: wk.from, to: wk.to }),
+    '…and asks for this account’s own row, Monday to Sunday of the week the day is in')
   const ids = (p0.status === 200 ? p0.body.grid ?? [] : []).filter(r => /Player 0[2-4]/.test(r.name)).map(r => r.id)
   const officers = await ask('tok-ross', 'bulk', { clubId, memberIds: ids, op: 'tick', key: 'officer', value: true })
   ok(officers.status === 200 && officers.body.done === 3 && ids.every(id => s.list.get(id)!.officer === true), 'ticked rows made Officers in one go')
@@ -2933,6 +3002,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  overviewTests()
   playsFollowsMembershipTests()
   teeEmbedTests()
   gridColumnTests()

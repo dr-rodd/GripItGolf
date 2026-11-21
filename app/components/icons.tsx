@@ -452,3 +452,10 @@ export const IconDots = (p: IconProps) => (
     <path d="M17 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
   </Svg>
 )
+
+export const IconSearch = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M10 10m-7 0a7 7 0 1 0 14 0a7 7 0 1 0 -14 0" />
+    <path d="M21 21l-6 -6" />
+  </Svg>
+)

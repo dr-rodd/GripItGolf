@@ -135,7 +135,17 @@ export default function MembersGrid() {
     const g = p.get('gender')
     if (g === 'M' || g === 'F' || g === 'none') setGender(g)
     if (p.get('category')) setCategory(p.get('category')!)
+    // D276: the Overview's search opens a person (?row=<id>&q=<name>): searched for, then their panel.
+    const q0 = p.get('q')
+    if (q0) setQ(q0)
+    if (p.get('row')) rowAsked.current = p.get('row')
   }, [])
+  const rowAsked = useRef<string | null>(null)
+  useEffect(() => {
+    if (!rowAsked.current || !data) return
+    const r = data.grid.find(x => x.id === rowAsked.current)
+    if (r) { rowAsked.current = null; setPanel({ row: r }) }
+  }, [data])
   // An age box settles a moment after the last key, as the search does.
   useEffect(() => {
     const age = (v: string) => { const n = Number(v); return v.trim() && Number.isInteger(n) && n >= 0 && n <= AGE_MAX ? n : undefined }

@@ -29,6 +29,7 @@ import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
 import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { noteAsSeason } from '@/lib/clubhouse'
+import { NO_YOURS, periodRange, type YoursFacts } from '@/lib/clubOverview'
 import { planLine, presetIssue, readPreset, type Preset } from '@/lib/clubPresets'
 import { entryRulesIssue } from '@/lib/clubMembership'
 import type { ActivityEntry, ClubOutcome, ClubRecord, ClubStore, ClubSummary, MemberRecord } from './club'
@@ -56,6 +57,8 @@ export interface ListQuery {
 export interface ClubhouseStore {
   /** Stage 3 (D271): how many of a club match play's matches are past their play-by date. */
   overdueCount?(code: string, today: string): Promise<number>
+  /** D276: what this account is in from `from` to `to` — its own list row's tee times and entries, and the events it added. */
+  yoursFacts?(clubId: string, rowId: string | null, userId: string, from: string, to: string): Promise<YoursFacts>
   /** This account's row at the club, linked and not taken off. */
   rowOf?(clubId: string, userId: string): Promise<MemberRecord | null>
   /** Whether this account is Green Dot staff (093; false before it). */
@@ -226,7 +229,13 @@ export async function runClubhouse(
       ? await Promise.all(playing.map(async e => ({ code: e.code, name: e.name, count: await store.overdueCount!(e.code, irishToday(now)).catch(() => 0) })))
       : []
     const needs = needsYou({ base: `/clubhouse/${club.slug}`, counts, phases, clubSlug: club.slug, officer: clubMay('run_events', asker), hasCategories: cats.length > 0, overdue })
-    return { status: 200, body: { ok: true, counts, byPhase, needs } }
+    // D276: the week the Overview's Today and This week both sit in, and what this account is in during it.
+    const today = irishToday(now)
+    const week = periodRange(today, 'week')
+    const yours = store.yoursFacts
+      ? await store.yoursFacts(club.id, mine?.id ?? null, user.id, week.from, week.to).catch(e => { console.error('overview yours failed:', e); return NO_YOURS })
+      : NO_YOURS
+    return { status: 200, body: { ok: true, counts, byPhase, needs, today, yours } }
   }
 
   if (action === 'page') {

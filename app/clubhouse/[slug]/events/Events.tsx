@@ -57,6 +57,15 @@ export default function Events() {
     return () => { live = false }
   }, [club.id])
 
+  // D276: the Overview opens a club event's panel (?event=<id>) once the season is read.
+  const [asked] = useState(() => (typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('event')))
+  const [opened, setOpened] = useState(false)
+  useEffect(() => {
+    if (!asked || opened || !events) return
+    setOpened(true)
+    const n = events.find(e => e.note?.id === asked)?.note
+    if (n && office) setEditing(n)
+  }, [asked, opened, events, office])
   const rows = useMemo(() => seasonOfYear(events ?? [], year)
     .filter(e => type === 'all' || seasonType(e) === type)
     .filter(e => shown === 'all' || (shown === 'office') === isOfficeOnly(e)), [events, year, type, shown])

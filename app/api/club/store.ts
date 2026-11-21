@@ -23,6 +23,7 @@ import type { ClubRecord, ClubStore, MemberRecord } from './club'
 import type { ListQuery, PageRecord } from './clubhouse'
 import { SORT_COLUMN, type ListCounts, type SeasonEvent } from '@/lib/clubhouse'
 import { readAllRows } from '@/lib/allRows'
+import { NO_YOURS, type YoursFacts } from '@/lib/clubOverview'
 import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
 import { TicksNotReady, asRow, isMissingColumn, missingSet, peopleMissing, peopleOn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
 import { birthRange, cleanDays, entryLine, readEntryRules, type Category, type RowExtras } from '@/lib/clubMembership'
@@ -368,6 +369,7 @@ export function clubStore(db: Db): ClubStore {
     },
     myMatches: (rowId, codes) => readMyClubMatches(db, rowId, codes),
     pairPartners: (rowId, codes) => readPairPartners(db, rowId, codes),
+    yoursFacts: (clubId, rowId, userId, from, to) => readYoursFacts(db, clubId, rowId, userId, from, to),
     async overdueCount(code, today) {
       const draw = await readClubDraw(code)
       return draw ? overdueMatches(draw.rounds, draw.view.names, today).length : 0
@@ -742,3 +744,69 @@ export function clubStore(db: Db): ClubStore {
   }
 }
 
+
+/**
+ * What an account is in at its club from `from` to `to` (D276): its list
+ * row's casual tee times (playing, or booking others), its competition tee
+ * times (on the sheet, or booking others onto it), the match plays it is
+ * entered in, and the club events it added. Each part fail-soft: a table not
+ * there yet (095, 096) or a read that fails gives nothing, never an error.
+ */
+export async function readYoursFacts(db: Db, clubId: string, rowId: string | null, userId: string, from: string, to: string): Promise<YoursFacts> {
+  const out: YoursFacts = { ...NO_YOURS, comps: [], casual: [], entered: [], added: [], roles: [] }
+  const added = db.from('club_events').select('id, starts_on, ends_on').eq('club_id', clubId).eq('created_by', userId)
+    .lte('starts_on', to).or(`ends_on.gte.${from},and(ends_on.is.null,starts_on.gte.${from})`)
+  if (!rowId) {
+    const a = await added
+    if (!a.error) out.added = ((a.data ?? []) as { id: string }[]).map(r => r.id)
+    return out
+  }
+  const [a, casual, players] = await Promise.all([
+    added,
+    db.from('club_tee_bookings').select('play_on, tee_time, member_id, booked_by').eq('club_id', clubId)
+      .gte('play_on', from).lte('play_on', to).or(`member_id.eq.${rowId},booked_by.eq.${rowId}`),
+    db.from('players').select('id, trip_id').eq('club_member_id', rowId),
+  ])
+  if (!a.error) out.added = ((a.data ?? []) as { id: string }[]).map(r => r.id)
+  if (!casual.error) {
+    const byTime = new Map<string, { date: string; time: string; playing: boolean; bookedOthers: number }>()
+    for (const b of (casual.data ?? []) as { play_on: string; tee_time: string; member_id: string | null; booked_by: string | null }[]) {
+      const k = `${b.play_on} ${b.tee_time}`
+      const t = byTime.get(k) ?? { date: b.play_on, time: b.tee_time, playing: false, bookedOthers: 0 }
+      if (b.member_id === rowId) t.playing = true
+      else if (b.booked_by === rowId) t.bookedOthers++
+      byTime.set(k, t)
+    }
+    out.casual = [...byTime.values()]
+  }
+  const mine = players.error ? [] : (players.data ?? []) as { id: string; trip_id: string }[]
+  if (!mine.length) return out
+  const ids = mine.map(p => p.id), tripIds = [...new Set(mine.map(p => p.trip_id))]
+  const [trips, priv, seats] = await Promise.all([
+    db.from('trips').select('id, trip_code, name, competition, bracket_setup').in('id', tripIds).eq('competition', 'club'),
+    db.from('trip_private').select('trip_id').in('trip_id', tripIds).eq('club_id', clubId),
+    db.from('tee_assignments').select('round_id, player_id, slot_index, booked_by').or(`player_id.in.(${ids.join(',')}),booked_by.in.(${ids.join(',')})`),
+  ])
+  if (trips.error || priv.error) return out
+  const here = new Set(((priv.data ?? []) as { trip_id: string }[]).map(p => p.trip_id))
+  const tripOf = new Map(((trips.data ?? []) as { id: string; trip_code: string; name: string; bracket_setup: unknown }[]).filter(t => here.has(t.id)).map(t => [t.id, t]))
+  out.entered = [...tripOf.values()].filter(t => readClubMatchPlay(t.bracket_setup)).map(t => t.trip_code)
+  if (seats.error) return out
+  const rows = (seats.data ?? []) as { round_id: string; player_id: string; slot_index: number; booked_by: string | null }[]
+  const roundIds = [...new Set(rows.map(r => r.round_id))]
+  if (!roundIds.length) return out
+  const rounds = await db.from('rounds').select('id, trip_id, scheduled_date, tee_sheet').in('id', roundIds).gte('scheduled_date', from).lte('scheduled_date', to)
+  if (rounds.error) return out
+  const mineIds = new Set(ids)
+  for (const r of (rounds.data ?? []) as { id: string; trip_id: string; scheduled_date: string; tee_sheet: unknown }[]) {
+    const t = tripOf.get(r.trip_id)
+    if (!t) continue
+    const clocks = (() => { const rules = parseTeeRules(r.tee_sheet); return rules ? teeClocks(rules) : [] })()
+    const on = rows.filter(x => x.round_id === r.id)
+    const me = on.find(x => mineIds.has(x.player_id))
+    const others = on.filter(x => !mineIds.has(x.player_id) && x.booked_by && mineIds.has(x.booked_by)).length
+    if (!me && !others) continue
+    out.comps.push({ code: t.trip_code, name: t.name, date: r.scheduled_date, time: me ? clocks[me.slot_index] ?? null : null, playing: !!me, bookedOthers: others })
+  }
+  return out
+}

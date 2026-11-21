@@ -671,6 +671,9 @@ export interface ClubAnswer {
   counts?: ListCounts
   byPhase?: Record<string, number>
   needs?: Need[]
+  /** D276: the Overview's day (Irish) and what this account is in this week. */
+  today?: string
+  yours?: import('@/lib/clubOverview').YoursFacts
   done?: number
   failed?: { name: string; why: string }[]
   csv?: string

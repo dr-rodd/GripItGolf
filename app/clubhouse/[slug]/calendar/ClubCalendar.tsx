@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
 import { eventHref, eventsOn, isOfficeOnly, monthGrid, opensOutside, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
@@ -29,6 +29,12 @@ export default function ClubCalendar() {
   const office = may('keep_calendar')
   const today = irishToday(new Date())
   const [ym, setYm] = useState<[number, number]>([Number(today.slice(0, 4)), Number(today.slice(5, 7))])
+  // D276: the Overview's search opens a day (?day=YYYY-MM-DD) — its month shown, the day outlined.
+  const [focusDay, setFocusDay] = useState<string | null>(null)
+  useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get('day')
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) { setFocusDay(d); setYm([Number(d.slice(0, 4)), Number(d.slice(5, 7))]) }
+  }, [])
   const [year, month] = ym
   const weeks = useMemo(() => monthGrid(year, month), [year, month])
   const title = new Intl.DateTimeFormat('en-IE', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(Date.UTC(year, month - 1, 1)))
@@ -90,7 +96,7 @@ export default function ClubCalendar() {
         {weeks.map((w, i) => (
           <div key={i} className="grid grid-cols-7 border-b border-line last:border-b-0">
             {w.map((d, j) => (
-              <div key={j} className={`min-h-24 p-1.5 border-r border-line last:border-r-0 ${d ? '' : 'bg-tint'}`}>
+              <div key={j} id={d ? `day-${d}` : undefined} className={`min-h-24 p-1.5 border-r border-line last:border-r-0 ${d ? '' : 'bg-tint'} ${d && d === focusDay ? 'outline outline-2 -outline-offset-2 outline-accent-deep' : ''}`}>
                 {d && (
                   <>
                     <p className={`text-[13px] tabular-nums mb-1 inline-flex items-center justify-center w-6 h-6 rounded-full ${d === today ? 'ring-2 ring-accent-deep text-ink font-semibold' : 'text-ink/65'}`}>
@@ -109,7 +115,7 @@ export default function ClubCalendar() {
         {events && busyDays.length === 0 && <p className="text-ink/65 text-[15px]">Nothing on in {title}.</p>}
         <ul className={`${cardClass()} divide-y divide-line overflow-hidden ${busyDays.length ? '' : 'hidden'}`}>
           {busyDays.map(({ d, on }) => (
-            <li key={d} className="px-4 py-3">
+            <li key={d} className={`px-4 py-3 ${d === focusDay ? 'bg-accent-tint' : ''}`}>
               <p className="t-cap text-ink/65">{new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))}</p>
               {on.map(e => {
                 const href = eventHref(e, face.slug)

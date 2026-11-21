@@ -42,6 +42,11 @@ export default function TeeSheet() {
   const office = may('keep_tee_sheet')
   const season = useSeason(club.id)
   const [asked, setAsked] = useState<{ date: string; n: number }>(() => ({ date: irishToday(new Date()), n: 0 }))
+  // D276: the Overview opens a day (?day=YYYY-MM-DD).
+  useEffect(() => {
+    const d = new URLSearchParams(window.location.search).get('day')
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) setAsked({ date: d, n: 0 })
+  }, [])
   const [day, setDay] = useState<Day | null>(null)
   const [lost, setLost] = useState<string | null>(null)
   const [picked, setPicked] = useState<Set<string>>(new Set())
