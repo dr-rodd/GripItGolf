@@ -2,7 +2,7 @@
 // copy. Pure: handed the facts, it answers the phase, which sections of the
 // competition page are live (D181), and the line each says before it is.
 //
-//   Announced         before the tee sheet opens for booking
+//   Scheduled         before the tee sheet opens for booking
 //   Booking open      from the sheet's opening until the first tee time
 //   In play           from the first tee time, or the first card started,
 //                     until scoring closes
@@ -49,7 +49,7 @@ export function compPhase(f: CompFacts, now: number): CompPhase {
 
 /** The phase as the competition page's one line and Comps' rows say it. */
 export const PHASE_WORDS: Record<CompPhase, string> = {
-  announced: 'Announced',
+  announced: 'Scheduled',
   booking: 'Booking open',
   in_play: 'In play',
   awaiting: 'Awaiting sign-off',

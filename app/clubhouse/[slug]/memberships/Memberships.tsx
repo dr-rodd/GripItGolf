@@ -6,7 +6,8 @@ import {
   CATEGORY_CODE_MAX, CATEGORY_NAME_MAX, EVERY_DAY, WEEKDAYS, WEEKDAY_NAMES, ageDateLabel, categoryCodeFrom, categoryIssue,
   daysLine, normaliseCode, uniqueCode,
 } from '@/lib/clubMembership'
-import { FIELD, FIELD_LABEL, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { IconSettings, IconX } from '@/app/components/icons'
+import { FIELD, FIELD_LABEL, IconButton, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { useShell } from '../ShellContext'
 import { useCategories, type CountedCategory } from '../useCategories'
 
@@ -31,6 +32,7 @@ export default function Memberships() {
   const [error, setError] = useState('')
   const [deleting, setDeleting] = useState<string | null>(null)
   const [note, setNote] = useState('')
+  const [settings, setSettings] = useState(false)
 
   if (!may('keep_list')) return <p className="text-ink/80 text-[15px]">Only someone with Clubhouse keeps the club’s memberships.</p>
 
@@ -75,6 +77,7 @@ export default function Memberships() {
         {categories && !draft && (
           <button type="button" onClick={() => open(null)} className={`${buttonClass('secondary', false)} ch-focus`}>Add a membership</button>
         )}
+        <IconButton label="Membership settings" onClick={() => setSettings(true)} className="ch-focus"><IconSettings size={22} /></IconButton>
       </div>
 
       {lost && (
@@ -86,7 +89,7 @@ export default function Memberships() {
       {note && <p role="status" className="t-cap text-ink/80 mt-4">{note}</p>}
       {error && !draft && <p role="alert" className="t-cap text-rust-deep mt-4">{error}</p>}
 
-      <div className="grid gap-4 mt-6 lg:grid-cols-[minmax(0,1fr)_340px] items-start">
+      <div className="mt-6">
         <div className="space-y-4 min-w-0">
           {draft && (
             <section className={`${cardClass()} p-5`} aria-labelledby="mem-edit">
@@ -170,19 +173,22 @@ export default function Memberships() {
           )}
         </div>
 
-        <div className="space-y-4 min-w-0">
-          <AgeDateCard clubId={club.id} ageDate={ageDate} onSaved={setAgeDate} ready={!!categories} />
-          <section className={`${cardClass('flat')} p-5`} aria-labelledby="mem-sheet">
-            <h2 id="mem-sheet" className="t-card text-ink">In the spreadsheet</h2>
-            <ul className="text-ink/80 text-[15px] mt-3 space-y-2 leading-snug">
-              <li><span className="font-medium text-ink">Gender</span>: Male, Female or N/A</li>
-              <li><span className="font-medium text-ink">Date of birth</span>: day first, like 03/04/2010, or N/A</li>
-              <li><span className="font-medium text-ink">Category</span>: {list.length ? list.map(c => c.code).join(', ') : 'a membership’s code'}, or N/A</li>
-            </ul>
-            <p className="t-cap text-ink/65 mt-3">An empty cell changes nothing. N/A clears it.</p>
-          </section>
-        </div>
       </div>
+      {settings && (
+        <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="mem-settings"
+          onKeyDown={e => { if (e.key === 'Escape') setSettings(false) }}>
+          <button type="button" aria-label="Close" onClick={() => setSettings(false)} className="absolute inset-0 bg-ink/30" />
+          <div className="ch-panel relative w-full md:w-[400px] h-full overflow-y-auto paper border-l border-line shadow-floating p-6">
+            <div className="flex items-start gap-3">
+              <h2 id="mem-settings" className="t-h2 text-ink flex-1">Membership settings</h2>
+              <button type="button" onClick={() => setSettings(false)} aria-label="Close" className="ch-hover ch-focus w-11 h-11 rounded-full flex items-center justify-center text-ink flex-shrink-0"><IconX size={22} /></button>
+            </div>
+            <div className="mt-4">
+              <AgeDateCard clubId={club.id} ageDate={ageDate} onSaved={d => { setAgeDate(d); setSettings(false) }} ready={!!categories} />
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }

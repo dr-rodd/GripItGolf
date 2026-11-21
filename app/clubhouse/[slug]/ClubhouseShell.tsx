@@ -113,11 +113,12 @@ export default function ClubhouseShell({ face, children }: { face: ClubhouseFace
           </div>
         </div>
         {clubs.length > 1 && (
-          <label className="block">
+          <label className="block relative">
             <span className="sr-only">Another club</span>
-            <select value={face.slug} onChange={e => router.push(clubhouseHref(e.target.value))} className="field ch-focus">
+            <select value={face.slug} onChange={e => router.push(clubhouseHref(e.target.value))} className="field ch-focus appearance-none pr-9">
               {clubs.map(c => <option key={c.slug} value={c.slug}>{c.name}</option>)}
             </select>
+            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-ink/65"><path d="M6 9l6 6 6-6" /></svg>
           </label>
         )}
         {nav}

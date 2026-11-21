@@ -1106,7 +1106,7 @@ async function competitionTests() {
   const f = (o: Partial<CompFacts> = {}): CompFacts => ({
     bookingOpensAt: at - 48 * H, firstTeeAt: at, booked: 0, finished: 0, cardsStarted: false, certifiedAt: null, ...o,
   })
-  eq(compPhase(f(), at - 72 * H), 'announced', 'before booking opens: Announced')
+  eq(compPhase(f(), at - 72 * H), 'announced', 'before booking opens: Scheduled')
   eq(compPhase(f(), at - 24 * H), 'booking', 'from the opening: Booking open')
   eq(compPhase(f({ bookingOpensAt: null }), at - 72 * H), 'booking', 'no opening set: open from the start')
   eq(compPhase(f({ booked: 8 }), at), 'in_play', 'from the first tee time: In play')
