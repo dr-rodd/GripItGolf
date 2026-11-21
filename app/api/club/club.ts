@@ -87,7 +87,7 @@ export interface MemberRecord {
 export type RowPatch = Partial<{
   name: string; member_number: string | null; gui_number: string | null; email: string | null
   role: ClubRole; user_id: string | null; linked_at: string | null; removed_at: string | null; on_boards: boolean
-  plays_here: boolean; officer: boolean; clubhouse: boolean
+  officer: boolean; clubhouse: boolean
   category_id: string | null; gender: Gender | null; birth_date: string | null
 }>
 

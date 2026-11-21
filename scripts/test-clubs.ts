@@ -263,7 +263,6 @@ class Stand implements ClubStore {
       ...(p.user_id !== undefined ? { userId: p.user_id } : {}),
       ...(p.removed_at !== undefined ? { removedAt: p.removed_at } : {}),
       ...(p.on_boards !== undefined ? { onBoards: p.on_boards } : {}),
-      ...(p.plays_here !== undefined ? { playsHere: p.plays_here } : {}),
       ...(p.officer !== undefined ? { officer: p.officer } : {}),
       ...(p.clubhouse !== undefined ? { clubhouse: p.clubhouse } : {}),
       ...(p.category_id !== undefined ? { categoryId: p.category_id } : {}),
@@ -1792,6 +1791,9 @@ function playsFollowsMembershipTests() {
   const clubhouseFiles: string[] = []
   const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx?$/.test(e.name)) clubhouseFiles.push(f) } }
   walk(path.join(__dirname, '../app/clubhouse'))
+  const m98 = read('supabase/migrations/20260101000098_drop_plays_here.sql')
+  ok(/^ALTER TABLE club_members DROP COLUMN IF EXISTS plays_here;$/m.test(m98) && /--\s+ALTER TABLE club_members ADD COLUMN IF NOT EXISTS plays_here boolean NOT NULL DEFAULT true;/.test(m98),
+    'migration 098 drops plays_here, its undo written beside it')
   eq(clubhouseFiles.filter(f => /Plays here|plays here/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(path.join(__dirname, '..'), f)), [], 'no Plays here in the Clubhouse (M1)')
 }
 

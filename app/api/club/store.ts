@@ -464,7 +464,7 @@ export function clubStore(db: Db): ClubStore {
     async updateRow(id, patch) {
       const { error } = await db.from('club_members').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
       if (error?.code === '23505') return 'clash'
-      if (isMissingColumn(error) && ['plays_here', 'officer', 'clubhouse', 'category_id', 'gender', 'birth_date'].some(k => k in patch)) throw new TicksNotReady()
+      if (isMissingColumn(error) && ['officer', 'clubhouse', 'category_id', 'gender', 'birth_date'].some(k => k in patch)) throw new TicksNotReady()
       if (error) throw error
       return 'ok'
     },

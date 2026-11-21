@@ -9,8 +9,8 @@
 // * **Plays here** — a golfer at the club: in its fields, boards and stats
 //   (D209). **No longer a tick (D275, Ross, 21 Nov 2026)**: it follows the
 //   row's membership — no membership, or one that plays on at least one day
-//   (`playsByMembership`). `club_members.plays_here` is kept, unread, until
-//   it is dropped.
+//   (`playsByMembership`). `club_members.plays_here` is unread and dropped
+//   by migration 098.
 // * **Officer** — edit access in the members app, on the phone: New
 //   competition, Manage competition, tee times, No return, sign or void a
 //   card, Certify, Reopen, calling a competition off. The organiser of the
@@ -26,7 +26,7 @@
 // **Green Dot staff** (D222, stage (k1)) may do everything Clubhouse and
 // Owner may, at any club; they are never the club's Officers.
 //
-// Stored on `club_members` (migration 092): `plays_here`, `officer`,
+// Stored on `club_members` (migration 092): `officer`,
 // `clubhouse`, and `role`, which keeps `owner` and mirrors the rest for the
 // code before 092 (`storedRole`). Before 092 the ticks are read off the
 // role (`credentialsOf`): owners and admins Officer and Clubhouse, everyone
