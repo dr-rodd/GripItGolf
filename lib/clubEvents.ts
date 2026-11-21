@@ -82,6 +82,13 @@ export interface ClubNote {
    * corporate outing, a society, a course closure.
    */
   blocksSheet: boolean
+  /**
+   * D277, migration 099: the room an event is in, or — a Golf or Course
+   * event — the course it is on (null: Course 1). Absent before 099. An
+   * event in neither keeps `place`, its free text ("Other").
+   */
+  locationId?: string | null
+  locationCourseId?: string | null
 }
 
 /** Types whose events may block the casual tee sheet. */
@@ -121,6 +128,8 @@ export function readClubNote(raw: unknown): Omit<ClubNote, 'id' | 'ref'> & { id:
     notes: typeof r.notes === 'string' && r.notes.trim() ? r.notes.trim().slice(0, NOTE_NOTES_MAX + 1) : null,
     visibility: r.visibility === 'office' ? 'office' : 'members',
     blocksSheet: r.blocksSheet === true,
+    locationId: typeof r.locationId === 'string' && r.locationId ? r.locationId : null,
+    locationCourseId: typeof r.locationCourseId === 'string' && r.locationCourseId ? r.locationCourseId : null,
   }
 }
 
@@ -140,6 +149,8 @@ export function noteIssue(n: ReturnType<typeof readClubNote>): string | null {
   if (n.visibility === 'office' && !mayBeOffice(n.type)) return `${typeLabel(n.type)} events are always shown to members — anything that touches the golf is.`
   if (n.blocksSheet && !mayBlockSheet(n.type)) return 'Only a Golf or Course event takes the tee sheet.'
   if (n.blocksSheet && n.visibility === 'office') return 'An event that takes the tee sheet is shown to members.'
+  if (n.locationId && n.locationCourseId) return 'An event is in one place.'
+  if (n.locationCourseId && n.type !== 'GOLF' && n.type !== 'COURSE') return 'Only a Golf or Course event is on a course.'
   return null
 }
 

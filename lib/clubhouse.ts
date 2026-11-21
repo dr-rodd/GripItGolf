@@ -265,6 +265,10 @@ export interface SeasonEvent {
   competition: {
     phase: CompPhase
     courseName: string | null
+    /** D277: its course, and its first and last tee time — the day view's block. Absent on a match play. */
+    courseId?: string | null
+    firstTee?: string | null
+    lastTee?: string | null
     scoring: 'stableford' | 'strokes'
     allowance: number
     booked: number

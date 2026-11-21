@@ -11,6 +11,7 @@ import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
 import { missing095, readNotes, saveNote } from '../notesStore'
 import { readPresets } from '../presetsStore'
+import { readPlaces } from '../locationsStore'
 import { runCalendarImport, type ImportStore } from '../calendarImport'
 import { compFormFrom, type CompForm } from '@/lib/clubComp'
 import { isMissingColumn } from '../rows'
@@ -92,6 +93,7 @@ export async function POST(req: NextRequest) {
         return c ? { name: c.name, lat: c.latitude === null ? null : Number(c.latitude), lng: c.longitude === null ? null : Number(c.longitude) } : null
       },
       clubComps: clubId => readClubComps(db, clubId),
+      places: (clubId, used) => readPlaces(db, clubId, used),
     }
     // Stage c2, M12–M16: a calendar imported in the Clubhouse.
     if (body?.action === 'import.prompt' || body?.action === 'import.preview' || body?.action === 'import.rows') {

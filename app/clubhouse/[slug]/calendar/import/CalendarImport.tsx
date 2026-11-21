@@ -213,6 +213,7 @@ export default function CalendarImport() {
                           {r.why && <span className="block text-rust-deep">{r.why}</span>}
                           {r.sheet && <span className="block text-ink/80">{r.sheet}</span>}
                           {r.sheetWhy && <span className="block text-rust-deep">Tee sheet not made: {r.sheetWhy}{r.status !== 'new' ? ' — its old one is kept.' : ''}</span>}
+                          {r.placeNote && <span className="block text-ink/80">{r.placeNote}</span>}
                           {r.check && <span className="block text-gold-deep font-semibold">Check: {r.check}</span>}
                         </td>
                         <td className="px-3 py-2.5">

@@ -5,10 +5,11 @@ import ClubHomeCourse from '@/app/account/club/ClubHomeCourse'
 import { cardClass } from '@/app/components/ui'
 import { useShell } from '../ShellContext'
 import ShowToMembers from './ShowToMembers'
+import ClubLocations from './ClubLocations'
 
 /**
- * Club settings (stage (k1)): the club's look — crest, art, colour — and its
- * home course, the same parts the list page held, moved as they are. Both
+ * Club settings (stage (k1)): the club's look — crest, art, colour — its
+ * locations (D277) and its home course, the same parts the list page held, moved as they are. Both
  * fold to one column, so a phone has them too (D202).
  */
 export default function ClubSettings() {
@@ -24,6 +25,11 @@ export default function ClubSettings() {
         {club.status === 'verified' && (
           <section className={`${cardClass()} p-5 [&>section]:mt-0`}>
             <ClubHomeCourse club={club} onChange={setClub} />
+          </section>
+        )}
+        {club.status === 'verified' && (
+          <section className={`${cardClass()} p-5`}>
+            <ClubLocations clubId={club.id} />
           </section>
         )}
         {club.status === 'verified' && may('keep_calendar') && (

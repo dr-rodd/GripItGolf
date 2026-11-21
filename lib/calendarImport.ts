@@ -41,6 +41,8 @@ export interface CalendarContext {
   homeCourse: string | null
   memberships: { id: string; code: string; name: string; days: number[] }[]
   presets: Pick<Preset, 'code' | 'name' | 'usedFor' | 'isDefault' | 'plan'>[]
+  /** D277: the club's places by name — its rooms, and its courses where it has more than one. */
+  places?: string[]
 }
 
 // ─── Reading the file ─────────────────────────────────────────
@@ -256,6 +258,8 @@ export interface PreviewRow {
   check: string | null
   /** A competition's tee times in a line, or why they cannot be made. */
   sheet: string | null
+  /** D277: a Where that is none of the club's places — kept as text, said so. */
+  placeNote?: string | null
   sheetWhy: string | null
 }
 export interface RowOutcome { line: number; title: string; outcome: 'made' | 'changed' | 'same' | 'skipped' | 'failed'; why: string | null }
@@ -299,6 +303,9 @@ ${memberships}
 ITS PRESETS (use only these codes, in the Preset column)
 ${presets}
 
+ITS PLACES (use these names in the Where column)
+${ctx.places?.length ? ctx.places.map(p => `- ${p}`).join('\n') : '- (The club has no places listed. Write where it happens in a few words.)'}
+
 EVENT TYPES (the Type column)
 ${types}
 
@@ -326,7 +333,7 @@ THE COLUMNS
 - Format (COMP only): STABLEFORD or STROKES, or blank for the preset's.
 - Allowance (COMP only): the handicap allowance, a whole number from 50 to 100, or blank for the preset's (95 if there is none).
 - Preset (COMP only): one of the preset codes above, or blank for the club's default.
-- Where: where it happens, if not the course.
+- Where: one of the club's places above, written as it is there; or, if it happens somewhere else, the place in a few words. Blank for golf on the course.
 - Notes: anything else worth telling members, short.
 - Check: blank, unless you are unsure of anything in the row — then say what, in a few words. Rows with Check filled are looked at by a person before they come in.
 

@@ -23,7 +23,8 @@ import { irishToday } from '@/lib/clubs'
 import { sunDay } from '@/lib/sun'
 import { describeRules } from '@/lib/teeSheet'
 import { compTeeRules } from '@/lib/clubComp'
-import { mayBlockSheet, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
+import { mayBlockSheet, typeLabel, type ClubEventType, type ClubNote, type EventType } from '@/lib/clubEvents'
+import { NO_PLACES, placeFields, type ClubPlaces } from '@/lib/clubLocations'
 import {
   MAX_CALENDAR_ROWS, calendarPrompt, calendarTemplate, noteIssue, readCalendarRow, rowAsNote, rowRecipe,
   type CalendarCells, type CalendarContext, type CalendarRow, type PreviewRow, type RowOutcome, type RowStatus,
@@ -38,6 +39,8 @@ export interface ImportStore extends CompetitionStore {
   presets?(clubId: string): Promise<Preset[] | null>
   /** A course's name and where it is, for the prompt and the sun. */
   course?(courseId: string): Promise<{ name: string; lat: number | null; lng: number | null } | null>
+  /** D277: the club's courses and rooms — `used` the courses its competitions play. */
+  places?(clubId: string, used: string[]): Promise<ClubPlaces>
   /** Every competition under the club, as its form (null where its sheet does not read), with its Ref. */
   clubComps?(clubId: string): Promise<{ code: string; ref: string | null; name: string; date: string; form: CompForm | null }[]>
 }
@@ -61,6 +64,7 @@ function sameForm(a: CompForm, b: CompForm): boolean {
 const sameNote = (a: ClubNote, b: Omit<ClubNote, 'id'>) =>
   a.title === b.title && a.type === b.type && a.startsOn === b.startsOn && (a.endsOn ?? null) === (b.endsOn ?? null)
   && a.startTime === b.startTime && a.endTime === b.endTime && a.place === b.place && a.notes === b.notes && a.visibility === b.visibility
+  && (a.locationId ?? null) === (b.locationId ?? null) && (a.locationCourseId ?? null) === (b.locationCourseId ?? null)
 
 /** Everything a row is worked out against, read once a request. */
 async function contextOf(store: ImportStore, clubId: string, year: number) {
@@ -73,12 +77,15 @@ async function contextOf(store: ImportStore, clubId: string, year: number) {
     store.clubComps ? store.clubComps(clubId) : Promise.resolve([]),
     homeId && store.course ? store.course(homeId).catch(() => null) : Promise.resolve(null),
   ])
+  const used = [...new Set(comps.flatMap(c => (c.form?.courseId ? [c.form.courseId] : [])))]
+  const places = store.places ? await store.places(clubId, used).catch(() => NO_PLACES) : NO_PLACES
   const ctx: CalendarContext = {
     clubName: club?.name ?? '', year, homeCourse: home?.name ?? null,
     memberships: categories.map(c => ({ id: c.id, code: c.code, name: c.name, days: c.days })),
     presets: presets ?? [],
+    places: [...(places.courses.length > 1 ? places.courses.map(c => c.label) : []), ...places.rooms.map(r => r.name)],
   }
-  return { club, homeId, home, categories, presets: presets ?? [], notes, comps, ctx, ready: presets !== null && notes !== null }
+  return { club, homeId, home, categories, presets: presets ?? [], notes, comps, ctx, places, ready: presets !== null && notes !== null }
 }
 type Context = Awaited<ReturnType<typeof contextOf>>
 
@@ -113,12 +120,15 @@ function workOut(r: CalendarRow, k: Context, today: string): {
   const notes = k.notes ?? []
   const existing = (r.ref ? notes.find(n => n.ref === r.ref) : undefined) ?? notes.find(n => key(n.startsOn, n.title) === key(r.date, r.title)) ?? null
   if (r.bad.length) return { preview: { ...base, status: 'bad' }, form: null, note: null, comp: null, existingNote: existing }
-  const note = rowAsNote(r)
+  // D277: Where matched to one of the club's places, else kept as text and said so.
+  const at = placeFields(r.type as ClubEventType, r.place, k.places)
+  const note = { ...rowAsNote(r), place: at.place, locationId: at.locationId, locationCourseId: at.locationCourseId }
   const issue = noteIssue(note)
   if (issue) return { preview: { ...base, status: 'bad', why: issue }, form: null, note: null, comp: null, existingNote: existing }
   // A calendar file says nothing about the tee sheet: an event the office set to take it keeps doing so.
   const n = { ...note, ref: note.ref ?? existing?.ref ?? null, blocksSheet: !!existing?.blocksSheet && mayBlockSheet(note.type) }
-  return { preview: { ...base, status: !existing ? 'new' : sameNote(existing, n) ? 'same' : 'changed' }, form: null, note: n, comp: null, existingNote: existing }
+  const placeNote = at.kept ? `Where: “${at.place}” isn’t one of the club’s places — kept as text.` : null
+  return { preview: { ...base, status: !existing ? 'new' : sameNote(existing, n) ? 'same' : 'changed', placeNote }, form: null, note: n, comp: null, existingNote: existing }
 }
 
 /** The rows a request carries, read against the club. */

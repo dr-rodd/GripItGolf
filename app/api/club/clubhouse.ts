@@ -30,6 +30,7 @@ import type { AuthUser } from '@/lib/account'
 import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { noteAsSeason } from '@/lib/clubhouse'
 import { NO_YOURS, periodRange, type YoursFacts } from '@/lib/clubOverview'
+import { NO_PLACES, roomNameIssue, type ClubPlaces } from '@/lib/clubLocations'
 import { planLine, presetIssue, readPreset, type Preset } from '@/lib/clubPresets'
 import { entryRulesIssue } from '@/lib/clubMembership'
 import type { ActivityEntry, ClubOutcome, ClubRecord, ClubStore, ClubSummary, MemberRecord } from './club'
@@ -71,6 +72,12 @@ export interface ClubhouseStore {
   markInvited?(memberId: string, at: string): Promise<void>
   /** Stage (k2): every event under the club, with a competition's facts. */
   seasonEvents?(clubId: string): Promise<SeasonEvent[]>
+  /** D277: the club's courses and rooms — courses worked out, `used` being those its competitions play. */
+  places?(clubId: string, used: string[]): Promise<ClubPlaces>
+  saveRoom?(clubId: string, room: { id: string | null; name: string; position: number }): Promise<string>
+  addCourse?(clubId: string, courseId: string, position: number): Promise<void>
+  deleteLocation?(clubId: string, id: string): Promise<void>
+  orderRooms?(clubId: string, ids: string[]): Promise<void>
   /** Stage c1 (095): the club's own events — office ones too — null before 095. */
   notes?(clubId: string, opts?: { from?: string; membersOnly?: boolean }): Promise<ClubNote[] | null>
   /** One kept, the id back; throws NotesNotReady before 095. */
@@ -94,7 +101,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'presets', 'preset.save', 'preset.delete'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'places', 'location.save', 'location.course', 'location.delete', 'location.order', 'presets', 'preset.save', 'preset.delete'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -293,7 +300,50 @@ export async function runClubhouse(
       store.notes ? store.notes(club.id).catch(() => null) : Promise.resolve(null),
       store.clubHidden ? store.clubHidden(club.id).catch(() => []) : Promise.resolve([]),
     ])
-    return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(noteAsSeason)], notesReady: notes !== null, hiddenTypes: hidden } }
+    const places = await readPlacesFor(store, club.id, events)
+    return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(noteAsSeason)], notesReady: notes !== null, hiddenTypes: hidden, places } }
+  }
+
+  // D277: the club's locations — read by anybody in the Clubhouse, kept by the calendar's keepers.
+  if (action === 'places' || action === 'location.save' || action === 'location.course' || action === 'location.delete' || action === 'location.order') {
+    const LATER = 'Locations aren’t set up yet — try again later.'
+    const now0 = await readPlacesFor(store, club.id, store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : [])
+    if (action === 'places') return { status: 200, body: { ok: true, places: now0 } }
+    if (!clubMay('keep_calendar', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s locations.')
+    if (!now0.ready || !store.saveRoom || !store.addCourse || !store.deleteLocation || !store.orderRooms) return fail(503, LATER)
+    try {
+      if (action === 'location.save') {
+        const id = str(input.id) || null
+        const name = str(input.name).trim()
+        const before = id ? now0.rooms.find(r => r.id === id) : undefined
+        if (id && !before) return fail(404, 'That place isn’t the club’s.')
+        const why = roomNameIssue(name, now0.rooms, id)
+        if (why) return fail(400, why)
+        await store.saveRoom(club.id, { id, name, position: before?.position ?? now0.rooms.length })
+        await logged([line(before ? 'location.rename' : 'location.add', null, { [name]: [before?.name ?? null, name] })])
+      } else if (action === 'location.course') {
+        const courseId = str(input.courseId)
+        if (!courseId) return fail(400, 'Choose a course.')
+        if (now0.courses.some(c => c.courseId === courseId)) return fail(409, 'That course is already the club’s.')
+        await store.addCourse(club.id, courseId, now0.courses.length)
+        await logged([line('location.course', null, { course: [null, courseId] })])
+      } else if (action === 'location.delete') {
+        const id = str(input.id)
+        const room = now0.rooms.find(r => r.id === id), course = now0.courses.find(c => c.locationId === id)
+        if (!room && !course) return fail(404, 'That place isn’t one the club added.')
+        await store.deleteLocation(club.id, id)
+        await logged([line('location.delete', null, { [room?.name ?? course!.name]: [room ? 'Room' : 'Course', null] })])
+      } else {
+        const ids = Array.isArray(input.ids) ? input.ids.filter((x): x is string => typeof x === 'string') : []
+        const mine = new Set(now0.rooms.map(r => r.id))
+        if (ids.length !== mine.size || ids.some(i => !mine.has(i))) return fail(400, 'Every room, once.')
+        await store.orderRooms(club.id, ids)
+      }
+    } catch (e) {
+      return (e as Error)?.name === 'LocationsNotReady' ? fail(503, LATER) : fail(503, 'Could not save the location — try again.')
+    }
+    const places = await readPlacesFor(store, club.id, store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : [])
+    return { status: 200, body: { ok: true, places } }
   }
 
   // Stage c1, M7: a preset kept or deleted — the office's.
@@ -355,6 +405,12 @@ export async function runClubhouse(
     const why = noteIssue(note)
     if (why) return fail(400, why)
     if (note.ref && all.some(n => n.ref === note.ref && n.id !== id)) return fail(409, 'Another event already has that Ref.')
+    // D277: a room or course is one of the club's own.
+    if (note.locationId || note.locationCourseId) {
+      const places = await readPlacesFor(store, club.id, store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : [])
+      if (note.locationId && !places.rooms.some(r => r.id === note.locationId)) return fail(400, 'That place isn’t one of the club’s.')
+      if (note.locationCourseId && !places.courses.some(c => c.courseId === note.locationCourseId)) return fail(400, 'That course isn’t one of the club’s.')
+    }
     let saved: string
     try {
       saved = await store.saveNote(club.id, { ...note, ref: note.ref ?? before?.ref ?? null }, { userId: user.id })
@@ -462,3 +518,10 @@ function randomUuid(store: Store): string {
 
 /** Numbers as the phone's list shows them — for the log, never the grid. */
 export const logNumber = maskNumber
+
+/** The club's places, its competitions' courses among them (D277). Never fails. */
+async function readPlacesFor(store: ClubhouseStore, clubId: string, events: SeasonEvent[]): Promise<ClubPlaces> {
+  if (!store.places) return NO_PLACES
+  const used = [...new Set(events.flatMap(e => (e.competition?.courseId ? [e.competition.courseId] : [])))]
+  return store.places(clubId, used).catch(e => { console.error('places failed:', e); return NO_PLACES })
+}

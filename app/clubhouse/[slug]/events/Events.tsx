@@ -2,13 +2,12 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import CourseName from '@/app/components/CourseName'
-import { splitCourseName } from '@/lib/courseDirectory'
 import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from '@/app/components/ui'
 import { eventHref, formatLine, isOfficeOnly, opensOutside, seasonOfYear, seasonType, seasonYears, type SeasonEvent } from '@/lib/clubhouse'
 import { EVENT_TYPES, noteTimeLine, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
+import { seasonPlaceLine } from '@/lib/clubLocations'
 import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
 import EventPanel from './EventPanel'
@@ -34,7 +33,7 @@ type Shown = 'all' | 'members' | 'office'
  */
 export default function Events() {
   const { face, club, may } = useShell()
-  const { events, lost, again, notesReady } = useSeason(club.id)
+  const { events, lost, again, notesReady, places } = useSeason(club.id)
   const thisYear = Number(irishToday(new Date()).slice(0, 4))
   const [year, setYear] = useState(thisYear)
   const [type, setType] = useState<EventType | 'all'>('all')
@@ -69,8 +68,6 @@ export default function Events() {
   const rows = useMemo(() => seasonOfYear(events ?? [], year)
     .filter(e => type === 'all' || seasonType(e) === type)
     .filter(e => shown === 'all' || (shown === 'office') === isOfficeOnly(e)), [events, year, type, shown])
-  // A club with one course names it once at most: its rows say "Course" (D272).
-  const oneCourse = useMemo(() => new Set((events ?? []).map(e => e.competition?.courseName).filter(Boolean)).size <= 1, [events])
   const years = useMemo(() => seasonYears(events ?? [], thisYear), [events, thisYear])
   const typesHere = useMemo(() => EVENT_TYPES.filter(t => (events ?? []).some(e => seasonType(e) === t.code)), [events])
   // The event's name opens it: a club event's panel (the office's), anything else where it lives.
@@ -180,7 +177,7 @@ export default function Events() {
                         {typeLabel(seasonType(e))}
                         {c && <span className="block t-cap text-ink/65">{formatLine(c)}</span>}
                       </td>
-                      <td className="px-3 text-ink/80 text-[15px]">{c?.courseName ? (oneCourse ? 'Course' : <CourseName name={c.courseName} />) : n?.place ?? '—'}</td>
+                      <td className="px-3 text-ink/80 text-[15px]">{seasonPlaceLine(e, places) ?? '—'}</td>
                       <td className="px-3 text-ink/80 text-[15px]">{c ? c.entry ?? 'Everybody' : '—'}</td>
                       <td className="px-3 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c ? (c.matchPlay ? `${c.matchPlay.entered}${c.matchPlay.cap ? ` of ${c.matchPlay.cap}` : ''}` : c.capacity ? `${c.booked} of ${c.capacity}` : c.booked) : '—'}</td>
                       <td className="px-3 whitespace-nowrap">
@@ -200,7 +197,7 @@ export default function Events() {
           </div>
           <ul className={`${cardClass()} mt-6 divide-y divide-line md:hidden overflow-hidden`}>
             {rows.map(e => {
-              const line = [clubEventDates(e.startDate, e.endDate), e.competition?.courseName ? (oneCourse ? 'Course' : splitCourseName(e.competition.courseName).club) : e.note?.place ?? null].filter(Boolean).join(' · ')
+              const line = [clubEventDates(e.startDate, e.endDate), seasonPlaceLine(e, places)].filter(Boolean).join(' · ')
               const body = (
                 <>
                   <span className="flex-1 min-w-0">

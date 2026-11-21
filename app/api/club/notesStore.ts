@@ -21,15 +21,21 @@ export class NotesNotReady extends Error {
 const NOTE_COLS = 'id, ref, title, type, starts_on, ends_on, start_time, end_time, place, notes, visibility'
 /** 096's column — an event that takes the casual tee sheet — read in a second try when missing. */
 const BLOCK_COL = 'blocks_tee_sheet'
+/** 099's columns — the room or course an event is in (D277) — asked for first, dropped when missing. */
+const PLACE_COLS = 'location_id, location_course_id'
+const missingPlaceCols = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === '42703' || e.code === 'PGRST204') && /location_/.test(e.message ?? '')
 type NoteRow = {
   id: string; ref: string | null; title: string; type: ClubEventType; starts_on: string; ends_on: string | null
   start_time: string | null; end_time: string | null; place: string | null; notes: string | null; visibility: 'members' | 'office'
   blocks_tee_sheet?: boolean | null
+  location_id?: string | null; location_course_id?: string | null
 }
 const asNote = (r: NoteRow): ClubNote => ({
   id: r.id, ref: r.ref, title: r.title, type: r.type, startsOn: r.starts_on, endsOn: r.ends_on,
   startTime: r.start_time, endTime: r.end_time, place: r.place, notes: r.notes, visibility: r.visibility,
   blocksSheet: r.blocks_tee_sheet === true,
+  ...('location_id' in r ? { locationId: r.location_id ?? null, locationCourseId: r.location_course_id ?? null } : {}),
 })
 
 /** 096 is not in yet: an event cannot take the tee sheet. */
@@ -52,7 +58,8 @@ export async function readNotes(db: Db, clubId: string, opts: { from?: string; t
     if (opts.to) q = q.lte('starts_on', opts.to)
     return q.order('starts_on').order('start_time', { nullsFirst: true }).order('title').limit(2000)
   }
-  let { data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}`)
+  let { data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}, ${PLACE_COLS}`)
+  if (error && missingPlaceCols(error)) ({ data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}`))
   if (error && missingBlockCol(error)) {
     if (opts.blocking) return []
     ;({ data, error } = await ask(NOTE_COLS))
@@ -72,7 +79,10 @@ export async function saveNote(db: Db, clubId: string, n: Omit<ClubNote, 'id'> &
   const write = (r: Record<string, unknown>) => n.id
     ? db.from('club_events').update(r).eq('id', n.id).eq('club_id', clubId).select('id').maybeSingle()
     : db.from('club_events').insert({ ...r, created_by: by.userId }).select('id').single()
-  let { data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet })
+  // 099: the room or course — a write before it saves without, its free text kept.
+  const placed = { location_id: n.locationId ?? null, location_course_id: n.locationCourseId ?? null }
+  let { data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet, ...placed })
+  if (error && missingPlaceCols(error)) ({ data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet }))
   // Before 096 an event that does not take the sheet saves as it always did.
   if (error && missingBlockCol(error)) {
     if (n.blocksSheet) throw new BlockNotReady()

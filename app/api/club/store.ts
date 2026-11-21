@@ -15,6 +15,7 @@ import { teeInstant } from '@/lib/clubComp'
 import { opensAt, parseTeeRules, sheetCapacity, teeClocks } from '@/lib/teeSheet'
 import { deleteNote, readClubHidden, readMemberHiddenOf, readNotes, saveNote, writeClubHidden } from './notesStore'
 import { deletePreset, readPresets, savePreset } from './presetsStore'
+import { addCourse, deleteLocation, orderRooms, readPlaces, saveRoom } from './locationsStore'
 import type { SeasonRow } from '@/lib/cardSummary'
 import type { AttemptWindow } from '@/lib/membership'
 import { asUser, userFromClaims } from '../account/store'
@@ -309,6 +310,7 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
       competition: {
         phase: e.competition.phase,
         courseName: round ? courseName.get(round.course_id) ?? null : null,
+        ...(round ? { courseId: round.course_id, ...teeSpan(rules) } : {}),
         scoring: board?.scoring === 'strokes' ? 'strokes' as const : 'stableford' as const,
         allowance: typeof board?.handicapAllowance === 'number' ? board.handicapAllowance : 100,
         booked: round ? booked.get(round.id) ?? 0 : 0,
@@ -319,6 +321,12 @@ export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEven
       },
     }
   })
+}
+
+/** A tee sheet's first and last time (D277): the day view's block for a competition. */
+function teeSpan(rules: ReturnType<typeof parseTeeRules>): { firstTee: string | null; lastTee: string | null } {
+  const clocks = rules ? teeClocks(rules) : []
+  return { firstTee: clocks[0] ?? null, lastTee: clocks[clocks.length - 1] ?? null }
 }
 
 /** A club's memberships in their order (094 — none before it). */
@@ -680,6 +688,11 @@ export function clubStore(db: Db): ClubStore {
       return readListCounts(db, clubId)
     },
     seasonEvents: clubId => readClubSeason(db, clubId),
+    places: (clubId, used) => readPlaces(db, clubId, used),
+    saveRoom: (clubId, room) => saveRoom(db, clubId, room),
+    addCourse: (clubId, courseId, position) => addCourse(db, clubId, courseId, position),
+    deleteLocation: (clubId, id) => deleteLocation(db, clubId, id),
+    orderRooms: (clubId, ids) => orderRooms(db, clubId, ids),
     // Stage c1 (095): the club's own events, what it shows, what a member asks to see.
     notes: (clubId, opts) => readNotes(db, clubId, opts),
     saveNote: (clubId, note, by) => saveNote(db, clubId, note, by),

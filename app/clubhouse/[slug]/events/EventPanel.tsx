@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { IconCheck, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
 import { askClub } from '@/lib/accountClient'
+import { NO_PLACES, onCourse, shortCourse, type ClubPlaces } from '@/lib/clubLocations'
 import {
   CLUB_EVENT_TYPES, NOTE_NOTES_MAX, NOTE_PLACE_MAX, NOTE_TITLE_MAX, mayBeOffice, mayBlockSheet, noteIssue, readClubNote, typeLabel,
   type ClubEventType, type ClubNote, type Visibility,
@@ -33,6 +34,15 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
   const [startTime, setStartTime] = useState(note?.startTime ?? '')
   const [endTime, setEndTime] = useState(note?.endTime ?? '')
   const [place, setPlace] = useState(note?.place ?? '')
+  // D277: a room (or Other with its text) for most events; the course for Golf and Course — asked only when the club has two.
+  const [room, setRoom] = useState<string>(note?.locationId ?? 'other')
+  const [courseId, setCourseId] = useState<string>(note?.locationCourseId ?? '')
+  const [places, setPlaces] = useState<ClubPlaces>(NO_PLACES)
+  useEffect(() => {
+    let live = true
+    void askClub('places', { clubId }).then(r => { if (live && r.ok && r.places) setPlaces(r.places) })
+    return () => { live = false }
+  }, [clubId])
   const [notes, setNotes] = useState(note?.notes ?? '')
   const [visibility, setVisibility] = useState<Visibility>(note?.visibility ?? 'members')
   const [blocks, setBlocks] = useState(note?.blocksSheet ?? !!blocking)
@@ -42,7 +52,15 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
 
   const office = mayBeOffice(type)
   const blockable = mayBlockSheet(type)
-  const draft = readClubNote({ title, type, startsOn, endsOn, startTime, endTime, place, notes, visibility: office ? visibility : 'members', blocksSheet: blockable && blocks })
+  const golfy = onCourse(type)
+  const roomPicked = !golfy && room !== 'other' && places.rooms.some(x => x.id === room)
+  const draft = readClubNote({
+    title, type, startsOn, endsOn, startTime, endTime, notes, visibility: office ? visibility : 'members', blocksSheet: blockable && blocks,
+    // A room or course picked leaves no free text behind; Other keeps it.
+    place: roomPicked || (golfy && places.courses.length > 0) ? '' : place,
+    locationId: roomPicked ? room : null,
+    locationCourseId: golfy && places.courses.length > 1 && courseId && courseId !== places.courses[0].courseId ? courseId : null,
+  })
   const issue = noteIssue(draft)
 
   useEffect(() => {
@@ -134,10 +152,40 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
               <input id="ev-end" type="time" className={`${FIELD} ch-focus`} value={endTime} onChange={e => setEndTime(e.target.value)} />
             </div>
           </div>
-          <div>
-            <label htmlFor="ev-place" className={FIELD_LABEL}>Where</label>
-            <input id="ev-place" className={`${FIELD} ch-focus`} value={place} maxLength={NOTE_PLACE_MAX} placeholder="e.g. The clubhouse bar" onChange={e => setPlace(e.target.value)} />
-          </div>
+          {golfy ? (
+            places.courses.length > 1 ? (
+              <div>
+                <label htmlFor="ev-course" className={FIELD_LABEL}>Course</label>
+                <select id="ev-course" className={`${FIELD} ch-focus`} value={courseId || places.courses[0].courseId} onChange={e => setCourseId(e.target.value)}>
+                  {places.courses.map(c => <option key={c.courseId} value={c.courseId}>{c.label} · {shortCourse(c.name)}</option>)}
+                </select>
+              </div>
+            ) : places.courses.length === 0 && (
+              <div>
+                <label htmlFor="ev-place" className={FIELD_LABEL}>Where</label>
+                <input id="ev-place" className={`${FIELD} ch-focus`} value={place} maxLength={NOTE_PLACE_MAX} placeholder="e.g. The first tee" onChange={e => setPlace(e.target.value)} />
+              </div>
+            )
+          ) : (
+            <div>
+              {places.rooms.length > 0 && (
+                <>
+                  <label htmlFor="ev-room" className={FIELD_LABEL}>Where</label>
+                  <select id="ev-room" className={`${FIELD} ch-focus`} value={roomPicked ? room : 'other'} onChange={e => setRoom(e.target.value)}>
+                    {places.rooms.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    <option value="other">Other</option>
+                  </select>
+                </>
+              )}
+              {!roomPicked && (
+                <>
+                  <label htmlFor="ev-place" className={places.rooms.length > 0 ? 'sr-only' : FIELD_LABEL}>{places.rooms.length > 0 ? 'Where else' : 'Where'}</label>
+                  <input id="ev-place" className={`${FIELD} ch-focus ${places.rooms.length > 0 ? 'mt-2' : ''}`} value={place} maxLength={NOTE_PLACE_MAX}
+                    placeholder={places.rooms.length > 0 ? 'Where else — e.g. The Strand Hotel' : 'e.g. The clubhouse bar'} onChange={e => setPlace(e.target.value)} />
+                </>
+              )}
+            </div>
+          )}
           <div>
             <label htmlFor="ev-notes" className={FIELD_LABEL}>Notes</label>
             <textarea id="ev-notes" rows={4} className={`${FIELD} ch-focus h-auto`} value={notes} maxLength={NOTE_NOTES_MAX} onChange={e => setNotes(e.target.value)} />

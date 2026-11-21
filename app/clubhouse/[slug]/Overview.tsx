@@ -105,7 +105,10 @@ export default function Overview() {
         </section>
       )}
 
-      <h2 className="t-eyebrow text-ink/65 mt-6">What’s on</h2>
+      <div className="mt-6 flex items-baseline gap-3">
+        <h2 className="t-eyebrow text-ink/65 flex-1">What’s on</h2>
+        <Link href={`${clubhouseHref(face.slug, 'settings')}#locations`} className="t-label text-ink/80 underline underline-offset-2 ch-focus rounded-tile">Locations</Link>
+      </div>
       <div className="mt-2 columns-1 lg:columns-2 gap-4 [&>*]:mb-4 [&>*]:break-inside-avoid">
         {loading && <div className={`${cardClass()} p-5`}><Skeleton /></div>}
         {quiet && (

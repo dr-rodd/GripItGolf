@@ -276,6 +276,8 @@ export type ClubBody = {
   /** D276: the Overview's day (Irish) and what this account is in this week. */
   today?: string
   yours?: import('@/lib/clubOverview').YoursFacts
+  /** D277: the club's courses and rooms. */
+  places?: import('@/lib/clubLocations').ClubPlaces
   done?: number
   failed?: { name: string; why: string }[]
   csv?: string
