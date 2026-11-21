@@ -4,7 +4,7 @@ import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
-import { EntryNotReady, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
+import { EntryNotReady, failWords, runChangeCompetition, runCopyCompetition, runNewCompetition, runNewMatchPlay, runReadMatchPlay, runReadCompetition, type CompNow, type CompetitionStore } from '../competition'
 import { parseTeeRules } from '@/lib/teeSheet'
 import { readAgeDate } from '@/lib/clubMembership'
 import { asRow, rowCols, withTicks, type RowRow } from '../rows'
@@ -129,7 +129,7 @@ export async function POST(req: NextRequest) {
     return res
   } catch (e) {
     console.error('competition failed:', e)
-    return NextResponse.json({ ok: false, error: 'Could not make the competition — try again.' }, { status: 503, headers: NO_STORE })
+    return NextResponse.json({ ok: false, error: failWords(body?.action) }, { status: 503, headers: NO_STORE })
   }
 }
 
@@ -174,7 +174,7 @@ async function readCompNow(db: Db, code: string): Promise<CompNow | null> {
     db.from('live_rounds').select('round_id', { count: 'exact', head: true }).eq('round_id', r.id),
     // Migration 091 — fail-soft: before it nothing is certified.
     db.from('rounds').select('certified_at').eq('id', r.id).maybeSingle(),
-    db.from('tee_assignments').select('player_id, slot_index, players(name, club_member_id)').eq('round_id', r.id),
+    db.from('tee_assignments').select('player_id, slot_index, players!player_id(name, club_member_id)').eq('round_id', r.id),
   ])
   if (seats.error) throw seats.error
   type Seat = { player_id: string; slot_index: number; players: { name: string; club_member_id: string | null } | { name: string; club_member_id: string | null }[] | null }

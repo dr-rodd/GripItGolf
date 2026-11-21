@@ -29,7 +29,7 @@ import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidt
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
-import { runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
+import { failWords, runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
 import { applyPreset, formFromPreset, planIssue, presetIssue, readPreset, resolvePlan, type TeePlan } from '../lib/clubPresets'
 import { CALENDAR_COLUMNS, CALENDAR_FORMAT, calendarPrompt, calendarTemplate, readCalendarFile, readCalendarRow, rowRecipe, type CalendarCells, type CalendarContext } from '../lib/calendarImport'
 import { runCalendarImport, type ImportStore } from '../app/api/club/calendarImport'
@@ -1760,6 +1760,31 @@ async function competitionBarTests() {
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function teeEmbedTests() {
+  console.log('\nA competition read into Edit (D274)')
+  // Migration 065 gave tee_assignments a second key to players (booked_by), so an
+  // unhinted players(...) embed is ambiguous and PostgREST refuses the whole read —
+  // which is how every competition's Edit failed with "Could not make the competition".
+  const mig = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260101000065_tee_booked_by.sql'), 'utf8')
+  ok(/booked_by uuid REFERENCES players\(id\)/.test(mig), 'tee_assignments has two keys to players (player_id, booked_by)')
+  const files: string[] = []
+  const walk = (d: string) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, e.name)
+      if (e.isDirectory()) { if (e.name !== 'node_modules' && !e.name.startsWith('.')) walk(f) }
+      else if (/\.tsx?$/.test(e.name)) files.push(f)
+    }
+  }
+  walk(path.join(__dirname, '../app')); walk(path.join(__dirname, '../lib'))
+  const bad = files.filter(f => /from\('tee_assignments'\)[^;]{0,400}[\s,'(]players\(/.test(fs.readFileSync(f, 'utf8')))
+  eq(bad.map(f => path.relative(path.join(__dirname, '..'), f)), [], 'no tee_assignments read embeds players without naming the key')
+  const route = fs.readFileSync(path.join(__dirname, '../app/api/club/competition/route.ts'), 'utf8')
+  ok(route.includes('players!player_id(name, club_member_id)'), 'the competition read names player_id')
+  eq([failWords('read'), failWords('change'), failWords('copy'), failWords(undefined)],
+    ['Could not open the competition — try again.', 'Could not change the competition — try again.', 'Could not copy the competition — try again.', 'Could not make the competition — try again.'],
+    'a fault says what was being done')
+}
+
 function gridColumnTests() {
   console.log('\nMembers grid columns (D273)')
   eq(readWidths(null), COLUMN_DEFAULTS, 'nothing remembered: the defaults')
@@ -2857,6 +2882,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  teeEmbedTests()
   gridColumnTests()
   snappyTests()
   wiringTests()

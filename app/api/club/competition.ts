@@ -302,6 +302,16 @@ export async function runCopyCompetition(
 
 // ─── Stage c1, M10–M11: a competition read and changed in the Clubhouse ───
 
+/** A fault's words follow what was asked — a read or a change never claims to be making one (D274). */
+export function failWords(action: unknown): string {
+  if (action === 'read' || action === 'matchplay.read') return 'Could not open the competition — try again.'
+  if (action === 'change') return 'Could not change the competition — try again.'
+  if (action === 'copy') return 'Could not copy the competition — try again.'
+  if (typeof action === 'string' && action.startsWith('import.')) return 'Could not import the calendar — try again.'
+  return 'Could not make the competition — try again.'
+}
+
+
 export type CompReadOutcome =
   | { status: 200; body: { ok: true; form: CompForm; booked: number; started: boolean; certified: boolean } }
   | { status: 400 | 401 | 403 | 404 | 503; body: { ok: false; error: string } }
