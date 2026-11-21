@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { IconCheck, IconChevronLeft, IconChevronRight } from '@/app/components/icons'
+import { IconCheck, IconChevronLeft, IconChevronRight, IconDots } from '@/app/components/icons'
 import { FIELD, Pill, buttonClass, cardClass } from '@/app/components/ui'
 import { askClub } from '@/lib/accountClient'
 import { withChange, type CredentialKey } from '@/lib/clubMay'
@@ -12,6 +12,9 @@ import {
 import { cleanRow, irishToday, listRowIssue } from '@/lib/clubs'
 import { indexLabel } from '@/lib/handicapIndex'
 import { AGE_MAX, GENDER_WORDS, NOT_GIVEN, birthDateLabel, readBirthDate, type Gender } from '@/lib/clubMembership'
+import {
+  COLUMN_DEFAULTS, COLUMN_STEP, COLUMN_STORAGE_KEY, clampWidth, fitWidth, readWidths, writeWidths, type GridColumn,
+} from '@/lib/gridColumns'
 import { useShell } from '../ShellContext'
 import { useCategories } from '../useCategories'
 import RowPanel, { indexValue, tickWhy } from './RowPanel'
@@ -55,6 +58,12 @@ type Toast = { text: string; tone: 'ok' | 'error'; undo?: () => void; skipped?: 
  * filters fold behind one button, and the ticked rows' bar scrolls sideways
  * (Ross, 20 Nov 2026: the Clubhouse as good as is reasonable on a phone).
  */
+/** The columns left to right, as the table lays them out (Standing follows Membership). */
+const GRID_ORDER: GridColumn[] = ['name', 'email', 'memberNumber', 'guiNumber', 'handicapIndex', 'gender', 'birthDate', 'categoryId', 'standing']
+const TICK_W = 104
+/** Every header and cell shares this padding, so a header's text starts where its cells' text does. */
+const ACTION_W = 64
+
 export default function MembersGrid() {
   const { face, club, may, staff } = useShell()
   const asker = useMemo(() => ({ row: club.credentials, staff }), [club.credentials, staff])
@@ -86,6 +95,38 @@ export default function MembersGrid() {
   const { categories } = useCategories(club.id)
   const search = useRef<HTMLInputElement>(null)
   const undoRef = useRef<(() => void) | null>(null)
+  // Column widths: the defaults first, the browser's own memory after mount (D273).
+  const [widths, setWidths] = useState<Record<GridColumn, number>>({ ...COLUMN_DEFAULTS })
+  const tableRef = useRef<HTMLTableElement>(null)
+  useEffect(() => {
+    try { setWidths(readWidths(window.localStorage.getItem(COLUMN_STORAGE_KEY))) } catch { /* private window: the defaults */ }
+  }, [])
+  const setWidth = useCallback((c: GridColumn, w: number, save: boolean) => {
+    setWidths(prev => {
+      const next = { ...prev, [c]: clampWidth(w) }
+      if (save) { try { window.localStorage.setItem(COLUMN_STORAGE_KEY, writeWidths(next)) } catch { /* not remembered */ } }
+      return next
+    })
+  }, [])
+  /** Double-click: the widest text on this page, in the cell's own font. */
+  const fitColumn = useCallback((c: GridColumn) => {
+    const table = tableRef.current
+    if (!table) return
+    const cells = Array.from(table.querySelectorAll<HTMLElement>(`td[data-col="${c}"]`))
+    const head = table.querySelector<HTMLElement>(`th[data-col="${c}"]`)
+    const ctx = document.createElement('canvas').getContext('2d')
+    if (!ctx) return
+    const measure = (el: HTMLElement | null, text: string) => {
+      if (!el) return 0
+      const cs = window.getComputedStyle(el)
+      ctx.font = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`
+      return ctx.measureText(text).width
+    }
+    const texts = cells.map(td => measure(td, td.dataset.fit ?? ''))
+    if (head) texts.push(measure(head, head.dataset.head ?? ''))
+    const dropdown = c === 'gender' || c === 'categoryId'
+    setWidth(c, fitWidth(texts, dropdown ? 16 : 0), true)
+  }, [setWidth])
 
   // The filter an address asks for (?filter=), from the Overview's figures.
   useEffect(() => {
@@ -250,6 +291,9 @@ export default function MembersGrid() {
   const narrowed = !!gender || !!category || ages.min !== undefined || ages.max !== undefined
   const empty = !!data && total === 0 && !searched && filter === 'all' && !narrowed
   const cats = categories ?? []
+  const cols = GRID_ORDER.filter(c => c !== 'categoryId' || cats.length > 0)
+  const tableMin = 48 + cols.reduce((n, c) => n + widths[c], 0) + TICKS.length * TICK_W + ACTION_W
+  const colCount = cols.length + TICKS.length + 2
   const catName = (id: string | null) => cats.find(c => c.id === id)?.name ?? null
   const showEveryone = () => { setQ(''); chooseFilter('all'); setGender(''); setCategory(''); setAgeMin(''); setAgeMax('') }
   const allTicked = grid.length > 0 && grid.every(r => ticked.has(r.id))
@@ -341,40 +385,64 @@ export default function MembersGrid() {
         <>
           {/* A computer: the grid. */}
           <div className={`${cardClass()} mt-5 overflow-x-auto hidden md:block`}>
-            <table className="w-full text-left border-collapse">
+            <table ref={tableRef} className="table-fixed text-left border-collapse" style={{ width: '100%', minWidth: tableMin }}>
+              <colgroup>
+                <col style={{ width: 48 }} />
+                {cols.map(c => <col key={c} style={{ width: widths[c] }} />)}
+                {TICKS.map(t => <col key={t.key} style={{ width: TICK_W }} />)}
+                <col />
+              </colgroup>
               <thead>
                 <tr className="border-b border-line">
                   <th scope="col" className="ch-stick left-0 w-12 px-4">
                     <TickBox label="Tick every row on this page" on={allTicked} onChange={v => setTicked(v ? new Set(grid.map(r => r.id)) : new Set())} />
                   </th>
-                  {FIELDS.map(f => {
-                    const s = SORTABLE[f]
-                    const right = RIGHT.includes(f)
+                  {cols.map(c => {
+                    const f = c as Field
+                    const s = c in SORTABLE ? SORTABLE[f] : undefined
+                    const right = c === 'birthDate' || RIGHT.includes(f)
+                    const label = c === 'gender' ? 'Gender' : c === 'categoryId' ? 'Membership' : c === 'standing' ? 'Standing' : HEAD[f]
+                    const arrow = s && sort === s ? (desc ? '↓' : '↑') : ''
                     return (
-                      <th key={f} scope="col" aria-sort={s && sort === s ? (desc ? 'descending' : 'ascending') : undefined}
-                        className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap ${right ? 'text-right' : ''} ${f === 'name' ? 'ch-stick left-12' : ''}`}>
+                      <th key={c} scope="col" data-col={c} data-head={label} aria-sort={s && sort === s ? (desc ? 'descending' : 'ascending') : undefined}
+                        className={`t-eyebrow text-ink/65 font-normal px-3 py-3 whitespace-nowrap overflow-hidden ${right ? 'text-right' : 'text-left'} ${c === 'name' ? 'ch-stick left-12' : 'relative'}`}>
                         {s ? (
-                          <button type="button" onClick={() => toggleSort(s)} className="ch-focus rounded-tile t-eyebrow">
-                            {HEAD[f]}{sort === s ? (desc ? ' ↓' : ' ↑') : ''}
+                          <button type="button" onClick={() => toggleSort(s)} title={label} className="ch-focus rounded-tile t-eyebrow relative max-w-full truncate">
+                            {label}
+                            {arrow && <span aria-hidden="true" className={`absolute top-0 ${right ? 'right-full pr-1' : 'left-full pl-1'}`}>{arrow}</span>}
                           </button>
-                        ) : HEAD[f]}
+                        ) : <span className="block truncate" title={label}>{label}</span>}
+                        <span role="separator" aria-orientation="vertical" tabIndex={0} aria-label={`Width of ${label}`}
+                          aria-valuenow={widths[c]} aria-valuemin={72} aria-valuemax={480}
+                          onDoubleClick={() => fitColumn(c)}
+                          onKeyDown={e => {
+                            if (e.key === 'ArrowLeft') { e.preventDefault(); setWidth(c, widths[c] - COLUMN_STEP, true) }
+                            if (e.key === 'ArrowRight') { e.preventDefault(); setWidth(c, widths[c] + COLUMN_STEP, true) }
+                          }}
+                          onPointerDown={e => {
+                            e.preventDefault()
+                            const el = e.currentTarget
+                            el.setPointerCapture(e.pointerId)
+                            const x0 = e.clientX, w0 = widths[c]
+                            let last = w0
+                            const move = (ev: PointerEvent) => { last = clampWidth(w0 + ev.clientX - x0); setWidth(c, last, false) }
+                            const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); el.removeEventListener('pointercancel', up); setWidth(c, last, true) }
+                            el.addEventListener('pointermove', move); el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up)
+                          }}
+                          className="ch-col-handle ch-focus absolute top-0 right-0 h-full w-2.5 cursor-col-resize touch-none" />
                       </th>
                     )
                   })}
-                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Gender</th>
-                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3 text-right">{HEAD.birthDate}</th>
-                  {cats.length > 0 && <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Membership</th>}
-                  <th scope="col" className="t-eyebrow text-ink/65 font-normal px-3 py-3">Standing</th>
                   {TICKS.map(t => <th key={t.key} scope="col" className="t-eyebrow text-ink/65 font-normal px-2 py-3 text-center whitespace-nowrap">{t.label}</th>)}
                   <th scope="col" className="px-4"><span className="sr-only">Details</span></th>
                 </tr>
               </thead>
               <tbody>
                 {!data && Array.from({ length: 8 }, (_, i) => (
-                  <tr key={i} className="border-b border-line"><td colSpan={15} className="px-4 py-2"><div className="skeleton h-8 rounded-tile" /></td></tr>
+                  <tr key={i} className="border-b border-line"><td colSpan={colCount} className="px-4 py-2"><div className="skeleton h-8 rounded-tile" /></td></tr>
                 ))}
                 {data && grid.length === 0 && (
-                  <tr><td colSpan={15} className="px-4 py-8 text-ink/65 text-[15px]">
+                  <tr><td colSpan={colCount} className="px-4 py-8 text-ink/65 text-[15px]">
                     Nobody matches. <button type="button" onClick={showEveryone} className="underline underline-offset-2 text-ink ch-focus">Show everyone</button>
                   </td></tr>
                 )}
@@ -383,48 +451,60 @@ export default function MembersGrid() {
                     <td className="ch-stick left-0 px-4">
                       <TickBox label={`Tick ${r.name}`} on={ticked.has(r.id)} onChange={v => setTicked(s => { const n = new Set(s); if (v) n.add(r.id); else n.delete(r.id); return n })} />
                     </td>
-                    {[...FIELDS, 'gender' as const, 'birthDate' as const, ...(cats.length ? ['categoryId' as const] : [])].map(f => {
-                      if (f === 'gender') return (
-                        <td key={f} className="px-1">
-                          <select value={r.gender ?? ''} onChange={e => void choose(r, 'gender', e.target.value || null)} aria-label={`Gender for ${r.name}`}
-                            className={`ch-focus ch-hover h-9 px-1 w-[6.5rem] rounded-tile bg-transparent text-[15px] ${r.gender ? 'text-ink/80' : 'text-ink/65'}`}>
-                            <option value="">{NOT_GIVEN}</option>
-                            <option value="M">{GENDER_WORDS.M}</option>
-                            <option value="F">{GENDER_WORDS.F}</option>
-                          </select>
-                        </td>
-                      )
-                      if (f === 'categoryId') return (
-                        <td key={f} className="px-1">
-                          <select value={r.categoryId ?? ''} onChange={e => void choose(r, 'categoryId', e.target.value || null)} aria-label={`Membership for ${r.name}`}
-                            className={`ch-focus ch-hover h-9 px-1 w-[7.5rem] rounded-tile bg-transparent text-[15px] ${r.categoryId ? 'text-ink/80' : 'text-ink/65'}`}>
-                            <option value="">None</option>
-                            {cats.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                          </select>
-                        </td>
-                      )
+                    {cols.map(c => {
+                      if (c === 'standing') return <td key={c} data-col={c} data-fit="" className="px-3 whitespace-nowrap overflow-hidden"><StandingPill s={standingOf(r)} /></td>
+                      if (c === 'gender' || c === 'categoryId') {
+                        const isGender = c === 'gender'
+                        const val = isGender ? r.gender ?? '' : r.categoryId ?? ''
+                        const text = isGender ? (r.gender ? GENDER_WORDS[r.gender] : NOT_GIVEN) : (catName(r.categoryId) || 'None')
+                        return (
+                          <td key={c} data-col={c} data-fit={text} className="px-3 overflow-hidden">
+                            <span className="relative block -mx-2">
+                              <select value={val} title={text} onChange={e => void choose(r, c, e.target.value || null)}
+                                aria-label={`${isGender ? 'Gender' : 'Membership'} for ${r.name}`}
+                                className={`ch-focus ch-hover appearance-none block w-full h-9 pl-2 pr-6 rounded-tile bg-transparent text-[15px] truncate ${val ? 'text-ink/80' : 'text-ink/65'}`}>
+                                {isGender ? (
+                                  <>
+                                    <option value="">{NOT_GIVEN}</option>
+                                    <option value="M">{GENDER_WORDS.M}</option>
+                                    <option value="F">{GENDER_WORDS.F}</option>
+                                  </>
+                                ) : (
+                                  <>
+                                    <option value="">None</option>
+                                    {cats.map(k => <option key={k.id} value={k.id}>{k.name}</option>)}
+                                  </>
+                                )}
+                              </select>
+                              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none text-ink/50"><path d="M6 9l6 6 6-6" /></svg>
+                            </span>
+                          </td>
+                        )
+                      }
+                      const f = c as Field
                       const key = `${r.id}:${f}`
                       const right = RIGHT.includes(f)
                       const isEditing = editing?.id === r.id && editing.field === f
+                      const text = shown(r, f)
                       return (
-                        <td key={f} className={`px-1 ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''} ${f === 'name' ? 'ch-stick left-12' : ''}`}>
+                        <td key={f} data-col={f} data-fit={text} className={`px-3 overflow-hidden ${isEditing ? 'ch-cell-editing' : ''} ${right ? 'text-right' : ''} ${f === 'name' ? 'ch-stick left-12' : ''}`}>
                           {isEditing ? (
                             <input autoFocus value={draft} onChange={e => setDraft(e.target.value)} onKeyDown={e => editKey(e, r, f)}
                               onBlur={() => void commit(r, f, draft)} aria-label={`${HEAD[f]} for ${r.name}`}
                               inputMode={f === 'guiNumber' ? 'numeric' : f === 'handicapIndex' ? 'decimal' : undefined}
                               placeholder={f === 'birthDate' ? 'dd/mm/yyyy' : undefined}
-                              className={`w-full min-w-[6rem] h-9 px-2 rounded-tile bg-surface border border-accent-deep text-[15px] text-ink outline-none ${right ? 'text-right tabular-nums' : ''}`} />
+                              className={`block -mx-2 w-[calc(100%+1rem)] h-9 px-2 rounded-tile bg-surface border border-accent-deep text-[15px] text-ink outline-none ${right ? 'text-right tabular-nums' : ''}`} />
                           ) : (
-                            <button type="button" onClick={() => { setEditing({ id: r.id, field: f }); setDraft(shown(r, f)) }}
-                              aria-label={`${HEAD[f]} for ${r.name}: ${shown(r, f) || 'empty'}. Change`}
-                              className={`ch-focus w-full min-h-9 px-2 rounded-tile text-[15px] ${right ? 'text-right tabular-nums' : 'text-left'} ${failedCell === key ? 'border border-rust text-rust-deep' : ''} ${f === 'name' ? 'text-ink font-medium' : 'text-ink/80'} ${r.removed ? 'line-through text-ink/50' : ''} whitespace-nowrap`}>
-                              {shown(r, f) || <span className="text-ink/65">—</span>}
+                            <button type="button" onClick={() => { setEditing({ id: r.id, field: f }); setDraft(text) }}
+                              title={text || undefined}
+                              aria-label={`${HEAD[f]} for ${r.name}: ${text || 'empty'}. Change`}
+                              className={`ch-focus block -mx-2 w-[calc(100%+1rem)] min-h-9 px-2 rounded-tile text-[15px] truncate ${right ? 'text-right tabular-nums' : 'text-left'} ${failedCell === key ? 'border border-rust text-rust-deep' : ''} ${f === 'name' ? 'text-ink font-medium' : 'text-ink/80'} ${r.removed ? 'line-through text-ink/50' : ''}`}>
+                              {text || <span className="text-ink/65">—</span>}
                             </button>
                           )}
                         </td>
                       )
                     })}
-                    <td className="px-3 whitespace-nowrap"><StandingPill s={standingOf(r)} /></td>
                     {TICKS.map(t => {
                       const why = tickWhy(asker, r, t.key)
                       return (
@@ -434,7 +514,8 @@ export default function MembersGrid() {
                       )
                     })}
                     <td className="px-2 text-right">
-                      <button type="button" onClick={() => setPanel({ row: r })} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9 whitespace-nowrap">Details</button>
+                      <button type="button" onClick={() => setPanel({ row: r })} aria-label={`Details for ${r.name}`} title={`Details for ${r.name}`}
+                        className="ch-hover ch-focus text-ink rounded-tile w-9 h-9 inline-flex items-center justify-center"><IconDots size={20} /></button>
                     </td>
                   </tr>
                 ))}

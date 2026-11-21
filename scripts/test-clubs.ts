@@ -25,6 +25,7 @@ import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
 import { clubEventDates } from '../lib/clubs'
+import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidths, writeWidths } from '../lib/gridColumns'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
@@ -1759,6 +1760,23 @@ async function competitionBarTests() {
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function gridColumnTests() {
+  console.log('\nMembers grid columns (D273)')
+  eq(readWidths(null), COLUMN_DEFAULTS, 'nothing remembered: the defaults')
+  eq(readWidths('not json'), COLUMN_DEFAULTS, 'a broken memory is the defaults')
+  eq(readWidths('[1,2]'), COLUMN_DEFAULTS, 'an array is no memory')
+  const r = readWidths(JSON.stringify({ email: 300, name: 5, gender: 9999, birthDate: 'wide', bogus: 100 }))
+  eq([r.email, r.name, r.gender, r.birthDate], [300, COLUMN_MIN, COLUMN_MAX, COLUMN_DEFAULTS.birthDate], 'remembered widths are clamped and bad ones dropped')
+  eq(writeWidths({ ...COLUMN_DEFAULTS, email: 300 }), '{"email":300}', 'only a changed column is kept')
+  eq(readWidths(writeWidths({ ...COLUMN_DEFAULTS, categoryId: 333 })).categoryId, 333, 'what is written reads back')
+  eq([clampWidth(NaN), clampWidth(1), clampWidth(10000), clampWidth(200.4)], [COLUMN_MIN, COLUMN_MIN, COLUMN_MAX, 200], 'clamp')
+  eq(fitWidth([100, 180, 90]), 204, 'a fit is the widest text plus padding')
+  eq(fitWidth([]), COLUMN_MIN, 'an empty page fits the minimum')
+  const grid = fs.readFileSync(path.join(__dirname, '../app/clubhouse/[slug]/members/MembersGrid.tsx'), 'utf8')
+  ok(/aria-label=\{`Details for \$\{r\.name\}`\}/.test(grid) && grid.includes('IconDots'), 'Details is an ellipsis button named for the person')
+  ok(grid.includes('COLUMN_STORAGE_KEY') && /localStorage[\s\S]{0,200}catch/.test(grid), 'widths are kept in localStorage inside try/catch')
+}
+
 function snappyTests() {
   section('Preload, then be snappy (D198)')
   const ctx = read('app/club/[slug]/ClubBarContext.tsx')
@@ -2839,6 +2857,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  gridColumnTests()
   snappyTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)

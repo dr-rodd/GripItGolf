@@ -412,6 +412,9 @@ html.club-switch-fade::view-transition-group(club-header) { animation-duration: 
 .ch-nav[aria-current="page"], .ch-nav[aria-current="page"]:hover { background-color: var(--gd-club-tint); color: var(--gd-club-deep); }
 .ch-focus:focus-visible { outline: 2px solid var(--color-accent-deep); outline-offset: 2px; }
 .ch-row[aria-selected="true"] > td { background-color: var(--color-accent-tint); }
+.ch-col-handle::after { content: ''; position: absolute; top: 25%; bottom: 25%; right: 3px; width: 2px; border-radius: 1px; background-color: var(--color-line-strong); opacity: 0; transition: opacity 120ms ease-out; }
+th:hover > .ch-col-handle::after, .ch-col-handle:focus-visible::after, .ch-col-handle:active::after { opacity: 1; }
+.ch-col-handle:active::after { background-color: var(--color-accent-deep); }
 .ch-cell-editing { background-color: var(--color-accent-tint); }
 /* Stage (m): the grid grew wider than the page; the tick and the name stay
    put while the rest scrolls under them, as a spreadsheet's first columns do. */

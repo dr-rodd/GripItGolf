@@ -444,3 +444,11 @@ export const IconEyeOff = (p: IconProps) => (
     <path d="M3 3l18 18" />
   </Svg>
 )
+
+export const IconDots = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M5 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M11 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+    <path d="M17 12a1 1 0 1 0 2 0a1 1 0 1 0 -2 0" />
+  </Svg>
+)
