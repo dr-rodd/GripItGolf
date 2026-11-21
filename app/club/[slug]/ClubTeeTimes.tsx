@@ -186,6 +186,7 @@ function OverlayRow({ o, times }: { o: Overlay; times: number }) {
       {o.bookHref && (
         <Link href={o.bookHref} className={`${buttonClass('primary', false)} mt-3`}>Book</Link>
       )}
+      {!o.bookHref && o.bookNote && <p className="t-cap text-ink/80 mt-2">{o.bookNote}</p>}
     </li>
   )
 }

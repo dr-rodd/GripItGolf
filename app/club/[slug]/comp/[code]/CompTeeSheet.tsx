@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { IconPlus, IconX } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
+import { notEligibleLine } from '@/lib/clubMembership'
 import { enterEvent } from '@/lib/entryClient'
 import { formatHandicap } from '@/lib/handicap'
 import { rememberPlayer } from '@/lib/playerCookie'
@@ -52,7 +53,9 @@ export default function CompTeeSheet({ code, slots, sun, bookingOpen, waitLine }
   }, [code])
 
   const iAmBooked = !!me?.myPlayerId && slots.some(s => s.seats.some(x => x.playerId === me.myPlayerId))
-  const mayBook = !!me && (bookingOpen || !!me.admin)
+  // MS2 (D279): a member the entry rules refuse is told first and offered no Book; an Officer still books others.
+  const refused = !!me?.myRefusal && !iAmBooked
+  const mayBook = !!me && (bookingOpen || !!me.admin) && (!refused || !!me.admin)
 
   async function withdraw(slot: CompSlot, seat: CompSeat) {
     if (!seat.rowId || busy) return
@@ -68,7 +71,11 @@ export default function CompTeeSheet({ code, slots, sun, bookingOpen, waitLine }
     <section className="mt-6">
       <h1 className="t-h1 text-ink">Tee sheet</h1>
       {me?.entry && <p className="t-label text-ink mt-2">Open to: {me.entry}</p>}
-      {me?.myRefusal && !iAmBooked && <p className="text-ink/80 text-[15px] mt-1">{me.myRefusal}</p>}
+      {refused && me?.myRefusal && (
+        <div role="status" className={`${cardClass('flat')} bg-club-tint p-4 mt-4`}>
+          <p className="text-ink text-[15px] leading-snug">{notEligibleLine(me.myRefusal)}</p>
+        </div>
+      )}
       {waitLine && <p className="text-ink/80 text-[15px] mt-2">{waitLine}</p>}
       {!bookingOpen && me?.admin && <p className="t-cap text-ink/65 mt-1">Until then, only the club’s admins place people.</p>}
       {sun.sunrise && <p className="t-cap text-ink/65 mt-5">Sunrise {sun.sunrise}</p>}

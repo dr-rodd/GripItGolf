@@ -325,6 +325,16 @@ export function refusalWords(f: EntryRefusal, who: string | null = null): string
   }
 }
 
+/**
+ * The notice a refused member reads before a tee sheet offers Book (MS2,
+ * D279): the reason first, then what follows from it. `where` is "book on
+ * this tee sheet" or "book it". The reason is `refusalWords`' own.
+ */
+export function notEligibleLine(reason: string, where = 'book on this tee sheet'): string {
+  const stem = reason.replace(/\.$/, '')
+  return stem.includes(' — ') ? `${stem}. So you can’t ${where}.` : `${stem} — you’re not eligible to ${where}.`
+}
+
 /** What a member's clubs have recorded of them (stage (m)) — shown on their account, changed only by a club. */
 export interface MyDetails {
   gender: Gender | null

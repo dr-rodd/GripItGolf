@@ -50,6 +50,7 @@ import { CLUB_GROUNDS, cleanHex, clubColours, clubStyle, contrast, deltaE } from
 import { EMAIL_PAID_LINE, countSince, emailCountLine, irishMidnight } from '../lib/emailCount'
 import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api/entry/entry'
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
+import { notEligibleLine } from '../lib/clubMembership'
 import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
 import { barOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, withdrawIssue, type CompForm, type SheetBooking } from '../lib/clubComp'
@@ -1121,6 +1122,9 @@ async function competitionTests() {
     && sectionLive('scoring', 'in_play') && sectionLive('board', 'certified'), 'the bar\'s sections go live by phase (D181)')
   ok(/^Booking opens .*(November).*/.test(sectionWaitLine('tee', at - 48 * H)) && /first tee time/.test(sectionWaitLine('scoring', at)),
     'a section not yet live says when it starts, Irish time')
+  eq(notEligibleLine('This is a ladies’ competition.'), 'This is a ladies’ competition — you’re not eligible to book on this tee sheet.', 'a refused member is told the reason first (D279)')
+  eq(notEligibleLine('Your club hasn’t recorded your gender — ask the club to add it.'), 'Your club hasn’t recorded your gender — ask the club to add it. So you can’t book on this tee sheet.', '…a refusal with its own dash keeps its words')
+  ok(/!refused \|\| !!me\.admin/.test(read('app/club/[slug]/comp/[code]/CompTeeSheet.tsx')) && /bookNote/.test(read('app/club/[slug]/ClubTeeTimes.tsx')), 'no Book for a refused member, Officers keep it; the casual sheet says why (D279)')
   eq(sectionWaitLine('board', at), 'This competition hasn’t started yet.', 'the leaderboard before play says only that it has not started (D278)')
 
   section('A club competition\'s door: the club\'s list, never a PIN box (D164)')

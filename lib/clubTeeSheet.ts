@@ -133,16 +133,18 @@ export interface Overlay {
   detail: string | null
   /** A competition: whether this member may book into it, and where. */
   bookHref?: string | null
+  /** Said in place of Book when this member may not enter it (MS2, D279). */
+  bookNote?: string | null
 }
 
 /** A competition's overlay — its first tee time to its last, no gap either side. */
-export function competitionOverlay(c: { code: string; name: string; clocks: string[]; detail?: string | null; bookHref?: string | null }): Overlay | null {
+export function competitionOverlay(c: { code: string; name: string; clocks: string[]; detail?: string | null; bookHref?: string | null; bookNote?: string | null }): Overlay | null {
   const mins = c.clocks.map(clockMins).filter((m): m is number => m !== null)
   if (!mins.length) return null
   return {
     kind: 'competition', id: c.code, title: c.name,
     from: minsClock(Math.min(...mins)), to: minsClock(Math.max(...mins)),
-    detail: c.detail ?? null, bookHref: c.bookHref ?? null,
+    detail: c.detail ?? null, bookHref: c.bookHref ?? null, bookNote: c.bookNote ?? null,
   }
 }
 

@@ -18,7 +18,7 @@ import { isAccount, type AuthUser } from '@/lib/account'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { irishToday } from '@/lib/clubs'
 import { STAFF_NAME } from '@/lib/clubhouse'
-import { entryRefusal, type EntryRules } from '@/lib/clubMembership'
+import { entryRefusal, notEligibleLine, refusalWords, type EntryRules } from '@/lib/clubMembership'
 import { compSectionHref } from '@/lib/clubBar'
 import {
   CASUAL_LOOK_AHEAD_DAYS, blockOverlay, bookingName, bookingRefusal, casualBookIssue, casualCancelIssue, casualDay,
@@ -186,9 +186,11 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
       const refusal = forMember ? entryRefusal({
         rules: c.entry, person: { gender: forMember.gender ?? null, birthDate: forMember.birthDate ?? null, categoryId: forMember.categoryId ?? null },
         category: categories.find(k => k.id === forMember.categoryId) ?? null, day: d, ageDate, categories,
-      }) : { code: 'none' }
+      }) : null
       const mayBook = !!forMember && !refusal && !c.certified && d >= today && !!credentialsOf(forMember).playsHere
-      return competitionOverlay({ code: c.code, name: c.name, clocks: c.clocks, detail: 'Booked through the competition', bookHref: mayBook ? compSectionHref(club.slug, c.code, 'tee') : null })
+      return competitionOverlay({ code: c.code, name: c.name, clocks: c.clocks, detail: 'Booked through the competition', bookHref: mayBook ? compSectionHref(club.slug, c.code, 'tee') : null,
+        // MS2 (D279): a member the entry rules refuse is told why, in place of Book.
+        bookNote: forMember && refusal && !c.certified && d >= today ? notEligibleLine(refusalWords(refusal), 'book it') : null })
     }).filter((o): o is Overlay => !!o),
     ...blocks.map(b => blockOverlay(b, d)).filter((o): o is Overlay => !!o),
   ]
