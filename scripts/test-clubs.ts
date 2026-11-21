@@ -918,10 +918,10 @@ function wiringTests() {
   eq(clubSwitch([{ slug: 'pints', name: 'Pints', toSign: 0 }], 'pints'), null, 'one club: nothing changes')
   const three = [{ slug: 'a', name: 'A', toSign: 0 }, { slug: 'b', name: 'B', toSign: 2 }, { slug: 'c', name: 'C', toSign: 0 }]
   const sw = clubSwitch(three, 'c')
-  ok(sw?.position === 3 && sw.count === 3 && sw.next.slug === 'a' && sw.dot, 'the third of three: next is the first, and a dot for a card waiting at another')
+  ok(sw?.clubs.length === 3 && sw.clubs[2].here && sw.clubs[1].dot && sw.dot, 'the picker lists every club, this one ticked, a dot where a card waits (D280)')
   eq(clubSwitch(three, 'b')?.dot, false, '…no dot for this club’s own cards — they lead its Home')
   const view0 = read('app/club/[slug]/ClubView.tsx')
-  ok(/Members\{switcher && <span className="t-cap font-normal text-ink\/65"> · \{switcher\.position\} of \{switcher\.count\}/.test(view0), '"Members · 1 of 3" (t-cap)')
+  ok(/aria-haspopup="listbox"/.test(view0) && !/switcher\.next/.test(view0), 'the club name opens a list to choose from, never a tap that cycles (D280)')
   ok(/w-2 h-2 rounded-full bg-accent ring-2 ring-accent-tint/.test(view0), 'the dot: 8px emerald on an emerald-tint ring, on the crest')
   ok(/if \(!doc\.startViewTransition \|\| reducedMotion\(\)\) \{ go\(\); return \}/.test(view0), 'Reduce Motion, or no view transitions: an immediate swap')
   const cssK = read('app/globals.css')
@@ -1715,6 +1715,18 @@ async function competitionBarTests() {
   eq(barOf('/club/lahinch/comp/AB12CD/scoring', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, '…scoring lights Scoring')
   eq(barOf('/club/lahinch/comp/AB12CD/leaderboard', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'board' }, '…leaderboard lights Leaderboard')
   eq(barOf('/club/lahinch/list', 'lahinch'), null, 'the list has no footer')
+  {
+    const bar = read('app/club/[slug]/ClubTabBar.tsx'), ctx = read('app/club/[slug]/ClubBarContext.tsx')
+    ok(/if \(comp\) \{\s*e\.preventDefault\(\)/.test(bar) && /router\.push\(to\)/.test(bar) && /window\.location\.assign\(to\)/.test(bar),
+      'leaving a competition by Comps or Home is asked for outright, and made whole if it never lands (D280, M6)')
+    ok(/data-keep-set/.test(bar) && /hasAttribute\('data-keep-set'\)/.test(ctx), '…the bar keeps its set until the address has left the competition')
+    const view = read('app/club/[slug]/ClubView.tsx'), me = read('app/club/[slug]/me/YourPage.tsx')
+    ok(/href=\{members \? `\/club\/\$\{face\.slug\}\/me`/.test(view) && /HandicapIndexCard/.test(me) && /YourDetailsCard/.test(me) && /ClubEventTypesCard/.test(me) && /href="\/account"/.test(me),
+      'the account icon opens Your page in the club: handicap, details, what you see, account (D280, M2)')
+    ok(/clubMay\('open_clubhouse'/.test(view) && /label="Your page"/.test(view), 'the Club tab reaches Your page; the Clubhouse row only with Clubhouse (M5)')
+    ok(/BackButton href=\{back\}/.test(read('app/account/AccountScreen.tsx')) && /homeHref\(\)/.test(read('app/home/HomeScreen.tsx')),
+      'back from /account and Home on /home go to a club member’s club, never /home (D280, M3–M4)')
+  }
   eq(barOf('/club/lahinch/comp/AB12CD/elsewhere', 'lahinch'), null, '…nor an address that is no section')
   eq(barOf('/club/other/comp/AB12CD', 'lahinch'), null, '…nor another club\'s address')
   eq(compSectionHref('lahinch', 'ab12cd', 'board'), '/club/lahinch/comp/AB12CD/leaderboard', 'a section\'s address')

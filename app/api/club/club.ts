@@ -266,7 +266,7 @@ export type ClubBody = {
    * by name, and how many cards wait on it at each of the others — the
    * header's next club and its dot. Only asked for an account on more than one.
    */
-  myClubs?: { slug: string; name: string; toSign: number }[]
+  myClubs?: { slug: string; name: string; toSign: number; crestUrl?: string | null }[]
   /** Stage (k1), the Clubhouse: a page of the list and its total, the counts, competitions by phase, the Alerts, a bulk change's outcome, the file. */
   grid?: GridRow[]
   total?: number
@@ -447,13 +447,14 @@ function uuidFrom(b: Uint8Array): string {
  * cards waiting on it at each club but this one — the header's next club and
  * its dot. Null when there is only the one, so nothing more is asked.
  */
-async function otherClubs(store: ClubStore, userId: string, here: string): Promise<{ slug: string; name: string; toSign: number }[] | null> {
+async function otherClubs(store: ClubStore, userId: string, here: string): Promise<{ slug: string; name: string; toSign: number; crestUrl: string | null }[] | null> {
   const mine = (await store.clubsOf(userId)).filter(x => !!x.club.verifiedAt)
   if (mine.length < 2) return null
   const counts = await Promise.all(mine.map(x => (x.club.id === here || !store.cardsToSign
     ? Promise.resolve(0)
     : store.cardsToSign(x.club.id, x.row.id).then(l => l.reduce((n, c) => n + c.count, 0)).catch(() => 0))))
-  return mine.map((x, i) => ({ slug: x.club.slug, name: x.club.name, toSign: counts[i] }))
+  // MO1, M1 (D280): the picker draws each club's crest.
+  return mine.map((x, i) => ({ slug: x.club.slug, name: x.club.name, toSign: counts[i], crestUrl: clubAssetUrl(assetBase ?? store.assetBase(), x.club.crestPath ?? null) }))
 }
 
 /**

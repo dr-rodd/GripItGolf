@@ -1,5 +1,7 @@
 'use client'
 
+import { homeHref } from '@/lib/tierHint'
+
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -68,6 +70,8 @@ export default function HomeScreen() {
   }, [load, router])
 
   function choose(t: HomeTab) {
+    // MO1, M4 (D280): a club member's Home is their club's home.
+    if (t === 'home' && homeHref() !== '/') { router.push(homeHref()); return }
     setTab(t)
     window.history.replaceState(window.history.state, '', t === 'home' ? '/home' : `/home?tab=${t}`)
     window.scrollTo({ top: 0 })

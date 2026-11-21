@@ -2,14 +2,14 @@
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
-import { IconCheck, IconChevronRight, IconUser } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
@@ -167,17 +167,17 @@ export default function ClubView({ face }: { face: ClubFace }) {
   // the header — the next club, the one it is on and how many, and a dot
   // when a card waits at another. The next one is fetched ahead.
   const switcher = useMemo(() => clubSwitch(members?.myClubs, face.slug), [members?.myClubs, face.slug])
-  useEffect(() => { if (switcher) router.prefetch(`/club/${switcher.next.slug}`) }, [switcher, router])
+  useEffect(() => { switcher?.clubs.filter(c => !c.here).forEach(c => router.prefetch(`/club/${c.slug}`)) }, [switcher, router])
 
   const home = !members || tab === 'home'
   return (
     <main data-club style={face.style as React.CSSProperties} className={`min-h-dvh paper relative isolate ${members ? 'has-tabbar' : 'club-wait-pad'}`}>
       <Art face={face} home={home} />
       <div className="relative z-10">
-        <TripHeader backTo="/" />
+        <TripHeader backTo={members ? `/club/${face.slug}` : '/'} />
         <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
           <ClubHeader face={face} members={!!members} switcher={switcher}
-            onNext={switcher ? () => goToClub(router, switcher.next.slug, switcher.all) : undefined} />
+            onPick={switcher ? slug => goToClub(router, slug, switcher.all) : undefined} />
           {/* D197: a phone hinted to this club sees the stand-in from the
               first paint (the head script's mark on <html>), never the
               public face; anybody else sees the public face. */}
@@ -251,55 +251,85 @@ function goToClub(router: ReturnType<typeof useRouter>, slug: string, all: strin
 }
 
 /** The frosted header: crest in the club's ring, the name, "Members", and the account button. */
-export function ClubHeader({ face, members, switcher = null, onNext }: {
+export function ClubHeader({ face, members, switcher = null, onPick }: {
   face: ClubFace
   members: boolean
-  /** D223: an account on several clubs — the crest and name move on to the next. */
+  /** D223, D280: an account on several clubs — the name opens a list of them to choose from. */
   switcher?: ClubSwitch | null
-  onNext?: () => void
+  onPick?: (slug: string) => void
 }) {
-  const crest = (
+  const [open, setOpen] = useState(false)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+    document.addEventListener('pointerdown', away)
+    document.addEventListener('keydown', esc)
+    return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
+  }, [open])
+  const crest = (url: string | null, dot: boolean, size: 'lg' | 'sm' = 'lg') => (
     <span className="relative flex-shrink-0">
-      {face.crestUrl ? (
+      {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={face.crestUrl} alt="" width={44} height={44}
-          className="w-11 h-11 rounded-full object-contain bg-surface ring-2 ring-club block" />
+        <img src={url} alt="" width={size === 'lg' ? 44 : 32} height={size === 'lg' ? 44 : 32}
+          className={`${size === 'lg' ? 'w-11 h-11 ring-2' : 'w-8 h-8 ring-1'} rounded-full object-contain bg-surface ring-club block`} />
       ) : (
-        <span aria-hidden="true" className="w-11 h-11 rounded-full ring-2 ring-club bg-club-tint block" />
+        <span aria-hidden="true" className={`${size === 'lg' ? 'w-11 h-11 ring-2' : 'w-8 h-8 ring-1'} rounded-full ring-club bg-club-tint block`} />
       )}
-      {switcher?.dot && (
+      {dot && (
         <span aria-hidden="true" className="absolute top-0 right-0 w-2 h-2 rounded-full bg-accent ring-2 ring-accent-tint" />
       )}
     </span>
   )
   const words = (
     <span className="flex-1 min-w-0 text-left">
-      <span className="block t-card text-ink leading-tight break-words">{face.name}</span>
+      <span className="flex items-center gap-1 t-card text-ink leading-tight break-words">
+        {face.name}
+        {switcher && <IconChevronDown size={18} className={`flex-shrink-0 text-ink/65 transition-transform ${open ? 'rotate-180' : ''}`} />}
+      </span>
       {members
-        ? (
-          <span className="block text-[13px] font-semibold text-club-deep leading-tight">
-            Members{switcher && <span className="t-cap font-normal text-ink/65"> · {switcher.position} of {switcher.count}</span>}
-          </span>
-        )
+        ? <span className="block text-[13px] font-semibold text-club-deep leading-tight">Members</span>
         : <span className="t-cap text-ink/65 inline-flex items-center gap-1"><IconCheck size={14} /> Verified club</span>}
     </span>
   )
   return (
-    <header className="club-frost club-header rounded-card p-2 flex items-center gap-3">
-      {switcher && onNext ? (
-        <button type="button" onClick={onNext} className="club-switch flex-1 min-w-0 flex items-center gap-3 text-left rounded-tile"
-          aria-label={`${face.name}, ${switcher.position} of ${switcher.count}. Next club: ${switcher.next.name}${switcher.dot ? '. A card waits for you at another club' : ''}`}>
-          {crest}{words}
-        </button>
-      ) : (
-        <>{crest}{words}</>
+    <div ref={box} className="relative z-30">
+      <header className="club-frost club-header rounded-card p-2 flex items-center gap-3">
+        {switcher && onPick ? (
+          <button type="button" onClick={() => setOpen(o => !o)} className="club-switch flex-1 min-w-0 flex items-center gap-3 text-left rounded-tile"
+            aria-haspopup="listbox" aria-expanded={open}
+            aria-label={`${face.name}. Choose a club${switcher.dot ? '. A card waits for you at another club' : ''}`}>
+            {crest(face.crestUrl, switcher.dot)}{words}
+          </button>
+        ) : (
+          <>{crest(face.crestUrl, false)}{words}</>
+        )}
+        <Link href={members ? `/club/${face.slug}/me` : accountLink(`/club/${face.slug}`)}
+          aria-label={members ? 'Your page' : `${face.name} members: sign in`}
+          className="w-12 h-12 flex-shrink-0 rounded-full bg-surface border border-line flex items-center justify-center text-ink press">
+          <IconUser size={22} />
+        </Link>
+      </header>
+      {/* MO1, M1 (D280): the account's clubs, a list under the header — the one here ticked. */}
+      {open && switcher && onPick && (
+        <ul role="listbox" aria-label="Your clubs" className={`${cardClass('floating')} absolute left-0 right-0 top-full mt-2 p-1 paper`}>
+          {switcher.clubs.map(c => (
+            <li key={c.slug}>
+              <button type="button" role="option" aria-selected={c.here}
+                onClick={() => { setOpen(false); if (!c.here) onPick(c.slug) }}
+                className="w-full flex items-center gap-3 px-2 py-2 min-h-12 rounded-tile text-left ch-focus press">
+                {crest(c.crestUrl, c.dot, 'sm')}
+                <span className="flex-1 min-w-0 text-[16px] font-medium text-ink truncate">
+                  {c.name}{c.dot && <span className="sr-only"> — a card waits for you</span>}
+                </span>
+                {c.here && <IconCheck size={18} className="text-club-deep flex-shrink-0" />}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
-      <Link href={members ? '/account' : accountLink(`/club/${face.slug}`)}
-        aria-label={members ? 'Your account' : `${face.name} members: sign in`}
-        className="w-12 h-12 flex-shrink-0 rounded-full bg-surface border border-line flex items-center justify-center text-ink press">
-        <IconUser size={22} />
-      </Link>
-    </header>
+    </div>
   )
 }
 
@@ -714,7 +744,7 @@ function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
         )}
         <ListRow href="/home?tab=events" label="Your events"
           hint="Every event you’re in or run, and the players linked to you" />
-        <ListRow href="/account" label="Your account" hint="Username, password, sign out" />
+        <ListRow href={`/club/${face.slug}/me`} label="Your page" hint="Handicap, your details, what you see, username, password, sign out" />
       </ListGroup>
       <p className="t-cap text-ink/65 mt-4">Anybody else opening this address sees {face.name}’s public page.</p>
       <LegalLinks className="mt-12" />

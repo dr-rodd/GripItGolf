@@ -83,23 +83,20 @@ export function barOf(pathname: string, slug: string): BarState {
   return section ? { set: 'comp', code, active: section } : null
 }
 
-/** Where this club sits among the account's clubs: which of how many, the next, and whether a card waits at another. */
+/** The header's club picker (D223, D280): the account's clubs, this one ticked, a dot where a card waits. */
 export interface ClubSwitch {
-  position: number
-  count: number
-  next: { slug: string; name: string }
+  clubs: { slug: string; name: string; crestUrl: string | null; here: boolean; dot: boolean }[]
+  /** A card waits at another club — the dot on this club's crest. */
   dot: boolean
   all: string[]
 }
 
-/** The header's switch (D223), from the account's clubs in name order — none for one club. */
-export function clubSwitch(clubs: { slug: string; name: string; toSign: number }[] | undefined, here: string): ClubSwitch | null {
-  if (!clubs || clubs.length < 2) return null
-  const i = clubs.findIndex(c => c.slug === here)
-  if (i < 0) return null
-  const next = clubs[(i + 1) % clubs.length]
-  return {
-    position: i + 1, count: clubs.length, next: { slug: next.slug, name: next.name },
-    dot: clubs.some(c => c.slug !== here && c.toSign > 0), all: clubs.map(c => c.slug),
-  }
+/**
+ * The picker (MO1, M1 — Ross, 21 Nov 2026: a list to choose from, never a
+ * tap that cycles), from the account's clubs in name order — none for one club.
+ */
+export function clubSwitch(clubs: { slug: string; name: string; toSign: number; crestUrl?: string | null }[] | undefined, here: string): ClubSwitch | null {
+  if (!clubs || clubs.length < 2 || !clubs.some(c => c.slug === here)) return null
+  const list = clubs.map(c => ({ slug: c.slug, name: c.name, crestUrl: c.crestUrl ?? null, here: c.slug === here, dot: c.slug !== here && c.toSign > 0 }))
+  return { clubs: list, dot: list.some(c => c.dot), all: clubs.map(c => c.slug) }
 }

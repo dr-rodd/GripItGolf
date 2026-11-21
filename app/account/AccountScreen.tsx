@@ -1,5 +1,7 @@
 'use client'
 
+import { homeHref, myPageHref } from '@/lib/tierHint'
+
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -77,6 +79,10 @@ export default function AccountScreen() {
   // Signed in just now (not already, on arrival): on to where it was sent
   // from, else the member's own home (D148). Already signed in, this page is
   // the account's settings, reached from Me.
+  // MO1, M3–M4 (D280): back, and Your page, go to a club member's own club — never /home.
+  const [back, setBack] = useState('/')
+  const [mine, setMine] = useState('/home')
+  useEffect(() => { setBack(homeHref()); setMine(myPageHref()) }, [view.kind])
   const firstView = useRef<View['kind'] | null>(null)
   useEffect(() => {
     if (view.kind === 'loading') return
@@ -266,7 +272,7 @@ export default function AccountScreen() {
   return (
     <main className="min-h-dvh paper flex flex-col">
       <div className="w-full max-w-md mx-auto px-4 pt-2">
-        <BackButton href="/" label="Home" />
+        <BackButton href={back} label="Home" />
       </div>
 
       <div className="flex-1 w-full max-w-md mx-auto px-4 pt-4 pb-10" aria-busy={view.kind === 'loading'}>
@@ -493,7 +499,7 @@ export default function AccountScreen() {
               The events this phone has entered stay with you. Sign in on another phone to have them there too.
             </p>
             {errorLine}
-            <ButtonLink href="/home" variant="secondary" className="mt-8">Your page</ButtonLink>
+            <ButtonLink href={mine} variant="secondary" className="mt-8">Your page</ButtonLink>
             <ButtonLink href="/account/clubs" variant="secondary" className="mt-3">Clubs</ButtonLink>
             <button type="button" onClick={signOut} disabled={busy} className={`${buttonClass('secondary')} mt-3`}>
               Sign out

@@ -18,7 +18,7 @@ export interface ClubMembers {
   /** This account's ticks here (lib/clubMay.ts). A copy kept before stage (k0) has none: read as nothing held. */
   credentials?: Credentials
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
-  myClubs?: { slug: string; name: string; toSign: number }[]
+  myClubs?: { slug: string; name: string; toSign: number; crestUrl?: string | null }[]
   name: string
   events: ClubEvent[]
   entries: string[]
@@ -79,7 +79,7 @@ export function ClubBarProvider({ children }: { children: React.ReactNode }) {
     const onClick = (e: MouseEvent) => {
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return
       const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null
-      if (!a || a.target === '_blank') return
+      if (!a || a.target === '_blank' || a.hasAttribute('data-keep-set')) return
       const url = new URL(a.href, window.location.href)
       if (url.origin !== window.location.origin || !url.pathname.startsWith('/club/')) return
       if (url.pathname !== window.location.pathname) setGoing(url.pathname)

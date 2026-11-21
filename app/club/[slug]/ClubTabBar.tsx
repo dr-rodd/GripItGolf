@@ -1,8 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { useEffect, useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
+import { startTransition, useEffect, useRef, useState } from 'react'
 import {
   IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers,
 } from '@/app/components/icons'
@@ -74,9 +74,28 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   ]
   const five = own.length === 3
 
+  const router = useRouter()
+  // MO1, M6 (D280): leaving a competition is asked for outright, and checked —
+  // the bar keeps its set until the address has left the competition, so the
+  // page and the footer change together; a move that never lands is made whole.
+  const leaving = useRef<number | null>(null)
+  useEffect(() => () => { if (leaving.current) clearTimeout(leaving.current) }, [])
+  useEffect(() => { if (!comp && leaving.current) { clearTimeout(leaving.current); leaving.current = null } }, [comp])
+
   /** A club tab switches the page in place; one with an address of its own goes there. */
   const clubTap = (t: ClubTab, href?: string) => (e: React.MouseEvent) => {
-    if (comp || href) { setTab(t); return }
+    if (comp) {
+      e.preventDefault()
+      setTab(t)
+      const to = t === 'home' ? club : `${club}?tab=${t}`
+      startTransition(() => router.push(to))
+      if (leaving.current) clearTimeout(leaving.current)
+      leaving.current = window.setTimeout(() => {
+        if (window.location.pathname !== club) window.location.assign(to)
+      }, 4000)
+      return
+    }
+    if (href) { setTab(t); return }
     e.preventDefault()
     choose(t)
   }
@@ -92,12 +111,12 @@ export default function ClubTabBar({ slug }: { slug: string }) {
         {five && <span aria-hidden="true" className="club-bar-tray bg-club-tint" />}
         <ul className={`relative grid ${five ? 'grid-cols-5' : 'grid-cols-4'}`}>
           <li>
-            <Tab href={club} onClick={clubTap('home')} lit={!comp && tab === 'home'} label="Home">
+            <Tab href={club} onClick={clubTap('home')} keepSet={!!comp} lit={!comp && tab === 'home'} label="Home">
               <IconHome size={22} />
             </Tab>
           </li>
           <li>
-            <Tab href={comp ? compsBack(slug) : `${club}?tab=comps`} onClick={clubTap('comps')}
+            <Tab href={comp ? compsBack(slug) : `${club}?tab=comps`} onClick={clubTap('comps')} keepSet={!!comp}
               lit={comp ? comp.active === 'summary' : tab === 'comps'} label="Comps"
               aria={comp ? 'Comps — back to the club’s competitions' : undefined}>
               <span className="relative w-[22px] h-[22px]">
@@ -141,8 +160,10 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   )
 }
 
-function Tab({ href, onClick, lit, label, aria, replace, prefetch, children }: {
+function Tab({ href, onClick, lit, label, aria, replace, prefetch, keepSet, children }: {
   href: string
+  /** Leaving a competition: the bar keeps its set until the address leaves (M6). */
+  keepSet?: boolean
   /** A competition's sections fetched whole ahead of the tap (D198), so moving between them is instant. */
   prefetch?: boolean
   onClick?: (e: React.MouseEvent) => void
@@ -153,7 +174,7 @@ function Tab({ href, onClick, lit, label, aria, replace, prefetch, children }: {
   children: React.ReactNode
 }) {
   return (
-    <Link href={href} onClick={onClick} replace={replace} prefetch={prefetch ? true : undefined} aria-current={lit ? 'page' : undefined} aria-label={aria}
+    <Link href={href} onClick={onClick} replace={replace} data-keep-set={keepSet ? '' : undefined} prefetch={prefetch ? true : undefined} aria-current={lit ? 'page' : undefined} aria-label={aria}
       className={`club-bar-tab w-full flex flex-col items-center justify-center gap-1.5 h-16 ${
         lit ? 'text-club-deep' : 'text-bark/60 hover:text-bark/80'
       }`}>

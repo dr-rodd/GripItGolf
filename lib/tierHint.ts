@@ -124,3 +124,19 @@ export function storedAccountSession(): boolean {
   } catch { /* unreadable — no guess */ }
   return false
 }
+
+/**
+ * "Home" for whoever holds this phone (MO1, M4 — D280): a club member's is
+ * their club's home, the last club used; anybody else's the front page.
+ * Read in the browser only, after mount — the hint is this phone's.
+ */
+export function homeHref(): string {
+  const h = readTierHint()
+  return h?.kind === 'club' ? `/club/${h.slug}` : '/'
+}
+
+/** Your page (D280): a club member's own page at their last club; anybody else's /home. */
+export function myPageHref(): string {
+  const h = readTierHint()
+  return h?.kind === 'club' ? `/club/${h.slug}/me` : '/home'
+}

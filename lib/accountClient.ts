@@ -664,7 +664,7 @@ export interface ClubAnswer {
   /** D179: said once on linking, when the club's index differed from the account's. */
   note?: string
   /** D218, D223: every verified club this account is on, with cards waiting at each — only when more than one. */
-  myClubs?: { slug: string; name: string; toSign: number }[]
+  myClubs?: { slug: string; name: string; toSign: number; crestUrl?: string | null }[]
   /** Stage (k1), the Clubhouse. */
   grid?: GridRow[]
   total?: number
