@@ -914,6 +914,23 @@ function wiringTests() {
   ok(/e\.code === '42703' \|\| e\.code === 'PGRST204'/.test(rowsTs) && /ticksMissingAt = Date\.now\(\)/.test(rowsTs), 'before 092 the ticks are read off the role, and asked for again a minute later')
   ok(/seasonHere = season\.rows\.filter\(r => !r\.club_id \|\| r\.club_id === clubId\)/.test(read('app/api/club/club.ts')), 'season stats are per club: this club’s rounds and the account’s own (D223)')
 
+  section('MO3: Comps length and speed (D282)')
+  {
+    const view = read('app/club/[slug]/ClubView.tsx')
+    ok(/g\.upcoming\.filter\(e => soon\(e\.startDate\)\)/.test(view) && /href=\{`\/club\/\$\{slug\}\/comps`\}/.test(view) && /results: past\.slice\(0, resultsShown\)/.test(view),
+      'Comps’ Upcoming is the next two weeks with See all; Results ten at a time')
+    ok(/input\.whole !== true/.test(read('app/api/club/club.ts')) && /whole: true/.test(view), 'the home carries the next two weeks; the whole season only when asked')
+    const frame = read('app/club/[slug]/comp/[code]/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
+    ok(/<ClubHeader face=\{clubFace\} members \/>/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/loading.tsx')),
+      'a competition’s frame is its layout’s, kept between pages; the loading screen only the page’s own part (M3)')
+    const tt = read('app/api/club/teeTimes.ts')
+    ok(/const early = reading \? dayReads\(/.test(tt) && /readerFromToken/.test(tt), 'a day’s tee sheet starts its reads beside the sign-in check, checked locally')
+    ok(/trips!inner\(id, trip_code, name, start_date, competition, rounds\(/.test(read('app/api/club/teeTimesStore.ts')), '…the day’s competitions in one read')
+    ok(/live_player_locks\(live_round_id, player_id\)/.test(read('app/api/club/bookingStore.ts')) && /trip_private\(club_id, clubs\(verified_at\)\)/.test(read('app/api/club/bookingStore.ts')),
+      'a competition and its sheet in fewer reads one after another')
+    ok(/prefetchTeeDay\(clubIdNow\)/.test(view), 'today’s casual sheet asked for ahead of the tab')
+  }
+
   section('MO2: what counts as Live now (D281)')
   {
     // 21 Nov 2026 is winter: Irish time is UTC.

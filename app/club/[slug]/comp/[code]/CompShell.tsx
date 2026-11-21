@@ -4,44 +4,29 @@ import { courseLabel } from '@/lib/courseDirectory'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { compHome } from '@/lib/clubBar'
 import { IconChevronLeft } from '@/app/components/icons'
-import TripHeader from '@/app/components/TripHeader'
 import { LiveDot } from '@/app/components/ui'
-import { Art, ClubHeader } from '../../ClubView'
 import { NoBar } from '../../ClubBarContext'
 import CompDoor from './CompDoor'
 import CompAhead from './CompAhead'
 import type { CompPage, OpenCompPage } from './read'
 
 /**
- * The frame of a competition's four pages (D186): the club's art (the short
- * title strip, D123), the header whose green dot goes to the club Home
- * (D187), the club's frosted header — then the page. The footer is the
- * club layout's, never drawn here; the members-only door shows none.
+ * A competition page's own part (D186), inside the frame its layout draws
+ * (MO3, D282 — the art and the club's header stay put between pages). The
+ * footer is the club layout's; the members-only door shows none.
  */
 export default function CompShell({ page, children }: { page: Pick<CompPage, 'slug' | 'code' | 'clubFace' | 'here' | 'door' | 'kind'>; children?: React.ReactNode }) {
   const { slug, code, clubFace, here } = page
-  return (
-    <main data-club style={clubFace.style as React.CSSProperties}
-      className={`min-h-dvh paper relative isolate ${page.door ? '' : 'has-tabbar'}`}>
-      <Art face={clubFace} home={false} />
-      <div className="relative z-10">
-        <TripHeader backTo={`/club/${slug}`} />
-        <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
-          <ClubHeader face={clubFace} members />
-          {page.door ? (
-            <>
-              <NoBar />
-              <CompDoor code={code} clubName={clubFace.name} here={here} matchPlay={page.kind === 'matchplay'} />
-            </>
-          ) : (
-            <>
-              <CompAhead slug={slug} code={code} renderedAt={Date.now()} />
-              {children}
-            </>
-          )}
-        </div>
-      </div>
-    </main>
+  return page.door ? (
+    <>
+      <NoBar />
+      <CompDoor code={code} clubName={clubFace.name} here={here} matchPlay={page.kind === 'matchplay'} />
+    </>
+  ) : (
+    <>
+      <CompAhead slug={slug} code={code} renderedAt={Date.now()} />
+      {children}
+    </>
   )
 }
 

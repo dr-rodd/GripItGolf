@@ -650,6 +650,8 @@ export interface ClubAnswer {
   skipped?: { name: string; why: string }[]
   sentTo?: string
   events?: ClubEvent[]
+  more?: { upcoming: number; past: number }
+  whole?: boolean
   entries?: string[]
   me?: { name: string }
   season?: SeasonRow[]

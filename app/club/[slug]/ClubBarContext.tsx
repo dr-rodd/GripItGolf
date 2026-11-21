@@ -25,6 +25,8 @@ export interface ClubMembers {
   season: SeasonRow[]
   courses: Record<string, string>
   outside: ClubEvent[]
+  /** MO3 (D282): how many upcoming and past events the club has in all — the home carries the next two weeks. */
+  more?: { upcoming: number; past: number }
   tops: Record<string, { name: string; points: number }>
   /** Stage (d3): competitions with a card waiting on this member — to approve or to mark. */
   toSign: { code: string; name: string; count: number }[]

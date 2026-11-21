@@ -47,8 +47,7 @@ import {
   listRowIssue, maskNumber, nextSlug, normaliseClubName,
   planList, clubAssetUrl, clubImageIssue, IMAGE_COLUMN, CLUB_IMAGE_KINDS,
   clubEventWhen, irishToday,
-  type ClubEvent, type ClubImageKind, type ClubRole, type ClubStatus, type ListRow,
-} from '@/lib/clubs'
+  type ClubEvent, type ClubImageKind, type ClubRole, type ClubStatus, type ListRow, COMPS_DAYS_AHEAD, COMPS_RESULTS } from '@/lib/clubs'
 
 export interface ClubRecord {
   id: string; slug: string; name: string; verifiedAt: string | null; refusedAt: string | null
@@ -248,6 +247,9 @@ export type ClubBody = {
   sentTo?: string
   /** The members home (D159): every event under the club, and this account's entries among them. */
   events?: ClubEvent[]
+  /** MO3 (D282): how many upcoming and past events the club has in all — the home carries only the next two weeks and the latest results. */
+  more?: { upcoming: number; past: number }
+  whole?: boolean
   entries?: string[]
   /** The name on the club's list, for the greeting. */
   me?: { name: string }
@@ -331,6 +333,8 @@ export { inviteHash, inviteTryKey } from './invites'
 import { inviteHash, inviteTryKey } from './invites'
 
 let assetBase: string | undefined
+
+const addDaysIso = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
 function summary(club: ClubRecord, row: MemberRecord | Credentials): ClubSummary {
   return {
     id: club.id, slug: club.slug, name: club.name, status: clubStatus(club),
@@ -552,6 +556,24 @@ export async function runClub(
     if (phases) {
       events = events.map(e => (e.competition ? { ...e, competition: { ...e.competition, phase: phases.get(e.code) ?? e.competition.phase } } : e))
     }
+    // MO3 (D282): the home carries what Home and Comps show — on now, the
+    // next two weeks, everything this member entered, the latest results and
+    // the match plays — and the whole season only when asked (`whole`, See all).
+    const more = { upcoming: 0, past: 0 }
+    if (input.whole !== true) {
+      const last = addDaysIso(today, COMPS_DAYS_AHEAD - 1)
+      const recent = new Set(events.filter(e => clubEventWhen(e, today) === 'past')
+        .sort((a, b) => (b.endDate ?? b.startDate ?? '').localeCompare(a.endDate ?? a.startDate ?? '')).slice(0, COMPS_RESULTS).map(e => e.code))
+      const kept = events.filter(e => {
+        const when = clubEventWhen(e, today)
+        if (entries.includes(e.code) || e.competition?.matchPlay || when === 'now') return true
+        if (when === 'upcoming') return !!e.startDate && e.startDate <= last
+        return recent.has(e.code)
+      })
+      more.upcoming = events.filter(e => clubEventWhen(e, today) === 'upcoming').length
+      more.past = events.filter(e => clubEventWhen(e, today) === 'past').length
+      events = kept
+    }
     // D161: the home course, for New competition's first answer (089) — in
     // the first wave's club already; read again only on the old path.
     const full = first ? null : may('run_events', row) ? await store.club(club.id).catch(() => null) : null
@@ -563,6 +585,7 @@ export async function runClub(
       status: 200,
       body: {
         ok: true, club: summary(full ?? club, row), events, entries, me: { name: mineRowName },
+        ...(input.whole === true ? { whole: true } : { more }),
         season: seasonHere, courses: season.courses, outside, tops, toSign, notes,
         ...(matches.length ? { matches } : {}),
         ...(Object.keys(partners).length ? { partners } : {}),

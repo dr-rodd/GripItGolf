@@ -9,11 +9,11 @@ import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
-import { IconCheck, IconChevronDown, IconChevronRight, IconUser } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconUser } from '@/app/components/icons'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
-  clubEventDates, clubEventHref, clubEventLive, groupClubEvents, irishToday,
+  clubEventDates, clubEventHref, clubEventLive, groupClubEvents, irishToday, COMPS_DAYS_AHEAD, COMPS_RESULTS,
   type ClubEvent,
 } from '@/lib/clubs'
 import { clubMay, credentialLine, type Credentials } from '@/lib/clubMay'
@@ -30,10 +30,11 @@ import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClub
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
 import AwardsCard from './AwardsCard'
-import ClubTeeTimes from './ClubTeeTimes'
+import ClubTeeTimes, { prefetchTeeDay } from './ClubTeeTimes'
 import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
 import { noteTimeLine, noteWhen, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { prefetchWhole } from './prefetchWhole'
+import { addDays } from '@/lib/clubOverview'
 
 /** What the server hands the page: the club's look and its guests-welcome events — never more. */
 export interface ClubFace {
@@ -67,6 +68,10 @@ export default function ClubView({ face }: { face: ClubFace }) {
   // there while the page asks again.
   const { members, setMembers, tab, setTab } = useClubBar()
   const router = useRouter()
+
+  // MO3 (D282): today's casual tee sheet asked for ahead of the Tee times tab.
+  const clubIdNow = members?.clubId
+  useEffect(() => { if (clubIdNow) prefetchTeeDay(clubIdNow) }, [clubIdNow])
 
   // D198: the club's competitions still to finish, fetched whole while the
   // member looks at the club, so tapping one is instant (at most four).
@@ -153,7 +158,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
         slug: face.slug, myClubs: r.myClubs,
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, credentials: r.club.credentials, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
-        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [],
+        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [], more: r.more,
         notes: r.notes ?? [], matches: r.matches ?? [],
       }
       setMembers(fresh)
@@ -597,16 +602,37 @@ type CompsView = 'upcoming' | 'mine' | 'matches' | 'results'
 function Comps({ m, slug }: { m: Members; slug: string }) {
   const g = useGroups(m.events)
   const [view, setView] = useState<CompsView>('upcoming')
+  // MO3 (D282): the next two weeks; the whole season on its own page. Results
+  // ten at a time, the rest asked for only when wanted.
+  const [whole, setWhole] = useState<{ events: ClubEvent[]; tops: Members['tops'] } | null>(null)
+  const [resultsShown, setResultsShown] = useState(COMPS_RESULTS)
+  const [moreBusy, setMoreBusy] = useState(false)
   // Stage c1, M6: Upcoming holds the club's own events too, narrowed by type.
   const [type, setType] = useState<EventType | 'all'>('all')
   const [opened, setOpened] = useState<ClubNote | null>(null)
   const today = irishToday(new Date())
-  const notes = (m.notes ?? []).filter(n => noteWhen(n, today) !== 'past')
+  const last = addDays(today, COMPS_DAYS_AHEAD - 1)
+  const soon = (d: string | null | undefined) => !!d && d <= last
+  const allNotes = (m.notes ?? []).filter(n => noteWhen(n, today) !== 'past')
+  const notes = allNotes.filter(n => soon(n.startsOn) || noteWhen(n, today) === 'now')
+  const past = whole ? groupClubEvents(whole.events, today).past : g.past
+  const tops = whole ? { ...m.tops, ...whole.tops } : m.tops
   const lists: Record<CompsView, ClubEvent[]> = {
-    upcoming: [...g.now, ...g.upcoming],
+    upcoming: [...g.now, ...g.upcoming.filter(e => soon(e.startDate))],
     mine: [...g.now, ...g.upcoming, ...g.past].filter(e => m.entries.includes(e.code)),
     matches: [],
-    results: g.past,
+    results: past.slice(0, resultsShown),
+  }
+  const laterUpcoming = (m.more?.upcoming ?? g.upcoming.length) > g.upcoming.filter(e => soon(e.startDate)).length || allNotes.length > notes.length
+  const morePast = (whole ? past.length : m.more?.past ?? g.past.length) > resultsShown
+  async function moreResults() {
+    if (!whole) {
+      setMoreBusy(true)
+      const r = await askClub('home', { slug, whole: true })
+      setMoreBusy(false)
+      if (r.ok && r.events) setWhole({ events: r.events, tops: (r.tops ?? {}) as Members['tops'] })
+    }
+    setResultsShown(n => n + COMPS_RESULTS)
   }
   const upcomingTypes = [...new Set<EventType>([...lists.upcoming.map(eventType), ...notes.map(n => n.type)])]
   const list = view === 'upcoming' && type !== 'all' ? lists.upcoming.filter(e => eventType(e) === type) : lists[view]
@@ -656,9 +682,9 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
               </div>
             </div>
             {m.entries.includes(featured.code) && <p className="t-cap text-club-deep font-semibold mt-2">{inWords(m.partners, featured.code)}</p>}
-            {m.tops[featured.code] && (
+            {tops[featured.code] && (
               <p className="t-cap text-gold-deep font-semibold mt-2">
-                Top score: <span className="t-data">{m.tops[featured.code].name} {m.tops[featured.code].points}</span> pts
+                Top score: <span className="t-data">{tops[featured.code].name} {tops[featured.code].points}</span> pts
               </p>
             )}
           </Link>
@@ -672,15 +698,73 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
                     : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
                 </ListGroup>
               ) : (
-                <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? m.tops : {}} partners={m.partners} />
+                <EventRows events={rest} slug={slug} entries={m.entries} tops={view === 'results' ? tops : {}} partners={m.partners} />
               )}
             </section>
           )}
         </>
       )}
+      {view === 'upcoming' && laterUpcoming && (
+        <Link href={`/club/${slug}/comps`} className={`${buttonClass('quiet', false)} ch-focus mt-4`}>See all</Link>
+      )}
+      {view === 'results' && morePast && (
+        <button type="button" disabled={moreBusy} onClick={() => void moreResults()} className={`${buttonClass('quiet', false)} ch-focus mt-4`}>
+          {moreBusy ? 'Loading…' : 'More results'}
+        </button>
+      )}
       </>)}
       {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </>
+  )
+}
+
+/**
+ * Comps' See all (MO3, D282): the whole season still to come, the club's own
+ * events among it, asked for only when this page is opened.
+ */
+export function SeasonList({ slug, club }: { slug: string; club: string }) {
+  const [got, setGot] = useState<{ events: ClubEvent[]; notes: ClubNote[]; entries: string[]; partners?: Members['partners'] } | null>(null)
+  const [lost, setLost] = useState(false)
+  const [opened, setOpened] = useState<ClubNote | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    let live = true
+    void askClub('home', { slug, whole: true }).then(r => {
+      if (!live) return
+      if (!r.ok) { setLost(true); return }
+      setLost(false)
+      setGot({ events: r.events ?? [], notes: (r.notes ?? []) as ClubNote[], entries: r.entries ?? [], partners: r.partners as Members['partners'] })
+    })
+    return () => { live = false }
+  }, [slug, attempt])
+  const today = irishToday(new Date())
+  const g = got ? groupClubEvents(got.events, today) : null
+  const items = got && g ? calendarItems([...g.now, ...g.upcoming], got.notes, today) : []
+  return (
+    <section>
+      <Link href={`/club/${slug}?tab=comps`} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
+        <IconChevronLeft size={16} /> Comps
+      </Link>
+      <h1 className="t-h1 text-ink mt-2">The season</h1>
+      <p className="text-ink/65 text-sm mt-1">Everything coming up at {club}.</p>
+      {lost && (
+        <div role="alert" className="mt-4">
+          <p className="t-cap text-ink/80">Could not reach Green Dot — try again.</p>
+          <button type="button" onClick={() => setAttempt(a => a + 1)} className={`${buttonClass('secondary', false)} mt-3`}>Try again</button>
+        </div>
+      )}
+      {!got && !lost && <div className="skeleton h-64 rounded-card mt-6" />}
+      {got && (items.length === 0
+        ? <p className="text-ink/65 text-[15px] mt-6">Nothing coming up yet.</p>
+        : (
+          <ListGroup className="mt-5">
+            {items.map(x => x.e
+              ? <EventRow key={x.key} e={x.e} slug={slug} entries={got.entries} tops={{}} partners={got.partners} />
+              : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
+          </ListGroup>
+        ))}
+      {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
+    </section>
   )
 }
 

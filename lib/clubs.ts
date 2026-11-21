@@ -444,6 +444,11 @@ export interface ClubEvent {
   liveFrom?: number | null
 }
 
+/** Comps' Upcoming and the members home: the next two weeks (MO3, D282). */
+export const COMPS_DAYS_AHEAD = 14
+/** Results a page at a time, and the latest the home carries. */
+export const COMPS_RESULTS = 10
+
 /** An event spanning more days than this is season-long, whatever its shape says (D281). */
 export const SEASON_DAYS = 14
 

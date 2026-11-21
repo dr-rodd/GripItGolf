@@ -15,6 +15,20 @@ type Day = { ok: true } & TeeDayBody
 type Pick = { memberId: string; name: string } | { guestName: string }
 type Item = { key: string; row: Extract<SheetRow, { kind: 'overlay' }> } | { key: string; time: string; caught: string | null }
 
+/**
+ * Today's sheet asked for ahead of the tap (MO3, D282): the club home starts
+ * it, the tab draws it at once and asks again behind it. Held in this
+ * browser tab only, a few minutes at most — never a stand-in for the server.
+ */
+const ahead = new Map<string, { at: number; day: Promise<Day | null> }>()
+const AHEAD_MS = 5 * 60_000
+export function prefetchTeeDay(clubId: string) {
+  const had = ahead.get(clubId)
+  if (had && Date.now() - had.at < 60_000) return
+  const day = askTeeTimes<TeeDayBody>('day', { clubId }).then(r => (r.ok ? r as Day : null)).catch(() => null)
+  ahead.set(clubId, { at: Date.now(), day })
+}
+
 const dayChip = (d: string) => {
   const t = new Date(`${d}T12:00:00Z`)
   return {
@@ -50,6 +64,9 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
 
   useEffect(() => {
     let live = true
+    // Today, fetched ahead by the club home: drawn at once, then asked again behind it.
+    const kept = !asked.date && asked.n === 0 ? ahead.get(clubId) : undefined
+    if (kept && Date.now() - kept.at < AHEAD_MS) void kept.day.then(d => { if (live && d) setDay(prev => prev ?? d) })
     askTeeTimes<TeeDayBody>('day', { clubId, ...(asked.date ? { date: asked.date } : {}) }).then(r => {
       if (!live) return
       if (!r.ok) { setLost(r.error); return }
