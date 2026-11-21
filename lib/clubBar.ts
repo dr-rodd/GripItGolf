@@ -55,6 +55,30 @@ export function sectionOfView(view: string | null | undefined): CompSection | nu
   return view === 'tee' || view === 'scoring' || view === 'board' ? view : null
 }
 
+/**
+ * The screens a club competition plays inside its club (D284, Ross, 21 Nov
+ * 2026: all of it — scoring, matches, the bracket, managing it), at the
+ * same paths under the competition's address as under the event's own, so
+ * every link those screens build lands inside the club. Each maps to the
+ * footer tab lit on it.
+ */
+const PLAY_PATHS: readonly [RegExp, 'summary' | CompSection][] = [
+  [/^scoring\/\d+$/, 'scoring'],
+  [/^match\/[A-Za-z0-9-]+(?:\/card)?$/, 'scoring'],
+  [/^matchplay$/, 'board'],
+  [/^organiser(?:\/(?:tags|days|sessions|bracket|draw))?$/, 'summary'],
+  [/^setup(?:\/sessions)?$/, 'summary'],
+  [/^teesheet\/[A-Za-z0-9-]+\/setup$/, 'tee'],
+]
+
+/** A path under a competition's address that the club mounts (D284), cleaned, or null. */
+export function clubPathOf(path: string | null | undefined): string | null {
+  const p = (path ?? '').replace(/^\/+|\/+$/g, '')
+  if (!p) return null
+  if (Object.values(SECTION_PATH).includes(p)) return p
+  return PLAY_PATHS.some(([re]) => re.test(p)) ? p : null
+}
+
 /** Where Comps goes from a competition (Ross's answer, 16 Nov): back to the club's Comps, the club footer returning. */
 export function compsBack(slug: string): string {
   return `/club/${slug}?tab=comps`
@@ -75,12 +99,15 @@ export function barOf(pathname: string, slug: string): BarState {
   const base = `/club/${slug}`
   const path = pathname.replace(/\/+$/, '')
   if (path === base) return { set: 'club' }
-  const m = path.slice(base.length).match(/^\/comp\/([A-Za-z0-9]{4,12})(?:\/([a-z-]+))?$/)
+  const m = path.slice(base.length).match(/^\/comp\/([A-Za-z0-9]{4,12})(?:\/(.+))?$/)
   if (!path.startsWith(`${base}/`) || !m) return null
   const code = m[1].toUpperCase()
   if (!m[2]) return { set: 'comp', code, active: 'summary' }
   const section = SECTION_ORDER.find(s => SECTION_PATH[s] === m[2])
-  return section ? { set: 'comp', code, active: section } : null
+  if (section) return { set: 'comp', code, active: section }
+  // A screen the competition plays inside the club (D284): the tab it belongs to.
+  const play = PLAY_PATHS.find(([re]) => re.test(m[2]))
+  return play ? { set: 'comp', code, active: play[1] } : null
 }
 
 /** The header's club picker (D223, D280): the account's clubs, this one ticked, a dot where a card waits. */

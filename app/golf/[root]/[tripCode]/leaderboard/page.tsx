@@ -1,4 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { isLegacy } from '@/lib/leaderboardsCompat'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
@@ -21,6 +22,8 @@ export default async function TripLeaderboardPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'leaderboard')
   const tripHome = tripHomeAt(root, tripCode)
 
   // Everything the board reads, from the event's shared server copy — at

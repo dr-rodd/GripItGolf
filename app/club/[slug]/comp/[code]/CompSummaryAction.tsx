@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react'
 import { ButtonLink } from '@/app/components/ui'
 import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
-import { compSectionHref } from '@/lib/clubBar'
+import { compHome, compSectionHref } from '@/lib/clubBar'
 import type { CompPhase } from '@/lib/compPhase'
 import { joinNames } from '@/lib/matchplayEntrants'
-import { tripBase } from '@/lib/tripPaths'
 
 export interface SummarySlot { clock: string; players: { id: string; name: string }[] }
 
@@ -55,7 +54,7 @@ export default function CompSummaryAction({ slug, code, phase, line, slots }: {
       ? <ButtonLink href={compSectionHref(slug, code, 'tee')} variant="secondary" className="mt-4">Change</ButtonLink>
       : <ButtonLink href={compSectionHref(slug, code, 'tee')} className="mt-4">Book a tee time</ButtonLink>
   } else if (phase === 'in_play' && member?.booked) {
-    action = <ButtonLink href={`${tripBase(code, 'tournament')}/scoring/1`} className="mt-4">Start your card</ButtonLink>
+    action = <ButtonLink href={`${compHome(slug, code)}/scoring/1`} className="mt-4">Start your card</ButtonLink>
   } else if (phase === 'awaiting' && member?.admin) {
     action = <ButtonLink href={compSectionHref(slug, code, 'scoring')} className="mt-4">Certify result</ButtonLink>
   }

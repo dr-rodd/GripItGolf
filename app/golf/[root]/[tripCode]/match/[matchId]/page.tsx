@@ -1,4 +1,5 @@
 import { readClubMatchPlay } from '@/lib/clubMatchPlay'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { notFound } from 'next/navigation'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
@@ -50,6 +51,8 @@ export default async function MatchPage({
   params: Promise<{ root: string; tripCode: string; matchId: string }>
 }) {
   const { root, tripCode, matchId } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, `match/${matchId}`)
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

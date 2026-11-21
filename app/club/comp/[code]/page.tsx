@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase-admin'
-import { compHome, compSectionHref, sectionOfView } from '@/lib/clubBar'
+import { clubPathOf, compHome, compSectionHref, sectionOfView } from '@/lib/clubBar'
 
 /**
  * A club competition by its code alone (stage (d1), D164): the address the
@@ -19,10 +19,10 @@ export const metadata: Metadata = { robots: { index: false, follow: false } }
 
 export default async function CompetitionByCode({ params, searchParams }: {
   params: Promise<{ code: string }>
-  searchParams: Promise<{ view?: string }>
+  searchParams: Promise<{ view?: string; to?: string }>
 }) {
   const code = (await params).code.trim().toUpperCase()
-  const { view } = await searchParams
+  const { view, to } = await searchParams
   if (!/^[A-Z0-9]{4,12}$/.test(code)) notFound()
   const db = createAdminClient()
   // Before 089 there is no competition column: nothing is one.
@@ -35,6 +35,11 @@ export default async function CompetitionByCode({ params, searchParams }: {
   const { data: club } = await db.from('clubs').select('slug, verified_at').eq('id', clubId).maybeSingle()
   const c = club as { slug: string; verified_at: string | null } | null
   if (!c?.verified_at) notFound()
+  // A screen asked for comes along (D284): the event's own address of a
+  // card, a match, the bracket or the organiser area lands on the same
+  // screen inside the club (`intoClub` in the trip tree's kind.ts).
+  const path = clubPathOf(to)
+  if (path) redirect(`${compHome(c.slug, code)}/${path}`)
   // A section asked for comes along: the card's way back is to Scoring (D190).
   const section = sectionOfView(view)
   redirect(section ? compSectionHref(c.slug, code, section) : compHome(c.slug, code))

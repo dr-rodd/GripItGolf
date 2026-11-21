@@ -1,4 +1,5 @@
 import { eventReader } from '@/lib/eventReader'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { isKnockoutEvent, parseBracketSetup, rawDrawPlan } from '@/lib/bracketSetup'
@@ -38,6 +39,8 @@ export default async function BracketSetupPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'organiser/bracket')
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

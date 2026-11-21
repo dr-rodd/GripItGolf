@@ -3,6 +3,8 @@ import { parseLeaderboards } from '@/lib/leaderboards'
 import { overallOf } from '@/lib/sessions'
 import { eventReader } from '@/lib/eventReader'
 import { teeSheetInUse } from '@/lib/eventHub'
+import { redirect } from 'next/navigation'
+import { isTripRoot } from '@/lib/tripPaths'
 
 /**
  * The trip's kind, once per request — the one copy of this lookup.
@@ -96,3 +98,18 @@ export const fetchIsCompetition = cache(async (tripCode: string): Promise<boolea
     .maybeSingle()
   return !error && (data as { competition?: string | null } | null)?.competition === 'club'
 })
+
+/**
+ * A club competition is played inside its club (D284, Ross, 21 Nov 2026):
+ * opened at the event's own address — an old link, a bookmark — one of the
+ * screens the club mounts goes on to the same screen inside the club
+ * (`/club/comp/<code>?to=…` finds the club). Opened inside the club already
+ * (`root` a club root), nothing happens. `rest` is the path under the
+ * event's home, no leading slash, and must be one the club mounts.
+ */
+export async function intoClub(root: string, tripCode: string, rest: string): Promise<void> {
+  if (!isTripRoot(root)) return
+  if (!(await fetchIsCompetition(tripCode))) return
+  const to = rest ? `?to=${encodeURIComponent(rest)}` : ''
+  redirect(`/club/comp/${tripCode.toUpperCase()}${to}`)
+}

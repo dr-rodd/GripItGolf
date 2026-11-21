@@ -3,7 +3,7 @@ import { PHASE_WORDS } from '@/lib/compPhase'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { formatLine } from '@/lib/clubhouse'
 import { LONE_NOT_DRAWN, drawDueNow, matchPlayLine, matchPlayPhase, matchPlayRules, roundInPlayLine } from '@/lib/clubMatchPlay'
-import { tripBase } from '@/lib/tripPaths'
+import { compHome } from '@/lib/clubBar'
 import { readClubDraw } from '@/app/api/club/matchPlayDraw'
 import MyMatch, { type ClubMatchRow } from './MyMatch'
 import { MatchPlayMark } from '../../ClubBarContext'
@@ -47,7 +47,7 @@ export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }
         {mp.setup.field === 'entries' && <MatchPlayEnter code={mp.code} drawDue={drawDueNow(mp.setup, phase, new Date())} pairs={pairs} loneNote={LONE_NOT_DRAWN} />}
       </section>
 
-      {draw && <MyMatch code={mp.code} matches={rows} matchHref={`${tripBase(mp.code, 'tournament')}/match`} />}
+      {draw && <MyMatch code={mp.code} matches={rows} matchHref={`${compHome(page.slug, mp.code)}/match`} />}
 
       <section className="mt-6">
         <h2 className="t-h2 text-ink">Rules</h2>

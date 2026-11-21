@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
-import { Art, ClubHeader } from '../../ClubView'
-import { readFace } from '../../face'
+import { Art, ClubHeader } from '../../../ClubView'
+import { readFace } from '../../../face'
 
 /**
  * A competition's frame (MO3, D282): the club's art, the header whose green

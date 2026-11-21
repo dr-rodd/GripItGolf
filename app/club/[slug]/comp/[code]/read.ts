@@ -97,3 +97,25 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
 export type CompPage = Awaited<ReturnType<typeof readCompPage>>
 export type OpenCompPage = Extract<CompPage, { door: false; kind: 'stroke' }>
 export type MatchPlayPage = Extract<CompPage, { door: false; kind: 'matchplay' }>
+
+/**
+ * The door alone (D284), for the screens a competition plays inside its
+ * club — the card, a match, the bracket, managing it: the club's look, and
+ * whether this phone is through the members-only door, from the same reads
+ * as the Summary's, nothing of the sheet. Not found unless the competition
+ * is this club's.
+ */
+export const readCompGate = cache(async (slug: string, rawCode: string) => {
+  const code = rawCode.trim().toUpperCase()
+  const db = createAdminClient()
+  const [face, comp, jar] = await Promise.all([readFace(slug, { events: false }), readCompetition(db, code), cookies()])
+  if (!face) notFound()
+  const { id: _id, ...clubFace } = face
+  const here = compHome(slug, code)
+  const mp = comp ? null : await readMatchPlayComp(db, code)
+  const clubId = comp?.clubId ?? mp?.clubId ?? null
+  if (!clubId || clubId !== face.id) notFound()
+  const hash = comp ? comp.publicHash : mp!.publicHash
+  const kind = comp ? 'stroke' as const : 'matchplay' as const
+  return { slug, code, clubFace, here, kind, door: !entryAllowed(hash, jar.get(entryCookie(code))?.value, code) }
+})

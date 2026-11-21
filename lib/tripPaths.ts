@@ -36,8 +36,27 @@ export function tripBase(code: string, kind: unknown): string {
   return `/golf/${rootOf(kind)}/${code}`
 }
 
+/**
+ * A club competition's screens drawn inside its club (D284, Ross, 21 Nov
+ * 2026): the event's own pages, mounted under `/club/<slug>/comp/<CODE>/`,
+ * are handed this as their `root`, so every link they build lands inside
+ * the club too. Never a route segment — `isTripRoot` refuses it.
+ */
+const CLUB_ROOT = 'club~'
+
+/** The `root` a club competition's page is handed (D284). */
+export function clubCompRoot(slug: string): string {
+  return `${CLUB_ROOT}${slug}`
+}
+
+/** Whether a page was opened inside a club (D284) rather than at the event's own address. */
+export function isClubRoot(root: string): boolean {
+  return root.startsWith(CLUB_ROOT)
+}
+
 /** The home of the address a page was opened at — its own `root` segment — for a server page's links. */
 export function tripHomeAt(root: string, code: string): string {
+  if (isClubRoot(root)) return `/club/${root.slice(CLUB_ROOT.length)}/comp/${code.toUpperCase()}`
   return `/golf/${isTripRoot(root) ? root : 'trip'}/${code}`
 }
 

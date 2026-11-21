@@ -28,7 +28,7 @@ import { askClub, readAccount } from '@/lib/accountClient'
 import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
 import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClubHome } from '@/lib/clubHomeCopy'
 import { useClubBar, type ClubMembers } from './ClubBarContext'
-import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
+import { clubSwitch, compHome, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
 import AwardsCard from './AwardsCard'
 import ClubTeeTimes, { prefetchTeeDay } from './ClubTeeTimes'
 import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
@@ -770,7 +770,7 @@ export function SeasonList({ slug, club }: { slug: string; club: string }) {
 
 /** Where a match play row goes: the match's own page once the opponent is known, else the competition. */
 function matchHref(x: MyClubMatch, slug: string): string {
-  return x.state === 'next' && x.opponent ? `${tripBase(x.code, 'tournament')}/match/${x.matchId}` : clubEventHref({ code: x.code, competition: { phase: 'in_play', membersOnly: true } }, slug)
+  return x.state === 'next' && x.opponent ? `${compHome(slug, x.code)}/match/${x.matchId}` : clubEventHref({ code: x.code, competition: { phase: 'in_play', membersOnly: true } }, slug)
 }
 
 /** Comps' Matches (stage 3, D266): your place in each club match play — the next match to play, soonest due first, then how the rest ended. */

@@ -1,4 +1,5 @@
 import { unitLabel } from '@/lib/eventShape'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import Link from 'next/link'
 import CardStateLine from '@/app/components/CardStateLine'
 import { CARD_COUNTS, COURSE_CARD_COUNTS, blockersByCourse, type CardBlocker } from '@/lib/courseCard'
@@ -44,6 +45,8 @@ export default async function TripCoursePortalPage({
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'scoring')
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

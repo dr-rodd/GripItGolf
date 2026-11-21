@@ -1,4 +1,5 @@
 import { eventReader } from '@/lib/eventReader'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { teeSheetAccess } from '@/lib/eventPermissions'
@@ -37,6 +38,8 @@ export default async function TeeSheetSetupPage({ params, searchParams }: {
   searchParams: Promise<{ from?: string }>
 }) {
   const [{ root, tripCode, roundId }, { from }] = await Promise.all([params, searchParams])
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, `teesheet/${roundId}/setup`)
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

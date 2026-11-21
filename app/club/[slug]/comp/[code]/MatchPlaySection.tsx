@@ -2,7 +2,6 @@ import Link from 'next/link'
 import { cardClass } from '@/app/components/ui'
 import { PHASE_WORDS, type CompSection } from '@/lib/compPhase'
 import { irishToday } from '@/lib/clubs'
-import { tripBase } from '@/lib/tripPaths'
 import { compHome } from '@/lib/clubBar'
 import { matchPlayPhase, roundInPlayLine } from '@/lib/clubMatchPlay'
 import { eventReader } from '@/lib/eventReader'
@@ -19,7 +18,7 @@ import type { MatchPlayPage } from './read'
  * slots a stroke competition's Tee times, Scoring and Leaderboard hold:
  * **Field** — who has entered; **Matches** — your match, then the round in
  * play's matches; **Draw** — every round with its play-by date and results.
- * A match opens its own page (`/golf/event/<code>/match/<id>`) — arranging,
+ * A match opens its own page (`/club/<slug>/comp/<code>/match/<id>`, D284) — arranging,
  * contacts, the card and a walkover — as a stroke competition's card opens
  * its own; "See the full bracket" opens the event's bracket.
  */
@@ -27,7 +26,8 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
   const { mp, slug, code } = page
   const phase = matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, new Date())
   const today = irishToday(new Date())
-  const base = tripBase(code, 'tournament')
+  // D284: a match, its card and the bracket open inside the club.
+  const base = compHome(slug, code)
   const pairsMode = mp.setup.format !== 'singles'
   const db = eventReader(code)
   const [draw, field, pairRows] = await Promise.all([

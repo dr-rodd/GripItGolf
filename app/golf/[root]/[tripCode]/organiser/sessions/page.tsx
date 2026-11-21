@@ -1,4 +1,5 @@
 import { eventReader } from '@/lib/eventReader'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { isEvent } from '@/lib/eventHub'
 import { isLocked } from '@/lib/passcode'
 import { parseLeaderboards } from '@/lib/leaderboards'
@@ -22,6 +23,8 @@ export default async function SessionsPage({ params }: {
   params: Promise<{ root: string; tripCode: string }>
 }) {
   const { root, tripCode } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'organiser/sessions')
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

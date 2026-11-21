@@ -52,7 +52,8 @@ import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { notEligibleLine } from '../lib/clubMembership'
 import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
-import { barOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
+import { barOf, clubPathOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
+import { clubCompRoot, isTripRoot, tripHomeAt } from '../lib/tripPaths'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, withdrawIssue, type CompForm, type SheetBooking } from '../lib/clubComp'
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
 import { runBooking, type BookingStore, type Booked, type CompPlayer } from '../app/api/club/booking'
@@ -920,8 +921,8 @@ function wiringTests() {
     ok(/g\.upcoming\.filter\(e => soon\(e\.startDate\)\)/.test(view) && /href=\{`\/club\/\$\{slug\}\/comps`\}/.test(view) && /results: past\.slice\(0, resultsShown\)/.test(view),
       'Comps’ Upcoming is the next two weeks with See all; Results ten at a time')
     ok(/input\.whole !== true/.test(read('app/api/club/club.ts')) && /whole: true/.test(view), 'the home carries the next two weeks; the whole season only when asked')
-    const frame = read('app/club/[slug]/comp/[code]/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
-    ok(/<ClubHeader face=\{clubFace\} members \/>/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/loading.tsx')),
+    const frame = read('app/club/[slug]/comp/[code]/(frame)/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
+    ok(/<ClubHeader face=\{clubFace\} members \/>/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/(frame)/loading.tsx')),
       'a competition’s frame is its layout’s, kept between pages; the loading screen only the page’s own part (M3)')
     const tt = read('app/api/club/teeTimes.ts')
     ok(/const early = reading \? dayReads\(/.test(tt) && /readerFromToken/.test(tt), 'a day’s tee sheet starts its reads beside the sign-in check, checked locally')
@@ -1496,7 +1497,7 @@ async function competitionD2Tests() {
   ok(compRead.indexOf('entryAllowed(') < compRead.indexOf('readCompSheet(') && /return \{ \.\.\.base, door: true as const \}/.test(compRead)
     && /page\.door \? \(/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')) && /<CompDoor /.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
     'the competition pages read nothing of the competition without the door')
-  for (const f of ['page.tsx', 'tee-times/page.tsx', 'scoring/page.tsx', 'leaderboard/page.tsx', 'section.tsx']) {
+  for (const f of ['(frame)/page.tsx', '(frame)/tee-times/page.tsx', '(frame)/scoring/page.tsx', '(frame)/leaderboard/page.tsx', 'section.tsx']) {
     ok(!/ClubTabBar|CompBar/.test(read(`app/club/[slug]/comp/[code]/${f}`)), `…and ${f} draws no bar of its own (D180 amended)`)
   }
 }
@@ -1809,16 +1810,17 @@ async function competitionBarTests() {
   ok(/prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.club-bar-kid \{\s*transform: none !important;/.test(css), 'Reduce Motion: a cross-fade, no travel')
   ok(/body:has\(\[data-no-club-bar\]\) \.club-bar \{ display: none; \}/.test(css) && /<NoBar \/>/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
     'the members-only door shows no footer, in the server\'s HTML')
-  const summary = read('app/club/[slug]/comp/[code]/page.tsx')
+  const summary = read('app/club/[slug]/comp/[code]/(frame)/page.tsx')
   ok(/if \(asked\) redirect\(compSectionHref/.test(summary), 'an old ?view= on the Summary goes on to its section')
-  ok(/<CompManage code=\{code\} \/>/.test(summary), 'Manage competition on the Summary for owners and admins')
+  ok(/<CompManage slug=\{slug\} code=\{code\} \/>/.test(summary) && /compHome\(slug, code\)\}\/organiser/.test(read('app/club/[slug]/comp/[code]/CompManage.tsx')),
+    'Manage competition on the Summary for owners and admins, inside the club (D284)')
   ok(/const gold = certified && r\.place === 1/.test(summary), 'gold only for the certified winner')
   const action = read('app/club/[slug]/comp/[code]/CompSummaryAction.tsx')
   ok(/Book a tee time/.test(action) && /Start your card/.test(action) && /Certify result/.test(action) && /See the results/.test(action),
     'the phase\'s one action')
   ok((action.match(/<ButtonLink /g) ?? []).length - (action.match(/variant="secondary"/g) ?? []).length === 3, '…one emerald button each, Change and See the results secondary')
-  ok(/\/club\/comp\/\$\{tripCode\.toUpperCase\(\)\}\?view=scoring/.test(read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')),
-    'the card\'s back arrow returns to Scoring (D190), through the code\'s door')
+  ok(/\? `\$\{tripHome\}\/scoring` : null/.test(read('app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx')),
+    'the card\'s back arrow returns to Scoring (D190), inside the club (D284)')
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
@@ -2043,7 +2045,7 @@ function snappyTests() {
   for (const f of ['CompManage', 'CompSummaryAction', 'CompTeeSheet', 'CompSigning', 'CompAdmin']) {
     ok(/useState[^\n]*\(\(\) =>[\s\S]{0,60}peekKept/.test(read(`app/club/[slug]/comp/[code]/${f}.tsx`)), `  ${f} draws from the kept answer first`)
   }
-  ok(fs.existsSync('app/club/[slug]/comp/[code]/loading.tsx'), 'a page not fetched ahead lands on a stand-in at once')
+  ok(fs.existsSync('app/club/[slug]/comp/[code]/(frame)/loading.tsx'), 'a page not fetched ahead lands on a stand-in at once')
   ok(JSON.parse(read('vercel.json')).regions?.[0] === 'dub1', 'the functions run in Dublin, beside the database (D196)')
 
   section('The club home from the last copy (D193, D194, D197)')
@@ -3139,6 +3141,7 @@ async function main() {
   gridColumnTests()
   snappyTests()
   wiringTests()
+  insideClubTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {
     console.log(`✗ ${failed} failed, ${passed} passed`)
@@ -3146,6 +3149,57 @@ async function main() {
     process.exit(1)
   }
   console.log(`✓ all ${passed} checks passed`)
+}
+
+function insideClubTests() {
+  section('MS3: a club competition played inside the club (D284)')
+  const C = '/club/pints/comp/AB12CD'
+  eq(barOf(`${C}/scoring/1`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, 'the scorecard lights Scoring')
+  eq(barOf(`${C}/match/m-1`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, 'a match lights Scoring (Matches)')
+  eq(barOf(`${C}/match/m-1/card`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, '…and its card')
+  eq(barOf(`${C}/matchplay`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'board' }, 'the bracket lights Leaderboard (Draw)')
+  eq(barOf(`${C}/organiser`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, 'Manage keeps the competition footer')
+  eq(barOf(`${C}/organiser/bracket`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, '…its pages too')
+  eq(barOf(`${C}/setup`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, '…and Trip Setup')
+  eq(barOf(`${C}/round/1`, 'pints'), null, 'a screen the club does not mount wears no footer')
+  eq(clubPathOf('match/m-1/card'), 'match/m-1/card', 'a mounted path is kept')
+  eq(clubPathOf('/scoring/1/'), 'scoring/1', '…cleaned of its slashes')
+  eq(clubPathOf('leaderboard'), 'leaderboard', 'a section is a mounted path')
+  eq(clubPathOf('../../admin'), null, 'anything else is refused')
+  eq(clubPathOf('https://evil.example'), null, '…an address elsewhere too')
+  eq(clubPathOf(undefined), null, 'nothing asked, nothing')
+  eq(tripHomeAt(clubCompRoot('pints'), 'ab12cd'), '/club/pints/comp/AB12CD', 'a page handed the club root builds club links')
+  ok(!isTripRoot(clubCompRoot('pints')), '…and the club root is never an event route')
+  eq(tripHomeAt('event', 'AB12CD'), '/golf/event/AB12CD', 'the event\'s own address is unchanged')
+
+  // Every path the club mounts has its page there, drawn through the door.
+  const play = 'app/club/[slug]/comp/[code]/(play)'
+  for (const p of ['scoring/[roundNumber]', 'match/[matchId]', 'match/[matchId]/card', 'matchplay', 'organiser', 'organiser/tags', 'organiser/days', 'organiser/sessions', 'organiser/bracket', 'setup', 'setup/sessions', 'teesheet/[roundId]/setup']) {
+    const src = read(`${play}/${p}/page.tsx`)
+    ok(/inClub\(params/.test(src), `the club mounts ${p}, behind the competition's door`)
+  }
+  ok(/<EnsureMember/.test(read(`${play}/layout.tsx`)) && /TripBaseProvider base=\{compHome/.test(read(`${play}/layout.tsx`)),
+    'the club\'s screens enter the phone in the event and link inside the club')
+  ok(/if \(gate\.door\)/.test(read(`${play}/inClub.tsx`)), 'without the door, only the door')
+
+  // The event's own address of each sends a competition into the club.
+  const ev = 'app/golf/[root]/[tripCode]'
+  for (const [f, to] of [['scoring/[roundNumber]', 'scoring/${roundNumber}'], ['scoring', "'scoring'"], ['leaderboard', "'leaderboard'"], ['teesheet', "'tee-times'"],
+    ['match/[matchId]', 'match/${matchId}'], ['match/[matchId]/card', 'match/${matchId}/card'], ['matchplay', "'matchplay'"],
+    ['organiser', "'organiser'"], ['organiser/tags', "'organiser/tags'"], ['organiser/days', "'organiser/days'"], ['organiser/sessions', "'organiser/sessions'"],
+    ['organiser/bracket', "'organiser/bracket'"], ['setup', "'setup'"], ['teesheet/[roundId]/setup', 'teesheet/${roundId}/setup']] as const) {
+    ok(read(`${ev}/${f}/page.tsx`).includes(`intoClub(root, tripCode, ${to.startsWith("'") ? to : '`' + to + '`'})`), `the event's ${f} sends a competition into the club`)
+  }
+  ok(/clubPathOf\(to\)/.test(read('app/club/comp/[code]/page.tsx')), '/club/comp/<code> carries the screen asked for, checked')
+
+  // Nothing in the club area builds an event address for a competition.
+  const clubFiles = (function walk(d: string): string[] {
+    return fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : [])
+  })('app/club')
+  const builders = clubFiles.filter(f => /tripBase\(/.test(fs.readFileSync(f, 'utf8'))).map(f => f.split(path.sep).join('/')).sort()
+  eq(builders, ['app/club/[slug]/ClubView.tsx', 'app/club/[slug]/comp/[code]/(play)/[...rest]/page.tsx'],
+    'only an outside event (Other events) and the not-mounted fallback build an event address')
+  ok(/e\.competition \? compSectionHref/.test(read('app/club/[slug]/ClubView.tsx')), '…the outside event never a competition')
 }
 
 void main()

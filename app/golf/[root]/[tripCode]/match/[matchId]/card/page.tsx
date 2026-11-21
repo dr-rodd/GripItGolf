@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { isEvent } from '@/lib/eventHub'
 import OrganiserLock from '@/app/components/OrganiserLock'
 import Link from 'next/link'
@@ -37,6 +38,8 @@ export default async function MatchCardPage({
   searchParams: Promise<{ view?: string }>
 }) {
   const [{ root, tripCode, matchId }, { view: opensOn }] = await Promise.all([params, searchParams])
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, `match/${matchId}/card`)
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
 

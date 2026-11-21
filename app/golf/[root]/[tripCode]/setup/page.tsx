@@ -1,3 +1,4 @@
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { eventReader } from '@/lib/eventReader'
 import BackButton from '@/app/components/BackButton'
 import { boardsForTrip } from '@/lib/leaderboardsCompat'
@@ -15,8 +16,10 @@ import TripTeeTimes from './TripTeeTimes'
 
 export const dynamic = 'force-dynamic'
 
-export default async function TripSetupPage({ params }: { params: Promise<{ tripCode: string }> }) {
-  const { tripCode } = await params
+export default async function TripSetupPage({ params }: { params: Promise<{ root: string; tripCode: string }> }) {
+  const { root, tripCode } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'setup')
   const db = eventReader(tripCode)
 
   const { data: trip, error: tripError } = await db

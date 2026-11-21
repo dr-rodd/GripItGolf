@@ -1,5 +1,5 @@
 import { sectionLive, sectionWaitLine, type CompSection } from '@/lib/compPhase'
-import { tripBase } from '@/lib/tripPaths'
+import { compHome } from '@/lib/clubBar'
 import { cardClass } from '@/app/components/ui'
 import Poller from '@/app/components/Poller'
 import CompTeeSheet from './CompTeeSheet'
@@ -50,7 +50,7 @@ export default async function CompSectionPage({ params, section }: {
         <section className="mt-6">
           <Poller isActive={phase === 'in_play' || phase === 'awaiting'} />
           <h1 className="t-h1 text-ink">Scoring</h1>
-          <CompPlay code={code} href={`${tripBase(code, 'tournament')}/scoring/1`} closed={phase === 'certified'} />
+          <CompPlay code={code} href={`${compHome(slug, code)}/scoring/1`} closed={phase === 'certified'} />
           <CardsToSign code={code} />
           <CompAdmin code={code} />
           <ul className="mt-6 space-y-2">
@@ -79,7 +79,7 @@ export default async function CompSectionPage({ params, section }: {
         <>
           {/* Stage (d4): certified, the board is the Results — gold for the winner (D171). */}
           {phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results</h1>}
-          <CompBoard code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
+          <CompBoard slug={slug} code={code} provisional={phase !== 'certified'} active={phase === 'in_play'}
             notes={Object.fromEntries(sheet.waiting.map(id => [id, 'To be signed']))} />
           {sheet.noReturns.length > 0 && (
             // A No return is off the board, listed under it, with no place.

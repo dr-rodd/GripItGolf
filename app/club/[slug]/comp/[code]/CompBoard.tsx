@@ -3,7 +3,7 @@ import { isLegacy } from '@/lib/leaderboardsCompat'
 import { parseLeaderboards } from '@/lib/leaderboards'
 import { parseTeamScoring } from '@/lib/teamScoring'
 import { liveRoundPresence, type OpenCard } from '@/lib/rowContext'
-import { tripBase } from '@/lib/tripPaths'
+import { compHome } from '@/lib/clubBar'
 import Poller from '@/app/components/Poller'
 import { TripBaseProvider } from '@/app/golf/[root]/[tripCode]/TripBase'
 import TripLeaderboardClient from '@/app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient'
@@ -15,8 +15,8 @@ import { boardCopy } from '@/app/golf/[root]/[tripCode]/leaderboard/boardCopy'
  * ten seconds at most), drawn by the event's own board. `provisional` until
  * certified: no gold (D171).
  */
-export default async function CompBoard({ code, provisional, active, notes }: {
-  code: string; provisional: boolean; active: boolean
+export default async function CompBoard({ slug, code, provisional, active, notes }: {
+  slug: string; code: string; provisional: boolean; active: boolean
   /** "To be signed" under a player whose card waits on a signature (stage (d3)). */
   notes?: Record<string, string>
 }) {
@@ -29,7 +29,7 @@ export default async function CompBoard({ code, provisional, active, notes }: {
   return (
     <section className="mt-6 -mx-4">
       <Poller isActive={active} />
-      <TripBaseProvider base={tripBase(code, 'tournament')}>
+      <TripBaseProvider base={compHome(slug, code)}>
         <TripLeaderboardClient
           tripCode={code}
           boards={boards}

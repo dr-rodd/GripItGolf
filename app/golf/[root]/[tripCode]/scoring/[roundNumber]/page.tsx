@@ -1,4 +1,5 @@
 import { foursomesPairs } from '@/lib/partnerships'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { fetchMemberships } from '@/lib/teamMembers'
 import { notFound, redirect } from 'next/navigation'
 import { overallOf, sessionBoardFor } from '@/lib/sessions'
@@ -24,6 +25,8 @@ export default async function TripCoursePage({
   params: Promise<{ root: string; tripCode: string; roundNumber: string }>
 }) {
   const { root, tripCode, roundNumber } = await params
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, `scoring/${roundNumber}`)
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   const roundNum = parseInt(roundNumber)
@@ -145,10 +148,11 @@ export default async function TripCoursePage({
     } : {}),
   }))
 
-  // A club competition's card leads back to the competition, inside its
-  // club's area (stage (d2)); the card itself is unchanged.
+  // A club competition's card leads back to the competition's Scoring,
+  // inside its club (stage (d2); D284 — the card is drawn there too, so
+  // `tripHome` is the competition's club address).
   const competitionBack = (trip as { competition?: string | null }).competition === 'club'
-    ? `/club/comp/${tripCode.toUpperCase()}?view=scoring` : null
+    ? `${tripHome}/scoring` : null
 
   return (
     // The mark is the way back from a scorecard, and the bar is the way

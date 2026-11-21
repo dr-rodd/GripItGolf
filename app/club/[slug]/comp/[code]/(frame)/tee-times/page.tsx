@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import CompSectionPage from '../section'
+import CompSectionPage from '../../section'
 
 /** A competition's Tee times (D186): a section under its Summary, the club footer's set lit here. */
 

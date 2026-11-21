@@ -3,12 +3,12 @@ import { redirect } from 'next/navigation'
 import { showsTopThree, summaryLine } from '@/lib/compPhase'
 import { compSectionHref, sectionOfView } from '@/lib/clubBar'
 import { cardClass } from '@/app/components/ui'
-import CompShell, { PhaseLine, dayAndCourse } from './CompShell'
-import CompManage from './CompManage'
-import CompSummaryAction from './CompSummaryAction'
-import { readCompPage } from './read'
-import { summaryBoard } from './summaryBoard'
-import MatchPlaySummary from './MatchPlaySummary'
+import CompShell, { PhaseLine, dayAndCourse } from '../CompShell'
+import CompManage from '../CompManage'
+import CompSummaryAction from '../CompSummaryAction'
+import { readCompPage } from '../read'
+import { summaryBoard } from '../summaryBoard'
+import MatchPlaySummary from '../MatchPlaySummary'
 
 /**
  * A club competition's Summary (D186; stage (d2), amended 16 Nov 2026) —
@@ -77,7 +77,7 @@ export default async function CompetitionSummary({ params, searchParams }: {
         </section>
       )}
 
-      <CompManage code={code} />
+      <CompManage slug={slug} code={code} />
     </CompShell>
   )
 }

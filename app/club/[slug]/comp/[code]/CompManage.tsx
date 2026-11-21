@@ -3,14 +3,14 @@
 import { useEffect, useState } from 'react'
 import { ButtonLink } from '@/app/components/ui'
 import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
-import { tripBase } from '@/lib/tripPaths'
+import { compHome } from '@/lib/clubBar'
 
 /**
  * "Manage competition" (D183), for the club's owners and admins: the
- * existing organiser area, with the event's own bar. Asked after the page
+ * existing organiser area, inside the club under its footer (D284). Asked after the page
  * paints — the server cannot see who is signed in.
  */
-export default function CompManage({ code }: { code: string }) {
+export default function CompManage({ slug, code }: { slug: string; code: string }) {
   const [admin, setAdmin] = useState(() => !!peekKept<{ ok: true } & BookingAnswer>('booking', code)?.admin)
   useEffect(() => {
     let live = true
@@ -19,7 +19,7 @@ export default function CompManage({ code }: { code: string }) {
   }, [code])
   if (!admin) return null
   return (
-    <ButtonLink href={`${tripBase(code, 'tournament')}/organiser`} variant="secondary" className="mt-4">
+    <ButtonLink href={`${compHome(slug, code)}/organiser`} variant="secondary" className="mt-4">
       Manage competition
     </ButtonLink>
   )

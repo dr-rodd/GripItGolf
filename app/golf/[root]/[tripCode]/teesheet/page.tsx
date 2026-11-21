@@ -1,4 +1,5 @@
 import { eventReader } from '@/lib/eventReader'
+import { intoClub } from '@/app/golf/[root]/[tripCode]/kind'
 import { overallOf, sessionBoardFor, sessionSlotCount } from '@/lib/sessions'
 import { tripHomeAt } from '@/lib/tripPaths'
 import { eventTags } from '@/lib/tagBoards'
@@ -49,6 +50,8 @@ export default async function TeeSheetPage({ params, searchParams }: {
   searchParams: Promise<{ round?: string; edit?: string }>
 }) {
   const [{ root, tripCode }, { round: initialRoundId, edit }] = await Promise.all([params, searchParams])
+  // D284: a club competition's screens live inside its club.
+  await intoClub(root, tripCode, 'tee-times')
   const db = eventReader(tripCode)
   const tripHome = tripHomeAt(root, tripCode)
   // A tee time to open for changing, from the Teams page (stage 2).
