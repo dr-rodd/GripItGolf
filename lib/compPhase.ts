@@ -82,7 +82,8 @@ export function sectionWaitLine(section: CompSection, at: number | null): string
   }).format(new Date(at))
   if (section === 'tee') return when ? `Booking opens ${when}.` : 'Booking opens soon.'
   if (section === 'scoring') return when ? `Scoring opens with the first tee time, ${when}.` : 'Scoring opens with the first tee time.'
-  return when ? `The leaderboard goes live with the first tee time, ${when}.` : 'The leaderboard goes live with the first tee time.'
+  // MS1, M7 (D278): nothing about when it goes live.
+  return 'This competition hasn’t started yet.'
 }
 
 /** "Thu 19 Nov, 7:00 pm", Irish time — the Summary's short way of saying when. */

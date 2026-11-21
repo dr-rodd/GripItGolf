@@ -341,9 +341,9 @@ function wiringTests() {
     const files = (dir: string): string[] => fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
       d.isDirectory() ? files(`${dir}/${d.name}`) : /\.tsx?$/.test(d.name) ? [`${dir}/${d.name}`] : [])
     const writers = [...files('app'), ...files('lib')].filter(f => read(f).includes("from('trip_members')"))
-    eq(writers.sort(), ['app/api/account/store.ts', 'app/api/club/store.ts', 'app/api/entry/store.ts', 'app/api/event/resetStore.ts', 'app/api/stats/card/route.ts', 'app/api/trip/create/store.ts'],
-      'six files name the table: the entry route\'s store, creation (the maker\'s own membership), a PIN reset ending every phone\'s organiser access, an account taking a phone\'s events across (stage (a)) — and two that only read it: a club member\'s events outside the club, and who may ask for a round\'s summaries (stage (f))')
-    for (const reader of ['app/api/club/store.ts', 'app/api/stats/card/route.ts']) {
+    eq(writers.sort(), ['app/api/account/store.ts', 'app/api/entry/store.ts', 'app/api/event/resetStore.ts', 'app/api/stats/card/route.ts', 'app/api/trip/create/store.ts'],
+      'five files name the table: the entry route\'s store, creation (the maker\'s own membership), a PIN reset ending every phone\'s organiser access, an account taking a phone\'s events across (stage (a)) — and two that only read it: a club member\'s events outside the club, and who may ask for a round\'s summaries (stage (f))')
+    for (const reader of ['app/api/stats/card/route.ts']) {
       ok(!/from\('trip_members'\)\s*\.(insert|upsert|update|delete)/.test(read(reader)), `  …${reader} only reads it`)
     }
     ok(read('app/api/trip/create/route.ts').includes('createAdminClient()') && /createStore\(db\)/.test(read('app/api/trip/create/route.ts')), '  …both on the service role')

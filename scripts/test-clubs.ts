@@ -897,7 +897,7 @@ function wiringTests() {
     'the old list address no longer sends anybody into the Clubhouse (Ross, 17 Nov 2026) — the club\'s own page, whose Club tab offers it to those who hold it')
   ok(/window\.location\.replace\(state\.list \? `\/clubhouse\/\$\{state\.club\.slug\}\/members`/.test(read('app/account/club/ClubScreen.tsx')),
     '  …as does /account/club for a verified club')
-  ok(/owner_id', userId/.test(read('app/api/club/store.ts')), 'a member’s own events include the ones they made (D144)')
+  ok(!/owner_id', userId/.test(read('app/api/club/store.ts').split('async outsideEvents')[1].split('async topScores')[0]), 'Other events are the ones a member plays in, not ones they made (D278)')
 
   section('Stage (k0): one rule for what a club’s people may do (lib/clubMay.ts)')
   const serverFiles = [...walk('app/api'), ...walk('app/club'), ...walk('app/account'), ...walk('app/dashboard'), ...walk('app/clubhouse'), ...walk('app/home')]
@@ -1121,6 +1121,7 @@ async function competitionTests() {
     && sectionLive('scoring', 'in_play') && sectionLive('board', 'certified'), 'the bar\'s sections go live by phase (D181)')
   ok(/^Booking opens .*(November).*/.test(sectionWaitLine('tee', at - 48 * H)) && /first tee time/.test(sectionWaitLine('scoring', at)),
     'a section not yet live says when it starts, Irish time')
+  eq(sectionWaitLine('board', at), 'This competition hasn’t started yet.', 'the leaderboard before play says only that it has not started (D278)')
 
   section('A club competition\'s door: the club\'s list, never a PIN box (D164)')
   const code = 'COMP01'
@@ -1224,6 +1225,9 @@ async function competitionD2Tests() {
   const compStore = (role: 'owner' | 'admin' | 'member'): CompetitionStore => ({
     async userFromToken(t) { return member(t.slice(4), `${t.slice(4)}@x.ie`) },
     async clubsOf() { return [{ club: verified, row: { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role, userId: 'ross', removedAt: null, onBoards: true } }] },
+    async club(id) { return id === 'c1' ? verified : null },
+    async rowOf() { return { id: 'row', clubId: 'c1', name: 'Ross', memberNumber: null, guiNumber: null, email: null, role, userId: 'ross', removedAt: null, onBoards: true } },
+    async isStaff() { return false },
     create: createStand,
     async insertItem(row) { created.push({ item: row }); return 'item-1' },
     async insertRound(row) { created.push({ round: row }) },
@@ -1231,8 +1235,9 @@ async function competitionD2Tests() {
     newCode: () => 'COMP01',
     newId: () => 'round-1',
   })
-  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form }, compStore('member'), NOW)).status, 403, 'a plain member cannot make one')
-  const ok1 = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form }, compStore('admin'), NOW)
+  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form, from: 'clubhouse' }, compStore('member'), NOW)).status, 403, 'a plain member cannot make one')
+  eq((await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form }, compStore('admin'), NOW)).status, 403, 'the members app makes none (D278)')
+  const ok1 = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form, from: 'clubhouse' }, compStore('admin'), NOW)
   ok(ok1.status === 200 && ok1.body.ok && ok1.body.code === 'COMP01' && ok1.body.slug === 'lahinch', 'an admin makes one')
   const row = madeRows[0] as Record<string, unknown>
   ok(row.competition === 'club' && row.kind === 'tournament' && row.start_date === '2026-11-22' && row.end_date === '2026-11-22',
@@ -1244,15 +1249,15 @@ async function competitionD2Tests() {
   ok(round.start_format === 'tee_sheet' && round.scheduled_date === '2026-11-22' && JSON.stringify(round.tee_sheet) === JSON.stringify(rules),
     '…its round on the tee sheet from the start, the rules written at once')
   madeRows.length = 0
-  await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, watch: 'guests' } }, compStore('admin'), NOW)
+  await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, watch: 'guests' }, from: 'clubhouse' }, compStore('admin'), NOW)
   ok(!madeRows[0]?.public_passcode_hash, 'guests can watch: no door (D184)')
   const ladies = { ...form, entry: { genders: ['F'], minAge: 50 } }
-  const noColumn = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies }, compStore('admin'), NOW)
+  const noColumn = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies, from: 'clubhouse' }, compStore('admin'), NOW)
   ok(noColumn.status === 503 && !noColumn.body.ok && /Who may enter isn’t set up yet/.test(noColumn.body.error), 'entry rules with nowhere to keep them make no competition (before 094)')
   const keptRules: unknown[] = []
-  const withRules = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies }, { ...compStore('admin'), async setEntryRules(_t, r) { keptRules.push(r) } }, NOW)
+  const withRules = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: ladies, from: 'clubhouse' }, { ...compStore('admin'), async setEntryRules(_t, r) { keptRules.push(r) } }, NOW)
   ok(withRules.status === 200 && JSON.stringify(keptRules[0]) === JSON.stringify({ genders: ['F'], minAge: 50 }), '…and with somewhere, the ladies’ over-50s are kept')
-  const badCat = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, entry: { categories: ['gone'] } } }, { ...compStore('admin'), async categories() { return [] }, async setEntryRules() {} }, NOW)
+  const badCat = await runNewCompetition({ token: 'tok-ross', clubId: 'c1', form: { ...form, entry: { categories: ['gone'] } }, from: 'clubhouse' }, { ...compStore('admin'), async categories() { return [] }, async setEntryRules() {} }, NOW)
   eq(badCat.status, 400, 'a membership not the club’s is refused')
 
   section('Booking from the club\'s list (/api/club/booking)')

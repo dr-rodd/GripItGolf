@@ -70,6 +70,6 @@ export function SectionTitle({ page }: { page: OpenCompPage }) {
 }
 
 export function dayAndCourse(page: OpenCompPage, extra: (string | null)[] = []): string {
-  return [clubEventDates(page.comp.date, page.comp.date), page.sheet.courseName ? courseLabel(page.sheet.courseName) : null, ...extra]
+  return [clubEventDates(page.comp.date, page.comp.date), page.sheet.courseName && !page.oneCourse ? courseLabel(page.sheet.courseName) : null, ...extra]
     .filter(Boolean).join(' · ')
 }

@@ -225,7 +225,9 @@ export async function runNewCompetition(
   if (!input.token) return fail(401, 'Sign in first.')
   const user = await store.userFromToken(input.token)
   if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
+  // MS1 (D278): competitions are made in the Clubhouse only, never the members app.
   const from = input.from ?? 'app'
+  if (from !== 'clubhouse') return fail(403, 'Competitions are made in the Clubhouse.')
   const who = await competitionAsker(store, user.id, input.clubId, from)
   if (!who.ok) return fail(403, who.error)
   const form = readCompForm(input.form)

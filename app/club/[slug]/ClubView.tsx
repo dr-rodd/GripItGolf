@@ -29,7 +29,6 @@ import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/l
 import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClubHome } from '@/lib/clubHomeCopy'
 import { useClubBar, type ClubMembers } from './ClubBarContext'
 import { clubSwitch, compSectionHref, type ClubSwitch } from '@/lib/clubBar'
-import NewCompetition from './NewCompetition'
 import AwardsCard from './AwardsCard'
 import ClubTeeTimes from './ClubTeeTimes'
 import { NoteRow, NoteSheet, TypeChips } from './ClubNotes'
@@ -355,14 +354,9 @@ function EventRow({ e, slug, entries, tops, partners }: { e: ClubEvent; slug: st
               )}
             </>
           }
-          trailing={membersOnly(e) ? <MembersOnly /> : undefined}
+          trailing={e.competition ? undefined : <CodePill code={e.code} />}
         />
   )
-}
-
-/** Members only (D164, D184): a competition by its door, any other event by who edits it. */
-function membersOnly(e: ClubEvent): boolean {
-  return e.competition ? e.competition.membersOnly : e.access !== 'anyone' && e.access !== null
 }
 
 /** An event's board: a competition's inside the club area, any other event's own. */
@@ -370,9 +364,9 @@ function boardHref(e: ClubEvent, slug: string): string {
   return e.competition ? compSectionHref(slug, e.code, 'board') : `${tripBase(e.code, e.kind)}/leaderboard`
 }
 
-/** D125: the one pill in the club's colour. */
-function MembersOnly() {
-  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[13px] font-semibold leading-none whitespace-nowrap bg-club-tint text-club-deep">Members only</span>
+/** D125, D278: the one pill in the club's colour — an outside event's code. Club competitions wear none. */
+function CodePill({ code }: { code: string }) {
+  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[13px] font-semibold leading-none whitespace-nowrap bg-club-tint text-club-deep t-code">{code}</span>
 }
 
 function useGroups(events: ClubEvent[]) {
@@ -426,6 +420,11 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   const [opened, setOpened] = useState<ClubNote | null>(null)
   // A match play runs for weeks: it is your next match on Home, never Live now (D266).
   const live = g.now.filter(e => !e.competition?.matchPlay)
+  const { choose } = useClubBar()
+  const others = useGroups(m.outside)
+  const otherUp = [...others.now, ...others.upcoming]
+  const otherPast = [...others.past].sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''))
+  const [showAllPast, setShowAllPast] = useState(false)
   return (
     <>
       <div className="h-[168px]" aria-hidden="true" />
@@ -464,11 +463,6 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       ))}
 
-      {/* Stage (h): the front page's way into an event, and making one —
-          the club's own for its admins, asked at the gate (Q3, D153). */}
-      <CodeBox />
-      <ButtonLink href="/create" variant="secondary" className="mt-3">Make an event</ButtonLink>
-
       {/* Never from the copy (D194): Live now waits for the fresh answer. */}
       {!m.fromCopy && live.length > 0 && (
         <section className="mt-6 club-fresh-in">
@@ -499,17 +493,29 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
 
       {m.season.length > 0 && (
         <section className="mt-6">
-          <h2 className="t-h2 text-ink">Your season</h2>
-          <SeasonTiles rows={m.season} />
-          {selfClaimedLine(season, face.name) && <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p>}
+          {/* M6 (D278): a heads-up; a tap opens Stats. */}
+          <button type="button" onClick={() => choose('stats')} className="block w-full text-left press ch-focus rounded-card">
+            <h2 className="t-h2 text-ink flex items-center justify-between">Your season <IconChevronRight size={20} className="text-ink/50" /></h2>
+            <SeasonTiles rows={m.season} />
+            {selfClaimedLine(season, face.name) && <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p>}
+          </button>
         </section>
       )}
 
-      {m.outside.length > 0 && (
+      {(otherUp.length > 0 || otherPast.length > 0) && (
         <section className="mt-6">
-          <h2 className="t-h2 text-ink">Outside the club</h2>
-          <p className="t-cap text-ink/65 mt-1">These open in green dot.</p>
-          <EventRows events={m.outside} slug={face.slug} />
+          <h2 className="t-h2 text-ink">Other events</h2>
+          {otherUp.length > 0 && (<>
+            <h3 className="t-label text-ink/65 mt-3">Upcoming</h3>
+            <EventRows events={otherUp} slug={face.slug} />
+          </>)}
+          {otherPast.length > 0 && (<>
+            <h3 className="t-label text-ink/65 mt-5">Previous</h3>
+            <EventRows events={showAllPast ? otherPast : otherPast.slice(0, 3)} slug={face.slug} />
+            {otherPast.length > 3 && !showAllPast && (
+              <button type="button" onClick={() => setShowAllPast(true)} className={`${buttonClass('quiet', false, true)} ch-focus mt-2`}>Show all {otherPast.length}</button>
+            )}
+          </>)}
         </section>
       )}
 
@@ -518,6 +524,13 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           {face.name}’s events show here once its admins put them under the club.
         </p>
       )}
+
+      {/* M1 (D278): the way into an outside event and making one, last and quiet. */}
+      <section className="mt-10 pt-6 border-t border-line">
+        <h2 className="t-cap text-ink/65 mb-2">Joining something else?</h2>
+        <CodeBox />
+        <Link href="/create" className="t-label text-ink/65 underline underline-offset-2 inline-block mt-3 ch-focus">Make an event</Link>
+      </section>
       {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </>
   )
@@ -541,7 +554,7 @@ function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: stri
             {KIND[e.kind]}{mine && <span className="text-club-deep font-semibold"> · {mine}</span>}
           </span>
         </span>
-        {membersOnly(e) ? <MembersOnly /> : <IconChevronRight size={20} className="text-ink/50" />}
+        {e.competition ? <IconChevronRight size={20} className="text-ink/50" /> : <CodePill code={e.code} />}
       </Link>
     </li>
   )
@@ -553,13 +566,11 @@ type CompsView = 'upcoming' | 'mine' | 'matches' | 'results'
 function Comps({ m, slug }: { m: Members; slug: string }) {
   const g = useGroups(m.events)
   const [view, setView] = useState<CompsView>('upcoming')
-  const [making, setMaking] = useState(false)
   // Stage c1, M6: Upcoming holds the club's own events too, narrowed by type.
   const [type, setType] = useState<EventType | 'all'>('all')
   const [opened, setOpened] = useState<ClubNote | null>(null)
   const today = irishToday(new Date())
   const notes = (m.notes ?? []).filter(n => noteWhen(n, today) !== 'past')
-  if (making) return <NewCompetition clubId={m.clubId} homeCourseId={m.homeCourseId} onCancel={() => setMaking(false)} />
   const lists: Record<CompsView, ClubEvent[]> = {
     upcoming: [...g.now, ...g.upcoming],
     mine: [...g.now, ...g.upcoming, ...g.past].filter(e => m.entries.includes(e.code)),
@@ -578,9 +589,6 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       <div className="h-6" aria-hidden="true" />
       <h1 className="t-h1 text-ink">Competitions</h1>
       <p className="text-ink/65 text-sm mt-1">The club’s events — tap one to open it.</p>
-      {clubMay('run_events', { row: m.credentials ?? null }) && (
-        <button type="button" onClick={() => setMaking(true)} className={`${buttonClass('secondary')} mt-4`}>New competition</button>
-      )}
       {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
         <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`}>
@@ -615,7 +623,6 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
                 <p className="t-cap text-ink/65">{clubEventDates(featured.startDate, featured.endDate) || KIND[featured.kind]}</p>
                 <p className="t-h2 text-ink mt-1 break-words">{featured.name}</p>
               </div>
-              {membersOnly(featured) && <MembersOnly />}
             </div>
             {m.entries.includes(featured.code) && <p className="t-cap text-club-deep font-semibold mt-2">{inWords(m.partners, featured.code)}</p>}
             {m.tops[featured.code] && (

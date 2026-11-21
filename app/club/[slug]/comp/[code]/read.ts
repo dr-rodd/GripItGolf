@@ -25,6 +25,7 @@ import type { CompSlot } from './CompTeeSheet'
  * **Members only** is the public PIN door with a PIN nobody holds: without
  * the door's cookie nothing of the competition is read past its name.
  */
+import { readPlaces } from '@/app/api/club/locationsStore'
 export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const code = rawCode.trim().toUpperCase()
   const db = createAdminClient()
@@ -50,9 +51,11 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   }
 
   // The sun on the day (Ross, 17 Nov 2026: sunrise at the head of the sheet, sunset at its foot).
-  const [sheet, place] = await Promise.all([
+  const [sheet, place, places] = await Promise.all([
     readCompSheet(db, comp),
     db.from('courses').select('latitude, longitude').eq('id', comp.courseId).maybeSingle().then(r => r.data as { latitude: number | null; longitude: number | null } | null),
+    // M8 (D278): a one-course club's header never names its course.
+    readPlaces(db, comp.clubId, [comp.courseId]).catch(() => null),
   ])
   const sun = sunDay(comp.date, place ? { lat: place.latitude ?? NaN, lng: place.longitude ?? NaN } : null)
   const sizes = slotGroupSizes(comp.rules)
@@ -82,7 +85,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
 
   return {
     ...base, door: false as const,
-    sheet, phase, slots, firstTeeAt, bookingOpensAt,
+    sheet, phase, slots, firstTeeAt, bookingOpensAt, oneCourse: !!places && places.courses.length <= 1,
     sun: { sunrise: sun.sunrise ? describeTime(sun.sunrise) : null, sunset: sun.sunset ? describeTime(sun.sunset) : null },
     firstTee: clocks[0] ? describeTime(clocks[0]) : null,
   }

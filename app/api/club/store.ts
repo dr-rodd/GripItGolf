@@ -622,18 +622,13 @@ export function clubStore(db: Db): ClubStore {
       return readSeason(db, userId, year)
     },
     async outsideEvents(userId, excludeCodes) {
-      // D144: the events they are in and the ones they made (owned, 085 —
-      // fail-soft before it), so a member's own sit in the club area too.
-      const [linked, entered, owned] = await Promise.all([
-        db.from('account_players').select('trip_id').eq('user_id', userId),
-        db.from('trip_members').select('trip_id').eq('user_id', userId),
-        db.from('trip_private').select('trip_id').eq('owner_id', userId),
-      ])
-      const ids = [...new Set([...(linked.data ?? []), ...(entered.data ?? []), ...(owned.data ?? [])].map(r => (r as { trip_id: string }).trip_id))]
+      // MS1 (D278): only events this member is a player in — upcoming and
+      // previous; one they made or merely opened is not theirs to list.
+      const linked = await db.from('account_players').select('trip_id').eq('user_id', userId)
+      const ids = [...new Set((linked.data ?? []).map(r => (r as { trip_id: string }).trip_id))]
       if (ids.length === 0) return []
-      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(new Date())
       const { data, error } = await db.from('trips').select('trip_code, name, kind, start_date, end_date')
-        .in('id', ids).or(`end_date.gte.${today},end_date.is.null`).order('start_date', { ascending: true }).limit(20)
+        .in('id', ids).order('start_date', { ascending: false }).limit(40)
       if (error) return []
       return ((data ?? []) as { trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
         .filter(t => !excludeCodes.includes(t.trip_code))
