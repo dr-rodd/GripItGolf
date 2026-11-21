@@ -530,6 +530,39 @@ Ross, 11 Nov 2026: agreed as a future project, not to be built yet.
 
 **Open questions.** What "confirmed" shows to players, if anything — a line under the course, or nothing at all. Whether a correction to a confirmed course should un-confirm it. What happens to a user course merged into a platform one whose events already play it.
 
+## Statistics a golfer chooses (Ross, 21 Nov 2026) — named, not built
+
+**What it is.** The Stats tab (D283) shows a fixed set: the season's tiles,
+the best round, the index this year, the rounds, and In depth — fairways
+hit, greens in regulation, putts a round and the scoring mix. Ross wants a
+golfer to choose which statistics they see, and for deeper ones to come.
+
+**What is already there.** Every signed card has a summary row
+(`card_summaries`, migration 088: gross, points, putts and how many holes
+recorded them, fairways hit and tried, greens and the holes they were
+counted on, eagles to doubles, course handicap, tee), read whole by
+`readSeason` in `app/api/stats/season.ts`; the rules are
+`lib/cardSummary.ts` (`seasonOf`, `seasonDepth`, `indexTrend`). The hole by
+hole figures stay in `scores`, never copied, and `lib/holeStats.ts` is the
+one copy of anything worked out from them (strokes gained, hole difficulty).
+
+**Questions for Ross before building.**
+1. Where the choosing happens — a "Choose your stats" sheet on the Stats tab,
+   or on Your page with the other preferences.
+2. Kept on the phone (no migration) or on the account (a small table, every
+   phone the same).
+3. The catalogue: which figures are on offer beyond today's — by course, by
+   par 3/4/5, front and back nine, strokes gained against the field, a
+   period (this month, last ten rounds) rather than the calendar year.
+4. Whether a club can choose a default set for its members.
+
+**Shape of a build.** A registry of statistics in `lib/` (key, label, how it
+is worked out from the season rows or the hole scores, what it needs
+recorded), the chosen keys stored per the answer to 2, and `SeasonSummary`
+drawing the chosen ones in their order — the fixed set becoming the default
+choice. Anything that needs hole scores is read on the Stats tab when opened,
+never carried by the home.
+
 ## Accounts and clubs (D94–D152)
 
 Ross, 14 Nov 2026: planned, not built. D117–D122 (the same day, from the

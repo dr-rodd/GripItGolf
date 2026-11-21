@@ -7,7 +7,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
-import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
+import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
 import { IconChevronRight } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
@@ -220,8 +220,7 @@ function StatsTab({ home }: { home: HomeData }) {
         <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
       ) : (
         <>
-          <SeasonTiles rows={home.season} />
-          <SeasonRounds rows={home.season} courses={home.courses} />
+          <SeasonSummary rows={home.season} courses={home.courses} index={home.indexTrend ?? []} />
         </>
       )}
     </section>

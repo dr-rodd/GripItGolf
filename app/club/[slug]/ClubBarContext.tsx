@@ -23,6 +23,8 @@ export interface ClubMembers {
   events: ClubEvent[]
   entries: string[]
   season: SeasonRow[]
+  /** MO4 (D283): the account's index after each change this year. */
+  indexTrend?: import('@/lib/cardSummary').IndexPoint[]
   courses: Record<string, string>
   outside: ClubEvent[]
   /** MO3 (D282): how many upcoming and past events the club has in all — the home carries the next two weeks. */

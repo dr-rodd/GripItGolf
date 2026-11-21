@@ -476,6 +476,8 @@ export interface HomeData {
   /** Every verified club this account is on, by name (D218, D223). */
   clubs: { slug: string; name: string }[]
   season: SeasonRow[]
+  /** MO4 (D283): the account's index after each change this year. */
+  indexTrend?: import('./cardSummary').IndexPoint[]
   courses: Record<string, string>
   /** D179: the account's handicap index, shown and changed on Me. */
   handicapIndex: number | null
@@ -515,6 +517,7 @@ export async function homeData(): Promise<{ ok: true; home: HomeData } | { ok: f
       clubs,
       season: Array.isArray(b.season) ? b.season as SeasonRow[] : [],
       courses: b.courses && typeof b.courses === 'object' ? b.courses as Record<string, string> : {},
+      indexTrend: Array.isArray(b.indexTrend) ? b.indexTrend as import('./cardSummary').IndexPoint[] : [],
       handicapIndex: typeof b.handicapIndex === 'number' ? b.handicapIndex : null,
       details: b.details && typeof b.details === 'object' ? b.details as MyDetails : null,
     },
@@ -650,6 +653,7 @@ export interface ClubAnswer {
   skipped?: { name: string; why: string }[]
   sentTo?: string
   events?: ClubEvent[]
+  indexTrend?: import('./cardSummary').IndexPoint[]
   more?: { upcoming: number; past: number }
   whole?: boolean
   entries?: string[]

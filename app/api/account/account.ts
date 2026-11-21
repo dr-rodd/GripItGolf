@@ -92,7 +92,7 @@ export interface AccountStore {
   /** The verified clubs this account is on the list of, linked and not taken off — address and name, by name (D218, D223). */
   homeClubs?(userId: string): Promise<{ slug: string; name: string }[]>
   /** This account's own players' signed cards this year (migration 088), and the courses' names. */
-  seasonFor?(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
+  seasonFor?(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string>; index?: import('@/lib/cardSummary').IndexPoint[] }>
 
   // Stage (d1) — the handicap index on the account (D179, migration 089).
   handicaps?: HandicapStore
@@ -276,13 +276,13 @@ export async function runAccount(
       store.usernameOf(user.id),
       store.eventsFor(user.id),
       store.homeClubs ? store.homeClubs(user.id) : Promise.resolve([]),
-      store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [], courses: {} }),
+      store.seasonFor ? store.seasonFor(user.id, year) : Promise.resolve({ rows: [] as SeasonRow[], courses: {} as Record<string, string>, index: [] }),
       store.handicaps ? store.handicaps.accountIndex(user.id) : Promise.resolve(null),
       store.detailsOf ? store.detailsOf(user.id).catch(() => null) : Promise.resolve(null),
     ])
     return {
       status: 200,
-      body: { ok: true, username, events: sortMyEvents(events), club: clubs[0] ?? null, clubs, season: season.rows, courses: season.courses, handicapIndex, details },
+      body: { ok: true, username, events: sortMyEvents(events), club: clubs[0] ?? null, clubs, season: season.rows, courses: season.courses, ...(season.index?.length ? { indexTrend: season.index } : {}), handicapIndex, details },
       after: tidy,
     }
   }

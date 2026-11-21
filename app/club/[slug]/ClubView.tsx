@@ -23,7 +23,7 @@ import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { enteredWithLine, type MyClubMatch } from '@/lib/clubMatchPlay'
-import { NO_SEASON, SeasonRounds, SeasonTiles } from '@/app/components/Season'
+import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
 import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClubHome } from '@/lib/clubHomeCopy'
@@ -158,7 +158,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
         slug: face.slug, myClubs: r.myClubs,
         clubId: r.club.id, homeCourseId: r.club.homeCourseId ?? null, credentials: r.club.credentials, name: r.me?.name ?? '',
         events: r.events ?? [], entries: r.entries ?? [], season: r.season ?? [],
-        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [], more: r.more,
+        courses: r.courses ?? {}, outside: r.outside ?? [], tops: r.tops ?? {}, toSign: r.toSign ?? [], more: r.more, indexTrend: r.indexTrend ?? [],
         notes: r.notes ?? [], matches: r.matches ?? [],
       }
       setMembers(fresh)
@@ -805,9 +805,8 @@ function Stats({ face, m }: { face: ClubFace; m: Members }) {
         <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
       ) : (
         <>
-          <SeasonTiles rows={m.season} />
-          {selfClaimedLine(season, face.name) && <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p>}
-          <SeasonRounds rows={m.season} courses={m.courses} />
+          <SeasonSummary rows={m.season} courses={m.courses} index={m.indexTrend ?? []}
+            footer={selfClaimedLine(season, face.name) ? <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p> : null} />
         </>
       )}
     </section>

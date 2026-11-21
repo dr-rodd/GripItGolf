@@ -166,7 +166,7 @@ export interface ClubStore extends ClubhouseStore {
   /** Of those events, the ones this account is linked to a player in (D134). */
   entries(userId: string, codes: string[]): Promise<string[]>
   /** Stage (f): this account's own card summaries for a year, and their courses' names. Empty before 088. */
-  seasonRows(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string> }>
+  seasonRows(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string>; index?: import('@/lib/cardSummary').IndexPoint[] }>
   /** This account's events outside the club — in them or made them — on now or to come (D143's "Outside the club", D144). */
   outsideEvents(userId: string, excludeCodes: string[]): Promise<ClubEvent[]>
   /** The best club-round score in each of these finished events, by code — from the summaries. */
@@ -248,6 +248,8 @@ export type ClubBody = {
   /** The members home (D159): every event under the club, and this account's entries among them. */
   events?: ClubEvent[]
   /** MO3 (D282): how many upcoming and past events the club has in all — the home carries only the next two weeks and the latest results. */
+  /** MO4 (D283): the account's index after each change this year. */
+  indexTrend?: import('@/lib/cardSummary').IndexPoint[]
   more?: { upcoming: number; past: number }
   whole?: boolean
   entries?: string[]
@@ -586,7 +588,7 @@ export async function runClub(
       body: {
         ok: true, club: summary(full ?? club, row), events, entries, me: { name: mineRowName },
         ...(input.whole === true ? { whole: true } : { more }),
-        season: seasonHere, courses: season.courses, outside, tops, toSign, notes,
+        season: seasonHere, courses: season.courses, ...(season.index?.length ? { indexTrend: season.index } : {}), outside, tops, toSign, notes,
         ...(matches.length ? { matches } : {}),
         ...(Object.keys(partners).length ? { partners } : {}),
         ...(myClubs && myClubs.length > 1 ? { myClubs } : {}),

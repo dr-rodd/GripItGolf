@@ -7,7 +7,7 @@
  */
 import fs from 'fs'
 import type { HoleStat } from '../lib/holeStats'
-import { CARD_SUMMARY_RULES, seasonOf, selfClaimedLine, summariseRound, type CardSummary, type SeasonRow } from '../lib/cardSummary'
+import { CARD_SUMMARY_RULES, indexTrend, seasonDepth, seasonOf, selfClaimedLine, summariseRound, type CardSummary, type SeasonRow } from '../lib/cardSummary'
 import { writeRoundSummaries, type SummaryDeps } from '../app/api/stats/summaries'
 
 let passed = 0, failed = 0
@@ -63,10 +63,21 @@ function ruleTests() {
   section('A golfer’s season (D143)')
   const row = (o: Partial<SeasonRow>): SeasonRow => ({ round_id: 'x', trip_id: 't', played_on: '2026-05-01', holes: 18, gross: 80, par: 72, points: 34, origin: 'club', club_id: 'c', course_id: 'c1', ...o })
   const season = seasonOf([row({ points: 30 }), row({ points: 38, origin: 'self_claimed' }), row({ holes: 9, points: 20 })])
-  eq(season, { rounds: 3, averagePoints: 34, bestPoints: 38, selfClaimed: 1 }, 'rounds, the average and best over full rounds only, and how many are self-claimed')
+  eq({ ...season, best: season.best?.points }, { rounds: 3, averagePoints: 34, bestPoints: 38, averageGross: 80, best: 38, selfClaimed: 1 }, 'rounds, the average and best over full rounds only, and how many are self-claimed')
   ok(/1 of these is a round from open events, self-claimed — never counted for Lahinch honours\./.test(selfClaimedLine(season, 'Lahinch') ?? ''), 'the self-claimed line says what they are (D122)')
   eq(selfClaimedLine(seasonOf([row({})]), 'Lahinch'), null, '…and is not drawn when every round was a club round')
-  eq(seasonOf([]), { rounds: 0, averagePoints: null, bestPoints: null, selfClaimed: 0 }, 'no rounds: nothing to average')
+  eq(seasonOf([]), { rounds: 0, averagePoints: null, bestPoints: null, averageGross: null, best: null, selfClaimed: 0 }, 'no rounds: nothing to average')
+
+  section('MO4: the season in depth and the index (D283)')
+  const deep = (o: Partial<SeasonRow>) => row({ putts: 32, putts_holes: 18, fairways_hit: 7, fairways_tried: 14, gir: 6, gir_holes: 18, eagles: 0, birdies: 2, pars: 8, bogeys: 6, doubles: 2, ...o })
+  const dp = seasonDepth([deep({}), deep({ putts: 30, fairways_hit: 7, birdies: 1, eagles: 1 }), row({ holes: 9, points: 18 })])
+  eq(dp.fairways, { pct: 50, rounds: 2 }, 'fairways hit as a share of those tried, from the rounds that recorded them')
+  eq(dp.greens, { pct: 33, rounds: 2 }, 'greens in regulation the same way')
+  eq(dp.putts, { perRound: 31, rounds: 2 }, 'putts a full round, only where all eighteen were recorded')
+  eq(dp.mix, { birdiesOrBetter: 2, pars: 8, bogeys: 6, doublesOrWorse: 2, rounds: 2 }, 'the scoring mix a full round, eagles counted as birdies or better')
+  eq(seasonDepth([row({})]), { fairways: null, greens: null, putts: null, mix: null }, 'nothing recorded: nothing said')
+  eq(indexTrend([{ at: '2026-06-01', index: 12.8 }, { at: '2026-01-01', index: 14.2 }])?.from, 14.2, 'the index from where the year started')
+  eq(indexTrend([{ at: '2026-06-01', index: 12.8 }]), null, '…and no line from a single point')
 }
 
 async function writerTests() {
