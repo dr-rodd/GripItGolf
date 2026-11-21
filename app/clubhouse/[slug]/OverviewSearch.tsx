@@ -58,7 +58,7 @@ export default function OverviewSearch({ events, today }: { events: SeasonEvent[
     if (!s) return []
     const out: SearchResult[] = []
     const day = parseDay(s, today)
-    if (day) out.push({ key: `day-${day}`, group: 'day', label: dayWord(day, today), sub: 'Open the Calendar on this day', href: `${clubhouseHref(face.slug, 'calendar')}?day=${day}` })
+    if (day) out.push({ key: `day-${day}`, group: 'day', label: dayWord(day, today), sub: 'Open the day — every location side by side', href: `${clubhouseHref(face.slug, 'calendar')}/${day}` })
     for (const e of searchEvents(s, events ?? [], today)) {
       const href = e.note ? `${clubhouseHref(face.slug, 'events')}?event=${e.note.id}` : eventHref(e, face.slug)
       if (!href) continue

@@ -27,9 +27,11 @@ import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
 import { clubEventDates } from '../lib/clubs'
 import { asRow, type RowRow } from '../app/api/club/rows'
+import { clubCourses, matchPlace, placeFields, placeLine, placeOf, roomNameIssue, seasonPlaceLine, type ClubPlaces } from '../lib/clubLocations'
+import { ELSEWHERE, dayLayout, lanesOf } from '../lib/clubDay'
 import { NO_YOURS, dayWord, matchTier, mondayOf, parseDay, periodRange, quietLine, searchEvents, whatsOn, yoursIn, type YoursFacts } from '../lib/clubOverview'
 import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidths, writeWidths } from '../lib/gridColumns'
-import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
+import { MAX_COPIES, eventsOn, formatLine, monthGrid, noteAsSeason, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
 import { failWords, runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
@@ -1760,6 +1762,74 @@ async function competitionBarTests() {
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function locationsTests() {
+  console.log('\nClub locations and the day view (D277)')
+  const names = new Map([['old', 'Lahinch Golf Club -- Old Course'], ['castle', 'Lahinch Golf Club -- Castle Course'], ['away', 'Doonbeg']])
+  const one = clubCourses({ homeCourseId: 'old', added: [], used: ['old'], names })
+  eq(one.map(c => `${c.label}:${c.courseId}`), ['Course:old'], 'a one-course club’s course is simply "Course", listed unasked')
+  const two = clubCourses({ homeCourseId: 'old', added: [{ id: 'l1', courseId: 'castle', position: 0 }], used: ['away', 'old', 'nameless'], names })
+  eq(two.map(c => `${c.label}:${c.courseId}:${c.locationId}`), ['Course 1:old:null', 'Course 2:castle:l1', 'Course 3:away:null'],
+    'Course 1 the home course, then those added, then those competitions use — each once, an unnamed one left out')
+  eq(clubCourses({ homeCourseId: null, added: [], used: [], names }), [], 'no home course and no competitions: no course yet')
+  const rooms = [{ id: 'r1', name: 'Bar', position: 0 }, { id: 'r2', name: 'Function room', position: 1 }]
+  eq([roomNameIssue('', rooms), roomNameIssue('bar', rooms), roomNameIssue('Bar', rooms, 'r1'), roomNameIssue('Locker room', rooms)],
+    ['Give the place a name.', 'The club already has bar.', null, null], 'a room’s name: given, and the club’s once ignoring case (renaming itself is fine)')
+  const P1: ClubPlaces = { courses: one, rooms, ready: true }
+  const P2: ClubPlaces = { courses: two, rooms, ready: true }
+  const ev = (o: Partial<ClubNote>): ClubNote => ({ id: 'n', ref: null, title: 'X', type: 'SOCIAL', startsOn: '2026-11-21', endsOn: null, startTime: null, endTime: null, place: null, notes: null, visibility: 'members', blocksSheet: false, ...o })
+  eq(placeLine(placeOf(ev({ type: 'GOLF' }), P1)), 'Course', 'a golf event in a one-course club is on the course — nobody chose it')
+  eq(placeLine(placeOf(ev({ type: 'GOLF', locationCourseId: 'castle' }), P2)), 'Course 2 · Castle Course', 'with two courses, the one it names')
+  eq(placeLine(placeOf(ev({ type: 'COURSE' }), P2)), 'Course 1 · Old Course', '…else Course 1')
+  eq(placeLine(placeOf(ev({ locationId: 'r2' }), P1)), 'Function room', 'a dinner in its room')
+  eq(placeLine(placeOf(ev({ place: 'The Strand Hotel' }), P1)), 'The Strand Hotel', 'Other: its free text')
+  eq(placeLine(placeOf(ev({ locationId: 'gone', place: null }), P1)), null, 'a room no longer there: nowhere in particular')
+  eq([matchPlace('The Bar', P2), matchPlace('function  room', P2), matchPlace('Course 2', P2), matchPlace('Castle Course', P2), matchPlace('Doonbeg', P2), matchPlace('the course', P1), matchPlace('the course', P2), matchPlace('Hotel', P2)],
+    [{ locationId: 'r1' }, { locationId: 'r2' }, { courseId: 'castle' }, { courseId: 'castle' }, { courseId: 'away' }, { courseId: 'old' }, null, null],
+    'an imported Where matched by name — "the", case and spaces aside; "the course" only where there is one')
+  eq(placeFields('GOLF', 'Old Course', P2), { locationId: null, locationCourseId: null, place: null, kept: false }, 'imported golf on Course 1 is stored as no course')
+  eq(placeFields('GOLF', 'Castle', P2).locationCourseId, null, '…a part of a name that is not one stays text')
+  eq(placeFields('SOCIAL', 'Bar', P2), { locationId: 'r1', locationCourseId: null, place: null, kept: false }, 'a social event in the bar')
+  eq(placeFields('SOCIAL', 'Strand Hotel', P2), { locationId: null, locationCourseId: null, place: 'Strand Hotel', kept: true }, 'somewhere else: kept as text, and the preview says so')
+  eq(placeFields('SOCIAL', 'Strand Hotel', { ...P2, rooms: [] }).kept, false, '…said only where the club has rooms it could have been')
+  eq(placeFields('SOCIAL', 'Course 2', P2).locationCourseId, null, 'a social event is never put on a course')
+  eq([seasonPlaceLine({ competition: { courseId: 'old', courseName: 'x' } }, P1), seasonPlaceLine({ competition: { courseId: 'castle', courseName: 'x' } }, P2), seasonPlaceLine({ competition: { courseName: 'Doonbeg' } }, { ...P1, courses: [] })],
+    ['Course', 'Course 2 · Castle Course', 'Doonbeg'], 'Events’ Location: a one-course club says "Course"; two say which (D272 kept)')
+  // The day view.
+  eq(lanesOf([{ key: 'a', from: 540, to: 600 }, { key: 'b', from: 570, to: 660 }, { key: 'c', from: 600, to: 630 }, { key: 'd', from: 700, to: 720 }]).map(x => `${x.key}${x.lane}/${x.lanes}`),
+    ['a0/2', 'b1/2', 'c0/2', 'd0/1'], 'overlaps side by side: each the first lane free, a run of overlaps sharing its count')
+  const D = '2026-11-21'
+  const comp = (code: string, first: string, last: string, courseId: string): SeasonEvent => ({ code, name: `Comp ${code}`, kind: 'tournament', startDate: D, endDate: D,
+    competition: { phase: 'booking', courseName: null, courseId, firstTee: first, lastTee: last, scoring: 'stableford', allowance: 95, booked: 30, capacity: 72, membersOnly: true } })
+  const note = (id: string, o: Partial<ClubNote>): SeasonEvent => noteAsSeason(ev({ id, title: `Event ${id}`, ...o }))
+  const day = dayLayout([comp('MED', '08:00', '10:30', 'old'), note('dinner', { startTime: '19:30', locationId: 'r2' })], D, P1)
+  eq(day.columns.map(c => `${c.kind}:${c.label}`), ['course:Course', 'room:Bar', 'room:Function room'], 'a column a location: the course first, then the rooms in order')
+  eq(day.blocks.map(b => `${b.column}:${b.title}:${b.from}-${b.to}`), ['course:old:Comp MED:480-630', 'room:r2:Event dinner:1170-1230'],
+    'a day with a competition and a dinner: two blocks in two columns — first tee to last, and an hour for a dinner with no end (M3)')
+  eq([day.from, day.to, day.hours.length], [420, 1320, 16], 'the window 07:00 to 22:00')
+  const busy = dayLayout([
+    comp('EARLY', '06:10', '06:10', 'old'), note('a', { startTime: '12:00', endTime: '14:00', locationId: 'r1' }), note('b', { startTime: '13:00', endTime: '15:00', locationId: 'r1' }),
+    note('c', { startTime: '20:00', endTime: '23:30', place: 'Strand Hotel' }), note('d', { endsOn: '2026-11-23', type: 'COURSE' }), note('e', { locationId: 'r2', visibility: 'office', type: 'BUSINESS' }),
+    { ...comp('MP', '', '', 'old'), competition: { ...comp('MP', '', '', 'old').competition!, firstTee: null, lastTee: null, matchPlay: { format: 'singles', cap: null, entered: 4, keyDates: [D] } } },
+  ], D, P1)
+  eq(busy.blocks.filter(b => b.column === 'room:r1').map(b => `${b.lane}/${b.lanes}`), ['0/2', '1/2'], 'two in the bar at once: side by side')
+  eq(busy.blocks.find(b => b.key.endsWith('EARLY'))?.to, 370 + 30, 'one tee time still shows as half an hour')
+  eq([busy.from, busy.to], [360, 1440], 'the window widened to the hour for 06:10 and a night out till 23:30')
+  ok(busy.columns.some(c => c.key === ELSEWHERE) && busy.blocks.some(b => b.column === ELSEWHERE && b.sub?.includes('Strand Hotel')), 'Other goes in an Elsewhere column, drawn only when needed')
+  ok(!day.columns.some(c => c.key === ELSEWHERE), '…and not otherwise')
+  eq(busy.allDay.map(b => `${b.column}:${b.key}`), ['course:old:ev-d', 'room:r2:ev-e'], 'over several days, or no start: all day, at the head of its column')
+  ok(busy.allDay.find(b => b.key === 'ev-e')?.office === true, 'Office only says so (the Clubhouse alone sees the day view — M5)')
+  ok(!busy.blocks.concat(busy.allDay).some(b => b.key.includes('MP')), 'a match play is no day’s booking')
+  eq(dayLayout([], D, { courses: [], rooms: [], ready: false }).columns, [], 'no locations: no columns, and the page says where to add them')
+  // Wiring.
+  const m99 = read('supabase/migrations/20260101000099_club_locations.sql')
+  ok(/CREATE TABLE IF NOT EXISTS club_locations/.test(m99) && /GRANT SELECT, INSERT, UPDATE, DELETE ON public\.club_locations TO service_role/.test(m99) && /REVOKE ALL ON public\.club_locations FROM anon, authenticated/.test(m99)
+    && /--\s+DROP TABLE IF EXISTS club_locations;/.test(m99), 'migration 099: server only, its undo beside it')
+  ok(/missingPlaceCols/.test(read('app/api/club/notesStore.ts')) && /missing099/.test(read('app/api/club/locationsStore.ts')), 'fail-soft before 099: events read and save as they did')
+  ok(/calendar'\)\}\/\$\{d\}/.test(read('app/clubhouse/[slug]/calendar/ClubCalendar.tsx')) && fs.existsSync(path.join(__dirname, '../app/clubhouse/[slug]/calendar/[day]/page.tsx')), 'a day on the Calendar opens the day view')
+  ok(/bg-club-tint/.test(read('app/clubhouse/[slug]/calendar/[day]/DayView.tsx')) && /bg-accent-deep/.test(read('app/clubhouse/[slug]/calendar/[day]/DayView.tsx')), 'course columns in the club’s tint, the line at now in emerald (M4)')
+  ok(/ITS PLACES/.test(calendarPrompt({ clubName: 'P', year: 2026, homeCourse: null, memberships: [], presets: [], places: ['Bar'] })), 'the import prompt lists the club’s places')
+}
+
 function overviewTests() {
   console.log('\nThe Overview as a control centre (D276)')
   eq(mondayOf('2026-11-21'), '2026-11-16', 'a Saturday’s Monday')
@@ -1810,7 +1880,7 @@ function overviewTests() {
   ok(!/lg:grid-cols-3/.test(ov) && /columns-1 lg:columns-2/.test(ov) && /break-inside-avoid/.test(ov), 'no three equal cards: cards sized to what they hold, flowing in two columns (M1)')
   ok(/keepsSheet && teeShown/.test(ov) && /keepsList && data\?\.counts/.test(ov), 'a card the account may not use is not drawn')
   const search = read('app/clubhouse/[slug]/OverviewSearch.tsx')
-  ok(/e\.key !== '\/'/.test(search) && /\?row=\$\{p\.id\}/.test(search) && /\?event=\$\{e\.note\.id\}/.test(search) && /\?day=\$\{day\}/.test(search), 'search: "/" focuses it; a member, a club event and a day each open in their own section')
+  ok(/e\.key !== '\/'/.test(search) && /\?row=\$\{p\.id\}/.test(search) && /\?event=\$\{e\.note\.id\}/.test(search) && /calendar'\)\}\/\$\{day\}/.test(search), 'search: "/" focuses it; a member, a club event and a day each open in their own section')
   ok(/get\('row'\)/.test(read('app/clubhouse/[slug]/members/MembersGrid.tsx')) && /get\('event'\)/.test(read('app/clubhouse/[slug]/events/Events.tsx'))
     && /get\('day'\)/.test(read('app/clubhouse/[slug]/calendar/ClubCalendar.tsx')) && /get\('day'\)/.test(read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')), '…and each section opens on what it was handed')
 }
@@ -3002,6 +3072,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  locationsTests()
   overviewTests()
   playsFollowsMembershipTests()
   teeEmbedTests()

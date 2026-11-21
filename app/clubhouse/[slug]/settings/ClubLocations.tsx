@@ -115,8 +115,8 @@ export default function ClubLocations({ clubId }: { clubId: string }) {
                       </span>
                     ) : (
                       <span className="flex items-center gap-1">
-                        <button type="button" disabled={busy || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${r.name} up`} className="ch-hover ch-focus rounded-tile w-9 h-9 inline-flex items-center justify-center text-ink disabled:text-ink/30"><IconChevronUp size={18} /></button>
-                        <button type="button" disabled={busy || i === rooms.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${r.name} down`} className="ch-hover ch-focus rounded-tile w-9 h-9 inline-flex items-center justify-center text-ink disabled:text-ink/30"><IconChevronDown size={18} /></button>
+                        <button type="button" disabled={busy || i === 0} onClick={() => move(i, -1)} aria-label={`Move ${r.name} up`} className="ch-hover ch-focus rounded-tile w-9 h-9 inline-flex items-center justify-center text-ink disabled:text-ink/50"><IconChevronUp size={18} /></button>
+                        <button type="button" disabled={busy || i === rooms.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${r.name} down`} className="ch-hover ch-focus rounded-tile w-9 h-9 inline-flex items-center justify-center text-ink disabled:text-ink/50"><IconChevronDown size={18} /></button>
                         <button type="button" onClick={() => { setRenaming({ id: r.id, name: r.name }); setSay(null) }} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Rename</button>
                         <button type="button" onClick={() => { setDeleting(r.id); setSay(null) }} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Take off</button>
                       </span>

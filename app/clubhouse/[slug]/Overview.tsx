@@ -142,7 +142,7 @@ function longDay(day: string): string {
 
 /** Where "and n more" goes: today's Calendar day, else Events. */
 function moreHref(slug: string, p: Period, from: string): string {
-  return p === 'today' ? `${clubhouseHref(slug, 'calendar')}?day=${from}` : clubhouseHref(slug, 'events')
+  return p === 'today' ? `${clubhouseHref(slug, 'calendar')}/${from}` : clubhouseHref(slug, 'events')
 }
 
 function YoursCard({ y, today, period }: { y: YoursItem; today: string; period: Period }) {

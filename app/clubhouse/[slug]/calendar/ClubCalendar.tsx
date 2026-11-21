@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
 import { FIELD, buttonClass, cardClass } from '@/app/components/ui'
-import { eventHref, eventsOn, isOfficeOnly, monthGrid, opensOutside, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
+import { clubhouseHref, eventHref, eventsOn, isOfficeOnly, monthGrid, opensOutside, seasonType, stepMonth, type SeasonEvent } from '@/lib/clubhouse'
 import { typeLabel, type ClubNote } from '@/lib/clubEvents'
 import EventPanel from '../events/EventPanel'
 import { irishToday } from '@/lib/clubs'
@@ -99,9 +99,10 @@ export default function ClubCalendar() {
               <div key={j} id={d ? `day-${d}` : undefined} className={`min-h-24 p-1.5 border-r border-line last:border-r-0 ${d ? '' : 'bg-tint'} ${d && d === focusDay ? 'outline outline-2 -outline-offset-2 outline-accent-deep' : ''}`}>
                 {d && (
                   <>
-                    <p className={`text-[13px] tabular-nums mb-1 inline-flex items-center justify-center w-6 h-6 rounded-full ${d === today ? 'ring-2 ring-accent-deep text-ink font-semibold' : 'text-ink/65'}`}>
+                    <Link href={`${clubhouseHref(face.slug, 'calendar')}/${d}`} aria-label={`Open ${d} as a day`} title="Open the day"
+                      className={`ch-hover ch-focus text-[13px] tabular-nums mb-1 inline-flex items-center justify-center w-7 h-7 rounded-full ${d === today ? 'ring-2 ring-accent-deep text-ink font-semibold' : 'text-ink/65'}`}>
                       {Number(d.slice(8))}
-                    </p>
+                    </Link>
                     <div className="space-y-1">{eventsOn(shown, d).map(chip)}</div>
                   </>
                 )}
@@ -116,7 +117,7 @@ export default function ClubCalendar() {
         <ul className={`${cardClass()} divide-y divide-line overflow-hidden ${busyDays.length ? '' : 'hidden'}`}>
           {busyDays.map(({ d, on }) => (
             <li key={d} className={`px-4 py-3 ${d === focusDay ? 'bg-accent-tint' : ''}`}>
-              <p className="t-cap text-ink/65">{new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))}</p>
+              <Link href={`${clubhouseHref(face.slug, 'calendar')}/${d}`} className="ch-focus t-cap text-ink/65 underline underline-offset-2 rounded-tile">{new Intl.DateTimeFormat('en-IE', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))}</Link>
               {on.map(e => {
                 const href = eventHref(e, face.slug)
                 const inner = (
