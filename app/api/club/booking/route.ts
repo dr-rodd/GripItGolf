@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { runBooking } from '../booking'
+import { logTiming, startTimer } from '@/lib/timing'
 import { bookingStore } from '../bookingStore'
 
 // POST /api/club/booking — `{ action, code, … }` with a Green Dot member's
@@ -17,8 +18,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null) as Record<string, unknown> | null
   const token = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') ?? '')?.[1] ?? null
   try {
+    const took = startTimer()
     const out = await runBooking({ ...(body ?? {}), token, action: body?.action }, bookingStore(createAdminClient()), new Date())
-    const res = NextResponse.json(out.body, { status: out.status, headers: NO_STORE })
+    const res = NextResponse.json(out.body, { status: out.status, headers: { ...NO_STORE, 'Server-Timing': logTiming('booking', body?.action, took(), out.status) } })
     if (out.status === 200 && out.door) {
       res.cookies.set(entryCookie(out.door.code), out.door.value, {
         httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production',

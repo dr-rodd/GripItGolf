@@ -52,6 +52,8 @@ export class TeeSheetNotReady extends Error {
 
 export interface TeeTimesStore {
   userFromToken(token: string): Promise<AuthUser | null>
+  /** A read's token checked locally where the keys allow (D195) — the day only reads. */
+  readerFromToken?(token: string): Promise<AuthUser | null>
   club(clubId: string): Promise<ClubRecord | null>
   rowOf(clubId: string, userId: string): Promise<MemberRecord | null>
   isStaff(userId: string): Promise<boolean>
@@ -111,15 +113,37 @@ function freeSeats(bookings: readonly StoredBooking[], time: string, size: numbe
   return Array.from({ length: size }, (_, i) => i + 1).filter(s => !taken.has(s))
 }
 
+/** The day's reads, by the club's id alone — started before the asker is known (D282). */
+function dayReads(store: TeeTimesStore, clubId: string, action: string, date: string) {
+  const from = action === 'office.day' && DAY.test(date) ? mondayOf(date) : date
+  const to = action === 'office.day' && DAY.test(date) ? addDays(from, 6) : date
+  return Promise.all([
+    store.settings(clubId),
+    store.categories(clubId),
+    store.bookings(clubId, from, to),
+    store.comps(clubId, from, to),
+    store.blocks(clubId, from, to),
+    store.ageDate(clubId),
+  ])
+}
+
 export async function runTeeTimes(input: Record<string, unknown> & { token: string | null; action: unknown }, store: TeeTimesStore, now: Date): Promise<TeeOutcome> {
   if (!input.token) return fail(401, 'Sign in first.')
-  const user = await store.userFromToken(input.token)
-  if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
   const action = str(input.action)
   const clubId = str(input.clubId)
   if (!clubId) return fail(400, 'Which club?')
+  // MO3 (D282): a day's sheet only reads — its token checked locally, and the
+  // club and the day's reads started beside it, answered only once the asker
+  // is known. Every other action asks in order, as before.
+  const reading = action === 'day' || action === 'office.day'
+  const clubP = store.club(clubId)
+  const early = reading ? dayReads(store, clubId, action, str(input.date) || irishToday(now)) : null
+  early?.catch(() => null)
+  clubP.catch(() => null)
+  const user = await (reading && store.readerFromToken ? store.readerFromToken(input.token) : store.userFromToken(input.token))
+  if (!user || !isAccount(user)) return fail(403, 'Sign in to your Green Dot account first.')
   const [club, row, staff] = await Promise.all([
-    store.club(clubId),
+    clubP,
     store.rowOf(clubId, user.id).catch(() => null),
     action.startsWith('office.') ? store.isStaff(user.id).catch(() => false) : Promise.resolve(false),
   ])
@@ -170,14 +194,9 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
   // ─── The day ────────────────────────────────────────────────
   const from = office && action === 'office.day' ? mondayOf(date) : date
   const to = office && action === 'office.day' ? addDays(from, 6) : date
-  const [{ settings, ready }, categories, booked, comps, blocks, place, ageDate] = await Promise.all([
-    store.settings(clubId),
-    store.categories(clubId),
-    store.bookings(clubId, from, to),
-    store.comps(clubId, from, to),
-    store.blocks(clubId, from, to),
+  const [[{ settings, ready }, categories, booked, comps, blocks, ageDate], place] = await Promise.all([
+    early ?? dayReads(store, clubId, action, date),
     club.homeCourseId ? store.place(club.homeCourseId) : Promise.resolve(null),
-    store.ageDate(clubId),
   ])
   const geo = place ? { lat: place.lat ?? NaN, lng: place.lng ?? NaN } : null
   const onSheet = (c: TeeComp) => !club.homeCourseId || !c.courseId || c.courseId === club.homeCourseId

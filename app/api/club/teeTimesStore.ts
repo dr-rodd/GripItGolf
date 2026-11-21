@@ -25,6 +25,7 @@ export function teeTimesStore(db: Db): TeeTimesStore {
   const clubs = clubStore(db)
   return {
     userFromToken: t => clubs.userFromToken(t),
+    readerFromToken: t => clubs.readerFromToken ? clubs.readerFromToken(t) : clubs.userFromToken(t),
     club: id => clubs.club(id),
     rowOf: (clubId, userId) => clubs.rowOf ? clubs.rowOf(clubId, userId) : Promise.resolve(null),
     isStaff: userId => clubs.isStaff ? clubs.isStaff(userId) : Promise.resolve(false),
@@ -100,31 +101,29 @@ export function teeTimesStore(db: Db): TeeTimesStore {
       return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow)
     },
     async comps(clubId, from, to): Promise<TeeComp[]> {
-      const { data: priv, error } = await db.from('trip_private').select('trip_id, entry_rules').eq('club_id', clubId)
-      // Before 094 there is no entry_rules column: ask again without it.
-      const privRows = error
-        ? (((await db.from('trip_private').select('trip_id').eq('club_id', clubId)).data ?? []) as { trip_id: string; entry_rules?: unknown }[])
-        : ((priv ?? []) as { trip_id: string; entry_rules?: unknown }[])
-      if (!privRows.length) return []
-      const { data: trips, error: te } = await db.from('trips').select('id, trip_code, name, start_date')
-        .in('id', privRows.map(p => p.trip_id)).eq('competition', 'club').gte('start_date', from).lte('start_date', to)
-      if (te || !trips?.length) return []
-      const tripRows = trips as { id: string; trip_code: string; name: string; start_date: string }[]
-      const [{ data: rounds }, certs] = await Promise.all([
-        db.from('rounds').select('id, trip_id, course_id, scheduled_date, tee_sheet').in('trip_id', tripRows.map(t => t.id)),
-        db.from('rounds').select('trip_id, certified_at').in('trip_id', tripRows.map(t => t.id)),
-      ])
-      const roundRows = (rounds ?? []) as { id: string; trip_id: string; course_id: string | null; scheduled_date: string | null; tee_sheet?: unknown }[]
-      const certified = new Set(certs.error ? [] : ((certs.data ?? []) as { trip_id: string; certified_at: string | null }[]).filter(c => c.certified_at).map(c => c.trip_id))
-      return tripRows.map(t => {
-        const r = roundRows.find(x => x.trip_id === t.id)
+      // MO3 (D282): the club's competitions in the days asked, with their
+      // round, in one read; the entry rules (094) and the certified stamp
+      // (091) asked for with them, and without them when either is missing.
+      type R = { id: string; trip_id?: string; course_id: string | null; scheduled_date: string | null; tee_sheet?: unknown; certified_at?: string | null }
+      type T = { id: string; trip_code: string; name: string; start_date: string; rounds?: R[] }
+      type P = { trip_id: string; entry_rules?: unknown; trips: T | T[] | null }
+      const ask = (full: boolean) => db.from('trip_private')
+        .select(`trip_id, ${full ? 'entry_rules, ' : ''}trips!inner(id, trip_code, name, start_date, competition, rounds(id, course_id, scheduled_date, tee_sheet${full ? ', certified_at' : ''}))`)
+        .eq('club_id', clubId).eq('trips.competition', 'club').gte('trips.start_date', from).lte('trips.start_date', to)
+      let res = await ask(true)
+      if (res.error) res = await ask(false)
+      if (res.error) return []
+      return ((res.data ?? []) as unknown as P[]).flatMap(p => {
+        const t = Array.isArray(p.trips) ? p.trips[0] : p.trips
+        if (!t) return []
+        const r = (t.rounds ?? [])[0]
         const rules = parseTeeRules(r?.tee_sheet)
-        return {
+        return [{
           code: t.trip_code, name: t.name, date: r?.scheduled_date ?? t.start_date, courseId: r?.course_id ?? null,
           clocks: rules ? teeClocks(rules) : [],
-          entry: readEntryRules(privRows.find(p => p.trip_id === t.id)?.entry_rules),
-          certified: certified.has(t.id),
-        }
+          entry: readEntryRules(p.entry_rules),
+          certified: !!(t.rounds ?? []).find(x => x.certified_at),
+        }]
       })
     },
     async blocks(clubId, from, to) {

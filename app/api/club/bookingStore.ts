@@ -17,9 +17,37 @@ import { signedOff } from '../card/sign'
 
 type Db = ReturnType<typeof createAdminClient>
 
+/** A competition's entry rules by its code (094, fail-soft) — asked beside the trip itself. */
+async function readEntryRulesByCode(db: Db, code: string): Promise<unknown> {
+  const { data, error } = await db.from('trip_private').select('entry_rules, trips!inner(trip_code)').eq('trips.trip_code', code).maybeSingle()
+  return error ? null : (data as { entry_rules?: unknown } | null)?.entry_rules ?? null
+}
+
 /** A verified club's competition by its code, with its one round and its sheet — or null. */
 export async function readCompetition(db: Db, code: string): Promise<(CompRecord & { name: string; courseId: string }) | null> {
   if (!/^[A-Z0-9]{4,12}$/.test(code)) return null
+  // MO3 (D282): the trip, its club (and whether verified) and its round in
+  // one read, the entry rules beside it; the old way only if that is refused.
+  type Joined = { id: string; trip_code: string; name: string; competition?: string | null; public_passcode_hash?: string | null
+    trip_private?: { club_id: string | null; clubs?: { verified_at: string | null } | null } | { club_id: string | null; clubs?: { verified_at: string | null } | null }[] | null
+    rounds?: { id: string; scheduled_date: string | null; tee_sheet?: unknown; course_id: string; round_number: number }[] }
+  const [joined, entryNow] = await Promise.all([
+    db.from('trips').select('id, trip_code, name, competition, public_passcode_hash, trip_private(club_id, clubs(verified_at)), rounds(id, scheduled_date, tee_sheet, course_id, round_number)').eq('trip_code', code).maybeSingle(),
+    readEntryRulesByCode(db, code),
+  ])
+  if (!joined.error) {
+    const j = joined.data as unknown as Joined | null
+    if (!j || j.competition !== 'club') return null
+    const priv = Array.isArray(j.trip_private) ? j.trip_private[0] : j.trip_private
+    const r = [...(j.rounds ?? [])].sort((a, b) => a.round_number - b.round_number)[0] ?? null
+    const rules = r ? parseTeeRules(r.tee_sheet) : null
+    if (!priv?.club_id || !r || !r.scheduled_date || !rules || !priv.clubs?.verified_at) return null
+    return {
+      tripId: j.id, code: j.trip_code, name: j.name, clubId: priv.club_id, roundId: r.id, date: r.scheduled_date, rules, courseId: r.course_id,
+      publicHash: j.public_passcode_hash ?? null,
+      entry: readEntryRules(entryNow),
+    }
+  }
   const { data: t, error } = await db.from('trips').select('id, trip_code, name, competition, public_passcode_hash').eq('trip_code', code).maybeSingle()
   const trip = (error ? null : t) as { id: string; trip_code: string; name: string; competition?: string | null; public_passcode_hash?: string | null } | null
   if (!trip || trip.competition !== 'club') return null
@@ -169,25 +197,31 @@ export interface CompSheet {
 }
 
 export async function readCompSheet(db: Db, c: { tripId: string; roundId: string; courseId: string }): Promise<CompSheet> {
-  const [assign, players, cards, course] = await Promise.all([
+  // MO3 (D282): one wave — the card locks embedded in the live cards, and
+  // the signatures and the round's lock beside the rest, not after them.
+  const [assign, players, cardsJoined, course, sigs, lock] = await Promise.all([
     db.from('tee_assignments').select('player_id, slot_index, booked_by').eq('round_id', c.roundId),
     db.from('players').select('id, name, handicap, club_member_id').eq('trip_id', c.tripId),
-    db.from('live_rounds').select('id, status').eq('round_id', c.roundId),
+    db.from('live_rounds').select('id, status, live_player_locks(live_round_id, player_id)').eq('round_id', c.roundId),
     db.from('courses').select('name').eq('id', c.courseId).maybeSingle(),
+    readSignatures(db, c.roundId),
+    readRoundLock(db, c.roundId),
   ])
+  const cards = cardsJoined.error ? await db.from('live_rounds').select('id, status').eq('round_id', c.roundId) : cardsJoined
   const byId = new Map(((players.data ?? []) as { id: string; name: string; handicap: number | null; club_member_id: string | null }[]).map(p => [p.id, p]))
   const seats = ((assign.data ?? []) as { player_id: string; slot_index: number; booked_by: string | null }[]).flatMap(a => {
     const p = byId.get(a.player_id)
     return p ? [{ playerId: p.id, rowId: p.club_member_id, name: p.name, handicap: p.handicap === null ? null : Number(p.handicap), slot: a.slot_index, bookedBy: a.booked_by }] : []
   })
-  const liveCards = (cards.data ?? []) as { id: string; status: string }[]
-  const locks = liveCards.length
+  const liveCards = (cards.data ?? []) as { id: string; status: string; live_player_locks?: { live_round_id: string; player_id: string }[] }[]
+  const locks = cardsJoined.error === null
+    ? liveCards.flatMap(l => l.live_player_locks ?? [])
+    : liveCards.length
     ? ((await db.from('live_player_locks').select('live_round_id, player_id').in('live_round_id', liveCards.map(l => l.id))).data ?? []) as { live_round_id: string; player_id: string }[]
     : []
   const statusOf = new Map(liveCards.map(l => [l.id, l.status]))
   const onCourse = locks.filter(l => statusOf.get(l.live_round_id) === 'active').map(l => l.player_id)
   const signed = locks.filter(l => statusOf.get(l.live_round_id) === 'finalised').map(l => l.player_id)
-  const [sigs, lock] = await Promise.all([readSignatures(db, c.roundId), readRoundLock(db, c.roundId)])
   const final = sigs === null ? signed : sigs.filter(signedOff).map(x => x.playerId)
   const waiting = sigs === null ? [] : sigs.filter(x => !signedOff(x)).map(x => x.playerId)
   return { seats, onCourse, signed, final, waiting, noReturns: lock.noReturns, certifiedAt: lock.certifiedAt, courseName: (course.data as { name?: string } | null)?.name ?? null }

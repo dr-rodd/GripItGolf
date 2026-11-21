@@ -26,8 +26,10 @@ import type { CompSlot } from './CompTeeSheet'
  * the door's cookie nothing of the competition is read past its name.
  */
 import { readPlaces } from '@/app/api/club/locationsStore'
+import { logTiming, startTimer } from '@/lib/timing'
 export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const code = rawCode.trim().toUpperCase()
+  const took = startTimer()
   const db = createAdminClient()
   const [face, comp, jar] = await Promise.all([readFace(slug, { events: false }), readCompetition(db, code), cookies()])
   if (!face) notFound()
@@ -83,6 +85,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
     }
   })
 
+  logTiming('comp-page', 'read', took(), 200)
   return {
     ...base, door: false as const,
     sheet, phase, slots, firstTeeAt, bookingOpensAt, oneCourse: !!places && places.courses.length <= 1,
