@@ -17,7 +17,7 @@
 //   list or back on it — each row through `clubMay`, what could not be done
 //   said by name.
 
-import { clubMay, credentialChangeIssue, credentialsOf, removeIssue, storedRole, withChange, type Asker, type CredentialKey, type Credentials } from '@/lib/clubMay'
+import { PLAYS_FOLLOWS_MEMBERSHIP, clubMay, credentialChangeIssue, credentialsOf, removeIssue, storedRole, withChange, type Asker, type CredentialKey, type Credentials } from '@/lib/clubMay'
 import {
   PAGE_SIZE, STAFF_NAME, cleanSearch, listCsv, needsYou, readFilter, readSort,
   type GridRow, type ListCounts, type ListFilter, type ListSort, type SeasonEvent,
@@ -389,13 +389,14 @@ export async function runClubhouse(
       try {
         if (op === 'tick') {
           const key = str(input.key) as CredentialKey
-          if (!['playsHere', 'officer', 'clubhouse'].includes(key) || typeof input.value !== 'boolean') return fail(400, 'Which tick?')
+          if (key === 'playsHere') return fail(409, PLAYS_FOLLOWS_MEMBERSHIP)
+          if (!['officer', 'clubhouse'].includes(key) || typeof input.value !== 'boolean') return fail(400, 'Which tick?')
           const change = { [key]: input.value } as Partial<Credentials>
           const why = credentialChangeIssue(asker, { credentials: before, removed: !!target.removedAt }, change, owners)
           if (why) { failed.push({ name: target.name, why }); continue }
           const next = withChange(before, change)
           if (next[key] === before[key]) { done++; continue }
-          await store.updateRow(target.id, { plays_here: next.playsHere, officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
+          await store.updateRow(target.id, { officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
           lines.push(line('credentials', target, { [key]: [before[key], next[key]] }, batchId))
           done++
         } else if (op === 'remove') {

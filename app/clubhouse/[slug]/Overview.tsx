@@ -53,7 +53,6 @@ export default function Overview() {
               <Figure href={members('not_invited')} label={c.invited === null ? 'Not joined' : 'Not invited'} value={c.invited === null ? c.notJoined : Math.max(0, c.notJoined - c.invited)} />
               <Figure href={members('off')} label="Taken off" value={c.off} />
               <li aria-hidden="true" className="h-px bg-line my-2" />
-              <Figure href={members('plays')} label="Plays here" value={c.playsHere} />
               <Figure href={members('officer')} label="Officers" value={c.officer} />
               <Figure href={members('clubhouse')} label="Clubhouse" value={c.clubhouse} />
               {c.byCategory && Object.keys(c.byCategory).length > 0 && (

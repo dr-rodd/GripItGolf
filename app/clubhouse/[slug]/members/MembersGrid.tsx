@@ -25,7 +25,7 @@ const FIELDS: Field[] = ['name', 'email', 'memberNumber', 'guiNumber', 'handicap
 /** Every typed cell, in Tab's order: the five, then Born after Gender (stage (m)). */
 const TAB_ORDER: Field[] = [...FIELDS, 'birthDate']
 const TICKS: { key: CredentialKey; label: string }[] = [
-  { key: 'playsHere', label: 'Plays here' }, { key: 'officer', label: 'Officer' }, { key: 'clubhouse', label: 'Clubhouse' },
+  { key: 'officer', label: 'Officer' }, { key: 'clubhouse', label: 'Clubhouse' },
 ]
 const SORTABLE: Partial<Record<Field, ListSort>> = { name: 'name', email: 'email', memberNumber: 'memberNumber', guiNumber: 'guiNumber' }
 const HEAD: Record<Field, string> = { name: 'Name', email: 'Email', memberNumber: 'Member no.', guiNumber: 'GUI no.', handicapIndex: 'Index', birthDate: 'Born' }
@@ -577,8 +577,6 @@ export default function MembersGrid() {
               <>
                 <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'officer', value: true }, 'Made Officers.')} className={`${buttonClass('secondary', false)} ch-focus`}>Make Officer</button>
                 <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'officer', value: false }, 'Officer taken away.')} className={`${buttonClass('quiet', false)} ch-focus`}>Not Officer</button>
-                <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'playsHere', value: true }, 'Ticked as playing here.')} className={`${buttonClass('quiet', false)} ch-focus`}>Plays here</button>
-                <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'playsHere', value: false }, 'Ticked as not playing here.')} className={`${buttonClass('quiet', false)} ch-focus`}>Doesn’t play</button>
                 {may('grant_clubhouse') && <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'clubhouse', value: true }, 'Given Clubhouse.')} className={`${buttonClass('quiet', false)} ch-focus`}>Give Clubhouse</button>}
                 <button type="button" disabled={busy} onClick={() => void bulk('invite', {}, 'Codes sent.')} className={`${buttonClass('quiet', false)} ch-focus`}>Email codes</button>
                 {filter === 'off'

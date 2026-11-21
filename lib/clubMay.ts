@@ -7,13 +7,16 @@
 // ticks on their row of the club's list, independent of each other:
 //
 // * **Plays here** — a golfer at the club: in its fields, boards and stats
-//   (D209). Off for back-office staff who do not play.
+//   (D209). **No longer a tick (D275, Ross, 21 Nov 2026)**: it follows the
+//   row's membership — no membership, or one that plays on at least one day
+//   (`playsByMembership`). `club_members.plays_here` is kept, unread, until
+//   it is dropped.
 // * **Officer** — edit access in the members app, on the phone: New
 //   competition, Manage competition, tee times, No return, sign or void a
 //   card, Certify, Reopen, calling a competition off. The organiser of the
 //   club's events.
 // * **Clubhouse** — admin access to the Clubhouse, the desktop office: the
-//   list, the club's look, and granting Plays here and Officer. Held with or
+//   list, the club's look, and granting Officer. Held with or
 //   without Officer.
 // * **Owner** — whoever set the club up on the platform (Green Dot, or the
 //   club itself until then). Holds Officer and Clubhouse always — never
@@ -30,6 +33,19 @@
 // Plays here.
 
 import type { ClubRole } from './clubs'
+
+/**
+ * Whether a row plays here (D275): it follows the membership. No membership
+ * — or one this club no longer has — plays (until Ross decides otherwise);
+ * a membership plays here when it plays on at least one day. Which days is
+ * `entryRefusal`'s and `bookingRefusal`'s, as before.
+ */
+export function playsByMembership(days: readonly number[] | null | undefined): boolean {
+  return !days || days.length > 0
+}
+
+/** Said when somebody asks to tick Plays here by hand (D275). */
+export const PLAYS_FOLLOWS_MEMBERSHIP = 'Playing follows the membership now — change it on Memberships.'
 
 export interface Credentials {
   owner: boolean
@@ -156,6 +172,7 @@ export function credentialChangeIssue(
   owners: number,
 ): string | null {
   const now = target.credentials
+  if (typeof change.playsHere === 'boolean') return PLAYS_FOLLOWS_MEMBERSHIP
   const keys = (Object.keys(change) as CredentialKey[]).filter(k => typeof change[k] === 'boolean' && change[k] !== now[k])
   for (const k of keys) {
     if (!clubMay(GRANT[k], asker)) {
@@ -184,9 +201,8 @@ export function removeIssue(asker: Asker, target: { credentials: Credentials; re
 
 /** The ticks as a screen names and explains them, in their order. */
 export const CREDENTIAL_WORDS: { key: CredentialKey; label: string; line: string }[] = [
-  { key: 'playsHere', label: 'Plays here', line: 'In the club’s fields, boards and stats.' },
   { key: 'officer', label: 'Officer', line: 'Runs competitions on the phone: tee times, cards, results.' },
-  { key: 'clubhouse', label: 'Clubhouse', line: 'Admin access to the Clubhouse: the list, the look, and giving Plays here and Officer.' },
+  { key: 'clubhouse', label: 'Clubhouse', line: 'Admin access to the Clubhouse: the list, the look, and giving Officer.' },
   { key: 'owner', label: 'Owner', line: 'Holds Officer and Clubhouse. Only an owner gives Clubhouse or makes owners.' },
 ]
 

@@ -998,7 +998,7 @@ section('Casual tee sheet (lib/clubTeeSheet.ts)')
   eq(bookingRefusal(social, mon, true), 'Seán’s membership doesn’t book tee times.', 'a membership that does not book tee times')
   eq(bookingRefusal(none, mon, true), 'Ann has no membership that books tee times.', 'no membership, where the club has them')
   eq(bookingRefusal(none, mon, false), null, 'a club with no memberships: everybody who plays here books')
-  eq(bookingRefusal(away, mon, false), 'Joe isn’t down as playing here.', 'Plays here off: nobody books them')
+  eq(bookingRefusal(away, mon, false), 'Joe’s membership doesn’t play at the club.', 'Plays here off: nobody books them')
   eq(bookingRefusal(fiveDay, sat, true, true), 'Sat 21 Nov isn’t one of your playing days.', 'said to the member themselves')
 
   // Opening.

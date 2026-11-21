@@ -266,9 +266,9 @@ async function placeRows(o: {
 }): Promise<{ ok: true; ids: string[] } | { ok: false; outcome: BookingOutcome }> {
   const { store, comp, rows, slot, playerOfRow } = o
   const no = (outcome: BookingOutcome) => ({ ok: false as const, outcome })
-  // D209: somebody who does not play here is in no field.
+  // D209: somebody who does not play here is in no field — which follows their membership (D275).
   const notPlaying = rows.find(r => !clubMay('play', { row: credentialsOf(r) }))
-  if (notPlaying) return no(fail(409, `${notPlaying.name} isn’t ticked as playing at the club.`))
+  if (notPlaying) return no(fail(409, `${notPlaying.name}’s membership doesn’t play at the club.`))
   const noAccount = rows.find(r => !r.userId)
   if (noAccount) return no(fail(409, `${noAccount.name} needs a Green Dot account linked to the club’s list to play.`))
   const already = rows.find(r => o.bookings.some(b => b.playerId === playerOfRow.get(r.id)))

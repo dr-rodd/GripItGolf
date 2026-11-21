@@ -84,7 +84,7 @@ export default function AwardPanel({ clubId, year, award, comps, cats, ageDate, 
 
           <h3 className="t-card text-ink pt-1">Who appears</h3>
           <EntryRulesFields entry={rules.entry} onChange={e => set('entry', readEntryRules(e))} cats={cats} ageDate={ageDate} idPrefix="aw-entry" />
-          <p className="t-cap text-ink/65 -mt-2">Everybody on the list who plays here and fits these. Ages are counted on 31 December {year}.</p>
+          <p className="t-cap text-ink/65 -mt-2">Everybody on the list whose membership plays and who fits these. Ages are counted on 31 December {year}.</p>
 
           <h3 className="t-card text-ink pt-1">What counts</h3>
           <div className="flex flex-wrap gap-4">

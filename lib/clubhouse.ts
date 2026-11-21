@@ -35,15 +35,13 @@ export function standingOf(r: { linked: boolean; removed: boolean; invitedAt: st
 }
 
 /** What the grid can be narrowed to, read on the server. */
-export type ListFilter = 'all' | 'joined' | 'invited' | 'not_invited' | 'plays' | 'not_playing' | 'officer' | 'clubhouse' | 'off'
+export type ListFilter = 'all' | 'joined' | 'invited' | 'not_invited' | 'officer' | 'clubhouse' | 'off'
 
 export const LIST_FILTERS: { key: ListFilter; label: string }[] = [
   { key: 'all', label: 'Everyone on the list' },
   { key: 'joined', label: 'Joined' },
   { key: 'invited', label: 'Invited' },
   { key: 'not_invited', label: 'Not invited' },
-  { key: 'plays', label: 'Plays here' },
-  { key: 'not_playing', label: 'Doesn’t play here' },
   { key: 'officer', label: 'Officers' },
   { key: 'clubhouse', label: 'Clubhouse' },
   { key: 'off', label: 'Taken off' },
@@ -116,14 +114,14 @@ function csvCell(v: string): string {
  * the columns the paste reads; the rest are for reading).
  */
 export function listCsv(rows: GridRow[], categories: Pick<Category, 'id' | 'code'>[] = []): string {
-  const head = ['Name', 'Email', 'Member number', 'GUI number', 'Gender', 'Date of birth', 'Category', 'Handicap index', 'Standing', 'Plays here', 'Officer', 'Clubhouse']
+  const head = ['Name', 'Email', 'Member number', 'GUI number', 'Gender', 'Date of birth', 'Category', 'Handicap index', 'Standing', 'Officer', 'Clubhouse']
   const yes = (b: boolean) => (b ? 'Yes' : 'No')
   const lines = rows.map(r => [
     r.name, r.email ?? '', r.memberNumber ?? '', r.guiNumber ?? '',
     r.gender ? GENDER_WORDS[r.gender] : '', birthDateLabel(r.birthDate), categories.find(c => c.id === r.categoryId)?.code ?? '',
     r.handicapIndex === null ? '' : indexLabel(r.handicapIndex),
     STANDING_WORDS[standingOf(r)],
-    yes(r.credentials.playsHere), yes(r.credentials.officer), yes(r.credentials.clubhouse || r.credentials.owner),
+    yes(r.credentials.officer), yes(r.credentials.clubhouse || r.credentials.owner),
   ].map(csvCell).join(','))
   return [head.join(','), ...lines].join('\r\n') + '\r\n'
 }
@@ -140,7 +138,6 @@ export interface ListCounts {
   invited: number | null
   notJoined: number
   off: number
-  playsHere: number
   officer: number
   clubhouse: number
   noEmail: number

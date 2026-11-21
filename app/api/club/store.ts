@@ -185,8 +185,6 @@ export async function readListPage(db: Db, clubId: string, o: ListQuery): Promis
       case 'joined': q = live().not('user_id', 'is', null); break
       case 'invited': q = invited ? live().is('user_id', null).not('invited_at', 'is', null) : live().is('user_id', null); break
       case 'not_invited': q = invited ? live().is('user_id', null).is('invited_at', null) : live().is('user_id', null); break
-      case 'plays': q = ticks ? live().eq('plays_here', true) : live(); break
-      case 'not_playing': q = ticks ? live().eq('plays_here', false) : live().eq('id', '00000000-0000-0000-0000-000000000000'); break
       case 'officer': q = ticks ? live().eq('officer', true) : live().in('role', LEGACY_RUNNING_ROLES); break
       case 'clubhouse': q = ticks ? live().eq('clubhouse', true) : live().in('role', LEGACY_RUNNING_ROLES); break
       default: q = live()
@@ -237,11 +235,11 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
     const r = await q
     return r.error ? null : r.count ?? 0
   }
-  const [onList, joined, invited, off, playsHere, officer, clubhouse, noEmail, noGender, noCategory] = await Promise.all([
+  const [onList, joined, invited, off, officer, clubhouse, noEmail, noGender, noCategory] = await Promise.all([
     n(live()), n(live().not('user_id', 'is', null)),
     n(live().is('user_id', null).not('invited_at', 'is', null)),
     n(base().not('removed_at', 'is', null)),
-    n(live().eq('plays_here', true)), n(live().eq('officer', true)), n(live().eq('clubhouse', true)),
+    n(live().eq('officer', true)), n(live().eq('clubhouse', true)),
     n(live().is('user_id', null).is('email', null)),
     // Stage (m), 094 — null before it.
     n(live().is('gender', null)), n(live().is('category_id', null)),
@@ -251,7 +249,7 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
   const on = onList ?? 0, j = joined ?? 0
   return {
     onList: on, joined: j, invited, notJoined: Math.max(0, on - j), off: off ?? 0,
-    playsHere: playsHere ?? on, officer: officer ?? legacyRun ?? 0, clubhouse: clubhouse ?? legacyRun ?? 0, noEmail: noEmail ?? 0,
+    officer: officer ?? legacyRun ?? 0, clubhouse: clubhouse ?? legacyRun ?? 0, noEmail: noEmail ?? 0,
     noGender, noCategory,
   }
 }

@@ -179,7 +179,7 @@ export async function runMatchPlayEntry(
     if (!rowId || rowId === me.id) return { why: 'Choose somebody else as your partner.' }
     const [row] = await store.rowsByIds(mp.clubId, [rowId])
     if (!row) return { why: 'That member is not on the club’s list.' }
-    if (!clubMay('play', { row: credentialsOf(row) })) return { why: `${row.name} isn’t ticked as playing at the club.` }
+    if (!clubMay('play', { row: credentialsOf(row) })) return { why: `${row.name}’s membership doesn’t play at the club.` }
     if (!row.userId) return { why: `${row.name} hasn’t joined Green Dot yet — every player needs their own account.` }
     const refused = refusalOf(row)
     if (refused) return { why: refusalWords(refused, row.name) }
@@ -227,7 +227,7 @@ export async function runMatchPlayEntry(
   if (action === 'enter' || action === 'join' || action === 'partner') {
     // D209: somebody who does not play here is in no field.
     if (action !== 'partner') {
-      if (!clubMay('play', { row: credentialsOf(me) })) return fail(409, 'You aren’t ticked as playing at the club — ask the office.')
+      if (!clubMay('play', { row: credentialsOf(me) })) return fail(409, 'Your membership doesn’t play at the club — ask the office.')
       const refused = refusalOf(me)
       if (refused) return fail(409, refusalWords(refused))
     }

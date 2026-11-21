@@ -15,7 +15,8 @@
 //     end, all day without times. Nobody books a casual time under one; the
 //     sheet says what it is and for how long, and a competition's overlay
 //     goes on to the competition's own tee sheet for whoever may enter it.
-//   * **Who books.** A member on the list with Plays here, on a day their
+//   * **Who books.** A member on the list who plays here (their membership
+//     plays some day — D275), on a day their
 //     membership plays and whose membership books tee times — every member
 //     where the club has no memberships set up. A member books themselves
 //     and others: members from the list, each checked the same way, and
@@ -247,7 +248,7 @@ export interface BookerFacts {
  */
 export function bookingRefusal(m: BookerFacts, date: string, clubHasMemberships: boolean, you = false): string | null {
   const who = you ? 'You' : m.name
-  if (!m.playsHere) return you ? 'You aren’t down as playing here — ask the office.' : `${m.name} isn’t down as playing here.`
+  if (!m.playsHere) return you ? 'Your membership doesn’t play at the club — ask the office.' : `${m.name}’s membership doesn’t play at the club.`
   if (!clubHasMemberships) return null
   if (!m.category) return you ? 'You have no membership that books tee times — ask the office.' : `${m.name} has no membership that books tee times.`
   if (!m.category.booksTeeTimes) return `${who === 'You' ? 'Your' : `${m.name}’s`} membership doesn’t book tee times.`

@@ -36,6 +36,7 @@ import { STAFF_NAME } from '@/lib/clubhouse'
 import { memberSees, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { isClubhouseAction, runClubhouse, type ClubhouseStore } from './clubhouse'
 import { afterFailure, attemptBlocked, type AttemptWindow } from '@/lib/membership'
+import { PLAYS_FOLLOWS_MEMBERSHIP } from '@/lib/clubMay'
 import {
   clubMay, credentialChangeIssue, credentialsOf, removeIssue, storedRole, withChange,
   type Asker, type ClubAct, type Credentials, type CredentialKey,
@@ -711,7 +712,8 @@ export async function runClub(
     }
     // The ticks (D219, D220): each one given or taken by whoever clubMay says.
     const change: Partial<Credentials> = {}
-    for (const k of ['playsHere', 'officer', 'clubhouse', 'owner'] as CredentialKey[]) {
+    if (input.playsHere !== undefined) return fail(409, PLAYS_FOLLOWS_MEMBERSHIP)
+    for (const k of ['officer', 'clubhouse', 'owner'] as CredentialKey[]) {
       if (input[k] === undefined) continue
       if (typeof input[k] !== 'boolean') return fail(400, 'A tick is on or off.')
       change[k] = input[k] as boolean
@@ -721,8 +723,8 @@ export async function runClub(
       const why = credentialChangeIssue(asker, { credentials: before, removed: !!target.removedAt }, change, owners)
       if (why) return fail(why.startsWith('Only') ? 403 : 409, why)
       const next = withChange(before, change)
-      if (next.playsHere !== before.playsHere || next.officer !== before.officer || next.clubhouse !== before.clubhouse || next.owner !== before.owner) {
-        Object.assign(patch, { plays_here: next.playsHere, officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
+      if (next.officer !== before.officer || next.clubhouse !== before.clubhouse || next.owner !== before.owner) {
+        Object.assign(patch, { officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
       }
     }
     if (typeof input.onBoards === 'boolean') patch.on_boards = input.onBoards
@@ -783,7 +785,7 @@ export async function runClub(
       ...(patch.gui_number !== undefined ? { guiNumber: patch.gui_number } : {}),
       ...(patch.email !== undefined ? { email: patch.email } : {}),
       ...(patch.on_boards !== undefined ? { onBoards: patch.on_boards } : {}),
-      ...(patch.role !== undefined ? { role: patch.role, playsHere: patch.plays_here, officer: patch.officer, clubhouse: patch.clubhouse } : {}),
+      ...(patch.role !== undefined ? { role: patch.role, officer: patch.officer, clubhouse: patch.clubhouse } : {}),
       ...(patch.category_id !== undefined ? { categoryId: patch.category_id } : {}),
       ...(details.gender !== undefined ? { gender: details.gender } : {}),
       ...(details.birthDate !== undefined ? { birthDate: details.birthDate } : {}),

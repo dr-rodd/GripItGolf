@@ -80,12 +80,11 @@ export function bookingStore(db: Db): BookingStore {
     },
     async searchRows(clubId, q, limit) {
       const like = `%${q.replace(/[%_\\]/g, m => `\\${m}`)}%`
-      // D209: only those who play here are offered for a field (092; before it, everyone).
-      const { data, error } = await withTicks(t => {
-        const q = db.from('club_members').select(rowCols(t)).eq('club_id', clubId).is('removed_at', null)
-        return (t ? q.eq('plays_here', true) : q).ilike('name', like).order('name').limit(limit)
-      })
-      return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow)
+      // D209: only those who play here are offered for a field — which follows
+      // their membership (D275), worked out on each row as it is read.
+      const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId)
+        .is('removed_at', null).ilike('name', like).order('name').limit(limit * 2))
+      return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow).filter(r => r.playsHere !== false).slice(0, limit)
         .map(r => ({ id: r.id, name: r.name, linked: !!r.userId, gender: r.gender, birthDate: r.birthDate, categoryId: r.categoryId }))
     },
     async indexOf(row) {

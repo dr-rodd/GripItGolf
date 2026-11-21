@@ -18,6 +18,7 @@ import {
 import {
   LAST_OWNER, clubMay, credentialChangeIssue, credentialLine, credentialsOf, removeIssue, storedRole, withChange,
   type Credentials,
+  PLAYS_FOLLOWS_MEMBERSHIP, playsByMembership,
 } from '../lib/clubMay'
 import { FEATURES, mayUseFeature } from '../lib/tiers'
 import type { SeasonRow } from '../lib/cardSummary'
@@ -25,6 +26,7 @@ import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
 import { clubEventDates } from '../lib/clubs'
+import { asRow, type RowRow } from '../app/api/club/rows'
 import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidths, writeWidths } from '../lib/gridColumns'
 import { MAX_COPIES, eventsOn, formatLine, monthGrid, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
@@ -135,11 +137,11 @@ function ruleTests() {
   const t = (c: Credentials, removed = false) => ({ credentials: c, removed })
   eq(credentialChangeIssue({ row: office }, t(plain0), { officer: true }, 1), null, 'the office makes an Officer')
   ok(/Only an owner or Green Dot/.test(credentialChangeIssue({ row: office }, t(plain0), { clubhouse: true }, 1) ?? ''), '…but cannot give Clubhouse')
-  ok(/Only someone with Clubhouse/.test(credentialChangeIssue({ row: officer }, t(plain0), { playsHere: false }, 1) ?? ''), 'an Officer gives no ticks')
+  ok(/Only someone with Clubhouse/.test(credentialChangeIssue({ row: officer }, t(plain0), { officer: true }, 1) ?? ''), 'an Officer gives no ticks')
   eq(credentialChangeIssue({ row: owner }, t(owner), { owner: false }, 1), LAST_OWNER, 'the last owner keeps Owner')
   eq(credentialChangeIssue({ row: owner }, t(owner), { owner: false }, 2), null, '…one of two may give it up')
   ok(/Take Owner off first/.test(credentialChangeIssue({ row: owner }, t(owner), { clubhouse: false }, 2) ?? ''), 'an owner’s Clubhouse is held')
-  eq(credentialChangeIssue({ row: owner }, t(owner), { playsHere: false }, 1), null, '…but whether they play is free')
+  eq(credentialChangeIssue({ row: owner }, t(owner), { playsHere: false }, 1), PLAYS_FOLLOWS_MEMBERSHIP, 'Plays here is no tick: it follows the membership (D275)')
   eq(removeIssue({ row: office }, t(plain0), 1), null, 'the office takes a member off')
   ok(removeIssue({ row: office }, t(both), 1) !== null && removeIssue({ row: office }, t(owner), 2) !== null, '…never somebody with Clubhouse, or an owner')
   eq(removeIssue({ row: owner }, t(owner), 1), LAST_OWNER, 'the last owner cannot be taken off')
@@ -350,8 +352,6 @@ class Stand implements ClubStore {
           case 'joined': return live && !!r.userId
           case 'invited': return live && !r.userId && inv
           case 'not_invited': return live && !r.userId && !inv
-          case 'plays': return live && c.playsHere
-          case 'not_playing': return live && !c.playsHere
           case 'officer': return live && c.officer
           case 'clubhouse': return live && c.clubhouse
           default: return live
@@ -411,7 +411,7 @@ class Stand implements ClubStore {
     const joined = live.filter(r => r.userId).length
     return {
       onList: live.length, joined, invited: live.filter(r => !r.userId && this.invitedAt.has(r.id)).length, notJoined: live.length - joined,
-      off: rows.length - live.length, playsHere: live.filter(r => credentialsOf(r).playsHere).length,
+      off: rows.length - live.length,
       officer: live.filter(r => credentialsOf(r).officer).length, clubhouse: live.filter(r => credentialsOf(r).clubhouse).length,
       noEmail: live.filter(r => !r.userId && !r.email).length,
     }
@@ -539,8 +539,8 @@ async function routeTests() {
   eq((await ask('tok-ross', 'remove', { clubId, memberId: rossRow.id })).status, 409, 'the only owner cannot be taken off')
   eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, owner: false })).status, 409, '…or give up Owner')
   eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, clubhouse: false })).status, 409, '…or Clubhouse while an owner')
-  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, playsHere: false })).status, 200, 'an owner who does not play says so')
-  eq(credentialsOf(s.list.get(rossRow.id)!).playsHere, false, '…and is out of the fields')
+  eq((await ask('tok-ross', 'update', { clubId, memberId: rossRow.id, playsHere: false })).status, 409, 'Plays here is not ticked by hand: it follows the membership (D275)')
+  eq(credentialsOf(s.list.get(rossRow.id)!).playsHere, true, '…and nothing changed')
   eq((await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, officer: 'yes' })).status, 400, 'a tick is on or off')
   await ask('tok-ross', 'update', { clubId, memberId: daveRow.id, clubhouse: true })
   eq([s.list.get(daveRow.id)!.clubhouse, s.list.get(daveRow.id)!.role], [true, 'member' as ClubRole], 'an owner gives Clubhouse — the role stays member until Officer joins it')
@@ -906,7 +906,7 @@ function wiringTests() {
   }
   const es = read('app/api/entry/store.ts')
   ok((es.match(/q\.eq\('officer', true\) : q\.in\('role', LEGACY_RUNNING_ROLES\)/g) ?? []).length === 2, 'a club event’s organisers, and the clubs an account runs, are its Officers (092; the old roles before it)')
-  ok(/withTicks\(t => \{[\s\S]{0,200}q\.eq\('plays_here', true\)/.test(read('app/api/club/bookingStore.ts')), 'the partner search offers only those who play here')
+  ok(/\.map\(asRow\)\.filter\(r => r\.playsHere !== false\)/.test(read('app/api/club/bookingStore.ts')), 'the partner search offers only those who play here — by their membership (D275)')
   const rowsTs = read('app/api/club/rows.ts')
   ok(/e\.code === '42703' \|\| e\.code === 'PGRST204'/.test(rowsTs) && /ticksMissingAt = Date\.now\(\)/.test(rowsTs), 'before 092 the ticks are read off the role, and asked for again a minute later')
   ok(/seasonHere = season\.rows\.filter\(r => !r\.club_id \|\| r\.club_id === clubId\)/.test(read('app/api/club/club.ts')), 'season stats are per club: this club’s rounds and the account’s own (D223)')
@@ -1292,7 +1292,7 @@ async function competitionD2Tests() {
   const ann = await book('tok-ross', { slot: 1, memberIds: ['r-ann'] })
   ok(ann.status === 409 && !ann.body.ok && /needs a Green Dot account/.test(ann.body.error), 'Ann has no account: every player needs their own (D94, amended)')
   const office = await book('tok-ross', { slot: 1, memberIds: ['r-off'] })
-  ok(office.status === 409 && !office.body.ok && /isn’t ticked as playing/.test(office.body.error), 'somebody who does not play here is in no field (D209)')
+  ok(office.status === 409 && !office.body.ok && /membership doesn’t play at the club/.test(office.body.error), 'somebody who does not play here is in no field (D209)')
   eq((await book('tok-dave', { slot: 1, memberIds: ['r-dave'] })).status, 409, 'Dave has a time already: refused')
   eq((await book('tok-ross', { slot: 0, memberIds: ['r-adm'] }, new Date(t8 + 60_000))).status, 409, 'after the time has gone: refused')
   const names = await runBooking({ token: 'tok-ross', action: 'names', code: 'COMP01', q: 'an' }, bstore, open)
@@ -1760,6 +1760,41 @@ async function competitionBarTests() {
 }
 
 /** D198: preload, then be snappy — inside a competition the tabs answer at the tap. */
+function playsFollowsMembershipTests() {
+  console.log('\nPlays here follows the membership (D275)')
+  eq([playsByMembership(null), playsByMembership(undefined), playsByMembership([2]), playsByMembership([0, 1, 2, 3, 4, 5, 6]), playsByMembership([])],
+    [true, true, true, true, false], 'no membership plays (until Ross decides); a membership plays when it plays some day')
+  const base: RowRow = { id: 'r', club_id: 'c', name: 'Ann', member_number: null, gui_number: null, email: null, role: 'member', user_id: null, removed_at: null, on_boards: true, officer: false, clubhouse: false }
+  const plays = (o: Partial<RowRow>) => clubMay('play', { row: credentialsOf(asRow({ ...base, ...o })) })
+  ok(plays({}), 'before 094 (no membership read): everybody plays')
+  ok(plays({ category_id: null, gender: null, birth_date: null, category: null }), 'no membership: plays (M3)')
+  ok(plays({ category_id: 'six', category: { days: [1, 2, 3, 4, 5, 6] } }), 'a 6 Day membership plays')
+  ok(plays({ category_id: 'six', category: [{ days: [1] }] }), '…read as an embedded list too')
+  ok(!plays({ category_id: 'social', category: { days: [] } }), 'a membership that plays no day: does not play')
+  ok(plays({ category_id: 'gone', category: null }), 'a membership no longer there: plays')
+  // M2: wherever the old tick and the membership agreed, the answer is the same.
+  const seeded: { tick: boolean; row: Partial<RowRow> }[] = [
+    { tick: true, row: { category_id: null, category: null } },
+    { tick: true, row: { category_id: 'full', category: { days: [0, 1, 2, 3, 4, 5, 6] } } },
+    { tick: true, row: { category_id: 'six', category: { days: [1, 2, 3, 4, 5, 6] } } },
+    { tick: false, row: { category_id: 'social', category: { days: [] } } },
+  ]
+  eq(seeded.map(x => plays({ ...x.row, plays_here: !x.tick } as Partial<RowRow>)), seeded.map(x => x.tick),
+    'a seeded club: every row whose tick agreed with its membership answers as before — the stored tick is no longer read')
+  // Where they disagreed, the membership wins — the two cases the plan lists for Pints.
+  ok(plays({ category_id: 'full', category: { days: [0, 1, 2, 3, 4, 5, 6] }, plays_here: false } as Partial<RowRow>), 'tick off, membership plays: now plays')
+  ok(!plays({ category_id: 'social', category: { days: [] }, plays_here: true } as Partial<RowRow>), 'tick on, membership plays no day: no longer plays')
+  const rowsTs = read('app/api/club/rows.ts')
+  ok(!/plays_here/.test(rowsTs.match(/const TICK_COLS = '[^']*'/)?.[0] ?? 'plays_here') && /club_categories\(days\)/.test(rowsTs), 'the list is read with the membership’s days, never plays_here')
+  ok(/PGRST200/.test(rowsTs) && /club_categories/.test(rowsTs.match(/missingSet[\s\S]{0,200}/)?.[0] ?? ''), '…and fail-soft before 094')
+  for (const f of ['app/api/club/club.ts', 'app/api/club/clubhouse.ts', 'app/api/club/bookingStore.ts', 'app/api/club/store.ts'])
+    ok(!/plays_here: |'plays_here'/.test(read(f).replace(/\/\/.*$/gm, '').replace(/RowPatch = Partial<\{[\s\S]*?\}>/, '').replace(/\['plays_here',[^\]]*\]/, '')), `${f}: plays_here neither read nor written`)
+  const clubhouseFiles: string[] = []
+  const walk = (d: string) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const f = path.join(d, e.name); if (e.isDirectory()) walk(f); else if (/\.tsx?$/.test(e.name)) clubhouseFiles.push(f) } }
+  walk(path.join(__dirname, '../app/clubhouse'))
+  eq(clubhouseFiles.filter(f => /Plays here|plays here/.test(fs.readFileSync(f, 'utf8'))).map(f => path.relative(path.join(__dirname, '..'), f)), [], 'no Plays here in the Clubhouse (M1)')
+}
+
 function teeEmbedTests() {
   console.log('\nA competition read into Edit (D274)')
   // Migration 065 gave tee_assignments a second key to players (booked_by), so an
@@ -1870,17 +1905,17 @@ async function clubhouseTests() {
   eq(cleanSearch('  O’Neill, (Seán)%_ '), 'O’Neill Seán', 'a search loses what the database reads as its own')
   eq([pageLine(0, 0), pageLine(0, 12), pageLine(1, 312)], ['Nobody', '12 people', '51–100 of 312'], 'where the page stands')
   eq(PAGE_SIZE, 50, '50 rows a page (D207)')
-  eq(LIST_FILTERS.map(f => f.key).length, 9, 'nine ways to narrow the list')
+  eq(LIST_FILTERS.map(f => f.key).length, 7, 'seven ways to narrow the list — Plays here follows the membership now (D275)')
   eq([clubhouseHref('pints'), clubhouseHref('pints', 'members'), sectionAt('/clubhouse/pints/members', 'pints'), sectionAt('/clubhouse/pints', 'pints')],
     ['/clubhouse/pints', '/clubhouse/pints/members', 'members', 'overview'], 'the sections’ addresses')
   const csv = listCsv([{ id: '1', name: '=HYPERLINK("x")', email: 'a@b.ie', memberNumber: '12', guiNumber: '3110002', handicapIndex: -1.5,
     credentials: { owner: false, playsHere: true, officer: true, clubhouse: false }, linked: true, removed: false, invitedAt: null, onBoards: true, gender: 'M', birthDate: '1980-04-03', categoryId: null }])
-  ok(csv.startsWith('Name,Email,Member number,GUI number,Gender,Date of birth,Category,Handicap index,Standing,Plays here,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
+  ok(csv.startsWith('Name,Email,Member number,GUI number,Gender,Date of birth,Category,Handicap index,Standing,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
     'the download: headed for pasting back, numbers whole, a plus index as +, a formula defused')
   const pasted = parseMemberList(csv)
   ok(pasted.rows.length === 1 && pasted.rows[0].guiNumber === '3110002' && pasted.rows[0].email === 'a@b.ie', '…and pasting it back reads it')
   ok(pasted.rows[0].gender === 'Male' && pasted.rows[0].birthDate === '03/04/1980', '…its gender and date of birth with it')
-  const counts: ListCounts = { onList: 10, joined: 4, invited: 2, notJoined: 6, off: 1, playsHere: 9, officer: 2, clubhouse: 1, noEmail: 1 }
+  const counts: ListCounts = { onList: 10, joined: 4, invited: 2, notJoined: 6, off: 1, officer: 2, clubhouse: 1, noEmail: 1 }
   const needs = needsYou({ base: '/clubhouse/p', counts, phases: [{ code: 'AB12CD', name: 'Medal', phase: 'awaiting' }], clubSlug: 'p', officer: true })
   eq(needs.map(n => n.key), ['certify-AB12CD', 'not-invited', 'no-email'], 'Needs you: a competition to certify, people never sent a code, people with no email')
   ok(/3 people have an email and no code yet/.test(needs[1].line), '…counted: six not joined, two invited, one with no email')
@@ -2896,6 +2931,7 @@ async function main() {
   await competitionD3Tests()
   await competitionD4Tests()
   await competitionBarTests()
+  playsFollowsMembershipTests()
   teeEmbedTests()
   gridColumnTests()
   snappyTests()

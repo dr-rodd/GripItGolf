@@ -452,7 +452,7 @@ function SettingsPanel({ clubId, onClose, onSaved }: { clubId: string; onClose: 
             <div>
               <p className={FIELD_LABEL}>Memberships that book tee times</p>
               {cats.length === 0 ? (
-                <p className="t-cap text-ink/80">The club has no memberships set up, so everybody who plays here books, any day.</p>
+                <p className="t-cap text-ink/80">The club has no memberships set up, so everybody on the list books, any day.</p>
               ) : (
                 <ul>
                   {cats.map(c => {
