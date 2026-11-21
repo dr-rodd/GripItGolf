@@ -438,6 +438,49 @@ export interface ClubEvent {
    * competitions only (D184). Absent on every other event.
    */
   competition?: { phase: import('./compPhase').CompPhase; membersOnly: boolean; /** A club match play (Ross, 17 Nov 2026). */ matchPlay?: true }
+  /** A season-long event — a league over weeks, a knockout over weeks, a run challenge, or longer than SEASON_DAYS (D281): never Live now. */
+  seasonLong?: true
+  /** A non-competition event's first tee time on its first day, as an instant — live from then (D281). */
+  liveFrom?: number | null
+}
+
+/** An event spanning more days than this is season-long, whatever its shape says (D281). */
+export const SEASON_DAYS = 14
+
+/**
+ * Whether an event runs over a season (MO2, D281 — Ross, 21 Nov 2026), read
+ * from its own shape first: a series or continuous league, a knockout over
+ * weeks, a run challenge; and, for an event whose shape says nothing, more
+ * than SEASON_DAYS from its first day to its last.
+ */
+export function seasonLongOf(t: { kind: string | null; startDate: string | null; endDate: string | null; setup?: unknown }): boolean {
+  if (t.kind === 'run') return true
+  const schedule = t.setup && typeof t.setup === 'object' ? (t.setup as { schedule?: unknown }).schedule : null
+  if (schedule === 'continuous' || schedule === 'series') return true
+  if (t.startDate && t.endDate) {
+    const days = (Date.parse(`${t.endDate}T00:00:00Z`) - Date.parse(`${t.startDate}T00:00:00Z`)) / 86_400_000 + 1
+    if (days > SEASON_DAYS) return true
+  }
+  return false
+}
+
+/**
+ * **Live now** (MO2, D281), the only copy: something actually happening.
+ * Never a season-long event or a club match play (D266). A club competition
+ * while it is In play — first tee to every card in. Any other event from its
+ * first tee time on its first day to the end of its last, the evenings
+ * between days included.
+ */
+export function clubEventLive(e: Pick<ClubEvent, 'startDate' | 'endDate' | 'competition' | 'seasonLong' | 'liveFrom'>, now: Date): boolean {
+  if (e.seasonLong || e.competition?.matchPlay) return false
+  if (e.competition) return e.competition.phase === 'in_play'
+  const start = e.startDate ?? e.endDate
+  const end = e.endDate ?? e.startDate
+  if (!start || !end) return false
+  const today = irishToday(now)
+  if (today < start || today > end) return false
+  if (today === start && typeof e.liveFrom === 'number' && now.getTime() < e.liveFrom) return false
+  return true
 }
 
 export type ClubEventWhen = 'now' | 'upcoming' | 'past'

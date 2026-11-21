@@ -9,7 +9,8 @@ import { Resend } from 'resend'
 import { handicapStore } from '../handicaps/store'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
-import { parseClubAccess, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
+import { irishInstant } from '@/lib/irishTime'
+import { parseClubAccess, seasonLongOf, type ClubEvent, type ClubRole, type ListRow } from '@/lib/clubs'
 import { compPhase, type CompPhase } from '@/lib/compPhase'
 import { teeInstant } from '@/lib/clubComp'
 import { opensAt, parseTeeRules, sheetCapacity, teeClocks } from '@/lib/teeSheet'
@@ -69,7 +70,7 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
   const access = new Map((priv as { trip_id: string; club_access: string | null }[]).map(p => [p.trip_id, parseClubAccess(p.club_access)]))
   const ids = [...access.keys()]
   const [{ data: trips, error: e }, comps] = await Promise.all([
-    db.from('trips').select('id, trip_code, name, kind, start_date, end_date').in('id', ids),
+    db.from('trips').select('id, trip_code, name, kind, start_date, end_date, bracket_setup').in('id', ids),
     // Stage (d2): which are competitions, and members only (089 — fail-soft).
     db.from('trips').select('id, competition, public_passcode_hash, bracket_setup').in('id', ids).eq('competition', 'club'),
   ])
@@ -77,12 +78,14 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
   const compRows = (comps.error ? [] : comps.data ?? []) as { id: string; public_passcode_hash: string | null; bracket_setup?: unknown }[]
   const phases = compRows.length ? await competitionPhases(db, compRows.map(c => c.id)) : new Map<string, CompPhase>()
   const compOf = new Map(compRows.map(c => [c.id, { phase: phases.get(c.id) ?? 'announced', membersOnly: !!c.public_passcode_hash, ...(readClubMatchPlay(c.bracket_setup) ? { matchPlay: true as const } : {}) }]))
-  return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
+  return ((trips ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; bracket_setup?: unknown }[])
     .map(t => ({
       code: t.trip_code, name: t.name,
       kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
       startDate: t.start_date, endDate: t.end_date, access: access.get(t.id) ?? null,
       ...(compOf.has(t.id) ? { competition: compOf.get(t.id)! } : {}),
+      // MO2 (D281): never Live now.
+      ...(seasonLongOf({ kind: t.kind, startDate: t.start_date, endDate: t.end_date, setup: t.bracket_setup }) ? { seasonLong: true as const } : {}),
     }))
 }
 
@@ -366,12 +369,29 @@ export function clubStore(db: Db): ClubStore {
         const t = Array.isArray(x.trips) ? x.trips[0] : x.trips
         return t ? [{ t, access: parseClubAccess(x.club_access) }] : []
       })
-      const events: ClubEvent[] = trips.map(({ t, access }) => ({
-        code: t.trip_code, name: t.name,
-        kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
-        startDate: t.start_date, endDate: t.end_date, access,
-        ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash, ...(readClubMatchPlay(t.bracket_setup) ? { matchPlay: true as const } : {}) } } : {}),
-      }))
+      // MO2 (D281): which run over a season, and when a one opening today goes live.
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(new Date())
+      const firstDay = trips.filter(x => x.t.competition !== 'club' && x.t.start_date === today).map(x => x.t.id)
+      const tees = firstDay.length
+        ? await db.from('itinerary_items').select('trip_id, day_index, tee_time').in('trip_id', firstDay).eq('kind', 'golf').eq('day_index', 0).not('tee_time', 'is', null)
+        : { data: [], error: null }
+      const firstTee = new Map<string, string>()
+      for (const i of (tees.error ? [] : tees.data ?? []) as { trip_id: string; tee_time: string }[]) {
+        const t = i.tee_time.slice(0, 5)
+        if (!firstTee.has(i.trip_id) || t < firstTee.get(i.trip_id)!) firstTee.set(i.trip_id, t)
+      }
+      const events: ClubEvent[] = trips.map(({ t, access }) => {
+        const tee = firstTee.get(t.id)
+        const liveFrom = tee && t.start_date ? irishInstant(t.start_date, tee)?.getTime() ?? null : null
+        return {
+          code: t.trip_code, name: t.name,
+          kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
+          startDate: t.start_date, endDate: t.end_date, access,
+          ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash, ...(readClubMatchPlay(t.bracket_setup) ? { matchPlay: true as const } : {}) } } : {}),
+          ...(seasonLongOf({ kind: t.kind, startDate: t.start_date, endDate: t.end_date, setup: t.bracket_setup }) ? { seasonLong: true as const } : {}),
+          ...(liveFrom !== null ? { liveFrom } : {}),
+        }
+      })
       const comps = trips.filter(x => x.t.competition === 'club').map(x => ({ tripId: x.t.id, code: x.t.trip_code }))
       return { club, row: row ? asRow(row) : null, events, comps }
     },

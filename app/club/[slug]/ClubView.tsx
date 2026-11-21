@@ -13,7 +13,7 @@ import { IconCheck, IconChevronDown, IconChevronRight, IconUser } from '@/app/co
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
-  clubEventDates, clubEventHref, groupClubEvents, irishToday,
+  clubEventDates, clubEventHref, clubEventLive, groupClubEvents, irishToday,
   type ClubEvent,
 } from '@/lib/clubs'
 import { clubMay, credentialLine, type Credentials } from '@/lib/clubMay'
@@ -448,8 +448,9 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   // Stage c1, M6: the club's own events sit on the calendar with its golf.
   const calendar = calendarItems(g.upcoming, m.notes ?? [], irishToday(now)).slice(0, 5)
   const [opened, setOpened] = useState<ClubNote | null>(null)
-  // A match play runs for weeks: it is your next match on Home, never Live now (D266).
-  const live = g.now.filter(e => !e.competition?.matchPlay)
+  // Live now is something happening (D281): never a season-long event or a
+  // match play (D266) — a competition in play, any other event from its first tee.
+  const live = g.now.filter(e => clubEventLive(e, now))
   const { choose } = useClubBar()
   const others = useGroups(m.outside)
   const otherUp = [...others.now, ...others.upcoming]
@@ -611,7 +612,7 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
   const list = view === 'upcoming' && type !== 'all' ? lists.upcoming.filter(e => eventType(e) === type) : lists[view]
   const shownNotes = view === 'upcoming' ? notes.filter(n => type === 'all' || n.type === type) : []
   const [featured, ...rest] = list
-  const liveHere = g.now.find(e => !e.competition?.matchPlay)
+  const liveHere = g.now.find(e => clubEventLive(e, new Date()))
   // The featured card is a golf event; the rest run in date order with the club's own events among them.
   const restItems = view === 'upcoming' ? calendarItems(rest, shownNotes, today) : rest.map(e => ({ key: e.code, day: e.startDate ?? '', e }) as CalItem)
   return (

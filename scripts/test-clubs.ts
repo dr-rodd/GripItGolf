@@ -25,7 +25,7 @@ import type { SeasonRow } from '../lib/cardSummary'
 import type { AuthUser } from '../lib/account'
 import type { AttemptWindow, Membership } from '../lib/membership'
 import type { ListQuery } from '../app/api/club/clubhouse'
-import { clubEventDates } from '../lib/clubs'
+import { clubEventDates, clubEventLive, seasonLongOf } from '../lib/clubs'
 import { asRow, type RowRow } from '../app/api/club/rows'
 import { clubCourses, matchPlace, placeFields, placeLine, placeOf, roomNameIssue, seasonPlaceLine, type ClubPlaces } from '../lib/clubLocations'
 import { ELSEWHERE, dayLayout, lanesOf } from '../lib/clubDay'
@@ -913,6 +913,28 @@ function wiringTests() {
   const rowsTs = read('app/api/club/rows.ts')
   ok(/e\.code === '42703' \|\| e\.code === 'PGRST204'/.test(rowsTs) && /ticksMissingAt = Date\.now\(\)/.test(rowsTs), 'before 092 the ticks are read off the role, and asked for again a minute later')
   ok(/seasonHere = season\.rows\.filter\(r => !r\.club_id \|\| r\.club_id === clubId\)/.test(read('app/api/club/club.ts')), 'season stats are per club: this club’s rounds and the account’s own (D223)')
+
+  section('MO2: what counts as Live now (D281)')
+  {
+    // 21 Nov 2026 is winter: Irish time is UTC.
+    const at = (t: string) => new Date(`2026-11-21T${t}:00Z`)
+    const comp = (phase: import('../lib/compPhase').CompPhase) => ({ startDate: '2026-11-21', endDate: '2026-11-21', competition: { phase, membersOnly: true } })
+    ok(!clubEventLive(comp('booking'), at('07:30')) && clubEventLive(comp('in_play'), at('10:00')) && !clubEventLive(comp('awaiting'), at('15:00')),
+      'a one-day competition is live only while in play — not before its first tee, not once every card is in')
+    const twoDay = { startDate: '2026-11-20', endDate: '2026-11-21' }
+    ok(clubEventLive({ ...twoDay, endDate: '2026-11-22' }, at('21:00')), 'a two-day event the evening between its days, day 1 done: still live')
+    const opens = { startDate: '2026-11-21', endDate: '2026-11-22', liveFrom: at('09:00').getTime() }
+    ok(!clubEventLive(opens, at('08:00')) && clubEventLive(opens, at('09:00')), '…live from its first tee time on day 1')
+    ok(!clubEventLive({ startDate: '2026-11-01', endDate: '2026-11-20' }, at('12:00')), '…and gone once its last day is over')
+    ok(seasonLongOf({ kind: 'tournament', startDate: '2026-11-01', endDate: '2026-11-07', setup: { format: 'league', schedule: 'series' } }), 'a league over weeks is season-long by its shape, however short')
+    ok(seasonLongOf({ kind: 'tournament', startDate: '2026-11-01', endDate: '2026-12-01', setup: { format: 'match_play', schedule: 'continuous' } }) && seasonLongOf({ kind: 'run', startDate: null, endDate: null }),
+      '…a knockout over weeks and a run challenge too')
+    ok(seasonLongOf({ kind: 'trip', startDate: '2026-11-01', endDate: '2026-11-20', setup: null }) && !seasonLongOf({ kind: 'tournament', startDate: '2026-11-20', endDate: '2026-11-23', setup: { format: 'league', schedule: 'standalone' } }),
+      '…anything over 14 days is; a four-day open is not')
+    ok(!clubEventLive({ ...twoDay, seasonLong: true }, at('12:00')) && !clubEventLive({ ...comp('in_play'), competition: { phase: 'in_play', membersOnly: true, matchPlay: true } }, at('12:00')),
+      'a season-long event and a match play are never live')
+    ok(/clubEventLive\(e, now\)/.test(read('app/club/[slug]/ClubView.tsx')), 'Home’s Live now reads the rule')
+  }
 
   section('Stage (k0): many clubs, the header moves between them (D218, D223)')
   eq(clubSwitch([{ slug: 'pints', name: 'Pints', toSign: 0 }], 'pints'), null, 'one club: nothing changes')
