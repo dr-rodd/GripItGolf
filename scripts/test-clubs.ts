@@ -981,7 +981,7 @@ function wiringTests() {
   eq(compFormFrom({ ...stored, teeSheet: { batches: [] } }), null, '…and a sheet that does not read is never guessed at')
   eq(formatLine({ scoring: 'stableford', allowance: 95 }), 'Stableford · 95%', 'the format as the table says it')
   const compsSrc = read('app/clubhouse/[slug]/events/Events.tsx')
-  ok(/may\('keep_calendar'\)/.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/events/Events.tsx')), 'Copy is the Clubhouse’s (Ross, 17 Nov 2026: Clubhouse is its own level)')
+  ok(/may\('keep_calendar'\)/.test(compsSrc) && /<CopyPanel /.test(compsSrc) && /copyCompetition\(/.test(read('app/clubhouse/[slug]/events/CopyPanel.tsx')), 'Copy is the Clubhouse’s (Ross, 17 Nov 2026: Clubhouse is its own level)')
   ok(/makeOne\(store, input\.token, mine\.club\.id, form, now, who\.club\)/.test(read('app/api/club/competition.ts')), 'a copy is made exactly as New competition makes one')
 
 
@@ -2428,6 +2428,20 @@ async function copyTests() {
     'an Officer without Clubhouse changes nothing here')
   const read1 = await runReadCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1' }, editStore())
   ok(read1.status === 200 && read1.body.ok && read1.body.booked === 2 && read1.body.form.batches[0].times === 6, 'a competition read back into the panel, with how many are booked')
+  // D274: Edit changes who can watch too — it used to be forced back to what was set when made.
+  applied = null
+  const guests = await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: { ...form0, watch: 'guests' } }, editStore(), NOW)
+  ok(guests.status === 200 && (applied as CompChange | null)?.membersOnly === false, 'Edit: a members-only competition opened to guests')
+  applied = null
+  await runChangeCompetition({ token: 'tok-ross', clubId: 'c1', code: 'MEDAL1', form: form0 }, editStore({ membersOnly: false }), NOW)
+  ok((applied as CompChange | null)?.membersOnly === true, 'Edit: a guests-can-watch competition made members only')
+  const events = fs.readFileSync(path.join(__dirname, '../app/clubhouse/[slug]/events/Events.tsx'), 'utf8')
+  ok(!/>Change</.test(events) && !/>Copy</.test(events) && (events.match(/>Edit</g) ?? []).length === 2, 'Events: one Edit a row, wide and narrow — no Change, no Copy')
+  const panel = fs.readFileSync(path.join(__dirname, '../app/clubhouse/[slug]/events/CompPanel.tsx'), 'utf8')
+  const footer = panel.slice(panel.indexOf('</fieldset>'))
+  ok(/onClick=\{onCopy\}[^>]*secondary[^>]*>Copy</.test(footer), 'Edit: Copy is the footer’s secondary button, outside the locked fieldset')
+  ok(panel.includes('A card has started, so the competition can’t be changed.') && panel.includes('The results are certified, so nothing can change.'), 'Edit: a locked competition still says why')
+  ok(!/\{!code && \(\s*<div>\s*<p className=\{FIELD_LABEL\}>Who can watch/.test(panel), 'Edit: who can watch is shown when editing')
 }
 
 function membershipRuleTests() {

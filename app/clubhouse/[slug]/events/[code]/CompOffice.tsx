@@ -16,6 +16,7 @@ import { askCompOffice, readClubMatchPlay, type MatchPlayOfficeBody } from '../.
 import { useShell } from '../../ShellContext'
 import { useCategories } from '../../useCategories'
 import CompPanel from '../CompPanel'
+import CopyPanel from '../CopyPanel'
 import SheetRow from '../../SheetRow'
 
 type Sheet = { ok: true } & OfficeBody
@@ -41,6 +42,7 @@ export default function CompOffice({ code }: { code: string }) {
   const [picked, setPicked] = useState<Set<string>>(new Set())
   const [booking, setBooking] = useState<OfficeSlot | null>(null)
   const [changing, setChanging] = useState(false)
+  const [copying, setCopying] = useState(false)
   const [moveTo, setMoveTo] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -108,7 +110,7 @@ export default function CompOffice({ code }: { code: string }) {
               <p className="text-ink/80 text-[15px] mt-1">{[longDay(sheet.comp.date), sheet.comp.courseName ? courseLabel(sheet.comp.courseName) : null].filter(Boolean).join(' · ')}</p>
               {sheet.entry && <p className="t-cap text-ink/65 mt-1">Open to: {sheet.entry}</p>}
             </div>
-            <button type="button" onClick={() => setChanging(true)} className={`${buttonClass('secondary', false)} ch-focus`}>Change</button>
+            <button type="button" onClick={() => setChanging(true)} className={`${buttonClass('secondary', false)} ch-focus`}>Edit</button>
           </div>
           {locked && <p className="text-ink/80 text-[15px] mt-3">The results are certified, so the tee sheet can’t change. An Officer reopens them first.</p>}
           {!locked && sheet.opening && <p className="t-cap text-ink/65 mt-3">Booking opens for members {sheet.opening}. The office books any time before.</p>}
@@ -189,8 +191,10 @@ export default function CompOffice({ code }: { code: string }) {
       {booking && <BookPanel code={code} slot={booking} onClose={() => setBooking(null)} onBooked={() => { setBooking(null); again() }} />}
       {changing && (
         <CompPanel clubId={club.id} slug={face.slug} code={code} homeCourseId={club.homeCourseId ?? null}
-          cats={categories ?? []} ageDate={ageDate} presets={presets} onClose={() => setChanging(false)} onDone={again} />
+          cats={categories ?? []} ageDate={ageDate} presets={presets} onClose={() => setChanging(false)} onDone={again}
+          onCopy={sheet ? () => { setChanging(false); setCopying(true) } : undefined} />
       )}
+      {copying && sheet && <CopyPanel clubId={club.id} slug={face.slug} event={{ code, name: sheet.comp.name }} onClose={() => setCopying(false)} onMade={() => {}} />}
     </>
   )
 }

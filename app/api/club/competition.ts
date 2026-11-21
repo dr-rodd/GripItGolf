@@ -131,6 +131,8 @@ export interface CompChange {
   firstTee: string
   leaderboards: unknown[]
   entry: CompForm['entry']
+  /** Who can watch (D274): members only, or guests too. Written only when it differs from the competition as it stands. */
+  membersOnly: boolean
 }
 
 export type CompetitionOutcome =
@@ -341,7 +343,8 @@ export type CompChangeOutcome =
 
 /**
  * A competition changed in the Clubhouse (M10, M11): its name, day, course,
- * format, allowance, who may enter, tee times and when booking opens. Every
+ * format, allowance, who may enter, who can watch (D274), tee times and when
+ * booking opens. Every
  * booking stays at its tee time and the member stays in if they may still
  * enter — an Officer's Book anyway kept — or the change is refused, each
  * member named with why (`planSheetChange`). Never once a card has started
@@ -366,8 +369,6 @@ export async function runChangeCompetition(
   if (c.started) return no(409, 'A card has started — the competition is in play.')
   const form = readCompForm(input.form)
   if (!form) return no(400, 'Fill in the competition.')
-  // A competition's watching (who may open it) is set when it is made.
-  form.watch = c.membersOnly ? 'members' : 'guests'
   const issue = compFormIssue(form, irishToday(now)) ?? await entryIssue(store, who.club.id, form)
   if (issue) return no(400, issue)
 
@@ -378,7 +379,7 @@ export async function runChangeCompetition(
     await store.logActivity([{
       clubId: c.clubId, byUser: user.id, byName: who.byName, byStaff: who.staff, action: 'competition.change',
       memberId: null, memberName: null,
-      changes: { [c.code]: [`${c.name} · ${c.date} · ${before ? sheetLine(before) : ''}`, `${form.name} · ${form.date} · ${sheetLine(form)}`] }, batchId: null,
+      changes: { [c.code]: [`${c.name} · ${c.date} · ${watchWord(c.membersOnly)} · ${before ? sheetLine(before) : ''}`, `${form.name} · ${form.date} · ${watchWord(form.watch === 'members')} · ${sheetLine(form)}`] }, batchId: null,
     }]).catch(e => console.error('club activity not logged:', e))
   }
   return { status: 200, body: { ok: true, moved: out.moved } }
@@ -423,6 +424,7 @@ export async function changeOne(store: CompetitionStore, c: CompNow, form: CompF
       moves: plan.ok ? plan.moves : [], name: form.name, date: kept ? c.date : form.date, courseId: kept ? c.courseId : form.courseId,
       teeSheet: kept ? c.rules : after, firstTee: kept ? (teeClocks(c.rules)[0] ?? compFirstTee(form)) : compFirstTee(form),
       leaderboards: boards, entry: kept ? readEntryRules(c.entry) : form.entry ?? null,
+      membersOnly: form.watch === 'members',
     })
   } catch (e) {
     console.error('competition change failed:', e)
@@ -431,6 +433,7 @@ export async function changeOne(store: CompetitionStore, c: CompNow, form: CompF
   return { ok: true, moved: plan.ok ? plan.moves.length : 0, keptSheet: plan.ok ? null : plan.problems }
 }
 
+const watchWord = (membersOnly: boolean) => (membersOnly ? 'Members only' : 'Guests can watch')
 const sheetLine = (f: Pick<CompForm, 'batches'>) => f.batches.map(b => `${b.start} ×${b.times} every ${b.interval} in ${b.perTime}s`).join(', ')
 
 // ─── A club match play (Ross, 17 Nov 2026; D264–D271) ──────────

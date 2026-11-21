@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase-admin'
+import { unheldPin } from '@/lib/pinHash'
 import { ENTRY_COOKIE_DAYS, entryCookie } from '@/lib/publicPin'
 import { createStore } from '../../trip/create/store'
 import { clubStore } from '../store'
@@ -217,7 +218,9 @@ async function applyChange(db: Db, c: CompNow, ch: import('../competition').Comp
     const item = await db.from('itinerary_items').update({ tee_time: ch.firstTee, course_id: ch.courseId }).eq('id', c.itemId)
     if (item.error) throw item.error
   }
-  const trip = await db.from('trips').update({ name: ch.name, start_date: ch.date, end_date: ch.date, leaderboards: ch.leaderboards }).eq('id', c.tripId)
+  // Who can watch (D274): the members-only door is a PIN nobody is given; guests, none. Re-written only when it changes.
+  const door = ch.membersOnly === c.membersOnly ? {} : { public_passcode_hash: ch.membersOnly ? unheldPin() : null }
+  const trip = await db.from('trips').update({ name: ch.name, start_date: ch.date, end_date: ch.date, leaderboards: ch.leaderboards, ...door }).eq('id', c.tripId)
   if (trip.error) throw trip.error
 }
 

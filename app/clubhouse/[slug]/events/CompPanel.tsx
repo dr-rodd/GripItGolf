@@ -23,9 +23,11 @@ import { changeCompetition, makeClubhouseCompetition, readCompetitionForm } from
  * format and allowance, who can enter, the tee times in up to four runs
  * (sunrise and sunset said for the day and course), when booking opens.
  * Changing one keeps every booking at its tee time or is refused, each
- * member named with why — never once a card has started.
+ * member named with why — never once a card has started. Edit (D274) is
+ * every answer the make form has, who can watch included, with Copy in the
+ * footer handing the saved competition to the copy flow — locked or not.
  */
-export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageDate, presets, onClose, onDone }: {
+export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageDate, presets, onClose, onDone, onCopy }: {
   clubId: string
   slug: string
   /** The competition being changed — none for a new one. */
@@ -37,6 +39,8 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   onClose: () => void
   /** Handed the new competition when one was made (a match play's qualifier, stage 5). */
   onDone: (made?: { code: string; name: string; date: string }) => void
+  /** Copy, from Edit: the saved competition handed to the copy flow (D274). */
+  onCopy?: () => void
 }) {
   const { courses: listed } = usePlatformCourses()
   const [added, setAdded] = useState<DirectoryCourse[]>([])
@@ -53,6 +57,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   const [error, setError] = useState('')
   const [problems, setProblems] = useState<{ name: string; why: string }[]>([])
   const [presetWhy, setPresetWhy] = useState<string | null>(null)
+  const [saved, setSaved] = useState('')
   const today = irishToday(new Date())
 
   // A competition being changed is read whole first.
@@ -62,7 +67,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
     void readCompetitionForm(clubId, code).then(r => {
       if (!live) return
       if (!r.ok) { setError(r.error); return }
-      setForm(r.form); setState({ booked: r.booked, started: r.started, certified: r.certified })
+      setForm(r.form); setSaved(JSON.stringify(r.form)); setState({ booked: r.booked, started: r.started, certified: r.certified })
     })
     return () => { live = false }
   }, [clubId, code])
@@ -91,6 +96,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   const setBatches = useSunriseStart(form, sun, !code && !preset, setForm)
   const issue = form ? compFormIssue(form, today) ?? entryRulesIssue(readEntryRules(form.entry), cats.map(c => c.id)) : null
   const locked = !!state && (state.started || state.certified)
+  const unsaved = !!code && !!form && !!saved && JSON.stringify(form) !== saved
 
   async function save() {
     if (!form || issue) { setError(issue ?? ''); return }
@@ -162,7 +168,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
               <Segmented label="Scoring" value={form.scoring} onChange={v => set('scoring', v)}
                 options={[{ value: 'stableford', label: 'Stableford' }, { value: 'strokes', label: 'Strokes' }] as const} />
             </div>
-            {!code && (
+            {(
               <div>
                 <p className={FIELD_LABEL}>Who can watch</p>
                 <Segmented label="Who can watch" value={form.watch} onChange={v => set('watch', v)}
@@ -206,14 +212,18 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
             {problems.map((p, i) => <li key={i} className="t-cap text-rust-deep">{p.name}: {p.why}</li>)}
           </ul>
         )}
-        {form && (
+        {(form || (code && onCopy)) && (
           <div className="flex flex-wrap gap-3 mt-6">
-            <button type="submit" disabled={busy || !!issue || locked} className={`${buttonClass('primary', false)} ch-focus`}>
-              {busy ? (code ? 'Saving…' : 'Making…') : code ? 'Save the changes' : 'Make the competition'}
-            </button>
-            <button type="button" onClick={onClose} className={`${buttonClass('quiet', false)} ch-focus`}>Cancel</button>
+            {form && (
+              <button type="submit" disabled={busy || !!issue || locked} className={`${buttonClass('primary', false)} ch-focus`}>
+                {busy ? (code ? 'Saving…' : 'Making…') : code ? 'Save the changes' : 'Make the competition'}
+              </button>
+            )}
+            {code && onCopy && <button type="button" onClick={onCopy} className={`${buttonClass('secondary', false)} ch-focus`}>Copy</button>}
+            <button type="button" onClick={onClose} className={`${buttonClass('quiet', false)} ch-focus`}>{code ? 'Close' : 'Cancel'}</button>
           </div>
         )}
+        {unsaved && onCopy && <p className="t-cap text-ink/65 mt-3">Copy uses the saved competition, not these changes.</p>}
         {form && issue && form.name && !error && <p className="t-cap text-ink/65 mt-3">{issue}</p>}
       </form>
     </div>

@@ -2,18 +2,17 @@
 
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
-import { IconX } from '@/app/components/icons'
 import CourseName from '@/app/components/CourseName'
 import { splitCourseName } from '@/lib/courseDirectory'
-import { FIELD, FIELD_LABEL, Pill, Segmented, buttonClass, cardClass } from '@/app/components/ui'
-import { copyCompetition } from '../../clubhouseClient'
-import { MAX_COPIES, eventHref, formatLine, isOfficeOnly, opensOutside, seasonOfYear, seasonType, seasonYears, weeklyFrom, type SeasonEvent } from '@/lib/clubhouse'
+import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from '@/app/components/ui'
+import { eventHref, formatLine, isOfficeOnly, opensOutside, seasonOfYear, seasonType, seasonYears, type SeasonEvent } from '@/lib/clubhouse'
 import { EVENT_TYPES, noteTimeLine, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
 import EventPanel from './EventPanel'
+import CopyPanel from './CopyPanel'
 import CompPanel from './CompPanel'
 import PresetPanel from './PresetPanel'
 import MatchPlayPanel from './MatchPlayPanel'
@@ -179,11 +178,9 @@ export default function Events() {
                         {c ? <Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill> : isOfficeOnly(e) ? <Pill>Office only</Pill> : null}
                       </td>
                       <td className="px-3 text-right whitespace-nowrap">
-                        {c && office && !c.matchPlay && (
-                          <>
-                            <button type="button" onClick={() => setComp(e.code)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Change</button>
-                            <button type="button" onClick={() => setCopying(e)} className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Copy</button>
-                          </>
+                        {office && ((c && !c.matchPlay) || n) && (
+                          <button type="button" onClick={() => (n ? setEditing(n) : setComp(e.code))} aria-label={`Edit ${e.name}`}
+                            className="ch-hover ch-focus t-label text-ink rounded-tile px-2 min-h-9">Edit</button>
                         )}
                       </td>
                     </tr>
@@ -213,8 +210,7 @@ export default function Events() {
                     : <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
                   {e.competition && office && !e.competition.matchPlay && (
                     <div className="flex gap-1 px-3 pb-2 -mt-1">
-                      <button type="button" onClick={() => setComp(e.code)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Change</button>
-                      <button type="button" onClick={() => setCopying(e)} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Copy</button>
+                      <button type="button" onClick={() => setComp(e.code)} aria-label={`Edit ${e.name}`} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Edit</button>
                     </div>
                   )}
                 </li>
@@ -259,7 +255,8 @@ export default function Events() {
       )}
 
       {comp && <CompPanel clubId={club.id} slug={face.slug} code={comp === 'new' ? null : comp} homeCourseId={club.homeCourseId ?? null}
-        cats={categories ?? []} ageDate={ageDate} presets={presets ?? []} onClose={() => setComp(null)} onDone={again} />}
+        cats={categories ?? []} ageDate={ageDate} presets={presets ?? []} onClose={() => setComp(null)} onDone={again}
+        onCopy={comp === 'new' ? undefined : () => { const ev = (events ?? []).find(x => x.code === comp); setComp(null); if (ev) setCopying(ev) }} />}
       {matchPlay && <MatchPlayPanel clubId={club.id} slug={face.slug} homeCourseId={club.homeCourseId ?? null} presets={presets ?? []} cats={categories ?? []} ageDate={ageDate}
         qualifiers={(events ?? []).filter(e => e.competition && !e.competition.matchPlay && e.startDate && e.startDate >= `${thisYear}-01-01`)
           .map(e => ({ code: e.code, name: e.name, date: clubEventDates(e.startDate, e.startDate) }))}
@@ -269,94 +266,5 @@ export default function Events() {
       {copying && <CopyPanel clubId={club.id} slug={face.slug} event={copying} onClose={() => setCopying(null)} onMade={again} />}
       {editing && <EventPanel clubId={club.id} note={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={again} />}
     </>
-  )
-}
-
-/** Copy to another date, or Repeat weekly (D214) — the dates shown before anything is made. */
-function CopyPanel({ clubId, slug, event, onClose, onMade }: {
-  clubId: string; slug: string; event: SeasonEvent; onClose: () => void; onMade: () => void
-}) {
-  const [mode, setMode] = useState<'once' | 'weekly'>('once')
-  const [date, setDate] = useState('')
-  const [count, setCount] = useState(4)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState<{ made: { code: string; date: string }[]; refused: { date: string; why: string }[] } | null>(null)
-  const dates = useMemo(() => (date ? (mode === 'once' ? [date] : weeklyFrom(date, count)) : []), [date, mode, count])
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
-
-  async function make() {
-    setBusy(true); setError('')
-    const r = await copyCompetition(clubId, event.code, dates)
-    setBusy(false)
-    if (!r.ok) { setError(r.error); return }
-    setResult(r)
-    if (r.made.length) onMade()
-  }
-
-  return (
-    <div className="fixed inset-0 z-40 flex justify-end" role="dialog" aria-modal="true" aria-labelledby="copy-title">
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-ink/30" />
-      <div className="ch-panel relative w-full md:w-[400px] h-full overflow-y-auto paper border-l border-line shadow-floating p-6">
-        <div className="flex items-start gap-3">
-          <div className="flex-1 min-w-0">
-            <h2 id="copy-title" className="t-h2 text-ink break-words">Copy {event.name}</h2>
-            <p className="t-cap text-ink/65 mt-1">The same course, format, tee times and booking, on another day.</p>
-          </div>
-          <button type="button" onClick={onClose} aria-label="Close" className="ch-hover ch-focus w-11 h-11 rounded-full flex items-center justify-center text-ink flex-shrink-0">
-            <IconX size={22} />
-          </button>
-        </div>
-
-        {result ? (
-          <div className="mt-6 space-y-3">
-            {result.made.length > 0 && (
-              <>
-                <p className="t-label text-ink">{result.made.length} made</p>
-                <ul className="space-y-1">
-                  {result.made.map(m => (
-                    <li key={m.code}><Link href={`/clubhouse/${slug}/events/${m.code}`} className="text-ink text-[15px] underline underline-offset-2">{clubEventDates(m.date, m.date)}</Link></li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {result.refused.length > 0 && (
-              <ul className="space-y-1">
-                {result.refused.map(r => <li key={r.date} className="t-cap text-rust-deep">{clubEventDates(r.date, r.date)}: {r.why}</li>)}
-              </ul>
-            )}
-            <button type="button" onClick={onClose} className={`${buttonClass('secondary', false)} ch-focus`}>Done</button>
-          </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            <Segmented label="How often" value={mode} onChange={setMode}
-              options={[{ value: 'once', label: 'Another date' }, { value: 'weekly', label: 'Repeat weekly' }] as const} />
-            <div>
-              <label htmlFor="copy-date" className={FIELD_LABEL}>{mode === 'once' ? 'The day' : 'The first day'}</label>
-              <input id="copy-date" type="date" value={date} min={irishToday(new Date())} onChange={e => setDate(e.target.value)} className={`${FIELD} ch-focus`} />
-            </div>
-            {mode === 'weekly' && (
-              <div>
-                <label htmlFor="copy-count" className={FIELD_LABEL}>How many weeks</label>
-                <input id="copy-count" type="number" min={2} max={MAX_COPIES} value={count}
-                  onChange={e => setCount(Math.max(2, Math.min(MAX_COPIES, Math.floor(Number(e.target.value) || 2))))} className={`${FIELD} ch-focus`} />
-              </div>
-            )}
-            {dates.length > 1 && (
-              <p className="t-cap text-ink/80">{dates.map(d => clubEventDates(d, d)).join(' · ')}</p>
-            )}
-            {error && <p role="alert" className="t-cap text-rust-deep">{error}</p>}
-            <button type="button" disabled={busy || dates.length === 0} onClick={() => void make()} className={`${buttonClass('primary', false)} ch-focus`}>
-              {busy ? 'Making…' : dates.length > 1 ? `Make ${dates.length} competitions` : 'Make the copy'}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
   )
 }
