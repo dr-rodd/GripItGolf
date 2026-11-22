@@ -71,6 +71,15 @@ export const KIND_FILL: Record<CalKind, string> = {
   golf: 'bg-surface text-ink border border-line',
 }
 
+/** The colour down a card's left edge (D287), by kind — the label's colour from D288. */
+export const KIND_BAR: Record<CalKind, string> = {
+  comp: 'bg-club',
+  open: 'bg-accent',
+  block: 'bg-line-strong',
+  event: 'bg-line-strong',
+  golf: 'bg-line-strong',
+}
+
 export const KIND_WORD: Record<CalKind, string> = {
   comp: 'Competition', open: 'Tee sheet open', block: 'Course booked', event: 'Club event', golf: 'Golf event',
 }

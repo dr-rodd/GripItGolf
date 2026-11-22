@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
-import { Art, ClubHeader } from '../../ClubView'
+import { Art } from '../../ClubView'
 import { NoBar } from '../../ClubBarContext'
 import { readFace } from '../../face'
 import AwardStanding from './AwardStanding'
@@ -27,8 +27,7 @@ export default async function AwardPage({ params, searchParams }: {
       <Art face={clubFace} home={false} />
       <div className="relative z-10">
         <TripHeader backTo={`/club/${slug}`} />
-        <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
-          <ClubHeader face={clubFace} members />
+        <div className="w-full max-w-md mx-auto px-4 pt-1 pb-10">
           <NoBar />
           <AwardStanding clubId={clubId} id={id} slug={slug} year={Number.isInteger(y) && y >= 2000 ? y : null} />
         </div>

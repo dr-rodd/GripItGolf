@@ -301,7 +301,8 @@ export function ClubHeader({ face, members, switcher = null, onPick }: {
     </span>
   )
   return (
-    <div ref={box} className="relative z-30">
+    // D287: under the sticky header (z-30), never over it as the page scrolls.
+    <div ref={box} className="relative z-20">
       <header className="club-frost club-header rounded-card p-2 flex items-center gap-3">
         {switcher && onPick ? (
           <button type="button" onClick={() => setOpen(o => !o)} className="club-switch flex-1 min-w-0 flex items-center gap-3 text-left rounded-tile"
@@ -537,7 +538,10 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
       {/* D286: the Calendar — the next few things on, then the whole calendar on its own page. */}
       {(upNext ? upNext.length > 0 : calendar.length > 0) && (
         <section className="mt-6">
-          <h2 className="t-h2 text-ink">Calendar</h2>
+          {/* D287: the title is the way in, its chevron saying so. */}
+          <Link href={`/club/${face.slug}/calendar`} className="block press ch-focus rounded-tile">
+            <h2 className="t-h2 text-ink flex items-center justify-between">Calendar <IconChevronRight size={20} className="text-ink/50" /></h2>
+          </Link>
           <ul className="mt-3 space-y-2">
             {upNext
               ? upNext.map(i => <ItemRow key={i.key} i={i} onNote={x => x.note && setOpened(x.note)} />)
@@ -545,9 +549,6 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
                 ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code) ? inWords(m.partners, x.e.code) : null} />
                 : <NoteRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
           </ul>
-          <Link href={`/club/${face.slug}/calendar`} className="t-label text-club-deep inline-flex items-center gap-1 mt-3 press">
-            Open calendar <IconChevronRight size={16} />
-          </Link>
         </section>
       )}
 

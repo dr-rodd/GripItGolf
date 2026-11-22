@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
-import { Art, ClubHeader } from '../ClubView'
+import { Art } from '../ClubView'
 import { NoBar } from '../ClubBarContext'
 import { readFace } from '../face'
 import YourPage from './YourPage'
@@ -24,8 +24,7 @@ export default async function YourPageRoute({ params }: { params: Promise<{ slug
       <Art face={clubFace} home={false} />
       <div className="relative z-10">
         <TripHeader backTo={`/club/${slug}`} />
-        <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
-          <ClubHeader face={clubFace} members />
+        <div className="w-full max-w-md mx-auto px-4 pt-1 pb-10">
           <NoBar />
           <YourPage slug={slug} club={clubFace.name} />
         </div>

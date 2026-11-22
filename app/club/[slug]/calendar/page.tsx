@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
-import { Art, ClubHeader } from '../ClubView'
+import { Art } from '../ClubView'
 import { readFace } from '../face'
 import CalendarScreen from './CalendarScreen'
 
@@ -24,8 +24,7 @@ export default async function CalendarRoute({ params }: { params: Promise<{ slug
       <Art face={clubFace} home={false} />
       <div className="relative z-10">
         <TripHeader backTo={`/club/${slug}`} />
-        <div className="w-full max-w-3xl mx-auto px-4 pt-3 pb-10">
-          <div className="max-w-md mx-auto md:max-w-none"><ClubHeader face={clubFace} members /></div>
+        <div className="w-full max-w-3xl mx-auto px-4 pt-1 pb-10">
           <CalendarScreen clubId={id} slug={slug} />
         </div>
       </div>

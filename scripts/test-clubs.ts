@@ -931,7 +931,7 @@ function wiringTests() {
       'Comps’ Upcoming is the next two weeks with See all; Results ten at a time')
     ok(/input\.whole !== true/.test(read('app/api/club/club.ts')) && /whole: true/.test(view), 'the home carries the next two weeks; the whole season only when asked')
     const frame = read('app/club/[slug]/comp/[code]/(frame)/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
-    ok(/<ClubHeader face=\{clubFace\} members \/>/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/(frame)/loading.tsx')),
+    ok(/<TripHeader backTo/.test(frame) && /<Art face=\{clubFace\}/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/(frame)/loading.tsx')),
       'a competition’s frame is its layout’s, kept between pages; the loading screen only the page’s own part (M3)')
     const tt = read('app/api/club/teeTimes.ts')
     ok(/const early = reading \? dayReads\(/.test(tt) && /readerFromToken/.test(tt), 'a day’s tee sheet starts its reads beside the sign-in check, checked locally')
@@ -3238,12 +3238,20 @@ function calendarRuleTests() {
   section('D286: Home and the Calendar page')
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(view.indexOf('Your bookings') > view.indexOf('Cards to sign') && view.indexOf('Your bookings') < view.indexOf('Live now</h2>'), 'Your bookings leads Home, after a card waiting to be signed')
-  ok(!view.includes('Club calendar') && /<h2 className="t-h2 text-ink">Calendar<\/h2>/.test(view) && view.includes('/calendar`}') && view.includes('Open calendar'), 'Club calendar is Calendar, with Open calendar')
+  ok(!view.includes('Club calendar') && /Calendar <IconChevronRight/.test(view) && view.includes('/calendar`}') && !view.includes('Open calendar'), 'Club calendar is Calendar, its title the way in with a chevron (D287)')
   ok(!/Your next match<\/h2>/.test(view), '…the next match folded into Your bookings')
   eq(barOf('/club/pints/calendar', 'pints'), { set: 'club' }, 'the Calendar keeps the club footer')
   ok(/setTab\('home'\)/.test(read('app/club/[slug]/calendar/CalendarScreen.tsx')), '…with Home lit')
   ok(/get\('day'\)/.test(read('app/club/[slug]/ClubTeeTimes.tsx')), 'Tee times opens on the day the Calendar asked for')
   ok(!/askTeeTimes|entryRefusal|Book now|hasn’t opened/.test(read('app/club/[slug]/calendar/CalendarScreen.tsx')), 'the screen only draws: every line is the server’s')
+
+  section('D287: the Calendar’s week, and the club card on Home alone')
+  const cal = read('app/club/[slug]/calendar/CalendarScreen.tsx')
+  ok(/function WeekView/.test(cal) && /overflow-x-auto/.test(cal) && /KIND_BAR\[i\.kind\]/.test(cal) && !/WEEK_PPM/.test(cal), 'a week is seven rows, each day’s things side by side, scrolling sideways, a colour down each card')
+  ok(/break-words/.test(cal.slice(cal.indexOf('function WeekCard'))), '…words wrap and the row grows rather than shrink')
+  const walkClub = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walkClub(path.join(d, e.name)) : /\.tsx$/.test(e.name) ? [path.join(d, e.name)] : [])
+  eq(walkClub('app/club').filter(f => /<ClubHeader /.test(read(f))).map(f => f.split(path.sep).join('/')), ['app/club/[slug]/ClubView.tsx'], 'the club’s frosted card is drawn on Home alone')
+  ok(/<div ref=\{box\} className="relative z-20">/.test(view) && /top-0 z-30/.test(read('app/components/TripHeader.tsx')), '…and sits under the sticky header as the page scrolls, never over it')
 }
 
 function unlinkTests() {

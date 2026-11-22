@@ -15,7 +15,7 @@ import {
 import type { ClubNote } from '@/lib/clubEvents'
 import { useClubBar } from '../ClubBarContext'
 import { NoteSheet } from '../ClubNotes'
-import { ItemRow, KIND_FILL, KIND_WORD, StatusLines, useMemberCalendar, whenLine } from '../calendarParts'
+import { ItemRow, KIND_BAR, KIND_FILL, KIND_WORD, StatusLines, useMemberCalendar, whenLine } from '../calendarParts'
 
 const VIEW_KEY = 'gd.clubcal.view.v1'
 const VIEW_WORD: Record<CalView, string> = { month: 'Month', week: 'Week', day: 'Day' }
@@ -26,7 +26,7 @@ const fmt = (day: string, o: Intl.DateTimeFormatOptions) => new Intl.DateTimeFor
 /**
  * The Calendar (D286): Month (a grid, Monday first — tap a day for its
  * timeline), Week (seven columns against the hours, like a phone's own
- * calendar app) and Day (one day's timeline: the casual tee sheet's open
+ * calendar app — D287: seven rows, a day each) and Day (one day's timeline: the casual tee sheet's open
  * hours down the left, competitions and the club's events beside it, each
  * with the member's own line). Every line and every tap's address is the
  * server's (lib/clubCalendar.ts).
@@ -62,16 +62,16 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
     : fmt(day, { weekday: 'long', day: 'numeric', month: 'long' })
 
   return (
-    <section className="mt-6">
+    <section className="mt-2">
       <div className="flex items-center gap-2">
         <h1 className="t-h1 text-ink flex-1 min-w-0 truncate">Calendar</h1>
         {day !== today && (
           <button type="button" onClick={() => setDay(today)} className={`${buttonClass('quiet', false, true)} ch-focus`}>Today</button>
         )}
       </div>
-      <Segmented className="mt-4" label="Show" value={view} onChange={setView}
+      <Segmented className="mt-3" label="Show" value={view} onChange={setView}
         options={CAL_VIEWS.map(v => ({ value: v, label: VIEW_WORD[v] }))} />
-      <div className="flex items-center gap-2 mt-4">
+      <div className="flex items-center gap-2 mt-2">
         <button type="button" onClick={() => setDay(stepView(view, day, -1))} aria-label={`Previous ${view}`} className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
           <IconChevronLeft size={22} />
         </button>
@@ -211,68 +211,74 @@ function Block({ i, top, height, left, width, onNote, children }: {
   return <div className={cls} style={style} title={i.title}>{children}</div>
 }
 
-// ─── Week ────────────────────────────────────────────────────────
+// ─── Week ───────────────────────────────────────────────────────
 
-const WEEK_PPM = 0.8
+/** Things on a day in the order a member reads them: all day first, then by time. */
+function dayOrder(items: CalItem[], d: string): CalItem[] {
+  return items.filter(i => onDay(i, d))
+    .sort((a, b) => (a.from ? 1 : 0) - (b.from ? 1 : 0) || (a.from ?? '').localeCompare(b.from ?? '') || a.title.localeCompare(b.title))
+}
 
+/**
+ * A week as seven rows, one a day (D287, Ross, 22 Nov 2026 — a phone's own
+ * training calendar the model): the day down the left, today ringed, and
+ * that day's things side by side, each a card with its colour down its left
+ * edge, its time and the member's own line. A busy day scrolls sideways;
+ * words wrap and the row grows rather than shrink below what reads.
+ */
 function WeekView({ range, today, items, onDay: open, onNote }: {
   range: { from: string; to: string }; today: string; items: CalItem[]; onDay: (d: string) => void; onNote: (i: CalItem) => void
 }) {
   const days = daysFrom(range.from, range.to)
-  const { start, end } = useMemo(() => hoursOf(items), [items])
-  const nowMins = days.includes(today) ? clockMinutes(irishParts(Date.now()).clock) : null
-  const firstAt = Math.min(...items.map(span).filter(Boolean).map(s => s!.from), 9 * 60)
-  const box = useScrollTo(start, WEEK_PPM, nowMins ?? firstAt, [range.from])
-  const allDay = (d: string) => items.filter(i => onDay(i, d) && !span(i))
-  const anyAllDay = days.some(d => allDay(d).length > 0)
+  const inWeek = items.filter(i => days.some(d => onDay(i, d)))
+  const booked = inWeek.filter(i => i.status?.tone === 'booked').length
+  const comps = inWeek.filter(i => i.kind === 'comp').length
   return (
     <div className={`${cardClass()} mt-3 overflow-hidden`}>
-      <div className="grid border-b border-line" style={{ gridTemplateColumns: '2.75rem repeat(7, minmax(0, 1fr))' }}>
-        <span />
-        {days.map((d, k) => (
-          <button key={d} type="button" onClick={() => open(d)} className="flex flex-col items-center py-2 press ch-focus" aria-label={fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}>
-            <span className={`t-cap ${d === today ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>{WEEKDAYS[k]}</span>
-            <span className={`t-data text-[17px] w-8 h-8 leading-8 text-center rounded-full mt-0.5 ${d === today ? 'bg-club text-on-club' : 'text-ink'}`}>{Number(d.slice(8))}</span>
-          </button>
-        ))}
-        {anyAllDay && (<>
-          <span />
-          {days.map(d => (
-            <span key={d} className="px-0.5 pb-1 space-y-0.5 min-w-0">
-              {allDay(d).map(i => (
-                <button key={i.key} type="button" onClick={() => (i.note ? onNote(i) : open(d))} className={`block w-full truncate rounded-tile px-1 text-[13px] leading-5 text-left ${KIND_FILL[i.kind]}`}>{i.title}</button>
-              ))}
-            </span>
-          ))}
-        </>)}
+      <div className="px-4 py-3 border-b border-line">
+        <p className="t-card text-ink">{fmt(range.from, { day: 'numeric', month: 'short' })} to {fmt(range.to, { day: 'numeric', month: 'short' })}</p>
+        {(booked > 0 || comps > 0) && (
+          <p className="t-cap text-ink/65">{[booked ? `You’re booked into ${booked}` : null, comps ? `${comps} competition${comps === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}</p>
+        )}
       </div>
-      <div ref={box} className="relative overflow-y-auto" style={{ height: 'min(62dvh, 560px)' }}>
-        <div className="relative" style={{ height: (end - start) * WEEK_PPM + 8 }}>
-          <HourRail start={start} end={end} ppm={WEEK_PPM} />
-          <div className="absolute top-0 bottom-0 right-0 grid" style={{ left: '2.75rem', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))' }}>
-            {days.map(d => {
-              const timed = lanesOf(items.filter(i => i.date === d).flatMap(i => {
-                const s = span(i)
-                return s ? [{ ...s, key: i.key, i }] : []
-              }))
-              return (
-                <div key={d} className="relative border-l border-line">
-                  {timed.map(t => (
-                    <Block key={t.key} i={t.i} onNote={onNote}
-                      top={(t.from - start) * WEEK_PPM} height={(t.to - t.from) * WEEK_PPM - 2}
-                      left={`calc(${(t.lane / t.lanes) * 100}% + 1px)`} width={`calc(${100 / t.lanes}% - 2px)`}>
-                      <span className="block text-[13px] font-semibold leading-tight break-words">{t.i.kind === 'open' ? 'Open' : t.i.title}</span>
-                    </Block>
-                  ))}
-                  {d === today && <NowLine start={start} ppm={WEEK_PPM} />}
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </div>
+      <ul className="divide-y divide-line">
+        {days.map(d => {
+          const here = dayOrder(items, d)
+          const isToday = d === today
+          return (
+            <li key={d} className="flex items-stretch min-h-16">
+              <button type="button" onClick={() => open(d)} aria-label={`${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}, hour by hour`}
+                className="w-14 flex-shrink-0 flex flex-col items-center justify-center py-2 press ch-focus">
+                <span className={`t-cap ${isToday ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>{fmt(d, { weekday: 'short' })}</span>
+                <span className={`t-data text-[17px] w-9 h-9 leading-9 text-center rounded-full ${isToday ? 'bg-club text-on-club' : 'text-ink'}`}>{Number(d.slice(8))}</span>
+              </button>
+              <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto py-2 pr-3 snap-x snap-mandatory">
+                {here.map(i => <WeekCard key={i.key} i={i} onNote={onNote} />)}
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
+}
+
+/** One thing in a week's row: its colour down the left, the title (wrapping), the time and the member's line. */
+function WeekCard({ i, onNote }: { i: CalItem; onNote: (i: CalItem) => void }) {
+  const body = (
+    <>
+      <span aria-hidden="true" className={`w-1.5 flex-shrink-0 rounded-l-tile ${KIND_BAR[i.kind]}`} />
+      <span className="flex-1 min-w-0 px-2.5 py-2 text-left">
+        <span className="block t-label text-ink leading-snug break-words">{i.kind === 'open' ? KIND_WORD.open : i.title}</span>
+        <span className="block t-cap text-ink/65">{whenLine(i, false) || 'All day'}</span>
+        <StatusLines status={i.status} className="mt-0.5" />
+      </span>
+    </>
+  )
+  const cls = 'snap-start flex-shrink-0 w-[min(15rem,72%)] flex items-stretch rounded-tile bg-tint press ch-focus'
+  if (i.href) return <Link href={i.href} className={cls}>{body}</Link>
+  if (i.note) return <button type="button" onClick={() => onNote(i)} className={cls}>{body}</button>
+  return <div className={cls}>{body}</div>
 }
 
 // ─── Day ─────────────────────────────────────────────────────────
