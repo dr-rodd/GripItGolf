@@ -64,10 +64,19 @@ export function siteOrigin(): string {
  * Every event under a club (086's `trip_private.club_id`), with who changes
  * it. The club page and the members home both read through this.
  */
-export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[]> {
-  const { data: priv, error } = await db.from('trip_private').select('trip_id, club_access').eq('club_id', clubId)
+export async function readClubEvents(db: Db, clubId: string, opts: { withUnlinked?: boolean } = {}): Promise<ClubEvent[]> {
+  // D285: an event unlinked from the members app (100) is read only by the
+  // Clubhouse (`withUnlinked`); every member's list and the public face leave
+  // it out. Fail-soft: before 100 nothing is unlinked.
+  let rows = await db.from('trip_private').select('trip_id, club_access, club_unlinked_at').eq('club_id', clubId)
+  if (rows.error) rows = await db.from('trip_private').select('trip_id, club_access').eq('club_id', clubId) as typeof rows
+  const { data: priv, error } = rows
   if (error || !priv?.length) return []
-  const access = new Map((priv as { trip_id: string; club_access: string | null }[]).map(p => [p.trip_id, parseClubAccess(p.club_access)]))
+  const all = priv as { trip_id: string; club_access: string | null; club_unlinked_at?: string | null }[]
+  const unlinkedIds = new Set(all.filter(p => p.club_unlinked_at).map(p => p.trip_id))
+  const kept = opts.withUnlinked ? all : all.filter(p => !unlinkedIds.has(p.trip_id))
+  if (!kept.length) return []
+  const access = new Map(kept.map(p => [p.trip_id, parseClubAccess(p.club_access)]))
   const ids = [...access.keys()]
   const [{ data: trips, error: e }, comps] = await Promise.all([
     db.from('trips').select('id, trip_code, name, kind, start_date, end_date, bracket_setup').in('id', ids),
@@ -84,6 +93,7 @@ export async function readClubEvents(db: Db, clubId: string): Promise<ClubEvent[
       kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
       startDate: t.start_date, endDate: t.end_date, access: access.get(t.id) ?? null,
       ...(compOf.has(t.id) ? { competition: compOf.get(t.id)! } : {}),
+      ...(unlinkedIds.has(t.id) && !compOf.has(t.id) ? { unlinked: true as const } : {}),
       // MO2 (D281): never Live now.
       ...(seasonLongOf({ kind: t.kind, startDate: t.start_date, endDate: t.end_date, setup: t.bracket_setup }) ? { seasonLong: true as const } : {}),
     }))
@@ -267,9 +277,9 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
  * bookings (past 1,000 rows) together.
  */
 export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEvent[]> {
-  const events = await readClubEvents(db, clubId)
+  const events = await readClubEvents(db, clubId, { withUnlinked: true })
   const comps = events.filter(e => e.competition)
-  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null })
+  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null, ...(e.unlinked ? { unlinked: true as const } : {}) })
   if (!comps.length) return events.map(base)
   const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards, bracket_setup').in('trip_code', comps.map(c => c.code))
   const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown; bracket_setup?: unknown }[]
@@ -641,7 +651,7 @@ export function clubStore(db: Db): ClubStore {
     async seasonRows(userId, year) {
       return readSeason(db, userId, year)
     },
-    async outsideEvents(userId, excludeCodes) {
+    async outsideEvents(userId, excludeCodes, clubId) {
       // MS1 (D278): only events this member is a player in — upcoming and
       // previous; one they made or merely opened is not theirs to list.
       const linked = await db.from('account_players').select('trip_id').eq('user_id', userId)
@@ -650,8 +660,18 @@ export function clubStore(db: Db): ClubStore {
       const { data, error } = await db.from('trips').select('trip_code, name, kind, start_date, end_date')
         .in('id', ids).order('start_date', { ascending: false }).limit(40)
       if (error) return []
+      // D285: an event this club has unlinked from the members app is not
+      // "another" event to list either — it is the club's, and hidden.
+      const hidden = new Set<string>()
+      if (clubId) {
+        const u = await db.from('trip_private').select('trip_id').eq('club_id', clubId).not('club_unlinked_at', 'is', null)
+        if (!u.error) for (const r of (u.data ?? []) as { trip_id: string }[]) hidden.add(r.trip_id)
+      }
+      const hiddenCodes = hidden.size
+        ? new Set(((await db.from('trips').select('trip_code').in('id', [...hidden])).data ?? []).map(r => (r as { trip_code: string }).trip_code))
+        : new Set<string>()
       return ((data ?? []) as { trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null }[])
-        .filter(t => !excludeCodes.includes(t.trip_code))
+        .filter(t => !excludeCodes.includes(t.trip_code) && !hiddenCodes.has(t.trip_code))
         .map(t => ({
           code: t.trip_code, name: t.name, kind: t.kind === 'tournament' || t.kind === 'run' ? t.kind : 'trip',
           startDate: t.start_date, endDate: t.end_date, access: null,
@@ -703,6 +723,17 @@ export function clubStore(db: Db): ClubStore {
       return readListCounts(db, clubId)
     },
     seasonEvents: clubId => readClubSeason(db, clubId),
+    async setEventLink(clubId, code, unlinked) {
+      const { data: t } = await db.from('trips').select('id, competition').eq('trip_code', code).maybeSingle()
+      const trip = t as { id: string; competition?: string | null } | null
+      if (!trip) return 'not_found'
+      if (trip.competition === 'club') return 'competition'
+      const { data: p } = await db.from('trip_private').select('trip_id').eq('trip_id', trip.id).eq('club_id', clubId).maybeSingle()
+      if (!p) return 'not_found'
+      const { error } = await db.from('trip_private')
+        .update({ club_unlinked_at: unlinked ? new Date().toISOString() : null }).eq('trip_id', trip.id).eq('club_id', clubId)
+      return error ? 'not_ready' : 'ok'
+    },
     places: (clubId, used) => readPlaces(db, clubId, used),
     saveRoom: (clubId, room) => saveRoom(db, clubId, room),
     addCourse: (clubId, courseId, position) => addCourse(db, clubId, courseId, position),

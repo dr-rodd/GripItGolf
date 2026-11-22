@@ -12,7 +12,7 @@ import { NO_PLACES, type ClubPlaces } from '@/lib/clubLocations'
  * (stage c1). `notesReady` is false before migration 095; `hiddenTypes` the
  * types the club does not show its members.
  */
-export function useSeason(clubId: string): { events: SeasonEvent[] | null; lost: boolean; again: () => void; notesReady: boolean; hiddenTypes: ClubEventType[]; places: ClubPlaces } {
+export function useSeason(clubId: string): { events: SeasonEvent[] | null; lost: boolean; again: () => void; notesReady: boolean; hiddenTypes: ClubEventType[]; places: ClubPlaces; setUnlinked: (code: string, unlinked: boolean) => void } {
   const [events, setEvents] = useState<SeasonEvent[] | null>(null)
   const [lost, setLost] = useState(false)
   const [attempt, setAttempt] = useState(0)
@@ -27,5 +27,11 @@ export function useSeason(clubId: string): { events: SeasonEvent[] | null; lost:
     })
     return () => { live = false }
   }, [clubId, attempt])
-  return { events, lost, again: () => setAttempt(a => a + 1), notesReady, hiddenTypes, places }
+  // D285: a chain-link tapped — the one event's state, without asking again.
+  const setUnlinked = (code: string, unlinked: boolean) => setEvents(es => es && es.map(e => {
+    if (e.code !== code) return e
+    const { unlinked: _was, ...rest } = e
+    return unlinked ? { ...rest, unlinked: true as const } : rest
+  }))
+  return { events, lost, again: () => setAttempt(a => a + 1), notesReady, hiddenTypes, places, setUnlinked }
 }

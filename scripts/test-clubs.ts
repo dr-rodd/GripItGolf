@@ -31,7 +31,7 @@ import { clubCourses, matchPlace, placeFields, placeLine, placeOf, roomNameIssue
 import { ELSEWHERE, dayLayout, lanesOf } from '../lib/clubDay'
 import { NO_YOURS, dayWord, matchTier, mondayOf, parseDay, periodRange, quietLine, searchEvents, whatsOn, yoursIn, type YoursFacts } from '../lib/clubOverview'
 import { COLUMN_DEFAULTS, COLUMN_MAX, COLUMN_MIN, clampWidth, fitWidth, readWidths, writeWidths } from '../lib/gridColumns'
-import { MAX_COPIES, eventsOn, formatLine, monthGrid, noteAsSeason, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
+import { MAX_COPIES, eventsOn, formatLine, linkable, monthGrid, noteAsSeason, seasonType, stepMonth, weeklyFrom, type SeasonEvent } from '../lib/clubhouse'
 import { EVENT_TYPES, memberSees, noteIssue, noteTimeLine, readClubNote, readHiddenTypes, readMemberHidden, type ClubEventType, type ClubNote } from '../lib/clubEvents'
 import { compFormFrom } from '../lib/clubComp'
 import { failWords, runChangeCompetition, runCopyCompetition, runReadCompetition, type CompChange, type CompNow } from '../app/api/club/competition'
@@ -328,7 +328,15 @@ class Stand implements ClubStore {
       ...('art_dark_path' in patch ? { artDarkPath: patch.art_dark_path } : {}),
     })
   }
-  async clubEvents(clubId: string) { return this.events.get(clubId) ?? [] }
+  unlinkedCodes = new Set<string>()
+  async clubEvents(clubId: string) { return (this.events.get(clubId) ?? []).filter(e => !this.unlinkedCodes.has(e.code)) }
+  async setEventLink(clubId: string, code: string, unlinked: boolean) {
+    const e = (this.events.get(clubId) ?? []).find(x => x.code === code)
+    if (!e) return 'not_found' as const
+    if (e.competition) return 'competition' as const
+    if (unlinked) this.unlinkedCodes.add(code); else this.unlinkedCodes.delete(code)
+    return 'ok' as const
+  }
   async entries(userId: string, codes: string[]) { return (this.linked.get(userId) ?? []).filter(c => codes.includes(c)) }
   season: SeasonRow[] = []
   async seasonRows() { return { rows: this.season, courses: { c1: 'Lahinch Old' } } }
@@ -387,7 +395,7 @@ class Stand implements ClubStore {
   hiddenOf = new Map<string, ClubEventType[]>()
   memberHiddenOf = new Map<string, ClubEventType[]>()
   async seasonEvents(clubId: string): Promise<SeasonEvent[]> {
-    return (await this.clubEvents(clubId)).map(e => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' as const : 'GOLF' as const, startDate: e.startDate, endDate: e.endDate, competition: null }))
+    return (this.events.get(clubId) ?? []).map(e => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' as const : 'GOLF' as const, startDate: e.startDate, endDate: e.endDate, competition: e.competition ? { phase: 'announced' as const, courseName: null, scoring: 'stableford' as const, allowance: 100, booked: 0, capacity: 0, membersOnly: true } : null, ...(this.unlinkedCodes.has(e.code) ? { unlinked: true as const } : {}) }))
   }
   async notes(clubId: string, opts: { from?: string; membersOnly?: boolean } = {}) {
     return (this.notesOf.get(clubId) ?? []).filter(n => !opts.membersOnly || n.visibility === 'members').filter(n => !opts.from || (n.endsOn ?? n.startsOn) >= opts.from)
@@ -2825,6 +2833,24 @@ async function calendarTests() {
   const quizId = quiz.status === 200 ? quiz.body.noteId! : ''
   eq((await ask('tok-ross', 'event.delete', { clubId, id: quizId })).status, 200, 'an event deleted from its panel')
   ok(s.activity.some(a => a.action === 'event.add') && s.activity.some(a => a.action === 'event.delete') && s.activity.some(a => a.action === 'events.shown'), 'each change on the club’s activity log')
+  // D285 (Ross, 22 Nov 2026): an event that opens outside the members app, unlinked and linked.
+  s.events.set(clubId, [
+    { code: 'OUT001', name: 'Captain’s Day', kind: 'tournament', startDate: '2026-11-20', endDate: '2026-11-20', access: 'admins' },
+    { code: 'COMP01', name: 'Saturday Stableford', kind: 'tournament', startDate: '2026-11-21', endDate: '2026-11-21', access: 'admins', competition: { phase: 'announced', membersOnly: true } },
+  ])
+  const codesOf = (o: Awaited<ReturnType<typeof ask>>) => (o.status === 200 ? (o.body.events ?? []).map(e => e.code) : ['refused'])
+  eq(codesOf(await ask('tok-ann', 'home', { slug: 'pints-golf-club' })).sort(), ['COMP01', 'OUT001'], 'linked, a standalone event is in the members’ home')
+  eq((await ask('tok-ross', 'event.link', { clubId, code: 'OUT001', linked: false })).status, 200, 'the Clubhouse unlinks it')
+  eq(codesOf(await ask('tok-ann', 'home', { slug: 'pints-golf-club' })), ['COMP01'], '…and it leaves every member’s list')
+  const seasonU = await ask('tok-ross', 'season', { clubId })
+  ok(seasonU.status === 200 && (seasonU.body.calendar ?? []).some(e => e.code === 'OUT001' && e.unlinked === true), '…while the Clubhouse still reads it, marked unlinked')
+  ok(s.activity.some(a => a.action === 'event.unlink'), '…on the activity log')
+  eq((await ask('tok-ollie', 'event.link', { clubId, code: 'OUT001', linked: true })).status, 403, 'an Officer without Clubhouse cannot link or unlink')
+  eq((await ask('tok-ross', 'event.link', { clubId, code: 'COMP01', linked: false })).status, 400, 'a competition is the club’s and never unlinks')
+  eq((await ask('tok-ross', 'event.link', { clubId, code: 'NOPE99', linked: false })).status, 404, 'an event that is not the club’s is refused')
+  eq((await ask('tok-ross', 'event.link', { clubId, code: 'OUT001', linked: true })).status, 200, 'a tap links it again')
+  eq(codesOf(await ask('tok-ann', 'home', { slug: 'pints-golf-club' })).sort(), ['COMP01', 'OUT001'], '…and members see it again')
+  ok(s.activity.some(a => a.action === 'event.link'), '…on the log too')
   const accountSrc = read('app/api/account/account.ts')
   ok(/input\.action === 'event-types'/.test(accountSrc) && /readMemberHidden\(input\.hidden\)/.test(accountSrc), '“From my clubs, show me” is kept on the account')
   ok(read('app/club/[slug]/ClubView.tsx').includes('<ClubEventTypesCard') && read('app/home/HomeScreen.tsx').includes('<ClubEventTypesCard'), '…on the club’s Club tab and Me')
@@ -3141,6 +3167,7 @@ async function main() {
   gridColumnTests()
   snappyTests()
   wiringTests()
+  unlinkTests()
   insideClubTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {
@@ -3149,6 +3176,23 @@ async function main() {
     process.exit(1)
   }
   console.log(`✓ all ${passed} checks passed`)
+}
+
+function unlinkTests() {
+  section('D285: an event outside the members app, linked or unlinked')
+  ok(linkable({ kind: 'tournament', competition: null }) && linkable({ kind: 'run', competition: null }), 'a standalone event is linkable')
+  ok(!linkable({ kind: 'tournament', competition: { phase: 'announced', courseName: null, scoring: 'stableford', allowance: 100, booked: 0, capacity: 0, membersOnly: true } }) && !linkable({ kind: 'club', competition: null }),
+    '…a competition and the club’s own events never')
+  const ev = (code: string, unlinked?: true): SeasonEvent => ({ code, name: code, kind: 'tournament', startDate: '2026-11-20', endDate: '2026-11-20', competition: null, ...(unlinked ? { unlinked } : {}) })
+  eq(whatsOn([ev('A'), ev('B', true)], '2026-11-20', '2026-11-20').events.map(o => o.event.code), ['A'], 'an unlinked event is not "on" in the Overview')
+  const store = read('app/api/club/store.ts')
+  ok(/club_unlinked_at/.test(store) && /withUnlinked/.test(store), 'the reads: members never, the Clubhouse’s season with the flag')
+  ok(/readClubEvents\(db, clubId, \{ withUnlinked: true \}\)/.test(store), 'only the season reads the unlinked')
+  ok(/hiddenCodes\.has\(t\.trip_code\)/.test(store), 'nor does Other events list one the club unlinked')
+  ok(/club_unlinked_at timestamptz NULL/.test(read('supabase/migrations/20260101000100_club_event_unlinked.sql')), 'migration 100 adds the column')
+  const card = read('app/components/ClubEventCard.tsx'), acts = read('app/api/event/actions.ts')
+  ok(/change\(\{ linked: view\.unlinked \}/.test(card) && /typeof input\.linked === 'boolean'/.test(acts) && /!trip\.competition/.test(acts), 'the event’s own card links and unlinks it — never a competition')
+  ok(/<LinkToggle/.test(read('app/clubhouse/[slug]/events/Events.tsx')) && /askClub\('event\.link'/.test(read('app/clubhouse/[slug]/events/LinkToggle.tsx')), 'the Clubhouse’s status place is the chain-link, tapped')
 }
 
 function insideClubTests() {

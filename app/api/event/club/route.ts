@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   try {
     const a = await asked(req)
     return respond(await runEventClub({
-      token: a.token, code: a.body.code, clubId: a.body.clubId, access: a.body.access, pin: a.body.pin,
+      token: a.token, code: a.body.code, clubId: a.body.clubId, access: a.body.access, pin: a.body.pin, linked: a.body.linked,
     }, a.store, new Date()))
   } catch (e) {
     return failed(e)

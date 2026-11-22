@@ -56,7 +56,8 @@ export function firstDayIn(e: SeasonEvent, from: string, to: string): string | n
 
 /** What's on in the period: competitions and everything else, each in date order (the day it is on in the period). */
 export function whatsOn(events: SeasonEvent[], from: string, to: string): { comps: On[]; events: On[] } {
-  const on = events.flatMap(e => {
+  // D285: an event unlinked from the members app is read in Events and the Calendar, not "on".
+  const on = events.filter(e => !e.unlinked).flatMap(e => {
     const day = firstDayIn(e, from, to)
     return day ? [{ event: e, day }] : []
   }).sort((a, b) => a.day.localeCompare(b.day) || (a.event.note?.startTime ?? '').localeCompare(b.event.note?.startTime ?? '') || a.event.name.localeCompare(b.event.name))

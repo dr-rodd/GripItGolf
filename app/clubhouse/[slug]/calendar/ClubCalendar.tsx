@@ -53,7 +53,7 @@ export default function ClubCalendar() {
       <span className="block truncate">{e.name}</span>
     </>
   )
-  const chipClass = (e: SeasonEvent) => `ch-hover ch-focus block w-full text-left rounded-tile px-1.5 py-1 text-[13px] font-semibold leading-tight ${e.competition ? 'bg-club-tint text-club-deep' : 'bg-tint text-ink'}`
+  const chipClass = (e: SeasonEvent) => `ch-hover ch-focus block w-full text-left rounded-tile px-1.5 py-1 text-[13px] font-semibold leading-tight ${e.competition ? 'bg-club-tint text-club-deep' : 'bg-tint text-ink'} ${e.unlinked ? 'opacity-60' : ''}`
   const chip = (e: SeasonEvent) => {
     const href = eventHref(e, face.slug)
     if (!href) {
@@ -126,7 +126,7 @@ export default function ClubCalendar() {
                     <span className="t-cap text-ink/65 font-normal">{e.competition ? PHASE_WORDS[e.competition.phase] : `${typeLabel(seasonType(e))}${isOfficeOnly(e) ? ' · Office only' : ''}`}</span>
                   </>
                 )
-                const cls = 'flex items-center justify-between gap-3 min-h-11 text-ink text-[15px] font-medium w-full text-left'
+                const cls = `flex items-center justify-between gap-3 min-h-11 text-ink text-[15px] font-medium w-full text-left ${e.unlinked ? 'opacity-60' : ''}`
                 return href
                   ? <Link key={e.code} href={href} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={cls}>{inner}</Link>
                   : e.note && office ? <button key={e.code} type="button" onClick={() => setEditing(e.note!)} className={cls}>{inner}</button>

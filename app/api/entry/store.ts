@@ -197,8 +197,18 @@ export function actionStore(db: ReturnType<typeof createAdminClient>): ActionSto
       const { error } = await db.from('trip_private')
         .upsert({ trip_id: tripId, club_id: clubId, club_access: access, updated_at: now }, { onConflict: 'trip_id' })
       if (error) throw error
+      // D285: put under a club (or taken out), it starts linked — best-effort, fail-soft before 100.
+      await db.from('trip_private').update({ club_unlinked_at: null }).eq('trip_id', tripId)
       // Its signed cards told whether they are club rounds now (D122).
       await retagSummaries(db, [tripId]).catch(e => console.error('summary retag failed:', e))
+    },
+    async eventUnlinked(tripId) {
+      const { data, error } = await db.from('trip_private').select('club_unlinked_at').eq('trip_id', tripId).maybeSingle()
+      return !error && !!(data as { club_unlinked_at?: string | null } | null)?.club_unlinked_at
+    },
+    async setEventUnlinked(tripId, unlinked) {
+      const { error } = await db.from('trip_private').update({ club_unlinked_at: unlinked ? new Date().toISOString() : null }).eq('trip_id', tripId)
+      return !error
     },
     async tripColumns(tripId, columns) {
       const { data, error } = await db.from('trips').select(columns.join(', ')).eq('id', tripId).maybeSingle()

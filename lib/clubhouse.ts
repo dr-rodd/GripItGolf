@@ -261,6 +261,8 @@ export interface SeasonEvent {
   note?: ClubNote
   startDate: string | null
   endDate: string | null
+  /** D285: unlinked from the members app — still read here, greyed, never shown to members. */
+  unlinked?: true
   /** A club competition's facts; null for any other event under the club. */
   competition: {
     phase: CompPhase
@@ -371,4 +373,16 @@ export function eventHref(e: Pick<SeasonEvent, 'code' | 'competition' | 'kind'>,
 /** An event that is neither a competition nor the club's own: it lives on its own pages, opened in a new tab so the Clubhouse stays. */
 export function opensOutside(e: Pick<SeasonEvent, 'competition' | 'kind'>): boolean {
   return e.kind !== 'club' && !e.competition
+}
+
+/**
+ * D285 (Ross, 22 Nov 2026): an event that opens outside the members app is
+ * the one kind that can be unlinked from it — linked, it shows to members as
+ * an event of the club; unlinked it stays under the club, read here and
+ * greyed, and members never see it. Its status is the chain-link, not a
+ * phase: an event outside the app has no status the club tracks. A
+ * competition and the club's own events are the club's and never unlink.
+ */
+export function linkable(e: Pick<SeasonEvent, 'competition' | 'kind'>): boolean {
+  return opensOutside(e)
 }

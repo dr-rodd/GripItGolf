@@ -133,6 +133,21 @@ export default function ClubEventCard({ tripCode, pinSet, isTrip }: {
           {club}’s Officers run it and choose who else can change it.
         </p>
       )}
+      {view.linkable && view.mayTakeOut && (
+        <div className="mt-5">
+          <p className="t-label text-ink">{view.unlinked ? `Not linked to ${club}’s members app` : `Linked to ${club}’s members app`}</p>
+          <p className="t-cap text-ink/65 mt-0.5">
+            {view.unlinked
+              ? `${club}’s members don’t see it in Comps, Home or Other events. ${club}’s Clubhouse still has its dates and details.`
+              : `${club}’s members see it in Comps, Home and Other events.`}
+          </p>
+          <button type="button" disabled={busy}
+            onClick={() => void change({ linked: view.unlinked }, view.unlinked ? `Linked. ${club}’s members see it again.` : `Unlinked. ${club}’s members no longer see it.`)}
+            className={`${buttonClass('secondary', false)} mt-2`}>
+            {view.unlinked ? `Link it to ${club}’s members app` : `Unlink it from ${club}’s members app`}
+          </button>
+        </div>
+      )}
       {view.mayTakeOut && (
         <button type="button" disabled={busy}
           onClick={() => void change({ clubId: null }, `Taken out of ${club}. Set a new PIN if the old one isn’t yours.`)}

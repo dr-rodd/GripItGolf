@@ -698,6 +698,8 @@ export interface ClubAnswer {
   notesReady?: boolean
   hiddenTypes?: ClubEventType[]
   noteId?: string
+  /** D285: after Link or Unlink — the event's state. */
+  unlinked?: boolean
   /** Stage c1, M7: the club's event presets. */
   presets?: import('./clubPresets').Preset[]
   presetsReady?: boolean

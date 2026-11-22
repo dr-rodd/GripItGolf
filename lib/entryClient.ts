@@ -470,6 +470,10 @@ export interface EventClubView {
   clubs: { id: string; name: string }[]
   runsClub: boolean
   mayTakeOut: boolean
+  /** D285: taken out of the club's members app. */
+  unlinked: boolean
+  /** D285: it can be linked or unlinked (not a competition). */
+  linkable: boolean
 }
 
 /**
@@ -481,7 +485,7 @@ export interface EventClubView {
  */
 export async function eventClub(
   tripCode: string,
-  change?: { clubId?: string | null; access?: ClubAccessChoice; pin?: string },
+  change?: { clubId?: string | null; access?: ClubAccessChoice; pin?: string; linked?: boolean },
 ): Promise<EventClubView | { error: string } | null> {
   if (!inBrowser() || !tripCode) return null
   // A phone with no Green Dot account runs no club: nothing to ask.
@@ -490,7 +494,7 @@ export async function eventClub(
   if (!r) return change ? { error: 'Could not reach Green Dot — try again.' } : null
   if (r.status !== 200) return change ? { error: typeof r.body.error === 'string' ? r.body.error : 'Could not save — try again.' } : null
   const b = r.body as unknown as EventClubView
-  return { club: b.club ?? null, access: b.access ?? null, clubs: Array.isArray(b.clubs) ? b.clubs : [], runsClub: b.runsClub === true, mayTakeOut: b.mayTakeOut === true }
+  return { club: b.club ?? null, access: b.access ?? null, clubs: Array.isArray(b.clubs) ? b.clubs : [], runsClub: b.runsClub === true, mayTakeOut: b.mayTakeOut === true, unlinked: b.unlinked === true, linkable: b.linkable === true }
 }
 
 // ─── A signed card summed up (stage (f)) ───────────────────────

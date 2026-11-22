@@ -28,7 +28,7 @@ import { severIndex } from '../handicaps/handicaps'
 import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
 import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
-import { noteAsSeason } from '@/lib/clubhouse'
+import { linkable, noteAsSeason } from '@/lib/clubhouse'
 import { NO_YOURS, periodRange, type YoursFacts } from '@/lib/clubOverview'
 import { NO_PLACES, roomNameIssue, type ClubPlaces } from '@/lib/clubLocations'
 import { planLine, presetIssue, readPreset, type Preset } from '@/lib/clubPresets'
@@ -92,6 +92,8 @@ export interface ClubhouseStore {
   presets?(clubId: string): Promise<Preset[] | null>
   savePreset?(clubId: string, p: Omit<Preset, 'id'> & { id: string | null }, position: number): Promise<string | 'clash'>
   deletePreset?(clubId: string, id: string): Promise<void>
+  /** D285 (100): an event under the club taken out of, or put back in, the members app. */
+  setEventLink?(clubId: string, code: string, unlinked: boolean): Promise<'ok' | 'not_found' | 'competition' | 'not_ready'>
 }
 
 type Store = ClubStore & ClubhouseStore
@@ -101,7 +103,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'places', 'location.save', 'location.course', 'location.delete', 'location.order', 'presets', 'preset.save', 'preset.delete'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'event.link', 'places', 'location.save', 'location.course', 'location.delete', 'location.order', 'presets', 'preset.save', 'preset.delete'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -373,6 +375,24 @@ export async function runClubhouse(
     const said = (x: Pick<Preset, 'name' | 'plan' | 'isDefault'>) => `${x.name} · ${planLine(x.plan)}${x.isDefault ? ' · default' : ''}`
     await logged([line(before ? 'preset.update' : 'preset.add', null, { [p.code]: [before ? said(before) : null, said(p)] })])
     return { status: 200, body: { ok: true, presets: await store.presets(club.id).catch(() => list) ?? list } }
+  }
+
+  // D285 (Ross, 22 Nov 2026): an event that opens outside the members app,
+  // unlinked from it or linked again — the office's (Clubhouse).
+  if (action === 'event.link') {
+    if (!clubMay('keep_calendar', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s calendar.')
+    if (!store.setEventLink) return fail(503, 'Linking isn’t set up yet — try again later.')
+    const code = str(input.code).toUpperCase()
+    if (!code || typeof input.linked !== 'boolean') return fail(400, 'Choose an event.')
+    const season = store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : []
+    const ev = season.find(e => e.code === code)
+    if (!ev) return fail(404, 'That event isn’t the club’s.')
+    if (!linkable(ev)) return fail(400, 'Only an event that opens outside the members app can be unlinked.')
+    const r = await store.setEventLink(club.id, code, !input.linked).catch(() => 'not_ready' as const)
+    if (r === 'not_ready') return fail(503, 'Linking isn’t set up yet — try again later.')
+    if (r !== 'ok') return fail(404, 'That event isn’t the club’s.')
+    await logged([line(input.linked ? 'event.link' : 'event.unlink', null, { [ev.name]: [input.linked ? 'Not shown to members' : 'Shown to members', input.linked ? 'Shown to members' : 'Not shown to members'] })])
+    return { status: 200, body: { ok: true, unlinked: !input.linked } }
   }
 
   // Stage c1, M1–M4: one of the club's own events made, changed or deleted,

@@ -191,7 +191,9 @@ function Block({ b, slug, office, events, onEdit, allDay = false }: {
   }
   const e = events.find(x => x.code === b.code)
   const href = e ? eventHref(e, slug) : null
+  // D285: an event unlinked from the members app is greyed.
+  const dim = e?.unlinked ? ' opacity-60' : ''
   return href
-    ? <Link href={href} title={b.title} {...(e && opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={`${cls} ch-hover`}>{inner}</Link>
-    : <div title={b.title} className={cls}>{inner}</div>
+    ? <Link href={href} title={b.title} {...(e && opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={`${cls} ch-hover${dim}`}>{inner}</Link>
+    : <div title={b.title} className={`${cls}${dim}`}>{inner}</div>
 }

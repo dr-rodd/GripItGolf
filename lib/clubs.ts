@@ -442,6 +442,8 @@ export interface ClubEvent {
   seasonLong?: true
   /** A non-competition event's first tee time on its first day, as an instant — live from then (D281). */
   liveFrom?: number | null
+  /** D285: unlinked from the members app — read only by the Clubhouse, never in a member's list. */
+  unlinked?: true
 }
 
 /** Comps' Upcoming and the members home: the next two weeks (MO3, D282). */

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { FIELD, FIELD_LABEL, Pill, buttonClass, cardClass } from '@/app/components/ui'
-import { eventHref, formatLine, isOfficeOnly, opensOutside, seasonOfYear, seasonType, seasonYears, type SeasonEvent } from '@/lib/clubhouse'
+import { eventHref, formatLine, isOfficeOnly, linkable, opensOutside, seasonOfYear, seasonType, seasonYears, type SeasonEvent } from '@/lib/clubhouse'
 import { EVENT_TYPES, noteTimeLine, typeLabel, type ClubNote, type EventType } from '@/lib/clubEvents'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { PHASE_WORDS } from '@/lib/compPhase'
@@ -14,6 +14,7 @@ import EventPanel from './EventPanel'
 import CopyPanel from './CopyPanel'
 import CompPanel from './CompPanel'
 import PresetPanel from './PresetPanel'
+import LinkToggle from './LinkToggle'
 import MatchPlayPanel from './MatchPlayPanel'
 import { useCategories } from '../useCategories'
 import { askClub } from '@/lib/accountClient'
@@ -33,7 +34,12 @@ type Shown = 'all' | 'members' | 'office'
  */
 export default function Events() {
   const { face, club, may } = useShell()
-  const { events, lost, again, notesReady, places } = useSeason(club.id)
+  const { events, lost, again, notesReady, places, setUnlinked } = useSeason(club.id)
+  const [linkError, setLinkError] = useState('')
+  const link = (e: SeasonEvent) => (
+    <LinkToggle clubId={club.id} code={e.code} unlinked={!!e.unlinked} office={office}
+      onChange={(u, err) => { setLinkError(err ?? ''); setUnlinked(e.code, u) }} />
+  )
   const thisYear = Number(irishToday(new Date()).slice(0, 4))
   const [year, setYear] = useState(thisYear)
   const [type, setType] = useState<EventType | 'all'>('all')
@@ -82,7 +88,7 @@ export default function Events() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[min(18rem,100%)]">
           <h1 className="t-h1 text-ink">Events</h1>
-          <p className="t-cap text-ink/65 mt-1">Competitions, and everything else on at the club.</p>
+          <p className="t-cap text-ink/65 mt-1">Competitions, and everything else on at the club. An event that opens outside the members app shows two chain links: linked, members see it; tap to unlink it and it stays here, greyed, and members don’t.</p>
         </div>
         {office && (
           <div className="flex flex-wrap gap-3">
@@ -133,6 +139,7 @@ export default function Events() {
         </div>
       </div>
 
+      {linkError && <p className="t-cap text-rust-deep mt-4" role="alert">{linkError}</p>}
       {lost && (
         <div role="alert" className="mt-4">
           <p className="t-cap text-ink/80">Could not reach Green Dot — try again.</p>
@@ -167,7 +174,7 @@ export default function Events() {
                   const c = e.competition
                   const n = e.note
                   return (
-                    <tr key={e.code} className="ch-hover border-b border-line last:border-b-0 h-12">
+                    <tr key={e.code} className={`ch-hover border-b border-line last:border-b-0 h-12 ${e.unlinked ? 'opacity-60' : ''}`}>
                       <td className="px-3 text-ink/80 text-[15px] whitespace-nowrap tabular-nums">
                         {clubEventDates(e.startDate, e.endDate)}
                         {n && noteTimeLine(n) && <span className="block t-cap text-ink/65">{noteTimeLine(n)}</span>}
@@ -181,7 +188,7 @@ export default function Events() {
                       <td className="px-3 text-ink/80 text-[15px]">{c ? c.entry ?? 'Everybody' : '—'}</td>
                       <td className="px-3 text-ink/80 text-[15px] text-right tabular-nums whitespace-nowrap">{c ? (c.matchPlay ? `${c.matchPlay.entered}${c.matchPlay.cap ? ` of ${c.matchPlay.cap}` : ''}` : c.capacity ? `${c.booked} of ${c.capacity}` : c.booked) : '—'}</td>
                       <td className="px-3 whitespace-nowrap">
-                        {c ? <Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill> : isOfficeOnly(e) ? <Pill>Office only</Pill> : null}
+                        {c ? <Pill live={c.phase === 'in_play'}>{PHASE_WORDS[c.phase]}</Pill> : isOfficeOnly(e) ? <Pill>Office only</Pill> : linkable(e) ? link(e) : null}
                       </td>
                       <td className="px-3 text-right whitespace-nowrap">
                         {office && ((c && !c.matchPlay) || n) && (
@@ -208,12 +215,17 @@ export default function Events() {
                 </>
               )
               return (
-                <li key={e.code}>
+                <li key={e.code} className={e.unlinked ? 'opacity-60' : ''}>
                   {e.note
                     ? (office
                       ? <button type="button" onClick={() => setEditing(e.note!)} className="w-full text-left flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</button>
                       : <div className="flex items-center gap-3 min-h-14 px-4 py-3">{body}</div>)
-                    : <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex items-center gap-3 min-h-14 px-4 py-3 press">{body}</Link>}
+                    : (
+                      <div className="flex items-center">
+                        <Link href={eventHref(e, face.slug)!} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className="flex-1 min-w-0 flex items-center gap-3 min-h-14 pl-4 py-3 press">{body}</Link>
+                        {linkable(e) && <span className="pr-2">{link(e)}</span>}
+                      </div>
+                    )}
                   {e.competition && office && !e.competition.matchPlay && (
                     <div className="flex gap-1 px-3 pb-2 -mt-1">
                       <button type="button" onClick={() => setComp(e.code)} aria-label={`Edit ${e.name}`} className="ch-focus t-label text-ink rounded-tile px-2 min-h-11 press">Edit</button>

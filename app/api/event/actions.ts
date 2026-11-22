@@ -46,6 +46,9 @@ export interface ActionStore extends EntryStore {
   adminClubs?(userId: string): Promise<{ id: string; name: string }[]>
   /** The event put under a club (or taken out, null), and who changes it. */
   setEventClub?(tripId: string, clubId: string | null, access: ClubAccess | null): Promise<void>
+  /** D285 (100): whether the event is unlinked from its club's members app, and setting it. False before 100. */
+  eventUnlinked?(tripId: string): Promise<boolean>
+  setEventUnlinked?(tripId: string, unlinked: boolean): Promise<boolean>
 
   // Stage (d1) — club competitions (D164, migration 089).
   /**
@@ -257,6 +260,10 @@ export interface EventClubView {
   runsClub: boolean
   /** The club's own, or the event's owner: may take it out of the club. */
   mayTakeOut: boolean
+  /** D285: taken out of the club's members app — still the club's, never in a member's list. */
+  unlinked: boolean
+  /** D285: whether it can be linked or unlinked at all — not a competition, and the club's switch is there. */
+  linkable: boolean
 }
 
 /**
@@ -270,7 +277,7 @@ export interface EventClubView {
  * hours to set a new one. Never touches a score.
  */
 export async function runEventClub(
-  input: { token: string | null; code: unknown; clubId?: unknown; access?: unknown; pin?: unknown },
+  input: { token: string | null; code: unknown; clubId?: unknown; access?: unknown; pin?: unknown; linked?: unknown },
   store: ActionStore,
   now: Date,
 ): Promise<{ status: 200; body: { ok: true } & EventClubView } | Fail> {
@@ -280,18 +287,34 @@ export async function runEventClub(
   if (!store.adminClubs || !store.setEventClub) return fail(503, 'Clubs aren’t set up yet.')
   const clubs = await store.adminClubs(c.userId)
   const { trip } = c
+  const unlinked = trip.clubId && store.eventUnlinked ? await store.eventUnlinked(trip.id).catch(() => false) : false
+  const canLink = !!trip.clubId && !trip.competition && !!store.setEventUnlinked
   const view = (clubId: string | null, name: string | null, access: ClubAccess | null): { status: 200; body: { ok: true } & EventClubView } => ({
     status: 200,
     body: {
       ok: true, club: clubId ? { id: clubId, name: name ?? '' } : null, access, clubs,
       runsClub: !!clubId && clubs.some(k => k.id === clubId),
       mayTakeOut: !!clubId && (clubs.some(k => k.id === clubId) || trip.ownerId === c.userId),
+      unlinked: !!clubId && unlinked,
+      linkable: !!clubId && !trip.competition && !!store.setEventUnlinked,
     },
   })
 
   const lockToAdmins = async () => {
     await store.updateTrip(trip.id, { settings_passcode_hash: await hashPin(unheldPin(), trip.code) })
     await store.endOrganisers(trip.id)
+  }
+
+  // D285: linked to the club's members app, or taken out of it — the club's
+  // Officers, or the event's owner; never for a competition.
+  if (typeof input.linked === 'boolean') {
+    if (!canLink) return fail(400, trip.clubId ? 'A competition is always the club’s members’.' : 'This event isn’t a club’s.')
+    if (!clubs.some(k => k.id === trip.clubId) && trip.ownerId !== c.userId) {
+      return fail(403, `Only ${trip.clubName ?? 'the club'}’s Officers, or the event’s owner, link it to the members app.`)
+    }
+    const ok = await store.setEventUnlinked!(trip.id, !input.linked)
+    if (!ok) return fail(503, 'Linking isn’t set up yet — try again later.')
+    return { status: 200, body: { ok: true, club: { id: trip.clubId as string, name: trip.clubName ?? '' }, access: trip.clubAccess ?? null, clubs, runsClub: clubs.some(k => k.id === trip.clubId), mayTakeOut: true, unlinked: !input.linked, linkable: true } }
   }
 
   // Taken out of its club.

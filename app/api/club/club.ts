@@ -168,7 +168,7 @@ export interface ClubStore extends ClubhouseStore {
   /** Stage (f): this account's own card summaries for a year, and their courses' names. Empty before 088. */
   seasonRows(userId: string, year: number): Promise<{ rows: SeasonRow[]; courses: Record<string, string>; index?: import('@/lib/cardSummary').IndexPoint[] }>
   /** This account's events outside the club — in them or made them — on now or to come (D143's "Outside the club", D144). */
-  outsideEvents(userId: string, excludeCodes: string[]): Promise<ClubEvent[]>
+  outsideEvents(userId: string, excludeCodes: string[], clubId?: string): Promise<ClubEvent[]>
   /** The best club-round score in each of these finished events, by code — from the summaries. */
   topScores(codes: string[]): Promise<Record<string, { name: string; points: number }>>
   /** An image kept in the bucket; the old one let go. */
@@ -291,6 +291,8 @@ export type ClubBody = {
   notesReady?: boolean
   hiddenTypes?: import('@/lib/clubEvents').ClubEventType[]
   noteId?: string
+  /** D285: after Link or Unlink — the event's state. */
+  unlinked?: boolean
   /** Stage c1, M7: the club's event presets, and whether they can be kept yet (095). */
   presets?: import('@/lib/clubPresets').Preset[]
   presetsReady?: boolean
@@ -542,7 +544,7 @@ export async function runClub(
     const [entries, season, outside, tops, toSign, phases, myClubs, notes, matches, partners] = await Promise.all([
       events.length ? store.entries(user.id, events.map(e => e.code)) : Promise.resolve([]),
       store.seasonRows(user.id, Number(today.slice(0, 4))),
-      store.outsideEvents(user.id, events.map(e => e.code)),
+      store.outsideEvents(user.id, events.map(e => e.code), club.id),
       past.length ? store.topScores(past) : Promise.resolve({}),
       comps && store.cardsToSign ? store.cardsToSign(club.id, row.id, compList).catch(() => []) : Promise.resolve([]),
       first?.comps.length && store.compPhases ? store.compPhases(first.comps).catch(() => null) : Promise.resolve(null),
