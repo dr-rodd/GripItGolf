@@ -1,6 +1,8 @@
 // The service-role store behind /api/club (./club.ts). Every club table is
 // closed to phones (migration 086); only this reaches them.
 
+import { colourFor, withDefaults } from '@/lib/clubLabels'
+import { deleteLabel, readLabels, saveLabel } from './labelsStore'
 import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { readMyClubMatches, readPairPartners } from './matchPlayStore'
 import { readClubDraw } from './matchPlayDraw'
@@ -68,11 +70,19 @@ export async function readClubEvents(db: Db, clubId: string, opts: { withUnlinke
   // D285: an event unlinked from the members app (100) is read only by the
   // Clubhouse (`withUnlinked`); every member's list and the public face leave
   // it out. Fail-soft: before 100 nothing is unlinked.
-  let rows = await db.from('trip_private').select('trip_id, club_access, club_unlinked_at').eq('club_id', clubId)
+  // D288: the entry rules carry a competition's label (094), asked for with the rest and dropped when missing.
+  const [rows0, storedLabels] = await Promise.all([
+    db.from('trip_private').select('trip_id, club_access, club_unlinked_at, entry_rules').eq('club_id', clubId),
+    readLabels(db, clubId).catch(() => null),
+  ])
+  let rows = rows0
+  if (rows.error) rows = await db.from('trip_private').select('trip_id, club_access, entry_rules').eq('club_id', clubId) as typeof rows
   if (rows.error) rows = await db.from('trip_private').select('trip_id, club_access').eq('club_id', clubId) as typeof rows
   const { data: priv, error } = rows
   if (error || !priv?.length) return []
-  const all = priv as { trip_id: string; club_access: string | null; club_unlinked_at?: string | null }[]
+  const all = priv as { trip_id: string; club_access: string | null; club_unlinked_at?: string | null; entry_rules?: unknown }[]
+  const labels = withDefaults(storedLabels ?? [])
+  const labelColourOf = new Map(all.map(p => [p.trip_id, readEntryRules(p.entry_rules)?.label?.colour ?? null]))
   const unlinkedIds = new Set(all.filter(p => p.club_unlinked_at).map(p => p.trip_id))
   const kept = opts.withUnlinked ? all : all.filter(p => !unlinkedIds.has(p.trip_id))
   if (!kept.length) return []
@@ -94,6 +104,7 @@ export async function readClubEvents(db: Db, clubId: string, opts: { withUnlinke
       startDate: t.start_date, endDate: t.end_date, access: access.get(t.id) ?? null,
       ...(compOf.has(t.id) ? { competition: compOf.get(t.id)! } : {}),
       ...(unlinkedIds.has(t.id) && !compOf.has(t.id) ? { unlinked: true as const } : {}),
+      colour: colourFor({ labelColour: labelColourOf.get(t.id) ?? null, type: compOf.has(t.id) ? 'COMP' : t.kind === 'run' ? 'SPORT' : 'GOLF' }, labels),
       // MO2 (D281): never Live now.
       ...(seasonLongOf({ kind: t.kind, startDate: t.start_date, endDate: t.end_date, setup: t.bracket_setup }) ? { seasonLong: true as const } : {}),
     }))
@@ -279,7 +290,7 @@ export async function readListCounts(db: Db, clubId: string): Promise<ListCounts
 export async function readClubSeason(db: Db, clubId: string): Promise<SeasonEvent[]> {
   const events = await readClubEvents(db, clubId, { withUnlinked: true })
   const comps = events.filter(e => e.competition)
-  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null, ...(e.unlinked ? { unlinked: true as const } : {}) })
+  const base = (e: ClubEvent): SeasonEvent => ({ code: e.code, name: e.name, kind: e.kind, type: e.competition ? 'COMP' : e.kind === 'run' ? 'SPORT' : 'GOLF', startDate: e.startDate, endDate: e.endDate, competition: null, ...(e.unlinked ? { unlinked: true as const } : {}), ...(e.colour ? { colour: e.colour } : {}) })
   if (!comps.length) return events.map(base)
   const { data: trips } = await db.from('trips').select('id, trip_code, leaderboards, bracket_setup').in('trip_code', comps.map(c => c.code))
   const tripRows = (trips ?? []) as { id: string; trip_code: string; leaderboards: unknown; bracket_setup?: unknown }[]
@@ -723,6 +734,9 @@ export function clubStore(db: Db): ClubStore {
       return readListCounts(db, clubId)
     },
     seasonEvents: clubId => readClubSeason(db, clubId),
+    labels: clubId => readLabels(db, clubId),
+    saveLabel: (clubId, l) => saveLabel(db, clubId, l),
+    deleteLabel: (clubId, id) => deleteLabel(db, clubId, id),
     async setEventLink(clubId, code, unlinked) {
       const { data: t } = await db.from('trips').select('id, competition').eq('trip_code', code).maybeSingle()
       const trip = t as { id: string; competition?: string | null } | null

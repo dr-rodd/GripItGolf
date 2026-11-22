@@ -263,6 +263,8 @@ export interface SeasonEvent {
   endDate: string | null
   /** D285: unlinked from the members app — still read here, greyed, never shown to members. */
   unlinked?: true
+  /** D288: its label's colour (else its type's default label's). */
+  colour?: string
   /** A club competition's facts; null for any other event under the club. */
   competition: {
     phase: CompPhase
@@ -289,8 +291,8 @@ export function seasonType(e: Pick<SeasonEvent, 'type' | 'competition' | 'kind'>
 }
 
 /** A club event as the season table and the calendar read it. */
-export function noteAsSeason(n: ClubNote): SeasonEvent {
-  return { code: `ev-${n.id}`, name: n.title, kind: 'club', type: n.type, startDate: n.startsOn, endDate: n.endsOn ?? n.startsOn, competition: null, note: n }
+export function noteAsSeason(n: ClubNote, colour?: string): SeasonEvent {
+  return { code: `ev-${n.id}`, name: n.title, kind: 'club', type: n.type, startDate: n.startsOn, endDate: n.endsOn ?? n.startsOn, competition: null, note: n, ...(colour ? { colour } : {}) }
 }
 
 /** Whether an event is Office only — the Clubhouse alone (only a club event can be). */

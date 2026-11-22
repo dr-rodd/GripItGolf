@@ -144,7 +144,10 @@ section('The old identity is gone')
     // club's own picture, and the gradient only says where it stops — never
     // a colour wash, and nothing outside a club page draws it.
     const clubMask = (r: string) => /\.club-art, \.club-grain\s*\{/.test(r) && !/background(-image)?:[^;]*gradient/.test(r)
-    const strays = rules.filter(r => !r.includes('.scroll-shade') && !clubMask(r))
+    // The third (D288, Ross, 22 Nov 2026): a label's wash at the head of its
+    // page — one flat colour, the gradient only the mask that fades it.
+    const labelMask = (r: string) => /\.label-wash\s*\{/.test(r) && !/background(-image)?:[^;]*gradient/.test(r)
+    const strays = rules.filter(r => !r.includes('.scroll-shade') && !clubMask(r) && !labelMask(r))
       .map(r => r.trim().split('{')[0].trim())
     eq(strays, [], 'the stylesheet has no gradient but the scroll shade, and the mask that fades a club\'s art')
 

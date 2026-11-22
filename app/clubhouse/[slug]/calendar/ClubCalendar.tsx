@@ -54,14 +54,16 @@ export default function ClubCalendar() {
     </>
   )
   const chipClass = (e: SeasonEvent) => `ch-hover ch-focus block w-full text-left rounded-tile px-1.5 py-1 text-[13px] font-semibold leading-tight ${e.competition ? 'bg-club-tint text-club-deep' : 'bg-tint text-ink'} ${e.unlinked ? 'opacity-60' : ''}`
+  // D288: its label's colour down the chip's left edge.
+  const chipEdge = (e: SeasonEvent): React.CSSProperties | undefined => (e.colour ? { borderLeft: `3px solid ${e.colour}` } : undefined)
   const chip = (e: SeasonEvent) => {
     const href = eventHref(e, face.slug)
     if (!href) {
       return office && e.note
-        ? <button key={e.code} type="button" title={e.name} onClick={() => setEditing(e.note!)} className={chipClass(e)}>{chipBody(e)}</button>
-        : <div key={e.code} title={e.name} className={chipClass(e)}>{chipBody(e)}</div>
+        ? <button key={e.code} type="button" title={e.name} onClick={() => setEditing(e.note!)} className={chipClass(e)} style={chipEdge(e)}>{chipBody(e)}</button>
+        : <div key={e.code} title={e.name} className={chipClass(e)} style={chipEdge(e)}>{chipBody(e)}</div>
     }
-    return <Link key={e.code} href={href} title={e.name} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={chipClass(e)}>{chipBody(e)}</Link>
+    return <Link key={e.code} href={href} title={e.name} {...(opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={chipClass(e)} style={chipEdge(e)}>{chipBody(e)}</Link>
   }
 
   return (

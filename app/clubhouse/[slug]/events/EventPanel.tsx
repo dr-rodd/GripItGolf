@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react'
 import { IconCheck, IconX } from '@/app/components/icons'
-import { FIELD, FIELD_LABEL, Segmented, buttonClass } from '@/app/components/ui'
+import { FIELD, FIELD_LABEL, Segmented, buttonClass, chipClass } from '@/app/components/ui'
+import { pickableLabels } from '@/lib/clubLabels'
+import { useLabels } from '../useLabels'
 import { askClub } from '@/lib/accountClient'
 import { NO_PLACES, onCourse, shortCourse, type ClubPlaces } from '@/lib/clubLocations'
 import {
@@ -46,6 +48,10 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
   const [notes, setNotes] = useState(note?.notes ?? '')
   const [visibility, setVisibility] = useState<Visibility>(note?.visibility ?? 'members')
   const [blocks, setBlocks] = useState(note?.blocksSheet ?? !!blocking)
+  // D288: the label it carries — none wears its type's own.
+  const { labels } = useLabels(clubId)
+  const [labelId, setLabelId] = useState<string | null>(note?.labelId ?? null)
+  const typeLabelOf = labels.find(l => l.eventType === type)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sure, setSure] = useState(false)
@@ -60,6 +66,7 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
     place: roomPicked || (golfy && places.courses.length > 0) ? '' : place,
     locationId: roomPicked ? room : null,
     locationCourseId: golfy && places.courses.length > 1 && courseId && courseId !== places.courses[0].courseId ? courseId : null,
+    labelId,
   })
   const issue = noteIssue(draft)
 
@@ -189,6 +196,20 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
           <div>
             <label htmlFor="ev-notes" className={FIELD_LABEL}>Notes</label>
             <textarea id="ev-notes" rows={4} className={`${FIELD} ch-focus h-auto`} value={notes} maxLength={NOTE_NOTES_MAX} onChange={e => setNotes(e.target.value)} />
+          </div>
+          <div>
+            <p className={FIELD_LABEL}>Label</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" aria-pressed={!labelId} onClick={() => setLabelId(null)} className={`${chipClass(!labelId)} inline-flex items-center gap-1.5 ch-focus`}>
+                <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full" style={{ background: typeLabelOf?.colour }} />{typeLabelOf?.name ?? typeLabel(type)}
+              </button>
+              {pickableLabels(labels).map(l => (
+                <button key={l.id} type="button" aria-pressed={labelId === l.id} onClick={() => setLabelId(l.id)} className={`${chipClass(labelId === l.id)} inline-flex items-center gap-1.5 ch-focus`}>
+                  <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full" style={{ background: l.colour }} />{l.name}
+                </button>
+              ))}
+            </div>
+            <p className="t-cap text-ink/65 mt-2">Its colour on the calendar. Without one, it wears its type’s.</p>
           </div>
           <div>
             <p className={FIELD_LABEL}>Who sees it</p>

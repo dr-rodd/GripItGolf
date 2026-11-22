@@ -1,5 +1,6 @@
 'use client'
 
+import { useLabels } from '../useLabels'
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { IconX } from '@/app/components/icons'
@@ -42,6 +43,8 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
   /** Copy, from Edit: the saved competition handed to the copy flow (D274). */
   onCopy?: () => void
 }) {
+  // D288: the club's labels, for who may enter and the colour.
+  const { labels } = useLabels(clubId)
   const { courses: listed } = usePlatformCourses()
   const [added, setAdded] = useState<DirectoryCourse[]>([])
   const courses = useMemo(() => [...listed.filter(c => !added.some(a => a.id === c.id)), ...added], [listed, added])
@@ -177,7 +180,7 @@ export default function CompPanel({ clubId, slug, code, homeCourseId, cats, ageD
             )}
 
             <h3 className="t-card text-ink pt-1">Who can enter</h3>
-            <EntryRulesFields entry={form.entry} onChange={e => set('entry', e)} cats={cats} date={form.date} ageDate={ageDate} idPrefix="cp-entry" />
+            <EntryRulesFields entry={form.entry} onChange={e => set('entry', e)} cats={cats} date={form.date} ageDate={ageDate} idPrefix="cp-entry" labels={labels} />
 
             <h3 className="t-card text-ink pt-1">Tee times</h3>
             {sun && sunWords(sun) && <p className="t-cap text-ink/65 -mt-3">{sunWords(sun)}</p>}

@@ -18,6 +18,7 @@ import { isMissingColumn } from '../rows'
 import { readEntryRulesOf } from '../entryRules'
 import { readMatchPlayComp } from '../matchPlayStore'
 import { readClubDraw } from '../matchPlayDraw'
+import { freshEntry, indexesOf } from '../labelsStore'
 
 // POST /api/club/competition — `{ clubId, form }` with a Green Dot member's
 // token: a verified club's owner or admin makes a competition (D162). The
@@ -55,7 +56,11 @@ export async function POST(req: NextRequest) {
       logActivity: entries => clubs.logActivity ? clubs.logActivity(entries) : Promise.resolve(),
       categories: clubId => clubs.categories ? clubs.categories(clubId) : Promise.resolve([]),
       async setEntryRules(tripId, rules) {
-        const { error } = await db.from('trip_private').update({ entry_rules: rules }).eq('trip_id', tripId)
+        // D288: a label carried is the club's own as it stands now.
+        const { data: priv } = await db.from('trip_private').select('club_id').eq('trip_id', tripId).maybeSingle()
+        const clubId = (priv as { club_id?: string | null } | null)?.club_id
+        const fresh = clubId ? await freshEntry(db, clubId, rules) : rules
+        const { error } = await db.from('trip_private').update({ entry_rules: fresh }).eq('trip_id', tripId)
         if (error) throw isMissingColumn(error) ? new EntryNotReady() : error
       },
       async setImportRef(tripId, ref) {
@@ -83,6 +88,9 @@ export async function POST(req: NextRequest) {
         return new Set(((data ?? []) as { member_id: string; changes: Record<string, unknown> | null }[]).filter(r => r.changes && code in r.changes).map(r => r.member_id))
       },
       applyChange: (c, change) => applyChange(db, c, change),
+      // D288: a label is the club's own as it stands; the indexes its handicap band reads.
+      freshEntry: (clubId, entry) => freshEntry(db, clubId, entry),
+      indexesOf: (clubId, rows) => indexesOf(db, clubId, rows),
       // Stage c2: a calendar imported.
       notes: clubId => readNotes(db, clubId),
       saveNote: (clubId, note, by) => saveNote(db, clubId, note, by),
@@ -200,7 +208,7 @@ async function readCompNow(db: Db, code: string): Promise<CompNow | null> {
  * the bookings moved puts them back.
  */
 async function applyChange(db: Db, c: CompNow, ch: import('../competition').CompChange): Promise<void> {
-  const ent = await db.from('trip_private').update({ entry_rules: ch.entry }).eq('trip_id', c.tripId)
+  const ent = await db.from('trip_private').update({ entry_rules: await freshEntry(db, c.clubId, ch.entry) }).eq('trip_id', c.tripId)
   if (ent.error && !(isMissingColumn(ent.error) && !ch.entry)) throw isMissingColumn(ent.error) ? new EntryNotReady() : ent.error
   const was = new Map(c.bookings.map(b => [b.playerId, b.slot]))
   const done: string[] = []

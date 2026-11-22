@@ -91,12 +91,23 @@ export function whenLine(i: CalItem, withDay = true): string {
   return [day, time].filter(Boolean).join(' · ')
 }
 
-/** One thing as a row: a date tile, its name, when, and the member's own line. A tap goes where it should. */
+/** D288: the colour down a card's left edge — its label's (else its type's); the open sheet's the action green. */
+export function edgeStyle(i: Pick<CalItem, 'colour'>): React.CSSProperties | undefined {
+  return i.colour ? { background: i.colour } : undefined
+}
+
+/** D288: a block filled with its label's colour softly, its edge in full — the words stay ink. */
+export function fillStyle(i: Pick<CalItem, 'colour'>): React.CSSProperties | undefined {
+  return i.colour ? { background: `color-mix(in srgb, ${i.colour} 16%, var(--color-surface))`, borderLeft: `4px solid ${i.colour}` } : undefined
+}
+
+/** One thing as a row: its colour down the left edge (D288), a date tile, its name, when, and the member's own line. A tap goes where it should. */
 export function ItemRow({ i, onNote }: { i: CalItem; onNote?: (i: CalItem) => void }) {
   const d = new Date(`${i.date}T12:00:00Z`)
   const body = (
     <>
-      <span className={`w-[52px] h-14 flex-shrink-0 rounded-tile flex flex-col items-center justify-center ${i.kind === 'comp' ? 'bg-club-tint' : 'bg-tint'}`}>
+      <span aria-hidden="true" className={`w-1.5 self-stretch -my-2 -ml-2 rounded-l-card flex-shrink-0 ${i.colour ? '' : KIND_BAR[i.kind]}`} style={edgeStyle(i)} />
+      <span className="w-[52px] h-14 flex-shrink-0 rounded-tile flex flex-col items-center justify-center bg-tint">
         <span className="t-data text-[20px] leading-none text-ink">{d.getUTCDate()}</span>
         <span className="text-[13px] leading-none text-ink/65 mt-1">{new Intl.DateTimeFormat('en-IE', { timeZone: 'UTC', month: 'short' }).format(d)}</span>
       </span>
@@ -108,7 +119,7 @@ export function ItemRow({ i, onNote }: { i: CalItem; onNote?: (i: CalItem) => vo
       {(i.href || i.note) && <IconChevronRight size={20} className="text-ink/50 flex-shrink-0" />}
     </>
   )
-  const cls = `${cardClass('raised', true)} w-full text-left flex items-center gap-3 p-2 pr-3`
+  const cls = `${cardClass('raised', true)} w-full text-left flex items-center gap-3 p-2 pr-3 overflow-hidden`
   return (
     <li>
       {i.href

@@ -1,5 +1,6 @@
 'use client'
 
+import { useLabels } from '../useLabels'
 import { useEffect, useMemo, useState } from 'react'
 import { IconX } from '@/app/components/icons'
 import EntryRulesFields from '@/app/components/EntryRulesFields'
@@ -39,6 +40,8 @@ export default function MatchPlayPanel({ clubId, slug, homeCourseId, presets, ca
   onClose: () => void
   onDone: () => void
 }) {
+  // D288: the club's labels, for who may enter and the colour.
+  const { labels } = useLabels(clubId)
   const today = irishToday(new Date())
   const [form, setForm] = useState<MatchPlayForm>({
     name: '', format: 'singles', allowance: 100, watch: 'members', entry: null,
@@ -136,7 +139,7 @@ export default function MatchPlayPanel({ clubId, slug, homeCourseId, presets, ca
           </div>
 
           <h3 className="t-card text-ink pt-1">Who can enter</h3>
-          <EntryRulesFields entry={form.entry} onChange={e => set('entry', e)} cats={cats} date={form.closes?.date ?? ''} ageDate={ageDate} idPrefix="mp-entry" />
+          <EntryRulesFields entry={form.entry} onChange={e => set('entry', e)} cats={cats} date={form.closes?.date ?? ''} ageDate={ageDate} idPrefix="mp-entry" labels={labels} />
           {pairs && <p className="t-cap text-ink/65 -mt-2">Both players in a pair must be able to enter.</p>}
 
           <h3 className="t-card text-ink pt-1">The field</h3>

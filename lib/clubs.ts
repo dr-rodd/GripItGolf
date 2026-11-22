@@ -444,6 +444,8 @@ export interface ClubEvent {
   liveFrom?: number | null
   /** D285: unlinked from the members app — read only by the Clubhouse, never in a member's list. */
   unlinked?: true
+  /** D288: its label's colour (else its type's default label's) — down a card's edge. */
+  colour?: string
 }
 
 /** Comps' Upcoming and the members home: the next two weeks (MO3, D282). */

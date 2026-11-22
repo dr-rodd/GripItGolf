@@ -6,6 +6,7 @@ import { readCasualSettings, type CasualSettings } from '@/lib/clubTeeSheet'
 import { asRow, clubStore, readCategories, rowCols, withTicks, type RowRow } from './store'
 import { readClubHidden, readMemberHiddenOf, readNotes } from './notesStore'
 import { readClubEvents } from './store'
+import { indexesOf, readLabels } from './labelsStore'
 import { TeeSheetNotReady, type StoredBooking, type TeeComp, type TeeTimesStore } from './teeTimes'
 
 // A club's casual tee sheet on the service role. Migration 096 is read
@@ -159,6 +160,8 @@ export function teeTimesStore(db: Db): TeeTimesStore {
       ])
       return (notes ?? []).filter(n => memberSees(n, clubHidden, mine))
     },
+    indexesOf: (clubId, rows) => indexesOf(db, clubId, rows),
+    labels: clubId => readLabels(db, clubId),
     async golfEvents(clubId) {
       const events = await readClubEvents(db, clubId).catch(() => [])
       return events.filter(e => !e.competition).map(e => ({ code: e.code, name: e.name, startDate: e.startDate, endDate: e.endDate }))

@@ -168,7 +168,7 @@ export default function TeeSheet() {
                     <div className="px-4 py-3">
                       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                         <span className="t-cap text-ink/65 tabular-nums">{overlaySpan(row.overlay)}</span>
-                        <span className="t-label text-ink">{row.overlay.title}</span>
+                        <span className="t-label text-ink inline-flex items-center gap-1.5">{row.overlay.colour && <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: row.overlay.colour }} />}{row.overlay.title}</span>
                         <span className="t-cap text-ink/65">{row.overlay.kind === 'competition' ? 'Competition' : 'Block booking'}{row.times.length ? ` · ${row.times.length} tee time${row.times.length === 1 ? '' : 's'}` : ''}</span>
                         <span className="flex-1" />
                         {row.overlay.kind === 'competition'

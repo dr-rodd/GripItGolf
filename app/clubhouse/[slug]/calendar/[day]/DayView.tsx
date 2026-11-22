@@ -184,16 +184,20 @@ function Block({ b, slug, office, events, onEdit, allDay = false }: {
     </>
   )
   if (b.noteId) {
-    const note = events.find(e => e.note?.id === b.noteId)?.note
+    const ev = events.find(e => e.note?.id === b.noteId)
+    const note = ev?.note
+    const noteEdge = ev?.colour ? { borderLeft: `4px solid ${ev.colour}` } : undefined
     return office && note
-      ? <button type="button" onClick={() => onEdit(note)} title={b.title} className={`${cls} ch-hover`}>{inner}</button>
-      : <div title={b.title} className={cls}>{inner}</div>
+      ? <button type="button" onClick={() => onEdit(note)} title={b.title} className={`${cls} ch-hover`} style={noteEdge}>{inner}</button>
+      : <div title={b.title} className={cls} style={noteEdge}>{inner}</div>
   }
   const e = events.find(x => x.code === b.code)
   const href = e ? eventHref(e, slug) : null
   // D285: an event unlinked from the members app is greyed.
   const dim = e?.unlinked ? ' opacity-60' : ''
+  // D288: its label's colour down the block's left edge.
+  const edge = e?.colour ? { borderLeft: `4px solid ${e.colour}` } : undefined
   return href
-    ? <Link href={href} title={b.title} {...(e && opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={`${cls} ch-hover${dim}`}>{inner}</Link>
-    : <div title={b.title} className={`${cls}${dim}`}>{inner}</div>
+    ? <Link href={href} title={b.title} {...(e && opensOutside(e) ? { target: '_blank', rel: 'noopener' } : {})} className={`${cls} ch-hover${dim}`} style={edge}>{inner}</Link>
+    : <div title={b.title} className={`${cls}${dim}`} style={edge}>{inner}</div>
 }

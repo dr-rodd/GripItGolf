@@ -14,6 +14,9 @@
 // Handed its store, so `test:clubs` runs it on a stand-in; ./teeTimesStore.ts
 // is the service-role store.
 
+import { labelNeedsIndex } from '@/lib/clubMembership'
+import { colourFor, withDefaults, type ClubLabel } from '@/lib/clubLabels'
+import type { IndexesOf } from './labelIndex'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { irishToday } from '@/lib/clubs'
@@ -51,6 +54,10 @@ export interface CalendarFacts {
   place: { lat: number | null; lng: number | null } | null
   notes: ClubNote[]
   golf: { code: string; name: string; startDate: string | null; endDate: string | null }[]
+  /** D288: the member's handicap index, read only when a label's band asks for one. */
+  myIndex?: number | null
+  /** D288: the club's labels, every type's default first — the colour of everything on the calendar. */
+  labels?: ClubLabel[]
 }
 
 /** The members the calendar must name: everybody on the member's own casual times. */
@@ -77,7 +84,7 @@ export function calendarItems(f: CalendarFacts, names: ReadonlyMap<string, strin
     const seats = c.seats ?? []
     const mineSeat = seats.find(s => s.memberId === r.id) ?? null
     const refusal = !me.playsHere ? 'plays' : entryRefusal({
-      rules: c.entry, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+      rules: c.entry, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null, index: f.myIndex ?? null },
       category: f.categories.find(k => k.id === r.categoryId) ?? null, day: c.date, ageDate: f.ageDate, categories: f.categories,
     })
     const cf: CompFacts = {
@@ -90,6 +97,7 @@ export function calendarItems(f: CalendarFacts, names: ReadonlyMap<string, strin
     items.push({
       key: `comp:${c.code}`, kind: 'comp', date: c.date, from: c.clocks[0] ?? null, to: c.clocks[c.clocks.length - 1] ?? null,
       title: c.name, status: compStatus(cf, f.now), href: compHref(f.slug, c.code, cf, f.now),
+      colour: colourFor({ labelColour: c.entry?.label?.colour ?? null, type: 'COMP' }, f.labels ?? []),
     })
   }
   const look = plusDays(f.today, CASUAL_LOOK_AHEAD_DAYS)
@@ -117,11 +125,12 @@ export function calendarItems(f: CalendarFacts, names: ReadonlyMap<string, strin
       key: `note:${n.id}`, kind: n.blocksSheet ? 'block' : 'event', date: n.startsOn, endDate: n.endsOn ?? null,
       from: n.startTime ?? null, to: n.endTime ?? null, title: n.title, detail: noteTimeLine(n) || null,
       status: null, href: null, noteId: n.id, note: n,
+      colour: colourFor({ labelId: n.labelId ?? null, type: n.type }, f.labels ?? []),
     })
   }
   for (const g of f.golf) {
     if (!g.startDate || (g.endDate ?? g.startDate) < f.from || g.startDate > f.to) continue
-    items.push({ key: `golf:${g.code}`, kind: 'golf', date: g.startDate, endDate: g.endDate, from: null, to: null, title: g.name, status: null, href: `/${g.code}` })
+    items.push({ key: `golf:${g.code}`, kind: 'golf', date: g.startDate, endDate: g.endDate, from: null, to: null, title: g.name, status: null, href: `/${g.code}`, colour: colourFor({ type: 'GOLF' }, f.labels ?? []) })
   }
   return items.sort((a, b) => a.date.localeCompare(b.date) || (a.from ?? '').localeCompare(b.from ?? '') || a.title.localeCompare(b.title))
 }
@@ -182,6 +191,10 @@ export interface TeeTimesStore {
   ageDate(clubId: string): Promise<string>
   /** D286: the club's own events a member sees from one day to another (the member's own hidden types left out) — none before 095. */
   events?(clubId: string, userId: string, from: string, to: string): Promise<ClubNote[]>
+  /** D288: list rows' handicap indexes, for a label's handicap band. */
+  indexesOf?: IndexesOf
+  /** D288: the club's stored labels — null before 101. */
+  labels?(clubId: string): Promise<ClubLabel[] | null>
   /** D286: golf events the club runs on their own pages — linked ones only (D285). */
   golfEvents?(clubId: string): Promise<{ code: string; name: string; startDate: string | null; endDate: string | null }[]>
   logActivity?(entries: ActivityEntry[]): Promise<void>
@@ -307,7 +320,12 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
       store.events ? store.events(clubId, user.id, from, to).catch(() => [] as ClubNote[]) : Promise.resolve([] as ClubNote[]),
       store.golfEvents ? store.golfEvents(clubId).catch(() => []) : Promise.resolve([]),
     ])
-    const facts: CalendarFacts = { slug: club.slug, today, now: now.getTime(), from, to, row, settings, ready: ready && booked !== null, categories, booked: booked ?? [], comps, blocks, ageDate, place, notes, golf }
+    // D288: the member's index, only when a competition's label band asks for one; the club's labels, for colour.
+    const [myIndex, storedLabels] = await Promise.all([
+      comps.some(c => labelNeedsIndex(c.entry)) && store.indexesOf ? store.indexesOf(clubId, [row]).then(m => m.get(row.id) ?? null).catch(() => null) : Promise.resolve(null),
+      store.labels ? store.labels(clubId).catch(() => null) : Promise.resolve(null),
+    ])
+    const facts: CalendarFacts = { slug: club.slug, today, now: now.getTime(), from, to, row, settings, ready: ready && booked !== null, categories, booked: booked ?? [], comps, blocks, ageDate, place, notes, golf, myIndex, labels: withDefaults(storedLabels ?? []) }
     const names = new Map<string, string>([[row.id, row.name]])
     const mateIds = calendarMateIds(facts)
     for (const r of mateIds.length ? await store.rowsByIds(clubId, mateIds).catch(() => []) : []) names.set(r.id, r.name)
@@ -317,24 +335,32 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
   // ─── The day ────────────────────────────────────────────────
   const from = office && action === 'office.day' ? mondayOf(date) : date
   const to = office && action === 'office.day' ? addDays(from, 6) : date
-  const [[{ settings, ready }, categories, booked, comps, blocks, ageDate], place] = await Promise.all([
+  const [[{ settings, ready }, categories, booked, comps, blocks, ageDate], place, storedLabels] = await Promise.all([
     early ?? dayReads(store, clubId, action, date),
     club.homeCourseId ? store.place(club.homeCourseId) : Promise.resolve(null),
+    // D288: the club's labels, for the overlays' colours.
+    store.labels ? store.labels(clubId).catch(() => null) : Promise.resolve(null),
   ])
+  const labels = withDefaults(storedLabels ?? [])
+  // D288: the member's index, only when a competition's label band asks for one.
+  const memberIndex = !office && row && comps.some(c => labelNeedsIndex(c.entry)) && store.indexesOf
+    ? await store.indexesOf(clubId, [row]).then(m => m.get(row.id) ?? null).catch(() => null) : null
   const geo = place ? { lat: place.lat ?? NaN, lng: place.lng ?? NaN } : null
   const onSheet = (c: TeeComp) => !club.homeCourseId || !c.courseId || c.courseId === club.homeCourseId
   const overlaysOn = (d: string, forMember: MemberRecord | null): Overlay[] => [
     ...comps.filter(c => c.date === d && onSheet(c)).map(c => {
       const refusal = forMember ? entryRefusal({
-        rules: c.entry, person: { gender: forMember.gender ?? null, birthDate: forMember.birthDate ?? null, categoryId: forMember.categoryId ?? null },
+        rules: c.entry, person: { gender: forMember.gender ?? null, birthDate: forMember.birthDate ?? null, categoryId: forMember.categoryId ?? null, index: memberIndex },
         category: categories.find(k => k.id === forMember.categoryId) ?? null, day: d, ageDate, categories,
       }) : null
       const mayBook = !!forMember && !refusal && !c.certified && d >= today && !!credentialsOf(forMember).playsHere
-      return competitionOverlay({ code: c.code, name: c.name, clocks: c.clocks, detail: 'Booked through the competition', bookHref: mayBook ? compSectionHref(club.slug, c.code, 'tee') : null,
+      const o = competitionOverlay({ code: c.code, name: c.name, clocks: c.clocks, detail: 'Booked through the competition', bookHref: mayBook ? compSectionHref(club.slug, c.code, 'tee') : null,
         // MS2 (D279): a member the entry rules refuse is told why, in place of Book.
         bookNote: forMember && refusal && !c.certified && d >= today ? notEligibleLine(refusalWords(refusal), 'book it') : null })
+      // D288: the competition's label's colour, else Competition's.
+      return o ? { ...o, colour: colourFor({ labelColour: c.entry?.label?.colour ?? null, type: 'COMP' }, labels) } as Overlay : null
     }).filter((o): o is Overlay => !!o),
-    ...blocks.map(b => blockOverlay(b, d)).filter((o): o is Overlay => !!o),
+    ...blocks.map(b => { const o = blockOverlay(b, d); return o ? { ...o, colour: colourFor({ labelId: b.labelId ?? null, type: b.type }, labels) } as Overlay : null }).filter((o): o is Overlay => !!o),
   ]
   const dayBookings = (d: string) => (booked ?? []).filter(b => b.date === d)
   const hasMemberships = categories.length > 0

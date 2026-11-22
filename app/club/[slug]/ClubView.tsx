@@ -380,7 +380,8 @@ function EventRow({ e, slug, entries, tops, partners }: { e: ClubEvent; slug: st
   return (
         <ListRow
           href={clubEventHref(e, slug)}
-          label={e.name}
+          // D288: its label's colour, at its left.
+          label={e.colour ? <span className="inline-flex items-start gap-2"><span aria-hidden="true" className="w-1.5 h-5 mt-0.5 rounded-full flex-shrink-0" style={{ background: e.colour }} />{e.name}</span> : e.name}
           hint={
             <>
               {[clubEventDates(e.startDate, e.endDate), e.competition ? PHASE_WORDS[e.competition.phase] : KIND[e.kind]].filter(Boolean).join(' · ')}
@@ -524,7 +525,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
           <div className="mt-3 space-y-3">
             {live.map(e => (
-              <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`}>
+              <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`} style={e.colour ? { borderLeft: `6px solid ${e.colour}` } : undefined}>
                 <p className="t-card text-ink">{e.name}</p>
                 <p className={`t-cap mt-1 ${m.entries.includes(e.code) ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>
                   {m.entries.includes(e.code) ? 'You’re playing · ' : ''}Open the leaderboard
@@ -602,7 +603,8 @@ function CalendarRow({ e, slug, mine }: { e: ClubEvent; slug: string; mine: stri
   const d = e.startDate ? new Date(`${e.startDate}T12:00:00Z`) : null
   return (
     <li>
-      <Link href={clubEventHref(e, slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-2 pr-3`}>
+      <Link href={clubEventHref(e, slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-2 pr-3 overflow-hidden`}>
+        {e.colour && <span aria-hidden="true" className="w-1.5 self-stretch -my-2 -ml-2 rounded-l-card flex-shrink-0" style={{ background: e.colour }} />}
         <span className="w-[52px] h-14 flex-shrink-0 rounded-tile bg-club-tint flex flex-col items-center justify-center">
           <span className="t-data text-[20px] leading-none text-ink">{d ? d.getUTCDate() : '–'}</span>
           <span className="text-[13px] leading-none text-ink/65 mt-1">

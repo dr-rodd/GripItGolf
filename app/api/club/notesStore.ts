@@ -23,6 +23,10 @@ const NOTE_COLS = 'id, ref, title, type, starts_on, ends_on, start_time, end_tim
 const BLOCK_COL = 'blocks_tee_sheet'
 /** 099's columns — the room or course an event is in (D277) — asked for first, dropped when missing. */
 const PLACE_COLS = 'location_id, location_course_id'
+/** 101's column — the label an event carries (D288) — asked for first, dropped when missing. */
+const LABEL_COL = 'label_id'
+const missingLabelCol = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === '42703' || e.code === 'PGRST204') && /label_id/.test(e.message ?? '')
 const missingPlaceCols = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (e.code === '42703' || e.code === 'PGRST204') && /location_/.test(e.message ?? '')
 type NoteRow = {
@@ -30,12 +34,14 @@ type NoteRow = {
   start_time: string | null; end_time: string | null; place: string | null; notes: string | null; visibility: 'members' | 'office'
   blocks_tee_sheet?: boolean | null
   location_id?: string | null; location_course_id?: string | null
+  label_id?: string | null
 }
 const asNote = (r: NoteRow): ClubNote => ({
   id: r.id, ref: r.ref, title: r.title, type: r.type, startsOn: r.starts_on, endsOn: r.ends_on,
   startTime: r.start_time, endTime: r.end_time, place: r.place, notes: r.notes, visibility: r.visibility,
   blocksSheet: r.blocks_tee_sheet === true,
   ...('location_id' in r ? { locationId: r.location_id ?? null, locationCourseId: r.location_course_id ?? null } : {}),
+  ...('label_id' in r ? { labelId: r.label_id ?? null } : {}),
 })
 
 /** 096 is not in yet: an event cannot take the tee sheet. */
@@ -58,7 +64,8 @@ export async function readNotes(db: Db, clubId: string, opts: { from?: string; t
     if (opts.to) q = q.lte('starts_on', opts.to)
     return q.order('starts_on').order('start_time', { nullsFirst: true }).order('title').limit(2000)
   }
-  let { data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}, ${PLACE_COLS}`)
+  let { data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}, ${PLACE_COLS}, ${LABEL_COL}`)
+  if (error && missingLabelCol(error)) ({ data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}, ${PLACE_COLS}`))
   if (error && missingPlaceCols(error)) ({ data, error } = await ask(`${NOTE_COLS}, ${BLOCK_COL}`))
   if (error && missingBlockCol(error)) {
     if (opts.blocking) return []
@@ -81,7 +88,9 @@ export async function saveNote(db: Db, clubId: string, n: Omit<ClubNote, 'id'> &
     : db.from('club_events').insert({ ...r, created_by: by.userId }).select('id').single()
   // 099: the room or course — a write before it saves without, its free text kept.
   const placed = { location_id: n.locationId ?? null, location_course_id: n.locationCourseId ?? null }
-  let { data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet, ...placed })
+  // 101: the label — a write before it saves without (the event wears its type's colour).
+  let { data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet, ...placed, [LABEL_COL]: n.labelId ?? null })
+  if (error && missingLabelCol(error)) ({ data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet, ...placed }))
   if (error && missingPlaceCols(error)) ({ data, error } = await write({ ...row, [BLOCK_COL]: n.blocksSheet }))
   // Before 096 an event that does not take the sheet saves as it always did.
   if (error && missingBlockCol(error)) {

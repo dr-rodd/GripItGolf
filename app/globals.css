@@ -311,6 +311,25 @@ html.dark {
   body { background-image: none; }
 }
 
+/* ── A label's wash (D288, Ross, 22 Nov 2026) ──
+   The head of a labelled thing's own page wears its label's colour softly,
+   fading into the paper — like a phone's training app. A flat tint of the
+   one colour; the gradient is only the mask that says where it stops (the
+   third named exception in test:branding, beside the club art's). */
+.label-wash {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 320px;
+  z-index: -1;
+  pointer-events: none;
+  background-color: color-mix(in srgb, var(--label) 20%, transparent);
+  -webkit-mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 0%, transparent 100%);
+}
+@media print { .label-wash { display: none; } }
+
 /* ── A club's area (stage (e1), D118, D123–D125, D155) ──
    A club page's wrapper carries the club's checked values for both modes
    at once (lib/clubColour.ts `clubStyle`), and these pick by the theme, so

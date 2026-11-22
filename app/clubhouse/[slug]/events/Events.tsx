@@ -15,6 +15,10 @@ import CopyPanel from './CopyPanel'
 import CompPanel from './CompPanel'
 import PresetPanel from './PresetPanel'
 import LinkToggle from './LinkToggle'
+import LabelPanel from './LabelPanel'
+import { useLabels } from '../useLabels'
+import type { ClubLabel } from '@/lib/clubLabels'
+import { labelGroupLine } from '@/lib/clubMembership'
 import MatchPlayPanel from './MatchPlayPanel'
 import { useCategories } from '../useCategories'
 import { askClub } from '@/lib/accountClient'
@@ -53,6 +57,9 @@ export default function Events() {
   const [matchPlay, setMatchPlay] = useState(false)
   const [presetOpen, setPresetOpen] = useState<Preset | 'new' | null>(null)
   const [presets, setPresets] = useState<Preset[] | null>(null)
+  // D288: the club's labels and the one open in its panel.
+  const { labels, ready: labelsReady, setLabels } = useLabels(club.id)
+  const [labelOpen, setLabelOpen] = useState<ClubLabel | 'new' | null>(null)
   const [presetsReady, setPresetsReady] = useState(false)
   const { categories, ageDate } = useCategories(club.id)
   const office = may('keep_calendar')
@@ -179,7 +186,10 @@ export default function Events() {
                         {clubEventDates(e.startDate, e.endDate)}
                         {n && noteTimeLine(n) && <span className="block t-cap text-ink/65">{noteTimeLine(n)}</span>}
                       </td>
-                      <td className="px-3 min-w-[9rem]">{open(e)}</td>
+                      <td className="px-3 min-w-[9rem]">
+                        {/* D288: its label's colour */}
+                        <span className="inline-flex items-center gap-2">{e.colour && <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: e.colour }} />}{open(e)}</span>
+                      </td>
                       <td className="px-3 text-ink/80 text-[15px] whitespace-nowrap">
                         {typeLabel(seasonType(e))}
                         {c && <span className="block t-cap text-ink/65">{formatLine(c)}</span>}
@@ -207,6 +217,7 @@ export default function Events() {
               const line = [clubEventDates(e.startDate, e.endDate), seasonPlaceLine(e, places)].filter(Boolean).join(' · ')
               const body = (
                 <>
+                  {e.colour && <span aria-hidden="true" className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ background: e.colour }} />}
                   <span className="flex-1 min-w-0">
                     <span className="block text-[17px] font-medium text-ink leading-snug">{e.name}</span>
                     <span className="block t-cap text-ink/65 mt-0.5">{typeLabel(seasonType(e))} · {line}</span>
@@ -279,8 +290,41 @@ export default function Events() {
         qualifiers={(events ?? []).filter(e => e.competition && !e.competition.matchPlay && e.startDate && e.startDate >= `${thisYear}-01-01`)
           .map(e => ({ code: e.code, name: e.name, date: clubEventDates(e.startDate, e.startDate) }))}
         onClose={() => setMatchPlay(false)} onDone={again} />}
+      {/* D288: the club's labels — every type's own, then the club's — beside the presets. */}
+      {office && (
+        <section className="mt-10">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-[min(18rem,100%)]">
+              <h2 className="t-h2 text-ink">Labels</h2>
+              <p className="t-cap text-ink/65 mt-1">A colour for who something is for. On a competition a label decides who may enter; its colour goes everywhere it shows.</p>
+            </div>
+            <button type="button" onClick={() => setLabelOpen('new')} disabled={!labelsReady}
+              title={labelsReady ? undefined : 'Labels aren’t set up yet.'} className={`${buttonClass('secondary', false)} ch-focus`}>New label</button>
+          </div>
+          <ul className={`${cardClass()} mt-4 divide-y divide-line overflow-hidden`}>
+            {labels.map(l => (
+              <li key={l.id}>
+                <button type="button" onClick={() => labelsReady && setLabelOpen(l)} disabled={!labelsReady} className="ch-hover ch-focus w-full text-left flex items-center gap-3 px-4 py-3">
+                  <span aria-hidden="true" className="w-1.5 self-stretch rounded-full flex-shrink-0" style={{ background: l.colour }} />
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-ink text-[15px] font-medium">{l.name}</span>
+                    <span className="block t-cap text-ink/65">
+                      {l.eventType ? `Every ${typeLabel(l.eventType).toLowerCase()} event without a label of its own` : l.groups.map(g => labelGroupLine(g, categories ?? [])).join('; or ')}
+                    </span>
+                  </span>
+                  {l.eventType && <Pill>Type</Pill>}
+                </button>
+              </li>
+            ))}
+          </ul>
+          {!labelsReady && <p className="t-cap text-ink/65 mt-2">Labels aren’t set up yet — every event wears its type’s colour until they are.</p>}
+        </section>
+      )}
+
       {presetOpen && <PresetPanel clubId={club.id} preset={presetOpen === 'new' ? null : presetOpen} presets={presets ?? []} homeCourseId={club.homeCourseId ?? null}
         cats={categories ?? []} ageDate={ageDate} onClose={() => setPresetOpen(null)} onSaved={setPresets} />}
+      {labelOpen && <LabelPanel clubId={club.id} label={labelOpen === 'new' ? null : labelOpen} labels={labels} cats={categories ?? []}
+        onClose={() => setLabelOpen(null)} onSaved={l => { setLabels(l); again() }} />}
       {copying && <CopyPanel clubId={club.id} slug={face.slug} event={copying} onClose={() => setCopying(null)} onMade={again} />}
       {editing && <EventPanel clubId={club.id} note={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={again} />}
     </>

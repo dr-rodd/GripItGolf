@@ -29,6 +29,7 @@ import { inviteHash } from './invites'
 import type { AuthUser } from '@/lib/account'
 import { OFFICE_TYPES, noteIssue, readClubNote, readHiddenTypes, typeLabel, type ClubEventType, type ClubNote } from '@/lib/clubEvents'
 import { linkable, noteAsSeason } from '@/lib/clubhouse'
+import { colourFor, labelIssue, readLabel, withDefaults, type ClubLabel } from '@/lib/clubLabels'
 import { NO_YOURS, periodRange, type YoursFacts } from '@/lib/clubOverview'
 import { NO_PLACES, roomNameIssue, type ClubPlaces } from '@/lib/clubLocations'
 import { planLine, presetIssue, readPreset, type Preset } from '@/lib/clubPresets'
@@ -94,6 +95,11 @@ export interface ClubhouseStore {
   deletePreset?(clubId: string, id: string): Promise<void>
   /** D285 (100): an event under the club taken out of, or put back in, the members app. */
   setEventLink?(clubId: string, code: string, unlinked: boolean): Promise<'ok' | 'not_found' | 'competition' | 'not_ready'>
+  /** D288 (101): the club's stored labels — null before 101. */
+  labels?(clubId: string): Promise<ClubLabel[] | null>
+  /** A label kept, the id back — 'clash' when its name is another's. Throws LabelsNotReady before 101. */
+  saveLabel?(clubId: string, l: ClubLabel): Promise<string | 'clash'>
+  deleteLabel?(clubId: string, id: string): Promise<void>
 }
 
 type Store = ClubStore & ClubhouseStore
@@ -103,7 +109,7 @@ const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): C
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
 /** The actions this file answers. */
-export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'event.link', 'places', 'location.save', 'location.course', 'location.delete', 'location.order', 'presets', 'preset.save', 'preset.delete'] as const
+export const CLUBHOUSE_ACTIONS = ['clubhouse', 'find', 'overview', 'page', 'export', 'bulk', 'season', 'categories', 'category.save', 'category.delete', 'age-date', 'event.save', 'event.delete', 'event-types', 'event.link', 'labels', 'label.save', 'label.delete', 'places', 'location.save', 'location.course', 'location.delete', 'location.order', 'presets', 'preset.save', 'preset.delete'] as const
 
 export function isClubhouseAction(a: unknown): boolean {
   return (CLUBHOUSE_ACTIONS as readonly unknown[]).includes(a)
@@ -303,7 +309,10 @@ export async function runClubhouse(
       store.clubHidden ? store.clubHidden(club.id).catch(() => []) : Promise.resolve([]),
     ])
     const places = await readPlacesFor(store, club.id, events)
-    return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(noteAsSeason)], notesReady: notes !== null, hiddenTypes: hidden, places } }
+    // D288: each club event in its label's colour, else its type's.
+    const labels = withDefaults((store.labels ? await store.labels(club.id).catch(() => null) : null) ?? [])
+    const asSeason = (n: ClubNote) => noteAsSeason(n, colourFor({ labelId: n.labelId ?? null, type: n.type }, labels))
+    return { status: 200, body: { ok: true, calendar: [...events, ...(notes ?? []).map(asSeason)], notesReady: notes !== null, hiddenTypes: hidden, places } }
   }
 
   // D277: the club's locations — read by anybody in the Clubhouse, kept by the calendar's keepers.
@@ -346,6 +355,42 @@ export async function runClubhouse(
     }
     const places = await readPlacesFor(store, club.id, store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : [])
     return { status: 200, body: { ok: true, places } }
+  }
+
+  // D288: the club's labels — read by anybody in the Clubhouse (the pickers),
+  // kept by the calendar's keepers. A type's default label changes its name
+  // and colour only; a label of the club's own says who belongs.
+  if (action === 'labels' || action === 'label.save' || action === 'label.delete') {
+    const LATER = 'Labels aren’t set up yet — try again later.'
+    const stored = store.labels ? await store.labels(club.id).catch(() => null) : null
+    const labels = withDefaults(stored ?? [])
+    if (action === 'labels') return { status: 200, body: { ok: true, labels, labelsReady: stored !== null } }
+    if (!clubMay('keep_calendar', asker)) return fail(403, 'Only someone with Clubhouse keeps the club’s labels.')
+    if (stored === null || !store.saveLabel || !store.deleteLabel) return fail(503, LATER)
+    const id = str(input.id)
+    const before = id ? labels.find(l => l.id === id) : undefined
+    if (id && !before) return fail(404, 'That label isn’t the club’s.')
+    if (action === 'label.delete') {
+      if (!before || before.eventType) return fail(400, before ? 'A type’s own label can be changed, not deleted.' : 'Choose a label.')
+      try { await store.deleteLabel(club.id, id) } catch { return fail(503, LATER) }
+      await logged([line('label.delete', null, { [before.name]: [before.colour, null] })])
+      const after = withDefaults((await store.labels!(club.id).catch(() => stored)) ?? stored)
+      return { status: 200, body: { ok: true, labels: after, labelsReady: true } }
+    }
+    const l = readLabel({ ...(input.label && typeof input.label === 'object' ? input.label : {}), id: id || '', eventType: before?.eventType ?? null })
+    if (!before) l.position = labels.filter(x => !x.eventType).length
+    else l.position = before.position
+    const known = store.categories ? (await store.categories(club.id).catch(() => [])).map(c => c.id) : []
+    const why = labelIssue(l, known, labels)
+    if (why) return fail(400, why)
+    let saved: string | 'clash'
+    try { saved = await store.saveLabel(club.id, l) } catch (e) {
+      return (e as Error)?.name === 'LabelsNotReady' ? fail(503, LATER) : fail(503, 'Could not save the label — try again.')
+    }
+    if (saved === 'clash') return fail(409, 'Another label already has that name.')
+    await logged([line(before ? 'label.update' : 'label.add', null, { [l.name]: [before ? `${before.name} · ${before.colour}` : null, `${l.name} · ${l.colour}`] })])
+    const after = withDefaults((await store.labels!(club.id).catch(() => stored)) ?? stored)
+    return { status: 200, body: { ok: true, labels: after, labelsReady: true, labelId: saved } }
   }
 
   // Stage c1, M7: a preset kept or deleted — the office's.
@@ -425,6 +470,11 @@ export async function runClubhouse(
     const why = noteIssue(note)
     if (why) return fail(400, why)
     if (note.ref && all.some(n => n.ref === note.ref && n.id !== id)) return fail(409, 'Another event already has that Ref.')
+    // D288: a label is one of the club's own.
+    if (note.labelId) {
+      const own = store.labels ? await store.labels(club.id).catch(() => null) : null
+      if (!own?.some(l => l.id === note.labelId && !l.eventType)) return fail(400, 'That label isn’t the club’s.')
+    }
     // D277: a room or course is one of the club's own.
     if (note.locationId || note.locationCourseId) {
       const places = await readPlacesFor(store, club.id, store.seasonEvents ? await store.seasonEvents(club.id).catch(() => []) : [])

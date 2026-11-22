@@ -82,6 +82,8 @@ export interface ClubNote {
    * corporate outing, a society, a course closure.
    */
   blocksSheet: boolean
+  /** D288, migration 101: the label it carries — none is its type's default label. Absent before 101. */
+  labelId?: string | null
   /**
    * D277, migration 099: the room an event is in, or — a Golf or Course
    * event — the course it is on (null: Course 1). Absent before 099. An
@@ -130,6 +132,7 @@ export function readClubNote(raw: unknown): Omit<ClubNote, 'id' | 'ref'> & { id:
     blocksSheet: r.blocksSheet === true,
     locationId: typeof r.locationId === 'string' && r.locationId ? r.locationId : null,
     locationCourseId: typeof r.locationCourseId === 'string' && r.locationCourseId ? r.locationCourseId : null,
+    labelId: typeof r.labelId === 'string' && r.labelId && !r.labelId.startsWith('type:') ? r.labelId : null,
   }
 }
 

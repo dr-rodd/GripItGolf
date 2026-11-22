@@ -15,7 +15,7 @@ import {
 import type { ClubNote } from '@/lib/clubEvents'
 import { useClubBar } from '../ClubBarContext'
 import { NoteSheet } from '../ClubNotes'
-import { ItemRow, KIND_BAR, KIND_FILL, KIND_WORD, StatusLines, useMemberCalendar, whenLine } from '../calendarParts'
+import { ItemRow, KIND_BAR, KIND_FILL, KIND_WORD, StatusLines, edgeStyle, fillStyle, useMemberCalendar, whenLine } from '../calendarParts'
 
 const VIEW_KEY = 'gd.clubcal.view.v1'
 const VIEW_WORD: Record<CalView, string> = { month: 'Month', week: 'Week', day: 'Day' }
@@ -120,7 +120,8 @@ function MonthView({ day, today, range, items, onDay: open }: {
       <div className="grid grid-cols-7 gap-1">
         {days.map(d => {
           const here = items.filter(i => onDay(i, d))
-          const kinds = [...new Set(here.map(i => i.kind))].slice(0, 3)
+          // D288: a mark a colour on the day — its things' labels, three at most.
+          const marks = [...new Map(here.map(i => [i.colour ?? i.kind, i])).values()].slice(0, 3)
           const booked = here.some(i => i.status?.tone === 'booked')
           const out = d.slice(0, 7) !== month
           const isToday = d === today
@@ -132,7 +133,7 @@ function MonthView({ day, today, range, items, onDay: open }: {
                 {Number(d.slice(8))}
               </span>
               <span className="flex gap-1 h-1.5">
-                {kinds.map(k => <span key={k} className={`w-1.5 h-1.5 rounded-full ${MARK[k]}`} />)}
+                {marks.map(i => <span key={i.colour ?? i.kind} className={`w-1.5 h-1.5 rounded-full ${i.colour ? '' : MARK[i.kind]}`} style={i.colour ? { background: i.colour } : undefined} />)}
               </span>
             </button>
           )
@@ -204,8 +205,9 @@ function NowLine({ start, ppm }: { start: number; ppm: number }) {
 function Block({ i, top, height, left, width, onNote, children }: {
   i: CalItem; top: number; height: number; left: string; width: string; onNote: (i: CalItem) => void; children: React.ReactNode
 }) {
-  const cls = `absolute rounded-tile overflow-hidden text-left px-1.5 py-1 ${KIND_FILL[i.kind]} ch-focus`
-  const style = { top, height, left, width }
+  // D288: a labelled thing filled softly in its colour, its edge in full; the open sheet keeps the club's tint.
+  const cls = `absolute rounded-tile overflow-hidden text-left px-1.5 py-1 ${i.colour ? 'text-ink' : KIND_FILL[i.kind]} ch-focus`
+  const style = { top, height, left, width, ...fillStyle(i) }
   if (i.href) return <Link href={i.href} className={`${cls} press`} style={style} title={i.title}>{children}</Link>
   if (i.note) return <button type="button" onClick={() => onNote(i)} className={`${cls} press`} style={style} title={i.title}>{children}</button>
   return <div className={cls} style={style} title={i.title}>{children}</div>
@@ -267,7 +269,7 @@ function WeekView({ range, today, items, onDay: open, onNote }: {
 function WeekCard({ i, onNote }: { i: CalItem; onNote: (i: CalItem) => void }) {
   const body = (
     <>
-      <span aria-hidden="true" className={`w-1.5 flex-shrink-0 rounded-l-tile ${KIND_BAR[i.kind]}`} />
+      <span aria-hidden="true" className={`w-1.5 flex-shrink-0 rounded-l-tile ${i.colour ? '' : KIND_BAR[i.kind]}`} style={edgeStyle(i)} />
       <span className="flex-1 min-w-0 px-2.5 py-2 text-left">
         <span className="block t-label text-ink leading-snug break-words">{i.kind === 'open' ? KIND_WORD.open : i.title}</span>
         <span className="block t-cap text-ink/65">{whenLine(i, false) || 'All day'}</span>

@@ -1,4 +1,5 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
+import { indexesOf } from './labelsStore'
 import { entryToken } from '@/lib/pinHash'
 import { parseTeeRules } from '@/lib/teeSheet'
 import { handicapStore } from '../handicaps/store'
@@ -76,6 +77,8 @@ export function bookingStore(db: Db): BookingStore {
   return {
     userFromToken: t => clubs.userFromToken(t),
     competition: code => readCompetition(db, code),
+    // D288: the indexes a label's handicap band reads.
+    indexesOf: (clubId, rows) => indexesOf(db, clubId, rows),
     isStaff: userId => clubs.isStaff ? clubs.isStaff(userId) : Promise.resolve(false),
     async officeSheet(c) {
       const [sheet, place] = await Promise.all([

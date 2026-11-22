@@ -15,7 +15,7 @@ import type { CompPage, OpenCompPage } from './read'
  * (MO3, D282 — the art and the club's header stay put between pages). The
  * footer is the club layout's; the members-only door shows none.
  */
-export default function CompShell({ page, children }: { page: Pick<CompPage, 'slug' | 'code' | 'clubFace' | 'here' | 'door' | 'kind'>; children?: React.ReactNode }) {
+export default function CompShell({ page, children }: { page: Pick<CompPage, 'slug' | 'code' | 'clubFace' | 'here' | 'door' | 'kind'> & { colour?: string }; children?: React.ReactNode }) {
   const { slug, code, clubFace, here } = page
   return page.door ? (
     <>
@@ -24,6 +24,8 @@ export default function CompShell({ page, children }: { page: Pick<CompPage, 'sl
     </>
   ) : (
     <>
+      {/* D288: a soft wash of its label's colour at the head of the page, behind everything. */}
+      {'colour' in page && page.colour && <div aria-hidden="true" className="label-wash" style={{ '--label': page.colour } as React.CSSProperties} />}
       <CompAhead slug={slug} code={code} renderedAt={Date.now()} />
       {children}
     </>

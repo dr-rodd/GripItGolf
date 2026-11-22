@@ -11,6 +11,7 @@
 // given, opened by the club's list) unless guests may watch (D184); the
 // handicap the account's (D179). Handed its store, so `test:clubs` runs it.
 
+import { indexCache, type IndexesOf } from './labelIndex'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { compBoard, compFirstTee, compFormFrom, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, type CompForm, type SheetBooking } from '@/lib/clubComp'
 import { entryRefusal, readAgeDate, readEntryRules, refusalWords } from '@/lib/clubMembership'
@@ -100,6 +101,10 @@ export interface CompetitionStore {
   overrides?(clubId: string, code: string): Promise<Set<string>>
   /** A change written: the bookings moved, then the round, its item, the event and its entry rules. */
   applyChange?(c: CompNow, change: CompChange): Promise<void>
+  /** D288: entry rules with their label made the club's own as it stands (dropped when it is not the club's). */
+  freshEntry?(clubId: string, entry: EntryRules | null | undefined): Promise<EntryRules | null | undefined>
+  /** D288: list rows' handicap indexes, for a label's handicap band. */
+  indexesOf?: IndexesOf
 }
 
 /** A competition as it stands, read for a change (stage c1, M11). */
@@ -249,6 +254,12 @@ export async function runNewCompetition(
 /** Why a form's entry rules cannot be kept at this club — a membership not the club's — or null. */
 async function entryIssue(store: CompetitionStore, clubId: string, form: CompForm): Promise<string | null> {
   if (!form.entry) return null
+  // D288: a label chosen is the club's own as it stands now — never the copy the form carried.
+  if (form.entry.label && store.freshEntry) {
+    const fresh = await store.freshEntry(clubId, form.entry)
+    if (!fresh?.label) return 'That label isn’t the club’s any more — look again.'
+    form.entry = fresh
+  }
   if (form.entry.categories?.length && !store.categories) return 'Memberships aren’t set up yet — try again later.'
   const known = form.entry.categories?.length && store.categories ? (await store.categories(clubId)).map(c => c.id) : []
   return entryRulesIssue(form.entry, known)
@@ -400,6 +411,7 @@ export async function changeOne(store: CompetitionStore, c: CompNow, form: CompF
   const after = compTeeRules(form)
   // Each booked member's entry under the new rules and day — unless an Officer booked them anyway (D231).
   const rowIds = c.bookings.map(b => b.rowId).filter((x): x is string => !!x)
+  if (form.entry?.label && store.freshEntry) form.entry = (await store.freshEntry(c.clubId, form.entry)) ?? null
   const [rows, categories, ageDate, anyway] = await Promise.all([
     rowIds.length && store.rowsByIds ? store.rowsByIds(c.clubId, rowIds) : Promise.resolve([] as MemberRecord[]),
     store.categories ? store.categories(c.clubId).catch(() => [] as Category[]) : Promise.resolve([] as Category[]),
@@ -407,10 +419,13 @@ export async function changeOne(store: CompetitionStore, c: CompNow, form: CompF
     store.overrides ? store.overrides(c.clubId, c.code).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
   ])
   const rowOf = new Map(rows.map(r => [r.id, r]))
+  // D288: a label's handicap band — each booked member's index, read only when it has one.
+  const idx = indexCache(form.entry, c.clubId, store.indexesOf)
+  await idx.load(rows)
   const bookings: SheetBooking[] = c.bookings.map(b => {
     const r = b.rowId ? rowOf.get(b.rowId) : undefined
     const f = r && !anyway.has(r.id) ? entryRefusal({
-      rules: form.entry ?? null, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+      rules: form.entry ?? null, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null, index: idx.of(r.id) },
       category: categories.find(x => x.id === r.categoryId) ?? null, day: form.date, ageDate: readAgeDate(ageDate), categories,
     }) : null
     return { playerId: b.playerId, name: b.name, slot: b.slot, refused: f ? refusalWords(f, b.name) : null }

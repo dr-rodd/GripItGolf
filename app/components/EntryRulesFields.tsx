@@ -1,6 +1,7 @@
 'use client'
 
 import { FIELD, FIELD_LABEL, chipClass } from '@/app/components/ui'
+import { gateOf, pickableLabels, type ClubLabel } from '@/lib/clubLabels'
 import {
   AGE_MAX, GENDER_COMP_WORDS, WEEKDAY_NAMES, ageDateLabel, entryLine, playsOn, readEntryRules, weekdayOf,
   type Category, type EntryRules, type Gender,
@@ -12,9 +13,11 @@ import {
  * competition in the members app, the Clubhouse's competition panel and a
  * preset all draw it; the checks are `entryRulesIssue`'s.
  */
-export default function EntryRulesFields({ entry, onChange, cats, date, ageDate, idPrefix = 'entry' }: {
+export default function EntryRulesFields({ entry, onChange, cats, date, ageDate, idPrefix = 'entry', labels }: {
   entry: EntryRules | null | undefined
   onChange: (e: EntryRules) => void
+  /** D288: the club's labels — a label picked decides who may enter, on top of the rest. Absent: no label offered. */
+  labels?: ClubLabel[]
   cats: Category[]
   /** The competition's day, for which memberships play it — none on a preset. */
   date?: string
@@ -22,8 +25,30 @@ export default function EntryRulesFields({ entry, onChange, cats, date, ageDate,
   idPrefix?: string
 }) {
   const e: EntryRules = entry ?? {}
+  const own = labels ? pickableLabels(labels) : []
   return (
     <div className="space-y-5">
+      {own.length > 0 && (
+        <div>
+          <p className={FIELD_LABEL}>Label</p>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" aria-pressed={!e.label} className={chipClass(!e.label)}
+              onClick={() => { const { label: _l, ...rest } = e; onChange(rest) }}>None</button>
+            {own.map(l => {
+              const on = e.label?.id === l.id
+              return (
+                <button key={l.id} type="button" aria-pressed={on} className={`${chipClass(on)} inline-flex items-center gap-1.5`}
+                  onClick={() => onChange({ ...e, label: gateOf(l) })}>
+                  <span aria-hidden="true" className="w-2.5 h-2.5 rounded-full" style={{ background: l.colour }} />{l.name}
+                </button>
+              )
+            })}
+          </div>
+          <p className="t-cap text-ink/65 mt-2">
+            {e.label ? `Only ${e.label.name} may enter — and the rest below narrows it further. Its colour goes wherever it shows.` : 'A label decides who may enter and gives it its colour.'}
+          </p>
+        </div>
+      )}
       <div>
         <p className={FIELD_LABEL}>Men’s or ladies’</p>
         <div className="flex flex-wrap gap-2">

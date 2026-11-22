@@ -26,6 +26,9 @@ import type { CompSlot } from './CompTeeSheet'
  * the door's cookie nothing of the competition is read past its name.
  */
 import { readPlaces } from '@/app/api/club/locationsStore'
+import { readLabels } from '@/app/api/club/labelsStore'
+import { colourFor, withDefaults } from '@/lib/clubLabels'
+import type { EntryRules } from '@/lib/clubMembership'
 import { logTiming, startTimer } from '@/lib/timing'
 export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const code = rawCode.trim().toUpperCase()
@@ -42,7 +45,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
     if (!mp || mp.clubId !== face.id) notFound()
     const mpBase = { slug, code, clubFace, here, kind: 'matchplay' as const, mp }
     if (!entryAllowed(mp.publicHash, jar.get(entryCookie(code))?.value, code)) return { ...mpBase, door: true as const }
-    return { ...mpBase, door: false as const }
+    return { ...mpBase, door: false as const, colour: await labelColour(db, face.id, mp.entry) }
   }
   if (comp.clubId !== face.id) notFound()
   const base = { slug, code, clubFace, comp, here, kind: 'stroke' as const }
@@ -53,11 +56,13 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   }
 
   // The sun on the day (Ross, 17 Nov 2026: sunrise at the head of the sheet, sunset at its foot).
-  const [sheet, place, places] = await Promise.all([
+  const [sheet, place, places, colour] = await Promise.all([
     readCompSheet(db, comp),
     db.from('courses').select('latitude, longitude').eq('id', comp.courseId).maybeSingle().then(r => r.data as { latitude: number | null; longitude: number | null } | null),
     // M8 (D278): a one-course club's header never names its course.
     readPlaces(db, comp.clubId, [comp.courseId]).catch(() => null),
+    // D288: its label's colour (else Competition's) — the soft wash at the page's head.
+    labelColour(db, comp.clubId, comp.entry),
   ])
   const sun = sunDay(comp.date, place ? { lat: place.latitude ?? NaN, lng: place.longitude ?? NaN } : null)
   const sizes = slotGroupSizes(comp.rules)
@@ -87,12 +92,18 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
 
   logTiming('comp-page', 'read', took(), 200)
   return {
-    ...base, door: false as const,
+    ...base, door: false as const, colour,
     sheet, phase, slots, firstTeeAt, bookingOpensAt, oneCourse: !!places && places.courses.length <= 1,
     sun: { sunrise: sun.sunrise ? describeTime(sun.sunrise) : null, sunset: sun.sunset ? describeTime(sun.sunset) : null },
     firstTee: clocks[0] ? describeTime(clocks[0]) : null,
   }
 })
+
+/** A competition's colour (D288): its label's, else the club's Competition label's. */
+async function labelColour(db: ReturnType<typeof createAdminClient>, clubId: string, entry: EntryRules | null | undefined): Promise<string> {
+  if (entry?.label?.colour) return entry.label.colour
+  return colourFor({ type: 'COMP' }, withDefaults((await readLabels(db, clubId).catch(() => null)) ?? []))
+}
 
 export type CompPage = Awaited<ReturnType<typeof readCompPage>>
 export type OpenCompPage = Extract<CompPage, { door: false; kind: 'stroke' }>

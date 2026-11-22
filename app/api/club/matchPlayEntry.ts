@@ -14,6 +14,7 @@
 // Every answer to a member on the list carries the members-only door's
 // cookie (D164), as booking does. Handed its store, so `test:clubs` runs it.
 
+import { labelNeedsIndex } from '@/lib/clubMembership'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { STAFF_NAME } from '@/lib/clubhouse'
@@ -130,8 +131,14 @@ export async function runMatchPlayEntry(
   const door = tokenValue ? { code: mp.code, value: tokenValue } : null
 
   const ms = store.memberships ? await store.memberships(mp.clubId).catch(() => ({ categories: [] as Category[], ageDate: '01-01' })) : { categories: [] as Category[], ageDate: '01-01' }
-  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => entryRefusal({
-    rules: mp.entry, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+  // D288: a label's handicap band reads each person's index — only when it has one — loaded for the rows judged.
+  const idx = new Map<string, number | null>()
+  const loadIdx = async (rows: MemberRecord[]) => {
+    if (!labelNeedsIndex(mp.entry)) return
+    await Promise.all(rows.filter(r => !idx.has(r.id)).map(async r => { idx.set(r.id, await store.indexOf(r).catch(() => null)) }))
+  }
+  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'> & { id?: string }) => entryRefusal({
+    rules: mp.entry, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null, index: r.id ? idx.get(r.id) ?? null : null },
     category: ms.categories.find(c => c.id === r.categoryId) ?? null, day: entryDay(mp.setup, irishToday(now)),
     ageDate: readAgeDate(ms.ageDate), categories: ms.categories,
   })
@@ -146,6 +153,7 @@ export async function runMatchPlayEntry(
   const answer = async (): Promise<EntryOutcome> => {
     const [field, pairs] = await Promise.all([store.entrants(mp.tripId), readPairs()])
     const mine = field.find(e => e.rowId === me.id)?.playerId ?? null
+    await loadIdx([me])
     const refused = refusalOf(me)
     const closed = enterIssue(mp.setup, { now, drawn: mp.drawn, entered: pairsMode ? pairs.length : field.length, admin: false })
     const stuck = mine ? withdrawEntryIssue(mp.setup, { now, drawn: mp.drawn, mine: true, admin: false }) : null
@@ -181,6 +189,7 @@ export async function runMatchPlayEntry(
     if (!row) return { why: 'That member is not on the club’s list.' }
     if (!clubMay('play', { row: credentialsOf(row) })) return { why: `${row.name}’s membership doesn’t play at the club.` }
     if (!row.userId) return { why: `${row.name} hasn’t joined Green Dot yet — every player needs their own account.` }
+    await loadIdx([row])
     const refused = refusalOf(row)
     if (refused) return { why: refusalWords(refused, row.name) }
     if (field.some(e => e.rowId === row.id) || pairOfRow(pairs, row.id)) return { why: `${row.name} has already entered.` }
@@ -214,6 +223,7 @@ export async function runMatchPlayEntry(
     if (q.length < 2) return { status: 200, door, body: { ok: true, entrants: [], cap: mp.setup.maxField, phase: matchPlayPhase(mp.setup, { drawn: mp.drawn, won: mp.won, fielded: mp.entered > 0 }, now), names: [] } }
     const [rows, field, pairs] = await Promise.all([store.searchRows(mp.clubId, q.slice(0, 40), 20), store.entrants(mp.tripId), readPairs()])
     const entered = new Set(field.map(e => e.rowId))
+    if (labelNeedsIndex(mp.entry)) await loadIdx(await store.rowsByIds(mp.clubId, rows.map(r => r.id)).catch(() => []))
     const names = rows.filter(r => r.id !== me.id).map(r => {
       const f = refusalOf(r)
       const why = entered.has(r.id) || pairOfRow(pairs, r.id) ? `${r.name} has already entered.`
@@ -228,6 +238,7 @@ export async function runMatchPlayEntry(
     // D209: somebody who does not play here is in no field.
     if (action !== 'partner') {
       if (!clubMay('play', { row: credentialsOf(me) })) return fail(409, 'Your membership doesn’t play at the club — ask the office.')
+      await loadIdx([me])
       const refused = refusalOf(me)
       if (refused) return fail(409, refusalWords(refused))
     }

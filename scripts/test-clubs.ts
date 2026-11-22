@@ -41,6 +41,8 @@ import { runCalendarImport, type ImportStore } from '../app/api/club/calendarImp
 import { parseTeeRules } from '../lib/teeSheet'
 import { describeTime } from '../lib/itinerary'
 import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
+import { LABEL_COLOURS, colourFor, labelIssue, pickableLabels, readLabel, withDefaults, type ClubLabel } from '../lib/clubLabels'
+import { labelGroupLine, labelNeedsIndex, type LabelGate } from '../lib/clubMembership'
 import { CAL_MAX_DAYS, DEFAULT_CAL_VIEW, bookedItems, compBookingActive, compStatus, daysFrom, nextItems, onDay, openStatus, stepView, viewRange, type CalItem } from '../lib/clubCalendar'
 import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
@@ -392,6 +394,18 @@ class Stand implements ClubStore {
     for (const r of this.list.values()) if (r.categoryId === id) this.list.set(r.id, { ...r, categoryId: null })
   }
   // Stage c1 (095): the club's own events, what it shows, what a member asks to see.
+  // D288: a club's labels.
+  labelsOf = new Map<string, ClubLabel[]>()
+  async labels(clubId: string) { return this.labelsOf.get(clubId) ?? [] }
+  async saveLabel(clubId: string, l: ClubLabel) {
+    const list = this.labelsOf.get(clubId) ?? []
+    if (list.some(x => x.id !== l.id && x.name.toLowerCase() === l.name.toLowerCase())) return 'clash' as const
+    const had = l.eventType ? list.find(x => x.eventType === l.eventType) : list.find(x => x.id === l.id)
+    const id = had?.id ?? `lab${++this.n}`
+    this.labelsOf.set(clubId, [...list.filter(x => x.id !== id), { ...l, id }])
+    return id
+  }
+  async deleteLabel(clubId: string, id: string) { this.labelsOf.set(clubId, (this.labelsOf.get(clubId) ?? []).filter(x => x.id !== id)) }
   notesOf = new Map<string, ClubNote[]>()
   hiddenOf = new Map<string, ClubEventType[]>()
   memberHiddenOf = new Map<string, ClubEventType[]>()
@@ -3170,6 +3184,14 @@ async function teeTimesTests() {
   eq((await ask('stranger', 'calendar', { from: SAT, to: SAT })).status, 403, 'somebody not on the list reads no calendar')
   eq(bookedItems(rc ?? [], '2026-11-18').map(i => i.key), [`open:${SAT}`, 'comp:MEDAL1'], 'Your bookings: what he is booked into, by time')
   ok(nextItems(rc ?? [], '2026-11-18').every(i => i.kind !== 'open'), 'the Calendar preview never lists the open sheet (it is every day)')
+  // D288: a labelled competition — its colour on the calendar, its groups deciding who may book.
+  const plainEntry = comp.entry
+  comp.entry = { label: { id: 'L1', name: 'Seniors', colour: '#4F6B7A', groups: [{ minAge: 55 }] } }
+  const lc = await calOf('ross')
+  eq(byKey(lc, 'comp:MEDAL1')?.colour, '#4F6B7A', 'a labelled competition wears its label’s colour on the calendar')
+  eq(byKey(lc, 'comp:MEDAL1')?.status?.line, 'You aren’t eligible to book this event.', '…and somebody outside its groups is told they aren’t eligible')
+  eq(byKey(lc, 'comp:AWAY1')?.colour, '#3D6FB6', 'one with no label wears Competition’s')
+  comp.entry = plainEntry
   comp.seats = undefined; away.opensAt = undefined
 }
 
@@ -3201,6 +3223,7 @@ async function main() {
   gridColumnTests()
   snappyTests()
   wiringTests()
+  await labelTests()
   calendarRuleTests()
   unlinkTests()
   insideClubTests()
@@ -3211,6 +3234,78 @@ async function main() {
     process.exit(1)
   }
   console.log(`✓ all ${passed} checks passed`)
+}
+
+async function labelTests() {
+  section('D288: labels — who belongs, and the colour (lib/clubLabels.ts)')
+  const juniors: LabelGate = { id: 'L1', name: 'Juniors', colour: '#C8453A', groups: [{ maxAge: 17, maxIndex: 12 }] }
+  const mens: LabelGate = { id: 'L2', name: 'Men’s', colour: '#3D6FB6', groups: [{ genders: ['M'], categories: ['full'] }, { genders: ['M'], categories: ['senior'] }, { maxAge: 17, maxIndex: 12 }] }
+  const base = { category: null, day: '2026-11-21', ageDate: '01-01', categories: [{ id: 'full', name: 'Full' }, { id: 'senior', name: 'Senior' }] }
+  const who = (o: Partial<{ gender: 'M' | 'F'; categoryId: string; birthDate: string; index: number | null }>) => ({ gender: o.gender ?? null, birthDate: o.birthDate ?? null, categoryId: o.categoryId ?? null, index: o.index })
+  eq(entryRefusal({ ...base, rules: { label: mens }, person: who({ gender: 'M', categoryId: 'full' }) }), null, 'a man on a Full membership is one of the Men’s')
+  eq(entryRefusal({ ...base, rules: { label: mens }, person: who({ gender: 'M', categoryId: 'senior' }) }), null, '…so is a man on a Senior membership (any one group will do)')
+  eq(entryRefusal({ ...base, rules: { label: mens }, person: who({ gender: 'F', categoryId: 'full' }) })?.code, 'label', 'a woman on a Full membership is not')
+  eq(entryRefusal({ ...base, rules: { label: mens }, person: who({ birthDate: '2012-03-01', index: 9.4 }) }), null, 'a junior under 18 off 9.4 is in by the third group')
+  eq(entryRefusal({ ...base, rules: { label: mens }, person: who({ birthDate: '2012-03-01', index: 14 }) })?.code, 'label', '…off 14 is not')
+  eq(entryRefusal({ ...base, rules: { label: juniors }, person: who({ birthDate: '2012-03-01', index: -2 }) }), null, 'a plus index is under every band’s top (stored negative)')
+  eq(entryRefusal({ ...base, rules: { label: juniors }, person: who({ birthDate: '2012-03-01', index: null }) }), { code: 'no_index', name: 'Juniors' }, 'a band asked of somebody whose index isn’t known says so')
+  eq(refusalWords({ code: 'label', name: 'Men’s' }), 'This competition is for Men’s.', '…in words')
+  eq(entryRefusal({ ...base, rules: { genders: ['M'], label: { ...juniors, groups: [{}] } }, person: who({ gender: 'F' }) })?.code, 'gender', 'a label sits on top of the rest: the competition’s own rules still narrow')
+  ok(labelNeedsIndex({ label: juniors }) && !labelNeedsIndex({ label: { ...juniors, groups: [{ maxAge: 17 }] } }) && !labelNeedsIndex(null), 'an index is read only when a band asks for one')
+  eq(readEntryRules({ label: { ...juniors, colour: '#c8453a', groups: [{ maxIndex: 99, maxAge: 17 }] } })?.label, { ...juniors, groups: [{ maxAge: 17 }] }, 'a label read back is cleaned: colour upper case, a band out of range dropped')
+  eq(entryLine({ label: mens }, base.categories), 'Men’s', 'who may enter leads with the label’s name')
+  eq(labelGroupLine(mens.groups[0], base.categories), 'Men · Full members', 'a group in words')
+  eq(labelGroupLine({ maxAge: 17, maxIndex: 12 }, []), 'Under 18 · Handicap up to 12', '…an age band and a handicap band')
+  eq(labelGroupLine({ minIndex: -2, maxIndex: 5 }, []), 'Handicap +2 to 5', '…a plus index with its plus')
+
+  const d = withDefaults([])
+  eq(d.map(l => l.name), ['Competition', 'Golf', 'Social', 'Club business', 'Other sport', 'Course', 'Miscellaneous'], 'every event type has a default label')
+  ok(d.every(l => l.groups.length === 0 && LABEL_COLOURS.includes(l.colour) && !['#0A9D56', '#C9A84C'].includes(l.colour)), '…from the eight team colours, none emerald or gold, none deciding entry')
+  const social: ClubLabel = { ...d[2], id: 'x1', colour: '#22375E' }
+  const own: ClubLabel = { id: 'x2', name: 'Seniors', colour: '#4F6B7A', groups: [{ minAge: 55 }], eventType: null, position: 0 }
+  const both = withDefaults([social, own])
+  eq(both.find(l => l.eventType === 'SOCIAL')?.colour, '#22375E', 'a club’s change to a default stands in for it')
+  eq(both.at(-1)?.name, 'Seniors', '…its own labels after the defaults')
+  eq(pickableLabels(both).map(l => l.name), ['Seniors'], 'only the club’s own are offered to carry')
+  eq(colourFor({ labelColour: '#C8453A', type: 'COMP' }, both), '#C8453A', 'a competition wears its label’s colour')
+  eq(colourFor({ type: 'SOCIAL' }, both), '#22375E', '…anything else without one, its type’s')
+  eq(colourFor({ labelId: 'x2', type: 'SOCIAL' }, both), '#4F6B7A', '…a club event its own label’s')
+  eq(readLabel({ eventType: 'GOLF', name: 'Golf', colour: '#6B7A2E', groups: [{ maxAge: 17 }] }).groups, [], 'a type’s default never keeps groups — it decides nothing about entry')
+  eq(labelIssue({ ...own, groups: [] }, [], both), 'Say who the label is for — add a group.', 'a label of the club’s own says who it is for')
+  eq(labelIssue({ ...own, id: 'new', name: 'seniors' }, [], both), 'Another label already has that name.', 'names are the club’s own, once')
+  eq(labelIssue({ ...own, colour: '#0A9D56' }, [], both), 'Pick one of the colours.', 'emerald is not a label colour')
+  eq(labelIssue({ ...own, groups: [{ minIndex: 20, maxIndex: 10 }] }, [], both), 'The lowest handicap must be under the highest.', 'a band the wrong way round is refused')
+
+  section('D288: labels in the Clubhouse, decided on the server')
+  const s = new Stand()
+  const ross = member('ross', 'ross@x.ie'), ollie = member('ollie', 'ollie@x.ie')
+  ;[ross, ollie].forEach(u => s.add(u))
+  const ask = (tok: string, action: string, body: Record<string, unknown> = {}) => runClub({ token: tok, action, address: 'a', ...body }, s, s.clock)
+  const made = await setUpClub(s, 'tok-ross', { name: 'Labels Golf Club', yourName: 'Ross' })
+  const clubId = made.status === 200 ? made.body.club!.id : ''
+  s.clubs.set(clubId, { ...s.clubs.get(clubId)!, verifiedAt: NOW.toISOString() })
+  await ask('tok-ross', 'add', { clubId, rows: [{ name: 'Ollie Officer', email: 'ollie@x.ie' }] })
+  for (const r of s.list.values()) if (r.name === 'Ollie Officer') s.list.set(r.id, { ...r, userId: 'ollie', officer: true, clubhouse: false })
+  const listed = await ask('tok-ross', 'labels', { clubId })
+  ok(listed.status === 200 && listed.body.labels?.length === 7 && listed.body.labelsReady === true, 'the Clubhouse reads the seven defaults')
+  const mk = await ask('tok-ross', 'label.save', { clubId, label: { name: 'Juniors', colour: '#C8453A', groups: [{ maxAge: 17, maxIndex: 12 }] } })
+  ok(mk.status === 200 && !!mk.body.labels?.some(l => l.name === 'Juniors' && l.groups[0].maxIndex === 12), 'Clubhouse makes a label with a handicap band')
+  eq((await ask('tok-ollie', 'label.save', { clubId, label: { name: 'Mine', colour: '#C8453A', groups: [{}] } })).status, 403, 'an Officer without Clubhouse makes none')
+  const soc = await ask('tok-ross', 'label.save', { clubId, id: 'type:SOCIAL', label: { name: 'Socials', colour: '#22375E', groups: [{ maxAge: 3 }] } })
+  ok(soc.status === 200 && soc.body.labels?.find(l => l.eventType === 'SOCIAL')?.colour === '#22375E' && soc.body.labels?.find(l => l.eventType === 'SOCIAL')?.groups.length === 0, 'a type’s default changes its name and colour, never its groups')
+  eq((await ask('tok-ross', 'label.delete', { clubId, id: 'type:SOCIAL' })).status, 404, 'a type’s default is never deleted')
+  const jid = mk.status === 200 ? mk.body.labelId! : ''
+  eq((await ask('tok-ross', 'label.save', { clubId, label: { name: 'juniors', colour: '#3D6FB6', groups: [{}] } })).status, 400, 'a second Juniors is refused')
+  eq((await ask('tok-ross', 'label.delete', { clubId, id: jid })).status, 200, 'a label of the club’s own is deleted')
+  ok(s.activity.some(a => a.action === 'label.add') && s.activity.some(a => a.action === 'label.delete'), '…every change on the activity log')
+
+  section('D288: wiring')
+  ok(/labels\?: ClubLabel\[\]/.test(read('app/components/EntryRulesFields.tsx')) && ['CompPanel', 'PresetPanel', 'MatchPlayPanel'].every(p => /labels=\{labels\}/.test(read(`app/clubhouse/[slug]/events/${p}.tsx`))), 'a label is picked where who may enter is: New competition, Edit, a preset, a match play')
+  ok(/setLabelId/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')), 'a club event carries a label')
+  ok(/freshEntry\(db, clubId, rules\)/.test(read('app/api/club/competition/route.ts')) && /freshEntry\(db, c\.clubId, ch\.entry\)/.test(read('app/api/club/competition/route.ts')), 'every competition write keeps the club’s label as it stands, never a copy a form carried')
+  ok(/indexCache\(rules/.test(read('app/api/club/booking.ts')) && /loadIdx/.test(read('app/api/club/matchPlayEntry.ts')) && /index: memberIndex/.test(read('app/api/club/teeTimes.ts')) && /index: f\.myIndex/.test(read('app/api/club/teeTimes.ts')), 'booking, entering a match play, the tee sheet and the calendar judge the label’s band')
+  ok(/className="label-wash"/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')), 'a competition’s page wears its label’s wash')
+  ok(/CREATE TABLE IF NOT EXISTS club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')) && /label_id uuid NULL REFERENCES club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')), 'migration 101: labels, and a club event’s label')
 }
 
 function calendarRuleTests() {

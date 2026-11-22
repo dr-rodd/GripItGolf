@@ -200,6 +200,70 @@ export interface EntryRules {
   categories?: string[]
   minAge?: number
   maxAge?: number
+  /**
+   * D288: the competition's label — its own copy, kept in step by the
+   * labels writer (`app/api/club/labelsStore.ts`) — a gate on top of the
+   * rest: somebody enters only if they are in one of its groups.
+   */
+  label?: LabelGate
+}
+
+/**
+ * One group of a label (D288): everybody who is in every part that is set —
+ * memberships, a gender, an age band, a handicap index band. An empty group
+ * is everybody. Index bounds are inclusive; a plus index is negative
+ * (lib/handicapIndex.ts), so "up to 12" lets every plus handicap in.
+ */
+export interface LabelGroup {
+  categories?: string[]
+  genders?: Gender[]
+  minAge?: number
+  maxAge?: number
+  minIndex?: number
+  maxIndex?: number
+}
+
+/** A label as a competition keeps it: who it is, its colour, and who may enter by it. */
+export interface LabelGate {
+  id: string
+  name: string
+  colour: string
+  groups: LabelGroup[]
+}
+
+/** The widest index the bands take, +10 to 54 (lib/handicapIndex.ts's range). */
+export const LABEL_INDEX_MIN = -10
+export const LABEL_INDEX_MAX = 54
+
+/** A label group as stored or posted, cleaned. */
+export function readLabelGroup(raw: unknown): LabelGroup {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const genders = Array.isArray(r.genders) ? [...new Set(r.genders.filter((g): g is Gender => g === 'M' || g === 'F'))].sort() : []
+  const categories = Array.isArray(r.categories) ? [...new Set(r.categories.filter((c): c is string => typeof c === 'string' && c.length > 0))] : []
+  const age = (v: unknown) => (typeof v === 'number' && Number.isInteger(v) && v >= AGE_MIN && v <= AGE_MAX ? v : undefined)
+  const idx = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= LABEL_INDEX_MIN && v <= LABEL_INDEX_MAX ? Math.round(v * 10) / 10 : undefined)
+  return {
+    ...(categories.length ? { categories } : {}),
+    ...(genders.length === 1 ? { genders } : {}),
+    ...(age(r.minAge) !== undefined ? { minAge: age(r.minAge) } : {}),
+    ...(age(r.maxAge) !== undefined ? { maxAge: age(r.maxAge) } : {}),
+    ...(idx(r.minIndex) !== undefined ? { minIndex: idx(r.minIndex) } : {}),
+    ...(idx(r.maxIndex) !== undefined ? { maxIndex: idx(r.maxIndex) } : {}),
+  }
+}
+
+/** A label as a competition keeps it, cleaned — or undefined. */
+export function readLabelGate(raw: unknown): LabelGate | undefined {
+  if (!raw || typeof raw !== 'object') return undefined
+  const r = raw as Record<string, unknown>
+  if (typeof r.id !== 'string' || !r.id || typeof r.name !== 'string' || !r.name.trim()) return undefined
+  const colour = typeof r.colour === 'string' && /^#[0-9A-Fa-f]{6}$/.test(r.colour) ? r.colour.toUpperCase() : '#4F6B7A'
+  return { id: r.id, name: r.name.trim().slice(0, 40), colour, groups: (Array.isArray(r.groups) ? r.groups : []).slice(0, 12).map(readLabelGroup) }
+}
+
+/** Whether a label's groups ask for a handicap index — only then is it read (D288). */
+export function labelNeedsIndex(r: EntryRules | null | undefined): boolean {
+  return !!r?.label?.groups.some(g => g.minIndex !== undefined || g.maxIndex !== undefined)
 }
 
 export const AGE_MIN = 0
@@ -219,6 +283,8 @@ export function readEntryRules(raw: unknown): EntryRules | null {
     ...(age(r.minAge) !== undefined ? { minAge: age(r.minAge) } : {}),
     ...(age(r.maxAge) !== undefined ? { maxAge: age(r.maxAge) } : {}),
   }
+  const label = readLabelGate(r.label)
+  if (label) out.label = label
   return Object.keys(out).length ? out : null
 }
 
@@ -227,7 +293,40 @@ export function entryRulesIssue(r: EntryRules | null, known: string[]): string |
   if (!r) return null
   if (r.categories?.some(c => !known.includes(c))) return 'One of those memberships isn’t the club’s any more — look again.'
   if (r.minAge !== undefined && r.maxAge !== undefined && r.minAge > r.maxAge) return 'The youngest age must be under the oldest.'
+  for (const g of r.label?.groups ?? []) {
+    const why = labelGroupIssue(g, known)
+    if (why) return why
+  }
   return null
+}
+
+/** Why a label group cannot be kept — or null. */
+export function labelGroupIssue(g: LabelGroup, known: string[]): string | null {
+  if (g.categories?.some(c => !known.includes(c))) return 'One of those memberships isn’t the club’s any more — look again.'
+  if (g.minAge !== undefined && g.maxAge !== undefined && g.minAge > g.maxAge) return 'The youngest age must be under the oldest.'
+  if (g.minIndex !== undefined && g.maxIndex !== undefined && g.minIndex > g.maxIndex) return 'The lowest handicap must be under the highest.'
+  return null
+}
+
+/** A handicap index as a member reads it: a plus index with its plus. */
+export function indexWords(i: number): string {
+  return i < 0 ? `+${-i}` : String(i)
+}
+
+/** A label group in words: "Men · Full and Senior members · Under 18 · Handicap up to 12" — "Everybody" when nothing is set. */
+export function labelGroupLine(g: LabelGroup, categories: Pick<Category, 'id' | 'name'>[]): string {
+  const parts: string[] = []
+  if (g.genders?.length === 1) parts.push(g.genders[0] === 'M' ? 'Men' : 'Women')
+  if (g.categories?.length) {
+    const names = g.categories.map(id => categories.find(c => c.id === id)?.name).filter((n): n is string => !!n)
+    if (names.length) parts.push(`${names.length > 1 ? `${names.slice(0, -1).join(', ')} and ${names.at(-1)}` : names[0]} members`)
+  }
+  const age = ageBandLine(g.minAge, g.maxAge)
+  if (age) parts.push(age)
+  if (g.minIndex !== undefined && g.maxIndex !== undefined) parts.push(`Handicap ${indexWords(g.minIndex)} to ${indexWords(g.maxIndex)}`)
+  else if (g.maxIndex !== undefined) parts.push(`Handicap up to ${indexWords(g.maxIndex)}`)
+  else if (g.minIndex !== undefined) parts.push(`Handicap ${indexWords(g.minIndex)} and over`)
+  return parts.length ? parts.join(' · ') : 'Everybody'
 }
 
 /** An age band as words: "Aged 50 and over", "Under 18", "Aged 18 to 25". */
@@ -249,6 +348,8 @@ export function entryLine(r: EntryRules | null, categories: Pick<Category, 'id' 
   }
   const age = ageBandLine(r.minAge, r.maxAge)
   if (age) parts.push(age)
+  // D288: the label names who it is for, first.
+  if (r.label) parts.unshift(r.label.name)
   return parts.length ? parts.join(' · ') : null
 }
 
@@ -257,6 +358,14 @@ export interface Entrant {
   gender: Gender | null
   birthDate: string | null
   categoryId: string | null
+  /**
+   * D288: their handicap index, where a label's group asks for one — read
+   * at booking or entering (a match play's on the day entries close). The
+   * Green Dot account's index today (`app/api/club/labelsStore.ts`
+   * `indexesOf`); a source like Golf Ireland's can stand in there later
+   * without anything here changing. Undefined or null: not known.
+   */
+  index?: number | null
 }
 
 /** Why someone may not enter, as a code and what the words need. */
@@ -267,6 +376,8 @@ export type EntryRefusal =
   | { code: 'day'; day: string }
   | { code: 'no_birth' }
   | { code: 'age'; band: string }
+  | { code: 'label'; name: string }
+  | { code: 'no_index'; name: string }
 
 /**
  * Whether this person may enter this competition, on its day — null when
@@ -306,6 +417,23 @@ export function entryRefusal(o: {
       return { code: 'age', band: (ageBandLine(r.minAge, r.maxAge) ?? '').toLowerCase() }
     }
   }
+  // D288: the label — in one of its groups, or not in.
+  if (r?.label && r.label.groups.length) {
+    const age = o.person.birthDate ? ageOn(o.person.birthDate, ageCountedOn(o.day, o.ageDate)) : null
+    const index = o.person.index ?? null
+    let wantedIndex = false
+    const fits = r.label.groups.some(g => {
+      if (g.genders?.length === 1 && o.person.gender !== g.genders[0]) return false
+      if (g.categories?.length && (!o.person.categoryId || !g.categories.includes(o.person.categoryId))) return false
+      if ((g.minAge !== undefined || g.maxAge !== undefined) && (age === null || (g.minAge !== undefined && age < g.minAge) || (g.maxAge !== undefined && age > g.maxAge))) return false
+      if (g.minIndex !== undefined || g.maxIndex !== undefined) {
+        if (index === null) { wantedIndex = true; return false }
+        if ((g.minIndex !== undefined && index < g.minIndex) || (g.maxIndex !== undefined && index > g.maxIndex)) return false
+      }
+      return true
+    })
+    if (!fits) return wantedIndex ? { code: 'no_index', name: r.label.name } : { code: 'label', name: r.label.name }
+  }
   return null
 }
 
@@ -322,6 +450,8 @@ export function refusalWords(f: EntryRefusal, who: string | null = null): string
     case 'day': return you ? `${f.day} isn’t one of your playing days.` : `${f.day} isn’t one of ${who}’s playing days.`
     case 'no_birth': return you ? 'Your club hasn’t recorded your date of birth — ask the club to add it.' : `The club hasn’t recorded ${who}’s date of birth.`
     case 'age': return `This competition is for players ${f.band}.`
+    case 'label': return `This competition is for ${f.name}${you ? '' : ` — ${who} isn’t one of them`}.`
+    case 'no_index': return you ? `This competition is for ${f.name}, and your handicap isn’t known yet — set it on your page or ask the club.` : `This competition is for ${f.name}, and ${who}’s handicap isn’t known yet.`
   }
 }
 

@@ -54,6 +54,8 @@ export interface CalItem {
   noteId?: string
   /** A club event's own facts, for its sheet. */
   note?: ClubNote
+  /** D288: its label's colour (else its type's) — down a card's edge, a block's fill. Absent: the open tee sheet. */
+  colour?: string
 }
 
 /** The calendar's three views (D286): Month first, remembered per phone. */

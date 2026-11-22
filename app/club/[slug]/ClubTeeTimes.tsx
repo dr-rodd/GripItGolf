@@ -199,7 +199,8 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
 /** A competition or an event that has the course: what, for how long, and — a competition one may enter — the way to book it. */
 function OverlayRow({ o, times }: { o: Overlay; times: number }) {
   return (
-    <li className={`${cardClass('flat')} p-4 bg-tint`}>
+    // D288: its label's colour down the left edge.
+    <li className={`${cardClass('flat')} p-4 bg-tint`} style={o.colour ? { borderLeft: `6px solid ${o.colour}` } : undefined}>
       <p className="t-cap text-ink/65">{o.kind === 'competition' ? 'Competition' : 'The course is taken'} · {overlaySpan(o)}</p>
       <p className="t-card text-ink mt-1 break-words">{o.title}</p>
       {o.detail && <p className="text-ink/80 text-[15px] mt-1 break-words">{o.detail}</p>}

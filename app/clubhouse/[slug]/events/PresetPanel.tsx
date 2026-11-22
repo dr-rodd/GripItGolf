@@ -1,5 +1,6 @@
 'use client'
 
+import { useLabels } from '../useLabels'
 import { useEffect, useState } from 'react'
 import { IconPlus, IconX } from '@/app/components/icons'
 import EntryRulesFields from '@/app/components/EntryRulesFields'
@@ -43,6 +44,8 @@ export default function PresetPanel({ clubId, preset, presets, homeCourseId, cat
   onClose: () => void
   onSaved: (list: Preset[]) => void
 }) {
+  // D288: the club's labels, for who may enter and the colour.
+  const { labels } = useLabels(clubId)
   const [name, setName] = useState(preset?.name ?? '')
   const [code, setCode] = useState(preset?.code ?? '')
   const [usedFor, setUsedFor] = useState(preset?.usedFor ?? '')
@@ -141,7 +144,7 @@ export default function PresetPanel({ clubId, preset, presets, homeCourseId, cat
           </div>
 
           <h3 className="t-card text-ink pt-1">Who can enter</h3>
-          <EntryRulesFields entry={entry} onChange={setEntry} cats={cats} ageDate={ageDate} idPrefix="pp-entry" />
+          <EntryRulesFields entry={entry} onChange={setEntry} cats={cats} ageDate={ageDate} idPrefix="pp-entry" labels={labels} />
 
           <h3 className="t-card text-ink pt-1">Tee times</h3>
           {plan.batches.map((b, i) => (

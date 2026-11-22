@@ -16,6 +16,8 @@
 // Handed its store, so `test:clubs` runs it on a stand-in; ./bookingStore.ts
 // is the service-role store.
 
+import { indexCache, type IndexesOf } from './labelIndex'
+import { labelNeedsIndex } from '@/lib/clubMembership'
 import { isAccount, type AuthUser } from '@/lib/account'
 import { bookingIssue, teeInstant, withdrawIssue } from '@/lib/clubComp'
 import { clubMay, credentialsOf } from '@/lib/clubMay'
@@ -46,6 +48,8 @@ export interface Booked { playerId: string; slot: number; bookedBy: string | nul
 export interface CompPlayer { id: string; clubMemberId: string | null }
 
 export interface BookingStore {
+  /** D288: list rows' handicap indexes, for a label's handicap band. */
+  indexesOf?: IndexesOf
   userFromToken(token: string): Promise<AuthUser | null>
   /** A verified club's competition by its code, or null. */
   competition(code: string): Promise<CompRecord | null>
@@ -148,11 +152,14 @@ export async function runBooking(
   // and its age date. Without rules a membership's days still decide.
   const ms = store.memberships ? await store.memberships(comp.clubId).catch(() => ({ categories: [] as Category[], ageDate: '01-01' })) : { categories: [] as Category[], ageDate: '01-01' }
   const rules = comp.entry ?? null
-  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => entryRefusal({
-    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+  // D288: a label's handicap band reads each person's index, loaded for the rows judged.
+  const idx = indexCache(rules, comp.clubId, store.indexesOf)
+  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'> & { id?: string }) => entryRefusal({
+    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null, index: idx.of(r.id) },
     category: ms.categories.find(c => c.id === r.categoryId) ?? null, day: comp.date, ageDate: readAgeDate(ms.ageDate), categories: ms.categories,
   })
   const line = entryLine(rules, ms.categories)
+  await idx.load([me])
   const mineRefused = refusalOf(me)
   const ok = (body: Omit<BookingBody, 'ok'> = {}): BookingOutcome =>
     ({ status: 200, body: { ok: true, myRowId: me.id, admin, booked, ...(line ? { entry: line } : {}), ...(mineRefused ? { myRefusal: refusalWords(mineRefused) } : {}), ...body }, door })
@@ -169,6 +176,8 @@ export async function runBooking(
     if (q.length < 2) return ok({ names: [] })
     const booked = new Set(bookings.map(b => b.playerId))
     const rows = await store.searchRows(comp.clubId, q.slice(0, 40), 20)
+    // A name found carries no account: its index is read from its whole row.
+    if (labelNeedsIndex(rules)) await idx.load(await store.rowsByIds(comp.clubId, rows.map(r => r.id)).catch(() => []))
     return ok({ names: rows.map(r => {
       const f = refusalOf(r)
       return { id: r.id, name: r.name, linked: r.linked, booked: booked.has(playerOfRow.get(r.id) ?? ''), ...(f ? { why: refusalWords(f, r.name) } : {}) }
@@ -180,6 +189,7 @@ export async function runBooking(
     const ids = [...new Set((Array.isArray(input.memberIds) ? input.memberIds : []).map(str).filter(Boolean))]
     const rows = await store.rowsByIds(comp.clubId, ids)
     if (rows.length !== ids.length) return fail(404, 'Somebody chosen is not on the club’s list.')
+    await idx.load(rows)
     const taken = bookings.filter(b => b.slot === slot).length
     const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken, adding: rows.length, admin, now: now.getTime() })
     if (issue) return fail(409, issue)
@@ -254,7 +264,7 @@ async function placeRows(o: {
   slot: number
   bookings: Booked[]
   playerOfRow: Map<string, string>
-  refusalOf: (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => Refusal | null
+  refusalOf: (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'> & { id?: string }) => Refusal | null
   admin: boolean
   anyway: boolean
   /** The player making the booking — null for the office. */
@@ -370,8 +380,10 @@ async function runCompOffice(input: Record<string, unknown>, store: BookingStore
   ])
   const playerOfRow = new Map(players.filter(p => p.clubMemberId).map(p => [p.clubMemberId as string, p.id]))
   const rules = comp.entry ?? null
-  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'>) => entryRefusal({
-    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+  // D288: a label's handicap band reads each person's index, loaded for the rows judged.
+  const idx = indexCache(rules, comp.clubId, store.indexesOf)
+  const refusalOf = (r: Pick<MemberRecord, 'gender' | 'birthDate' | 'categoryId'> & { id?: string }) => entryRefusal({
+    rules, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null, index: idx.of(r.id) },
     category: ms.categories.find(c => c.id === r.categoryId) ?? null, day: comp.date, ageDate: readAgeDate(ms.ageDate), categories: ms.categories,
   })
   const done = (body: Record<string, unknown> = {}): BookingOutcome => ({ status: 200, body: { ok: true, ...body } as BookingBody, door: null })
@@ -412,6 +424,8 @@ async function runCompOffice(input: Record<string, unknown>, store: BookingStore
     if (q.length < 2) return done({ names: [] })
     const booked = new Set(bookings.map(b => b.playerId))
     const rows = await store.searchRows(comp.clubId, q.slice(0, 40), 20)
+    // A name found carries no account: its index is read from its whole row.
+    if (labelNeedsIndex(rules)) await idx.load(await store.rowsByIds(comp.clubId, rows.map(r => r.id)).catch(() => []))
     return done({ names: rows.map(r => {
       const f = refusalOf(r)
       return { id: r.id, name: r.name, linked: r.linked, booked: booked.has(playerOfRow.get(r.id) ?? ''), ...(f ? { why: refusalWords(f, r.name) } : {}) }
@@ -425,6 +439,7 @@ async function runCompOffice(input: Record<string, unknown>, store: BookingStore
     const ids = [...new Set((Array.isArray(input.memberIds) ? input.memberIds : []).map(str).filter(Boolean))]
     const rows = await store.rowsByIds(comp.clubId, ids)
     if (rows.length !== ids.length) return fail(404, 'Somebody chosen is not on the club’s list.')
+    await idx.load(rows)
     const issue = bookingIssue({ rules: comp.rules, date: comp.date, slot, taken: bookings.filter(b => b.slot === slot).length, adding: rows.length, admin: true, now: now.getTime() })
     if (issue) return fail(409, issue)
     const placed = await placeRows({

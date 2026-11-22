@@ -135,6 +135,8 @@ export interface Overlay {
   bookHref?: string | null
   /** Said in place of Book when this member may not enter it (MS2, D279). */
   bookNote?: string | null
+  /** D288: its label's colour (else its type's) — down the overlay's edge. */
+  colour?: string
 }
 
 /** A competition's overlay — its first tee time to its last, no gap either side. */

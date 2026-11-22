@@ -293,6 +293,10 @@ export type ClubBody = {
   noteId?: string
   /** D285: after Link or Unlink — the event's state. */
   unlinked?: boolean
+  /** D288: the club's labels, every type's default first; whether 101 is in; a label just kept. */
+  labels?: import('@/lib/clubLabels').ClubLabel[]
+  labelsReady?: boolean
+  labelId?: string
   /** Stage c1, M7: the club's event presets, and whether they can be kept yet (095). */
   presets?: import('@/lib/clubPresets').Preset[]
   presetsReady?: boolean

@@ -367,6 +367,7 @@ Each is pinned by name in `test:branding`, so it cannot become a precedent.
 | Long name glide (11s) | Repeat ceiling | A journey at reading pace, only on a name that does not fit | `TripLeaderboardClient.tsx` |
 | Scroll shades | No gradients | The edge of a scroller says there is more | `.scroll-shade-l` / `-r` in `globals.css` |
 | Grain | No gradients, no texture on surfaces | A texture, not a gradient; the page only, capped faint | `--gd-grain` |
+| A label's wash (D288) | No gradients | One flat tint of the label's colour at the head of its own page; the gradient is only the mask that fades it into the paper | `.label-wash` in `globals.css` |
 | Tee swatches | No grey; palette only | A blue tee is blue — data, not brand | `scorecardStyle.ts` |
 | Terms disclaimer in capitals | No uppercase | The legal form | `app/terms/page.tsx` |
 | The dot bloom (600ms) | 400ms ceiling | The one celebration, once per card signed or run logged; never in score entry or on a board | `app/components/DotBloom.tsx`, its own `<style>` |
