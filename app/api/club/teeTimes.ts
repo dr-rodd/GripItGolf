@@ -29,6 +29,102 @@ import {
 export type { TeeCategory }
 import type { ClubNote } from '@/lib/clubEvents'
 import type { ActivityEntry, ClubRecord, MemberRecord } from './club'
+import { CAL_MAX_DAYS, compHref, compStatus, daysFrom, openHref, openStatus, plusDays, type CalItem, type CompFacts } from '@/lib/clubCalendar'
+import { irishInstant } from '@/lib/irishTime'
+import { noteTimeLine } from '@/lib/clubEvents'
+
+/** What the calendar is worked out from (D286) — every read, handed to one pure-ish pass. */
+export interface CalendarFacts {
+  slug: string
+  today: string
+  now: number
+  from: string
+  to: string
+  row: MemberRecord
+  settings: CasualSettings
+  ready: boolean
+  categories: TeeCategory[]
+  booked: StoredBooking[]
+  comps: TeeComp[]
+  blocks: ClubNote[]
+  ageDate: string
+  place: { lat: number | null; lng: number | null } | null
+  notes: ClubNote[]
+  golf: { code: string; name: string; startDate: string | null; endDate: string | null }[]
+}
+
+/** The members the calendar must name: everybody on the member's own casual times. */
+export function calendarMateIds(f: CalendarFacts): string[] {
+  const mine = f.booked.filter(b => b.memberId === f.row.id || (!b.memberId && b.bookedBy === f.row.id))
+  const ids = f.booked.filter(b => mine.some(m => m.date === b.date && m.time === b.time)).flatMap(b => [b.memberId, b.bookedBy])
+  return [...new Set(ids.filter((x): x is string => !!x && x !== f.row.id))]
+}
+
+/**
+ * Every thing on at the club in the days asked, each with the member's own
+ * line and where a tap goes (D286; the lines are lib/clubCalendar.ts's).
+ * Competitions from first tee to last, the casual sheet's open hours from
+ * today to as far ahead as it books, the club's events — those that take
+ * the sheet as blocks — and the golf events the club runs on their own pages.
+ */
+export function calendarItems(f: CalendarFacts, names: ReadonlyMap<string, string>): CalItem[] {
+  const items: CalItem[] = []
+  const r = f.row
+  const cat = f.categories.find(c => c.id === r.categoryId) ?? null
+  const me: BookerFacts = { memberId: r.id, name: r.name, playsHere: credentialsOf(r).playsHere, category: cat ? { days: cat.days, booksTeeTimes: cat.booksTeeTimes, name: cat.name } : null }
+  for (const c of f.comps) {
+    if (c.date < f.from || c.date > f.to) continue
+    const seats = c.seats ?? []
+    const mineSeat = seats.find(s => s.memberId === r.id) ?? null
+    const refusal = !me.playsHere ? 'plays' : entryRefusal({
+      rules: c.entry, person: { gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null },
+      category: f.categories.find(k => k.id === r.categoryId) ?? null, day: c.date, ageDate: f.ageDate, categories: f.categories,
+    })
+    const cf: CompFacts = {
+      mine: mineSeat ? { clock: mineSeat.clock, mates: seats.filter(s => s.clock === mineSeat.clock && s !== mineSeat).map(s => s.name) } : null,
+      refusal: refusal ? String(refusal) : null,
+      opensAt: c.opensAt ?? null,
+      firstTeeAt: c.clocks[0] ? irishInstant(c.date, c.clocks[0])?.getTime() ?? null : null,
+      certified: c.certified,
+    }
+    items.push({
+      key: `comp:${c.code}`, kind: 'comp', date: c.date, from: c.clocks[0] ?? null, to: c.clocks[c.clocks.length - 1] ?? null,
+      title: c.name, status: compStatus(cf, f.now), href: compHref(f.slug, c.code, cf, f.now),
+    })
+  }
+  const look = plusDays(f.today, CASUAL_LOOK_AHEAD_DAYS)
+  for (const d of f.ready ? daysFrom(f.from > f.today ? f.from : f.today, f.to < look ? f.to : look) : []) {
+    const day = casualDay(d, f.place ? { lat: f.place.lat ?? NaN, lng: f.place.lng ?? NaN } : null, f.settings)
+    if (!day.times.length) continue
+    const mine = f.booked.filter(b => b.date === d && (b.memberId === r.id || (!b.memberId && b.bookedBy === r.id)))
+      .sort((a, b) => a.time.localeCompare(b.time))
+      .map(b => ({ clock: b.time, mates: f.booked.filter(x => x.date === d && x.time === b.time && x.id !== b.id).map(x => {
+        const n = bookingName(x, names)
+        return n.guestOf ? `${n.name} (guest)` : n.name
+      }) }))
+    items.push({
+      key: `open:${d}`, kind: 'open', date: d, from: day.times[0], to: day.times[day.times.length - 1],
+      title: 'Tee sheet open',
+      status: openStatus({ mine, refusal: bookingRefusal(me, d, f.categories.length > 0, true), opening: openingLine(d, f.settings, new Date(f.now)) }),
+      href: openHref(f.slug, d),
+    })
+  }
+  const seen = new Set<string>()
+  for (const n of [...f.blocks, ...f.notes]) {
+    if (seen.has(n.id)) continue
+    seen.add(n.id)
+    items.push({
+      key: `note:${n.id}`, kind: n.blocksSheet ? 'block' : 'event', date: n.startsOn, endDate: n.endsOn ?? null,
+      from: n.startTime ?? null, to: n.endTime ?? null, title: n.title, detail: noteTimeLine(n) || null,
+      status: null, href: null, noteId: n.id, note: n,
+    })
+  }
+  for (const g of f.golf) {
+    if (!g.startDate || (g.endDate ?? g.startDate) < f.from || g.startDate > f.to) continue
+    items.push({ key: `golf:${g.code}`, kind: 'golf', date: g.startDate, endDate: g.endDate, from: null, to: null, title: g.name, status: null, href: `/${g.code}` })
+  }
+  return items.sort((a, b) => a.date.localeCompare(b.date) || (a.from ?? '').localeCompare(b.from ?? '') || a.title.localeCompare(b.title))
+}
 
 
 /** A competition under the club on a day, as the sheet needs it. */
@@ -41,6 +137,10 @@ export interface TeeComp {
   clocks: string[]
   entry: EntryRules | null
   certified: boolean
+  /** D286: when booking opens (its rules), as an instant — null: open from the start. Read with `seats`. */
+  opensAt?: number | null
+  /** D286: who is on each time — asked only by the calendar. */
+  seats?: { memberId: string | null; name: string; clock: string }[]
 }
 
 export interface StoredBooking extends CasualBooking { seat: number }
@@ -76,15 +176,19 @@ export interface TeeTimesStore {
   /** Names on the list matching what was typed — never numbers or emails. */
   searchRows(clubId: string, q: string, limit: number): Promise<MemberRecord[]>
   /** The club's competitions from one day to another, with their tee times. */
-  comps(clubId: string, from: string, to: string): Promise<TeeComp[]>
+  comps(clubId: string, from: string, to: string, opts?: { seats?: boolean }): Promise<TeeComp[]>
   /** The club's events that take the sheet from one day to another (none before 096). */
   blocks(clubId: string, from: string, to: string): Promise<ClubNote[]>
   ageDate(clubId: string): Promise<string>
+  /** D286: the club's own events a member sees from one day to another (the member's own hidden types left out) — none before 095. */
+  events?(clubId: string, userId: string, from: string, to: string): Promise<ClubNote[]>
+  /** D286: golf events the club runs on their own pages — linked ones only (D285). */
+  golfEvents?(clubId: string): Promise<{ code: string; name: string; startDate: string | null; endDate: string | null }[]>
   logActivity?(entries: ActivityEntry[]): Promise<void>
 }
 
 export type TeeOutcome =
-  | { status: 200; body: TeeDayBody | { ok: true; names: { id: string; name: string; why: string | null }[] } | { ok: true; settings: CasualSettings; categories: TeeCategory[]; ready: boolean } | { ok: true } }
+  | { status: 200; body: TeeDayBody | { ok: true; names: { id: string; name: string; why: string | null }[] } | { ok: true; settings: CasualSettings; categories: TeeCategory[]; ready: boolean } | { ok: true } | { ok: true; today: string; items: CalItem[] } }
   | { status: 400 | 401 | 403 | 404 | 409 | 503; body: { ok: false; error: string } }
 
 type FailStatus = 400 | 401 | 403 | 404 | 409 | 503
@@ -189,6 +293,25 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
       }
     }
     return { status: 200, body: { ok: true, settings, categories, ready } }
+  }
+
+  // ─── D286: the member's calendar — a range of days, each thing with their own line ───
+  if (action === 'calendar') {
+    if (office || !row) return fail(403, 'The calendar is for the club’s members.')
+    const from = str(input.from), to = str(input.to)
+    if (!DAY.test(from) || !DAY.test(to) || to < from || daysFrom(from, to).length > CAL_MAX_DAYS) return fail(400, 'Pick the days to show.')
+    const [{ settings, ready }, categories, booked, comps, blocks, ageDate, place, notes, golf] = await Promise.all([
+      store.settings(clubId), store.categories(clubId), store.bookings(clubId, from, to),
+      store.comps(clubId, from, to, { seats: true }), store.blocks(clubId, from, to), store.ageDate(clubId),
+      club.homeCourseId ? store.place(club.homeCourseId) : Promise.resolve(null),
+      store.events ? store.events(clubId, user.id, from, to).catch(() => [] as ClubNote[]) : Promise.resolve([] as ClubNote[]),
+      store.golfEvents ? store.golfEvents(clubId).catch(() => []) : Promise.resolve([]),
+    ])
+    const facts: CalendarFacts = { slug: club.slug, today, now: now.getTime(), from, to, row, settings, ready: ready && booked !== null, categories, booked: booked ?? [], comps, blocks, ageDate, place, notes, golf }
+    const names = new Map<string, string>([[row.id, row.name]])
+    const mateIds = calendarMateIds(facts)
+    for (const r of mateIds.length ? await store.rowsByIds(clubId, mateIds).catch(() => []) : []) names.set(r.id, r.name)
+    return { status: 200, body: { ok: true, today, items: calendarItems(facts, names) } }
   }
 
   // ─── The day ────────────────────────────────────────────────

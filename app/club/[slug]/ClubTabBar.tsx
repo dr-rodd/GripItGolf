@@ -84,7 +84,8 @@ export default function ClubTabBar({ slug }: { slug: string }) {
 
   /** A club tab switches the page in place; one with an address of its own goes there. */
   const clubTap = (t: ClubTab, href?: string) => (e: React.MouseEvent) => {
-    if (comp) {
+    // Off the club's home (a competition, the Calendar — D286): the tab is an address.
+    if (comp || (pathname ?? '').replace(/\/+$/, '') !== club) {
       e.preventDefault()
       setTab(t)
       const to = t === 'home' ? club : `${club}?tab=${t}`

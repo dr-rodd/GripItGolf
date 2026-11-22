@@ -1,9 +1,11 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
-import { parseTeeRules, teeClocks } from '@/lib/teeSheet'
+import { opensAt, parseTeeRules, teeClocks } from '@/lib/teeSheet'
+import { memberSees } from '@/lib/clubEvents'
 import { readEntryRules, readAgeDate } from '@/lib/clubMembership'
 import { readCasualSettings, type CasualSettings } from '@/lib/clubTeeSheet'
 import { asRow, clubStore, readCategories, rowCols, withTicks, type RowRow } from './store'
-import { readNotes } from './notesStore'
+import { readClubHidden, readMemberHiddenOf, readNotes } from './notesStore'
+import { readClubEvents } from './store'
 import { TeeSheetNotReady, type StoredBooking, type TeeComp, type TeeTimesStore } from './teeTimes'
 
 // A club's casual tee sheet on the service role. Migration 096 is read
@@ -100,7 +102,7 @@ export function teeTimesStore(db: Db): TeeTimesStore {
       const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).is('removed_at', null).ilike('name', like).order('name').limit(limit))
       return error ? [] : ((data ?? []) as unknown as RowRow[]).map(asRow)
     },
-    async comps(clubId, from, to): Promise<TeeComp[]> {
+    async comps(clubId, from, to, opts = {}): Promise<TeeComp[]> {
       // MO3 (D282): the club's competitions in the days asked, with their
       // round, in one read; the entry rules (094) and the certified stamp
       // (091) asked for with them, and without them when either is missing.
@@ -113,21 +115,53 @@ export function teeTimesStore(db: Db): TeeTimesStore {
       let res = await ask(true)
       if (res.error) res = await ask(false)
       if (res.error) return []
-      return ((res.data ?? []) as unknown as P[]).flatMap(p => {
+      const comps = ((res.data ?? []) as unknown as P[]).flatMap(p => {
         const t = Array.isArray(p.trips) ? p.trips[0] : p.trips
         if (!t) return []
         const r = (t.rounds ?? [])[0]
         const rules = parseTeeRules(r?.tee_sheet)
+        const date = r?.scheduled_date ?? t.start_date
         return [{
-          code: t.trip_code, name: t.name, date: r?.scheduled_date ?? t.start_date, courseId: r?.course_id ?? null,
+          code: t.trip_code, name: t.name, date, courseId: r?.course_id ?? null,
           clocks: rules ? teeClocks(rules) : [],
           entry: readEntryRules(p.entry_rules),
           certified: !!(t.rounds ?? []).find(x => x.certified_at),
+          roundId: r?.id ?? null,
+          opensAt: opts.seats && rules ? opensAt(rules, date)?.getTime() ?? null : null,
         }]
       })
+      // D286: who is on each time, for the calendar's "Booked in at … with:" — one read of the seats, one of the names.
+      if (opts.seats) {
+        const roundIds = comps.map(c => c.roundId).filter((x): x is string => !!x)
+        const seats = roundIds.length ? await db.from('tee_assignments').select('round_id, player_id, slot_index').in('round_id', roundIds) : { data: [] }
+        const rows = (seats.data ?? []) as { round_id: string; player_id: string; slot_index: number }[]
+        const ids = [...new Set(rows.map(s => s.player_id))]
+        const players = ids.length ? await db.from('players').select('id, name, club_member_id').in('id', ids) : { data: [] }
+        const who = new Map(((players.data ?? []) as { id: string; name: string; club_member_id?: string | null }[]).map(p => [p.id, p]))
+        for (const c of comps) {
+          (c as TeeComp).seats = rows.filter(s => s.round_id === c.roundId).flatMap(s => {
+            const p = who.get(s.player_id)
+            const clock = c.clocks[s.slot_index]
+            return p && clock ? [{ memberId: p.club_member_id ?? null, name: p.name, clock }] : []
+          })
+        }
+      }
+      return comps.map(({ roundId: _r, ...c }) => c)
     },
     async blocks(clubId, from, to) {
       return (await readNotes(db, clubId, { from, to, membersOnly: true, blocking: true })) ?? []
+    },
+    async events(clubId, userId, from, to) {
+      const [notes, clubHidden, mine] = await Promise.all([
+        readNotes(db, clubId, { from, to, membersOnly: true }),
+        readClubHidden(db, clubId).catch(() => []),
+        readMemberHiddenOf(db, userId).catch(() => []),
+      ])
+      return (notes ?? []).filter(n => memberSees(n, clubHidden, mine))
+    },
+    async golfEvents(clubId) {
+      const events = await readClubEvents(db, clubId).catch(() => [])
+      return events.filter(e => !e.competition).map(e => ({ code: e.code, name: e.name, startDate: e.startDate, endDate: e.endDate }))
     },
     async ageDate(clubId) {
       const { data } = await db.from('clubs').select('age_date').eq('id', clubId).maybeSingle()

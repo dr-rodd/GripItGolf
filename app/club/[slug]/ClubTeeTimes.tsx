@@ -55,7 +55,11 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
   const [busy, setBusy] = useState(false)
 
   // The day asked for; null is today, which the server knows in Irish time.
-  const [asked, setAsked] = useState<{ date: string | null; n: number }>({ date: null, n: 0 })
+  // D286: the Calendar opens the sheet on a day (`?day=`).
+  const [asked, setAsked] = useState<{ date: string | null; n: number }>(() => {
+    const d = typeof window === 'undefined' ? null : new URLSearchParams(window.location.search).get('day')
+    return { date: d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : null, n: 0 }
+  })
   const date = day?.date ?? asked.date
 
   // The chosen day kept in view on the strip.

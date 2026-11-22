@@ -41,6 +41,7 @@ import { runCalendarImport, type ImportStore } from '../app/api/club/calendarImp
 import { parseTeeRules } from '../lib/teeSheet'
 import { describeTime } from '../lib/itinerary'
 import { runTeeTimes, type StoredBooking, type TeeComp, type TeeTimesStore } from '../app/api/club/teeTimes'
+import { CAL_MAX_DAYS, DEFAULT_CAL_VIEW, bookedItems, compBookingActive, compStatus, daysFrom, nextItems, onDay, openStatus, stepView, viewRange, type CalItem } from '../lib/clubCalendar'
 import { DEFAULT_CASUAL, casualDay, type CasualSettings, type TeeCategory, type TeeDayBody } from '../lib/clubTeeSheet'
 import { LIST_FILTERS, PAGE_SIZE, STAFF_NAME, cleanSearch, clubhouseHref, listCsv, needsYou, pageLine, sectionAt, standingOf, type ListCounts } from '../lib/clubhouse'
 import { runAwards, eligiblePeople, AwardsNotReady, type Award, type AwardsStore } from '../app/api/club/awards'
@@ -1765,7 +1766,7 @@ async function competitionBarTests() {
   eq(barOf('/club/lahinch/list', 'lahinch'), null, 'the list has no footer')
   {
     const bar = read('app/club/[slug]/ClubTabBar.tsx'), ctx = read('app/club/[slug]/ClubBarContext.tsx')
-    ok(/if \(comp\) \{\s*e\.preventDefault\(\)/.test(bar) && /router\.push\(to\)/.test(bar) && /window\.location\.assign\(to\)/.test(bar),
+    ok(/if \(comp \|\| [^\n]*\) \{\s*e\.preventDefault\(\)/.test(bar) && /router\.push\(to\)/.test(bar) && /window\.location\.assign\(to\)/.test(bar),
       'leaving a competition by Comps or Home is asked for outright, and made whole if it never lands (D280, M6)')
     ok(/data-keep-set/.test(bar) && /hasAttribute\('data-keep-set'\)/.test(ctx), '…the bar keeps its set until the address has left the competition')
     const view = read('app/club/[slug]/ClubView.tsx'), me = read('app/club/[slug]/me/YourPage.tsx')
@@ -3137,6 +3138,39 @@ async function teeTimesTests() {
   const ts = read('app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx')
   ok(['office.day', 'office.book', 'office.move', 'office.remove', 'office.settings'].every(a => ts.includes(`'${a}'`)), '…which books, moves, takes off and sets, all through the server')
   ok(/Takes the tee sheet/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')) && /blocksSheet: blockable && blocks/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')), 'a Golf or Course event is ticked to take the tee sheet — a block booking')
+
+  // ─── D286: the member's Calendar and Your bookings ───
+  section('D286: the Calendar — each thing from the member’s side')
+  bookings = [
+    { id: 'cb1', date: SAT, time: times[0], seat: 1, memberId: 'r-ross', guestName: null, bookedBy: 'r-ross' },
+    { id: 'cb2', date: SAT, time: times[0], seat: 2, memberId: 'r-ann', guestName: null, bookedBy: 'r-ross' },
+    { id: 'cb3', date: SAT, time: times[0], seat: 3, memberId: null, guestName: 'Pat', bookedBy: 'r-ross' },
+  ]
+  comp.seats = [{ memberId: 'r-dave', name: 'Dave', clock: times[3] }, { memberId: 'r-ross', name: 'Ross', clock: times[3] }, { memberId: 'r-ann', name: 'Ann', clock: times[4] }]
+  away.opensAt = Date.parse('2026-11-19T19:00:00Z')
+  const calOf = async (who: string, from = SAT, to = SAT) => { const o = await ask(who, 'calendar', { from, to }); return o.status === 200 ? (o.body as { items: CalItem[] }).items : null }
+  const rc = await calOf('ross')
+  const byKey = (items: CalItem[] | null, k: string) => items?.find(i => i.key === k) ?? null
+  eq(byKey(rc, 'comp:MEDAL1')?.status, { line: `Booked in at ${describeTime(times[3])} with:`, names: ['Dave'], tone: 'booked' }, 'a competition Ross is on: “Booked in at … with:” and who is with him')
+  eq(byKey(rc, 'comp:MEDAL1')?.href, '/club/pints/comp/MEDAL1/tee-times', '…and a tap goes straight to its tee times while booking is live')
+  eq(byKey(rc, `open:${SAT}`)?.status, { line: `Booked in at ${describeTime(times[0])} with:`, names: ['Ann', 'Pat (guest)'], tone: 'booked' }, 'his casual tee time, with Ann and his guest')
+  eq(byKey(rc, `open:${SAT}`)?.href, `/club/pints?tab=tee&day=${SAT}`, '…which opens Tee times on that day')
+  eq(byKey(rc, 'comp:AWAY1')?.status, { line: 'Booking hasn’t opened. Opens Thu 19 Nov at 7:00 pm.', tone: 'wait' }, 'a competition not open yet says when it opens')
+  eq(byKey(rc, 'comp:AWAY1')?.href, '/club/pints/comp/AWAY1', '…and opens its Summary, not its tee times')
+  eq(byKey(rc, 'note:n1')?.kind, 'block', 'the outing that takes the sheet is a block on the day')
+  eq(byKey(rc, 'note:n1')?.status, null, '…with nothing to book')
+  const ac = await calOf('ann')
+  eq(byKey(ac, 'comp:MEDAL1')?.status, { line: `Booked in at ${describeTime(times[4])}`, tone: 'booked' }, 'booked wins over the entry rules: Ann on a time alone is told her time, no “with:”')
+  comp.seats = []
+  eq(byKey(await calOf('ann'), 'comp:MEDAL1')?.status, { line: 'You aren’t eligible to book this event.', tone: 'refused' }, 'a men’s competition tells Ann she isn’t eligible')
+  eq(byKey(await calOf('ross'), 'comp:MEDAL1')?.status, { line: 'Book now', tone: 'open' }, 'Ross, off the sheet, is told Book now')
+  cats.find(c => c.id === 'social')!.booksTeeTimes = false
+  eq(byKey(await calOf('sean'), `open:${SAT}`)?.status, { line: 'You aren’t eligible to book tee times on this day.', tone: 'refused' }, 'a social membership is told it may not book tee times')
+  eq((await ask('ross', 'calendar', { from: '2026-11-01', to: '2027-01-31' })).status, 400, 'a read is six weeks at most')
+  eq((await ask('stranger', 'calendar', { from: SAT, to: SAT })).status, 403, 'somebody not on the list reads no calendar')
+  eq(bookedItems(rc ?? [], '2026-11-18').map(i => i.key), [`open:${SAT}`, 'comp:MEDAL1'], 'Your bookings: what he is booked into, by time')
+  ok(nextItems(rc ?? [], '2026-11-18').every(i => i.kind !== 'open'), 'the Calendar preview never lists the open sheet (it is every day)')
+  comp.seats = undefined; away.opensAt = undefined
 }
 
 async function main() {
@@ -3167,6 +3201,7 @@ async function main() {
   gridColumnTests()
   snappyTests()
   wiringTests()
+  calendarRuleTests()
   unlinkTests()
   insideClubTests()
   console.log(`\n${'─'.repeat(56)}`)
@@ -3176,6 +3211,39 @@ async function main() {
     process.exit(1)
   }
   console.log(`✓ all ${passed} checks passed`)
+}
+
+function calendarRuleTests() {
+  section('D286: the Calendar’s rules (lib/clubCalendar.ts)')
+  eq(viewRange('month', '2026-11-21'), { from: '2026-10-26', to: '2026-12-06' }, 'a month is its whole weeks, Monday first')
+  eq(viewRange('week', '2026-11-21'), { from: '2026-11-16', to: '2026-11-22' }, 'a week is Monday to Sunday')
+  eq(viewRange('day', '2026-11-21'), { from: '2026-11-21', to: '2026-11-21' }, 'a day is itself')
+  eq([stepView('month', '2026-11-21', 1), stepView('month', '2026-11-21', -1), stepView('week', '2026-11-21', 1), stepView('day', '2026-11-21', -1)], ['2026-12-01', '2026-10-01', '2026-11-28', '2026-11-20'], '‹ and › move a month, a week, a day')
+  ok(daysFrom(viewRange('month', '2026-11-21').from, viewRange('month', '2026-11-21').to).length <= CAL_MAX_DAYS, 'a month’s grid is one read')
+  eq(DEFAULT_CAL_VIEW, 'month', 'the Calendar opens on Month (Ross, 22 Nov 2026)')
+  const base = { mine: null, refusal: null, opensAt: null, firstTeeAt: Date.parse('2026-11-21T09:00:00Z'), certified: false }
+  const t = Date.parse('2026-11-18T10:00:00Z')
+  eq(compStatus(base, t).line, 'Book now', 'open, eligible, not booked: Book now')
+  eq(compStatus({ ...base, refusal: 'gender' }, t).line, 'You aren’t eligible to book this event.', 'refused by the entry rules')
+  eq(compStatus({ ...base, refusal: 'gender', opensAt: Date.parse('2026-11-19T19:00:00Z') }, t).tone, 'refused', 'not eligible is said before not open yet')
+  eq(compStatus({ ...base, mine: { clock: '14:00', mates: ['Ann', 'Dave'] }, refusal: 'gender' }, t), { line: 'Booked in at 2:00 pm with:', names: ['Ann', 'Dave'], tone: 'booked' }, 'booked is said first, whatever else is true')
+  eq(compStatus(base, Date.parse('2026-11-21T09:30:00Z')).line, 'Booking closed', 'once the first tee has gone, booking is closed')
+  eq(compStatus({ ...base, certified: true }, t).line, 'Results are in', 'certified: the results are in')
+  ok(!compBookingActive(base, Date.parse('2026-11-21T09:30:00Z')) && compBookingActive(base, t), 'its tee times are where a tap lands only while booking is live')
+  eq(openStatus({ mine: [], refusal: null, opening: 'Booking opens Sat 15 Nov at 7:00 pm' }).line, 'Booking hasn’t opened. Opens Sat 15 Nov at 7:00 pm.', 'the casual sheet not open yet')
+  const i = (key: string, kind: CalItem['kind'], date: string, tone?: 'booked'): CalItem => ({ key, kind, date, from: null, to: null, title: key, status: tone ? { line: 'x', tone } : null, href: null })
+  ok(onDay({ date: '2026-11-20', endDate: '2026-11-22' }, '2026-11-21') && !onDay({ date: '2026-11-20' }, '2026-11-21'), 'an event over several days is on each of them')
+  eq(bookedItems([i('b', 'comp', '2026-11-25', 'booked'), i('a', 'open', '2026-11-20', 'booked'), i('c', 'comp', '2026-11-10', 'booked'), i('d', 'comp', '2026-11-21')], '2026-11-18').map(x => x.key), ['a', 'b'], 'Your bookings: still to come, soonest first, booked only')
+
+  section('D286: Home and the Calendar page')
+  const view = read('app/club/[slug]/ClubView.tsx')
+  ok(view.indexOf('Your bookings') > view.indexOf('Cards to sign') && view.indexOf('Your bookings') < view.indexOf('Live now</h2>'), 'Your bookings leads Home, after a card waiting to be signed')
+  ok(!view.includes('Club calendar') && /<h2 className="t-h2 text-ink">Calendar<\/h2>/.test(view) && view.includes('/calendar`}') && view.includes('Open calendar'), 'Club calendar is Calendar, with Open calendar')
+  ok(!/Your next match<\/h2>/.test(view), '…the next match folded into Your bookings')
+  eq(barOf('/club/pints/calendar', 'pints'), { set: 'club' }, 'the Calendar keeps the club footer')
+  ok(/setTab\('home'\)/.test(read('app/club/[slug]/calendar/CalendarScreen.tsx')), '…with Home lit')
+  ok(/get\('day'\)/.test(read('app/club/[slug]/ClubTeeTimes.tsx')), 'Tee times opens on the day the Calendar asked for')
+  ok(!/askTeeTimes|entryRefusal|Book now|hasn’t opened/.test(read('app/club/[slug]/calendar/CalendarScreen.tsx')), 'the screen only draws: every line is the server’s')
 }
 
 function unlinkTests() {

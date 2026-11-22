@@ -1,5 +1,7 @@
 'use client'
 
+import { bookedItems, nextItems, plusDays } from '@/lib/clubCalendar'
+import { ItemRow, useMemberCalendar } from './calendarParts'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
@@ -461,6 +463,12 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
   const otherUp = [...others.now, ...others.upcoming]
   const otherPast = [...others.past].sort((a, b) => (b.startDate ?? '').localeCompare(a.startDate ?? ''))
   const [showAllPast, setShowAllPast] = useState(false)
+  // D286: what this member is booked into, and the next few things on — one read of the next four weeks.
+  const today = irishToday(now)
+  const cal = useMemberCalendar(m.clubId, today, plusDays(today, 28))
+  const booked = cal.items ? bookedItems(cal.items, today) : []
+  const nextMatches = (m.matches ?? []).filter(x => x.state === 'next')
+  const upNext = cal.items ? nextItems(cal.items, today) : null
   return (
     <>
       <div className="h-[168px]" aria-hidden="true" />
@@ -487,17 +495,27 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
-      {/* Stage 3 (D266): your next match play match, first and foremost. */}
-      {(m.matches ?? []).filter(x => x.state === 'next').slice(0, 1).map(x => (
-        <section key={x.code} className="mt-6">
-          <h2 className="t-h2 text-ink">Your next match</h2>
-          <Link href={matchHref(x, face.slug)} className={`${cardClass('floating', true)} block p-4 mt-3`}>
-            <p className="t-cap text-ink/65">{x.name} · {x.roundName}</p>
-            <p className="t-data text-ink text-[19px] mt-1">{x.opponent ? `v ${x.opponent}` : 'Opponent to be decided'}</p>
-            {x.playBy && <p className="t-cap text-club-deep font-semibold mt-1">Play by {clubEventDates(x.playBy, x.playBy)}</p>}
-          </Link>
+      {/* D286: everything this member is booked into leads Home — competitions, casual tee times, their next matches. */}
+      {(booked.length > 0 || nextMatches.length > 0) && (
+        <section className="mt-6 club-fresh-in">
+          <h2 className="t-h2 text-ink">Your bookings</h2>
+          <ul className="mt-3 space-y-2">
+            {booked.map(i => <ItemRow key={i.key} i={i} />)}
+            {nextMatches.map(x => (
+              <li key={`match:${x.code}`}>
+                <Link href={matchHref(x, face.slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-3`}>
+                  <span className="flex-1 min-w-0">
+                    <span className="block text-[17px] font-medium leading-snug text-ink">{x.name}</span>
+                    <span className="block t-cap text-ink/65">Match play · {x.roundName}</span>
+                    <span className="block t-cap text-club-deep font-semibold mt-0.5">{x.opponent ? `v ${x.opponent}` : 'Opponent to be decided'}{x.playBy ? ` · play by ${clubEventDates(x.playBy, x.playBy)}` : ''}</span>
+                  </span>
+                  <IconChevronRight size={20} className="text-ink/50 flex-shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         </section>
-      ))}
+      )}
 
       {/* Never from the copy (D194): Live now waits for the fresh answer. */}
       {!m.fromCopy && live.length > 0 && (
@@ -516,14 +534,20 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
-      {calendar.length > 0 && (
+      {/* D286: the Calendar — the next few things on, then the whole calendar on its own page. */}
+      {(upNext ? upNext.length > 0 : calendar.length > 0) && (
         <section className="mt-6">
-          <h2 className="t-h2 text-ink">Club calendar</h2>
+          <h2 className="t-h2 text-ink">Calendar</h2>
           <ul className="mt-3 space-y-2">
-            {calendar.map(x => x.e
-              ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code) ? inWords(m.partners, x.e.code) : null} />
-              : <NoteRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
+            {upNext
+              ? upNext.map(i => <ItemRow key={i.key} i={i} onNote={x => x.note && setOpened(x.note)} />)
+              : calendar.slice(0, 3).map(x => x.e
+                ? <CalendarRow key={x.key} e={x.e} slug={face.slug} mine={m.entries.includes(x.e.code) ? inWords(m.partners, x.e.code) : null} />
+                : <NoteRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
           </ul>
+          <Link href={`/club/${face.slug}/calendar`} className="t-label text-club-deep inline-flex items-center gap-1 mt-3 press">
+            Open calendar <IconChevronRight size={16} />
+          </Link>
         </section>
       )}
 
@@ -555,7 +579,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
-      {live.length === 0 && !(m.matches ?? []).some(x => x.state === 'next') && calendar.length === 0 && m.season.length === 0 && m.outside.length === 0 && (
+      {live.length === 0 && booked.length === 0 && nextMatches.length === 0 && calendar.length === 0 && m.season.length === 0 && m.outside.length === 0 && (
         <p className="text-ink/65 text-[15px] leading-relaxed mt-6">
           {face.name}’s events show here once its admins put them under the club.
         </p>
