@@ -1,7 +1,7 @@
 // The service-role store behind /api/club (./club.ts). Every club table is
 // closed to phones (migration 086); only this reaches them.
 
-import { colourFor, withDefaults } from '@/lib/clubLabels'
+import { colourFor, readLabel, withDefaults } from '@/lib/clubLabels'
 import { deleteLabel, readLabels, saveLabel } from './labelsStore'
 import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } from '@/lib/clubMatchPlay'
 import { readMyClubMatches, readPairPartners } from './matchPlayStore'
@@ -373,23 +373,30 @@ export function clubStore(db: Db): ClubStore {
       // with its art and home course (087, 089), this account's row, and the
       // club's events with their trips. Any of them refused (a column not
       // there yet) and the caller reads one by one as before.
-      const [c, r, p] = await Promise.all([
+      // D292: the competitions' labels (entry rules, 094) and the club's labels (101) with them, so
+      // every event has its colour; D285: an unlinked event (100) is left out here as everywhere.
+      const [c, r, p, storedLabels] = await Promise.all([
         db.from('clubs').select(`${CLUB_COLS}, art_path, art_dark_path, home_course_id`).eq('slug', slug).maybeSingle(),
         withTicks(t => db.from('club_members').select(`${rowCols(t)}, clubs!inner(slug)`).eq('clubs.slug', slug).eq('user_id', userId).is('removed_at', null).limit(1)),
         db.from('trip_private')
-          .select('trip_id, club_access, clubs!inner(slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash, bracket_setup)')
+          .select('trip_id, club_access, club_unlinked_at, entry_rules, clubs!inner(id, slug), trips!inner(id, trip_code, name, kind, start_date, end_date, competition, public_passcode_hash, bracket_setup)')
           .eq('clubs.slug', slug),
+        db.from('club_labels').select('id, name, colour, groups, event_type, position, clubs!inner(slug)').eq('clubs.slug', slug),
       ])
       if (c.error || r.error || p.error) return null
       const cr = c.data as (ClubRow & { art_path: string | null; art_dark_path: string | null; home_course_id: string | null }) | null
       const club = cr ? { ...asClub(cr), artPath: cr.art_path, artDarkPath: cr.art_dark_path, homeCourseId: cr.home_course_id } : null
       const row = ((r.data ?? []) as unknown as RowRow[])[0]
       type Trip = { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; public_passcode_hash: string | null; bracket_setup?: unknown }
-      const privs = (p.data ?? []) as unknown as { club_access: string | null; trips: Trip | Trip[] | null }[]
+      const privs = (p.data ?? []) as unknown as { club_access: string | null; club_unlinked_at?: string | null; entry_rules?: unknown; trips: Trip | Trip[] | null }[]
       const trips = privs.flatMap(x => {
         const t = Array.isArray(x.trips) ? x.trips[0] : x.trips
-        return t ? [{ t, access: parseClubAccess(x.club_access) }] : []
+        if (!t || (x.club_unlinked_at && t.competition !== 'club')) return []
+        return [{ t, access: parseClubAccess(x.club_access), labelColour: readEntryRules(x.entry_rules)?.label?.colour ?? null }]
       })
+      // Before 101 there are no stored labels: every event wears its type's built-in colour.
+      const labels = withDefaults(storedLabels.error ? [] : ((storedLabels.data ?? []) as { id: string; name: string; colour: string; groups: unknown; event_type: string | null; position: number }[])
+        .map(l => readLabel({ id: l.id, name: l.name, colour: l.colour, groups: l.groups, eventType: l.event_type, position: l.position })))
       // MO2 (D281): which run over a season, and when a one opening today goes live.
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(new Date())
       const firstDay = trips.filter(x => x.t.competition !== 'club' && x.t.start_date === today).map(x => x.t.id)
@@ -401,7 +408,7 @@ export function clubStore(db: Db): ClubStore {
         const t = i.tee_time.slice(0, 5)
         if (!firstTee.has(i.trip_id) || t < firstTee.get(i.trip_id)!) firstTee.set(i.trip_id, t)
       }
-      const events: ClubEvent[] = trips.map(({ t, access }) => {
+      const events: ClubEvent[] = trips.map(({ t, access, labelColour }) => {
         const tee = firstTee.get(t.id)
         const liveFrom = tee && t.start_date ? irishInstant(t.start_date, tee)?.getTime() ?? null : null
         return {
@@ -411,6 +418,7 @@ export function clubStore(db: Db): ClubStore {
           ...(t.competition === 'club' ? { competition: { phase: 'announced' as CompPhase, membersOnly: !!t.public_passcode_hash, ...(readClubMatchPlay(t.bracket_setup) ? { matchPlay: true as const } : {}) } } : {}),
           ...(seasonLongOf({ kind: t.kind, startDate: t.start_date, endDate: t.end_date, setup: t.bracket_setup }) ? { seasonLong: true as const } : {}),
           ...(liveFrom !== null ? { liveFrom } : {}),
+          colour: colourFor({ labelColour, type: t.competition === 'club' ? 'COMP' : t.kind === 'run' ? 'SPORT' : 'GOLF' }, labels),
         }
       })
       const comps = trips.filter(x => x.t.competition === 'club').map(x => ({ tripId: x.t.id, code: x.t.trip_code }))

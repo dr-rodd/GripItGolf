@@ -3320,6 +3320,12 @@ async function labelTests() {
     ok(/accent\?: string \| null/.test(read('app/components/ui.tsx')), 'ListRow takes an accent')
     ok(/colour: colourFor\(\{ labelId: n\.labelId/.test(read('app/api/club/club.ts')), 'the members’ club events carry their label colour from the server')
     ok(/className="label-wash"/.test(read('app/club/[slug]/ClubNotes.tsx')), 'a club event’s sheet wears its label’s wash')
+    // D292: the members home's fast first read gave its events no colour (Ross's screenshot: blue on the
+    // Calendar, nothing on Comps) — both readers of a club's events now set it, and both leave out the unlinked.
+    const storeSrc = read('app/api/club/store.ts')
+    const fast = storeSrc.slice(storeSrc.indexOf('async clubHome('), storeSrc.indexOf('myMatches:'))
+    ok(/colour: colourFor\(/.test(fast) && /club_labels/.test(fast) && /entry_rules/.test(fast), 'the home’s fast read gives every event its label colour')
+    ok(/club_unlinked_at/.test(fast) && /x\.club_unlinked_at && t\.competition !== 'club'/.test(fast), 'the home’s fast read leaves an unlinked event out (D285)')
   }
   ok(/CREATE TABLE IF NOT EXISTS club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')) && /label_id uuid NULL REFERENCES club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')), 'migration 101: labels, and a club event’s label')
 }
