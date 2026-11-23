@@ -61,11 +61,13 @@ export function NoteSheet({ n, onClose }: { n: ClubNote; onClose: () => void }) 
   return createPortal(
     <div className="fixed inset-0 z-50 flex flex-col justify-end" role="dialog" aria-modal="true" aria-labelledby="note-title" onClick={onClose}>
       <div className="absolute inset-0 bg-ink/40 page-enter" />
-      <div className="relative paper rounded-t-sheet shadow-floating-up max-h-[88vh] overflow-y-auto sheet-up px-5 pt-5"
+      <div className="relative isolate paper rounded-t-sheet shadow-floating-up max-h-[88vh] overflow-y-auto sheet-up px-5 pt-5 overflow-x-hidden"
         style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 20px)' }} onClick={e => e.stopPropagation()}>
-        <div className="flex items-start gap-3">
+        {/* D292: the event's label colour, a soft wash at the sheet's head (the competition pages' own). */}
+        {n.colour && <div aria-hidden="true" className="label-wash" style={{ '--label': n.colour } as React.CSSProperties} />}
+        <div className="relative flex items-start gap-3">
           <div className="flex-1 min-w-0">
-            <p className="t-cap text-ink/65">{typeLabel(n.type)}</p>
+            <p className="t-cap text-ink/65 inline-flex items-center gap-1.5">{n.colour && <span aria-hidden="true" className="w-2 h-2 rounded-full" style={{ background: n.colour }} />}{typeLabel(n.type)}</p>
             <h2 id="note-title" className="t-h2 text-ink mt-1 break-words">{n.title}</h2>
           </div>
           <button type="button" onClick={onClose} aria-label="Close" className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-ink press flex-shrink-0">

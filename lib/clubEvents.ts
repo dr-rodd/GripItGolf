@@ -84,6 +84,8 @@ export interface ClubNote {
   blocksSheet: boolean
   /** D288, migration 101: the label it carries — none is its type's default label. Absent before 101. */
   labelId?: string | null
+  /** D292: its label's colour (else its type's), set by the server for the members app. */
+  colour?: string
   /**
    * D277, migration 099: the room an event is in, or — a Golf or Course
    * event — the course it is on (null: Course 1). Absent before 099. An

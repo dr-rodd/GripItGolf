@@ -121,9 +121,11 @@ export function ListGroup({
  * Given an `href` it is a link, an `onClick` a button, neither a plain row.
  */
 export function ListRow({
-  label, value, hint, icon, trailing, href, onClick, chevron, className = '',
+  label, value, hint, icon, trailing, href, onClick, chevron, accent, className = '',
 }: {
   label: React.ReactNode
+  /** D292: a label's colour down the row's left edge — the motif a thing carries sitewide. */
+  accent?: string | null
   /** On the right, before any chevron — a count, a setting's current answer. */
   value?: React.ReactNode
   /** Under the label, one line. */
@@ -142,6 +144,7 @@ export function ListRow({
   const showChevron = chevron ?? goes
   const body = (
     <>
+      {accent && <span aria-hidden="true" className="absolute left-0 top-0 bottom-0 w-1.5" style={{ background: accent }} />}
       {icon && (
         <span className="flex-shrink-0 w-10 h-10 rounded-tile bg-tint text-bark flex items-center justify-center" aria-hidden="true">
           {icon}
@@ -162,7 +165,7 @@ export function ListRow({
       )}
     </>
   )
-  const cls = `flex items-center gap-3 min-h-14 px-4 py-3 text-left w-full ${goes ? 'press hover:bg-tint' : ''} ${className}`.trim()
+  const cls = `${accent ? 'relative ' : ''}flex items-center gap-3 min-h-14 px-4 py-3 text-left w-full ${goes ? 'press hover:bg-tint' : ''} ${className}`.trim()
   if (href) return <Link href={href} className={cls}>{body}</Link>
   if (onClick) return <button type="button" onClick={onClick} className={cls}>{body}</button>
   return <div className={cls}>{body}</div>

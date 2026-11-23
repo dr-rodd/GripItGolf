@@ -1,3 +1,4 @@
+import { colourFor, withDefaults } from '@/lib/clubLabels'
 // The server's half of clubs (stage (c); lib/clubs.ts has the rules).
 //
 // Handed its store, so `test:clubs` runs every path against a stand-in
@@ -329,12 +330,16 @@ const PEOPLE_LATER = 'Memberships, genders and dates of birth aren’t set up ye
 async function membersNotes(store: ClubStore, clubId: string, userId: string, today: string): Promise<ClubNote[]> {
   if (!store.notes) return []
   const from = new Date(Date.parse(`${today}T00:00:00Z`) - 7 * 86_400_000).toISOString().slice(0, 10)
-  const [notes, clubHidden, mine] = await Promise.all([
+  const [notes, clubHidden, mine, stored] = await Promise.all([
     store.notes(clubId, { from, membersOnly: true }),
     store.clubHidden ? store.clubHidden(clubId).catch(() => []) : Promise.resolve([]),
     store.memberHidden ? store.memberHidden(userId).catch(() => []) : Promise.resolve([]),
+    store.labels ? store.labels(clubId).catch(() => null) : Promise.resolve(null),
   ])
+  // D292: each event wears its label's colour — its own, else its type's — wherever it is drawn.
+  const labels = withDefaults(stored ?? [])
   return (notes ?? []).filter(n => memberSees(n, clubHidden, mine))
+    .map(n => ({ ...n, colour: colourFor({ labelId: n.labelId ?? null, type: n.type }, labels) }))
 }
 
 export { inviteHash, inviteTryKey } from './invites'

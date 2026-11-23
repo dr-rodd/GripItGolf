@@ -380,8 +380,9 @@ function EventRow({ e, slug, entries, tops, partners }: { e: ClubEvent; slug: st
   return (
         <ListRow
           href={clubEventHref(e, slug)}
-          // D288: its label's colour, at its left.
-          label={e.colour ? <span className="inline-flex items-start gap-2"><span aria-hidden="true" className="w-1.5 h-5 mt-0.5 rounded-full flex-shrink-0" style={{ background: e.colour }} />{e.name}</span> : e.name}
+          // D288, D292: its label's colour down the row's left edge.
+          accent={e.colour}
+          label={e.name}
           hint={
             <>
               {[clubEventDates(e.startDate, e.endDate), e.competition ? PHASE_WORDS[e.competition.phase] : KIND[e.kind]].filter(Boolean).join(' · ')}
@@ -396,6 +397,11 @@ function EventRow({ e, slug, entries, tops, partners }: { e: ClubEvent; slug: st
           trailing={e.competition ? undefined : <CodePill code={e.code} />}
         />
   )
+}
+
+/** D292: a card's left edge in its label's colour — the motif every card carries in the members app. */
+function labelEdge(colour: string | null | undefined): React.CSSProperties | undefined {
+  return colour ? { borderLeft: `6px solid ${colour}` } : undefined
 }
 
 /** An event's board: a competition's inside the club area, any other event's own. */
@@ -505,7 +511,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
             {booked.map(i => <ItemRow key={i.key} i={i} />)}
             {nextMatches.map(x => (
               <li key={`match:${x.code}`}>
-                <Link href={matchHref(x, face.slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-3`}>
+                <Link href={matchHref(x, face.slug)} className={`${cardClass('raised', true)} flex items-center gap-3 p-3`} style={labelEdge(m.events.find(e => e.code === x.code)?.colour)}>
                   <span className="flex-1 min-w-0">
                     <span className="block text-[17px] font-medium leading-snug text-ink">{x.name}</span>
                     <span className="block t-cap text-ink/65">Match play · {x.roundName}</span>
@@ -525,7 +531,7 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           <h2 className="t-h2 text-ink flex items-center gap-2"><LiveDot /> Live now</h2>
           <div className="mt-3 space-y-3">
             {live.map(e => (
-              <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`} style={e.colour ? { borderLeft: `6px solid ${e.colour}` } : undefined}>
+              <Link key={e.code} href={boardHref(e, face.slug)} className={`${cardClass('floating', true)} block p-4`} style={labelEdge(e.colour)}>
                 <p className="t-card text-ink">{e.name}</p>
                 <p className={`t-cap mt-1 ${m.entries.includes(e.code) ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>
                   {m.entries.includes(e.code) ? 'You’re playing · ' : ''}Open the leaderboard
@@ -675,7 +681,7 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       <p className="text-ink/65 text-sm mt-1">The club’s events — tap one to open it.</p>
       {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
-        <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`}>
+        <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`} style={labelEdge(liveHere.colour)}>
           <p className="t-cap text-ink/65">Live now</p>
           <p className="t-card text-ink mt-1 break-words">{liveHere.name}</p>
           <p className="t-label text-club-deep mt-2">Open the leaderboard</p>
@@ -686,7 +692,7 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
           // Stage 3 (D266): your match play matches, apart from the competitions you entered.
           ...((m.matches ?? []).length ? [{ value: 'matches' as const, label: 'Matches' }] : []),
           { value: 'results', label: 'Results' }]} />
-      {view === 'matches' && <MatchList matches={m.matches ?? []} slug={slug} />}
+      {view === 'matches' && <MatchList matches={m.matches ?? []} slug={slug} colours={new Map(m.events.map(e => [e.code, e.colour]))} />}
       {/* Stage 6 (P14): Golfer of the Year, this member's line, at the head of Results. */}
       {view === 'results' && !m.fromCopy && <AwardsCard clubId={m.clubId} slug={slug} />}
       {view === 'upcoming' && <TypeChips types={upcomingTypes} value={type} onChange={setType} />}
@@ -701,7 +707,7 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
         </p>
       ) : (
         <>
-          <Link href={clubEventHref(featured, slug)} className={`${cardClass('floating', true)} block p-4 mt-5`}>
+          <Link href={clubEventHref(featured, slug)} className={`${cardClass('floating', true)} block p-4 mt-5`} style={labelEdge(featured.colour)}>
             <div className="flex items-start gap-3">
               <div className="flex-1 min-w-0">
                 <p className="t-cap text-ink/65">{clubEventDates(featured.startDate, featured.endDate) || KIND[featured.kind]}</p>
@@ -814,11 +820,11 @@ function matchHref(x: MyClubMatch, slug: string): string {
 }
 
 /** Comps' Matches (stage 3, D266): your place in each club match play — the next match to play, soonest due first, then how the rest ended. */
-function MatchList({ matches, slug }: { matches: MyClubMatch[]; slug: string }) {
+function MatchList({ matches, slug, colours }: { matches: MyClubMatch[]; slug: string; colours?: Map<string, string | undefined> }) {
   return (
     <ListGroup className="mt-5">
       {matches.map(x => (
-        <ListRow key={x.code} href={matchHref(x, slug)} label={x.name}
+        <ListRow key={x.code} href={matchHref(x, slug)} label={x.name} accent={colours?.get(x.code)}
           hint={x.state === 'next'
             ? [x.roundName, x.opponent ? `v ${x.opponent}` : 'opponent to be decided', x.playBy ? `play by ${clubEventDates(x.playBy, x.playBy)}` : null].filter(Boolean).join(' · ')
             : x.state === 'won' ? `Won the ${x.roundName}${x.opponent ? ` against ${x.opponent}` : ''}` : `Out in the ${x.roundName}${x.opponent ? ` to ${x.opponent}` : ''}${x.result ? `, ${x.result}` : ''}`} />
@@ -830,7 +836,7 @@ function MatchList({ matches, slug }: { matches: MyClubMatch[]; slug: string }) 
 /** One of the club's own events as a row of Upcoming: its type, day and time; it opens a sheet. */
 function NoteListRow({ n, onOpen }: { n: ClubNote; onOpen: () => void }) {
   return (
-    <ListRow label={n.title} onClick={onOpen}
+    <ListRow label={n.title} onClick={onOpen} accent={n.colour}
       hint={[typeLabel(n.type), clubEventDates(n.startsOn, n.endsOn ?? n.startsOn), noteTimeLine(n)].filter(Boolean).join(' · ')} />
   )
 }

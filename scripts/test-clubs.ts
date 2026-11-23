@@ -3310,6 +3310,17 @@ async function labelTests() {
   ok(/freshEntry\(db, clubId, rules\)/.test(read('app/api/club/competition/route.ts')) && /freshEntry\(db, c\.clubId, ch\.entry\)/.test(read('app/api/club/competition/route.ts')), 'every competition write keeps the club’s label as it stands, never a copy a form carried')
   ok(/indexCache\(rules/.test(read('app/api/club/booking.ts')) && /loadIdx/.test(read('app/api/club/matchPlayEntry.ts')) && /index: memberIndex/.test(read('app/api/club/teeTimes.ts')) && /index: f\.myIndex/.test(read('app/api/club/teeTimes.ts')), 'booking, entering a match play, the tee sheet and the calendar judge the label’s band')
   ok(/className="label-wash"/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')), 'a competition’s page wears its label’s wash')
+  // D292: the motif carries through the Comps tab and the rest of the members app.
+  {
+    const view = read('app/club/[slug]/ClubView.tsx')
+    ok(/accent=\{e\.colour\}/.test(view), 'a competition row wears its label down its left edge')
+    ok(/ListRow label=\{n\.title\} onClick=\{onOpen\} accent=\{n\.colour\}/.test(view), 'a club event row wears its label down its left edge')
+    ok(/accent=\{colours\?\.get\(x\.code\)\}/.test(view), 'a match play row wears its competition’s label')
+    ok((view.match(/style=\{labelEdge\(/g) ?? []).length >= 4, 'Comps’ featured and Live now cards, Home’s Live now and next match wear the edge')
+    ok(/accent\?: string \| null/.test(read('app/components/ui.tsx')), 'ListRow takes an accent')
+    ok(/colour: colourFor\(\{ labelId: n\.labelId/.test(read('app/api/club/club.ts')), 'the members’ club events carry their label colour from the server')
+    ok(/className="label-wash"/.test(read('app/club/[slug]/ClubNotes.tsx')), 'a club event’s sheet wears its label’s wash')
+  }
   ok(/CREATE TABLE IF NOT EXISTS club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')) && /label_id uuid NULL REFERENCES club_labels/.test(read('supabase/migrations/20260101000101_club_labels.sql')), 'migration 101: labels, and a club event’s label')
 }
 
