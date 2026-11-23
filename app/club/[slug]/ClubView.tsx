@@ -754,11 +754,16 @@ export function SeasonList({ slug, club }: { slug: string; club: string }) {
   const [lost, setLost] = useState(false)
   const [opened, setOpened] = useState<ClubNote | null>(null)
   const [attempt, setAttempt] = useState(0)
+  // D291: Comps' own page — the footer lights Comps.
+  const { setTab } = useClubBar()
+  useEffect(() => { setTab('comps') }, [setTab])
   useEffect(() => {
     let live = true
     void askClub('home', { slug, whole: true }).then(r => {
       if (!live) return
       if (!r.ok) { setLost(true); return }
+      // A member answered: the footer may show for this club (D197's mark).
+      document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '')
       setLost(false)
       setGot({ events: r.events ?? [], notes: (r.notes ?? []) as ClubNote[], entries: r.entries ?? [], partners: r.partners as Members['partners'] })
     })

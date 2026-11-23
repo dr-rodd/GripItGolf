@@ -58,6 +58,19 @@ export default function ClubTabBar({ slug }: { slug: string }) {
     document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '')
   }, [inComp, comp?.code])
 
+
+  const router = useRouter()
+  // MO1, M6 (D280): leaving a competition is asked for outright, and checked —
+  // the bar keeps its set until the address has left the competition, so the
+  // page and the footer change together; a move that never lands is made whole.
+  const leaving = useRef<number | null>(null)
+  useEffect(() => () => { if (leaving.current) clearTimeout(leaving.current) }, [])
+  useEffect(() => { if (!comp && leaving.current) { clearTimeout(leaving.current); leaving.current = null } }, [comp])
+
+  // D291: every hook above this line, always. A footer that returned before
+  // them rendered fewer hooks on a page with no bar (See all, Your page) than
+  // on one with it, and React threw on the tap between them — the site's
+  // "Could not load this page" until the new page landed.
   if (!state) return null
   // The club set before the page has said this phone is on the list: drawn,
   // but shown only to a phone hinted to this club (D197), with the stand-in.
@@ -74,13 +87,6 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   ]
   const five = own.length === 3
 
-  const router = useRouter()
-  // MO1, M6 (D280): leaving a competition is asked for outright, and checked —
-  // the bar keeps its set until the address has left the competition, so the
-  // page and the footer change together; a move that never lands is made whole.
-  const leaving = useRef<number | null>(null)
-  useEffect(() => () => { if (leaving.current) clearTimeout(leaving.current) }, [])
-  useEffect(() => { if (!comp && leaving.current) { clearTimeout(leaving.current); leaving.current = null } }, [comp])
 
   /** A club tab switches the page in place; one with an address of its own goes there. */
   const clubTap = (t: ClubTab, href?: string) => (e: React.MouseEvent) => {

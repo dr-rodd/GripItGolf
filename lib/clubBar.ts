@@ -98,8 +98,8 @@ export type BarState =
 export function barOf(pathname: string, slug: string): BarState {
   const base = `/club/${slug}`
   const path = pathname.replace(/\/+$/, '')
-  // D286: the Calendar is Home's — the club set, Home lit.
-  if (path === base || path === `${base}/calendar`) return { set: 'club' }
+  // D286: the Calendar is Home's — the club set, Home lit. D291: See all is Comps'.
+  if (path === base || path === `${base}/calendar` || path === `${base}/comps`) return { set: 'club' }
   const m = path.slice(base.length).match(/^\/comp\/([A-Za-z0-9]{4,12})(?:\/(.+))?$/)
   if (!path.startsWith(`${base}/`) || !m) return null
   const code = m[1].toUpperCase()
