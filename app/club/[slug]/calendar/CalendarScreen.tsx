@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
+import { IconChevronLeft, IconChevronRight, IconList } from '@/app/components/icons'
 import { Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { irishToday } from '@/lib/clubs'
 import { describeTime } from '@/lib/itinerary'
@@ -69,6 +69,11 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
         {day !== today && (
           <button type="button" onClick={() => setDay(today)} className={`${buttonClass('quiet', false, true)} ch-focus`}>Today</button>
         )}
+        {/* D290: the same season as a list, by the week. */}
+        <Link href={`/club/${slug}/comps`} aria-label="See it as a list" title="See it as a list"
+          className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
+          <IconList size={22} />
+        </Link>
       </div>
       <Segmented className="mt-3" label="Show" value={view} onChange={setView}
         options={CAL_VIEWS.map(v => ({ value: v, label: VIEW_WORD[v] }))} />

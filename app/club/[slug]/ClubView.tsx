@@ -1,6 +1,6 @@
 'use client'
 
-import { bookedItems, nextItems, plusDays } from '@/lib/clubCalendar'
+import { bookedItems, byWeek, nextItems, plusDays } from '@/lib/clubCalendar'
 import { ItemRow, useMemberCalendar } from './calendarParts'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -784,11 +784,19 @@ export function SeasonList({ slug, club }: { slug: string; club: string }) {
       {got && (items.length === 0
         ? <p className="text-ink/65 text-[15px] mt-6">Nothing coming up yet.</p>
         : (
-          <ListGroup className="mt-5">
-            {items.map(x => x.e
-              ? <EventRow key={x.key} e={x.e} slug={slug} entries={got.entries} tops={{}} partners={got.partners} />
-              : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
-          </ListGroup>
+          // D290: by the week, so a long season reads in order.
+          <div className="mt-5 space-y-5">
+            {byWeek(items, today).map(w => (
+              <section key={w.heading}>
+                <h2 className="t-card text-ink mb-2">{w.heading}</h2>
+                <ListGroup>
+                  {w.items.map(x => x.e
+                    ? <EventRow key={x.key} e={x.e} slug={slug} entries={got.entries} tops={{}} partners={got.partners} />
+                    : <NoteListRow key={x.key} n={x.n!} onOpen={() => setOpened(x.n!)} />)}
+                </ListGroup>
+              </section>
+            ))}
+          </div>
         ))}
       {opened && <NoteSheet n={opened} onClose={() => setOpened(null)} />}
     </section>

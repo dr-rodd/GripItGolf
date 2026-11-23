@@ -144,6 +144,9 @@ export const IconX = (p: IconProps) => (
   <Svg {...p}><path d="M18 6l-12 12" /><path d="M6 6l12 12" /></Svg>
 )
 
+export const IconList = (p: IconProps) => (
+  <Svg {...p}><path d="M9 6l11 0" /><path d="M9 12l11 0" /><path d="M9 18l11 0" /><path d="M5 6l0 .01" /><path d="M5 12l0 .01" /><path d="M5 18l0 .01" /></Svg>
+)
 export const IconPlus = (p: IconProps) => (
   <Svg {...p}><path d="M12 5l0 14" /><path d="M5 12l14 0" /></Svg>
 )

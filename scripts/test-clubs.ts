@@ -3435,3 +3435,18 @@ void main()
   if (!/const size = 'club-art-home'/.test(view)) throw new Error('D289: the club art is the same size on every page')
   console.log('✓ D289: week timescale, no open-sheet event, art the same everywhere')
 }
+
+// D290: See all reads by the week; the Calendar links to it.
+{
+  const { weekHeading, byWeek } = require('../lib/clubCalendar') as typeof import('../lib/clubCalendar')
+  const today = '2026-11-25' // a Wednesday
+  const heads = ['2026-11-23', '2026-11-29', '2026-11-30', '2026-12-07', '9999'].map(d => weekHeading(d, today))
+  if (heads.join('|') !== 'This week|This week|Next week|Week of Mon 7 Dec|Date to be set') throw new Error('D290 week headings: ' + heads.join('|'))
+  const grouped = byWeek([{ day: '2026-11-26' }, { day: '2026-11-27' }, { day: '2026-12-02' }], today)
+  if (grouped.map(g => `${g.heading}:${g.items.length}`).join(',') !== 'This week:2,Next week:1') throw new Error('D290 byWeek')
+  const view = fs.readFileSync('app/club/[slug]/ClubView.tsx', 'utf8')
+  if (!/byWeek\(items, today\)/.test(view)) throw new Error('D290: See all groups by the week')
+  const cal = fs.readFileSync('app/club/[slug]/calendar/CalendarScreen.tsx', 'utf8')
+  if (!/href=\{`\/club\/\$\{slug\}\/comps`\}[^>]*aria-label="See it as a list"/.test(cal)) throw new Error('D290: the Calendar links to the list')
+  console.log('✓ D290: See all by the week, linked from the Calendar')
+}

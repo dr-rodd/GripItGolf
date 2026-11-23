@@ -225,3 +225,29 @@ export function clockMinutes(clock: string | null): number | null {
   const m = clock ? /^(\d{2}):(\d{2})/.exec(clock) : null
   return m ? Number(m[1]) * 60 + Number(m[2]) : null
 }
+
+/**
+ * A week's heading in a list of what is coming up (D290, Ross, 23 Nov 2026):
+ * "This week", "Next week", else "Week of Mon 1 Dec" — a list running weeks
+ * ahead reads by the week. A day not set yet heads "Date to be set".
+ */
+export function weekHeading(day: string, today: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day.startsWith('9999')) return 'Date to be set'
+  const mon = mondayOf(day)
+  const thisMon = mondayOf(today)
+  if (mon <= thisMon) return 'This week'
+  if (mon === plusDays(thisMon, 7)) return 'Next week'
+  return `Week of ${describeShortDate(mon)}`
+}
+
+/** Things in date order, cut into weeks under their headings — the order kept. */
+export function byWeek<T extends { day: string }>(items: T[], today: string): { heading: string; items: T[] }[] {
+  const out: { heading: string; items: T[] }[] = []
+  for (const x of items) {
+    const heading = weekHeading(x.day, today)
+    const last = out[out.length - 1]
+    if (last && last.heading === heading) last.items.push(x)
+    else out.push({ heading, items: [x] })
+  }
+  return out
+}
