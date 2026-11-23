@@ -1,7 +1,8 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { IconChevronLeft, IconChevronRight } from '@/app/components/icons'
 import { Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { irishToday } from '@/lib/clubs'
@@ -15,7 +16,7 @@ import {
 import type { ClubNote } from '@/lib/clubEvents'
 import { useClubBar } from '../ClubBarContext'
 import { NoteSheet } from '../ClubNotes'
-import { ItemRow, KIND_BAR, KIND_FILL, KIND_WORD, StatusLines, edgeStyle, fillStyle, useMemberCalendar, whenLine } from '../calendarParts'
+import { ItemRow, KIND_BAR, KIND_FILL, KIND_WORD, StatusLines, edgeStyle, fillStyle, useMemberCalendar, whenLine, type SunTimes } from '../calendarParts'
 
 const VIEW_KEY = 'gd.clubcal.view.v1'
 const VIEW_WORD: Record<CalView, string> = { month: 'Month', week: 'Week', day: 'Day' }
@@ -53,7 +54,7 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
   const openDay = (d: string) => { setDay(d); setView('day') }
 
   const range = viewRange(view, day)
-  const { items, error, again } = useMemberCalendar(clubId, range.from, range.to)
+  const { items, sun, error, again } = useMemberCalendar(clubId, range.from, range.to)
   // A member answered: the footer may show for this club (D197's mark).
   useEffect(() => { if (items) document.documentElement.setAttribute(CLUB_MEMBER_ATTR, '') }, [items])
 
@@ -89,12 +90,26 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
       )}
       {!error && !items && <div className="skeleton h-80 rounded-card mt-4" aria-busy="true" aria-label="Loading" />}
       {items && view === 'month' && <MonthView day={day} today={today} range={range} items={items} onDay={openDay} />}
-      {items && view === 'week' && <WeekView range={range} today={today} items={items} onDay={openDay} onNote={i => i.note && setNote(i.note)} />}
+      {items && view === 'week' && <WeekView range={range} today={today} items={items} sun={sun} onDay={openDay} onNote={i => i.note && setNote(i.note)} />}
       {items && view === 'day' && <DayView day={day} today={today} items={items} onNote={i => i.note && setNote(i.note)} />}
       {note && <NoteSheet n={note} onClose={() => setNote(null)} />}
       <p className="sr-only"><Link href={`/club/${slug}`}>Back to the club</Link></p>
     </section>
   )
+}
+
+/**
+ * D289 (Ross, 23 Nov 2026): the open tee sheet is no event of its own —
+ * only the member's own tee time shows; a tap on a free time books.
+ */
+function shown(items: CalItem[]): CalItem[] {
+  return items.filter(i => i.kind !== 'open' || i.status?.tone === 'booked')
+}
+
+/** The open tee sheet on a day, where a tap on a free time may book it (open, or booked and may book again). */
+function bookable(items: CalItem[], d: string): CalItem | null {
+  const o = items.find(i => i.kind === 'open' && i.date === d)
+  return o && o.href && (o.status?.tone === 'open' || o.status?.tone === 'booked') ? o : null
 }
 
 // ─── Month ───────────────────────────────────────────────────────
@@ -119,7 +134,7 @@ function MonthView({ day, today, range, items, onDay: open }: {
       </div>
       <div className="grid grid-cols-7 gap-1">
         {days.map(d => {
-          const here = items.filter(i => onDay(i, d))
+          const here = shown(items).filter(i => onDay(i, d))
           // D288: a mark a colour on the day — its things' labels, three at most.
           const marks = [...new Map(here.map(i => [i.colour ?? i.kind, i])).values()].slice(0, 3)
           const booked = here.some(i => i.status?.tone === 'booked')
@@ -141,7 +156,6 @@ function MonthView({ day, today, range, items, onDay: open }: {
       </div>
       <p className="t-cap text-ink/65 mt-3 flex flex-wrap gap-x-4 gap-y-1">
         <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${MARK.comp}`} />Competition</span>
-        <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${MARK.open}`} />Tee sheet open</span>
         <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${MARK.event}`} />Club event</span>
       </p>
       <p className="t-cap text-ink/65 mt-1">Tap a day to see it hour by hour.</p>
@@ -217,24 +231,62 @@ function Block({ i, top, height, left, width, onNote, children }: {
 
 /** Things on a day in the order a member reads them: all day first, then by time. */
 function dayOrder(items: CalItem[], d: string): CalItem[] {
-  return items.filter(i => onDay(i, d))
+  return shown(items).filter(i => onDay(i, d))
     .sort((a, b) => (a.from ? 1 : 0) - (b.from ? 1 : 0) || (a.from ?? '').localeCompare(b.from ?? '') || a.title.localeCompare(b.title))
 }
 
+const DAY_COL = 56
+/** The narrowest a card is drawn, so its words read — a short thing's card runs past its end. */
+const CARD_MIN = 132
+const MIDNIGHT = 24 * 60
+
+const hourWord = (m: number) => describeTime(`${String(Math.floor(m / 60) % 24).padStart(2, '0')}:00`).replace(':00', '')
+
 /**
- * A week as seven rows, one a day (D287, Ross, 22 Nov 2026 — a phone's own
- * training calendar the model): the day down the left, today ringed, and
- * that day's things side by side, each a card with its colour down its left
- * edge, its time and the member's own line. A busy day scrolls sideways;
- * words wrap and the row grows rather than shrink below what reads.
+ * A week against a timescale (D289, Ross, 23 Nov 2026): seven rows, a day
+ * each, the hours across the top — the phone's width sunrise to sunset,
+ * scrolling right to midnight for the evening. Each thing sits at its time
+ * in its label's colour; a short one's card runs past its end so its words
+ * read, and the row grows a line where two would touch. A tap on a free
+ * time books the open tee sheet that day; the day's name opens it hour by
+ * hour.
  */
-function WeekView({ range, today, items, onDay: open, onNote }: {
-  range: { from: string; to: string }; today: string; items: CalItem[]; onDay: (d: string) => void; onNote: (i: CalItem) => void
+function WeekView({ range, today, items, sun, onDay: open, onNote }: {
+  range: { from: string; to: string }; today: string; items: CalItem[]; sun: SunTimes; onDay: (d: string) => void; onNote: (i: CalItem) => void
 }) {
+  const router = useRouter()
   const days = daysFrom(range.from, range.to)
-  const inWeek = items.filter(i => days.some(d => onDay(i, d)))
+  const inWeek = shown(items).filter(i => days.some(d => onDay(i, d)))
   const booked = inWeek.filter(i => i.status?.tone === 'booked').length
   const comps = inWeek.filter(i => i.kind === 'comp').length
+  const anyBookable = days.some(d => bookable(items, d))
+
+  // Sunrise to sunset across the week fills the phone's width.
+  const rises = days.map(d => clockMinutes(sun[d]?.rise ?? null)).filter((m): m is number => m !== null)
+  const sets = days.map(d => clockMinutes(sun[d]?.set ?? null)).filter((m): m is number => m !== null)
+  const earliest = Math.min(...inWeek.filter(i => i.from).map(i => clockMinutes(i.from) ?? MIDNIGHT))
+  const start = Math.floor(Math.min(rises.length ? Math.min(...rises) : 7 * 60, earliest) / 60) * 60
+  const dusk = Math.ceil((sets.length ? Math.max(...sets) : 20 * 60) / 60) * 60
+  const scroller = useRef<HTMLDivElement | null>(null)
+  const [width, setWidth] = useState(0)
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (!el) return
+    const measure = () => setWidth(el.clientWidth - DAY_COL)
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+  useEffect(() => { if (scroller.current) scroller.current.scrollLeft = 0 }, [range.from])
+  const ppm = width > 0 ? width / Math.max(60, dusk - start) : 0
+  const track = (MIDNIGHT - start) * ppm
+  const x = (m: number) => (m - start) * ppm
+  const step = ppm * 60 < 40 ? 120 : 60
+  const ticks: number[] = []
+  for (let m = start; m < MIDNIGHT; m += step) ticks.push(m)
+  const nowMins = clockMinutes(irishParts(Date.now()).clock)
+
   return (
     <div className={`${cardClass()} mt-3 overflow-hidden`}>
       <div className="px-4 py-3 border-b border-line">
@@ -242,45 +294,94 @@ function WeekView({ range, today, items, onDay: open, onNote }: {
         {(booked > 0 || comps > 0) && (
           <p className="t-cap text-ink/65">{[booked ? `You’re booked into ${booked}` : null, comps ? `${comps} competition${comps === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')}</p>
         )}
+        {anyBookable && <p className="t-cap text-ink/65">Tap a free time to book a tee time.</p>}
       </div>
-      <ul className="divide-y divide-line">
-        {days.map(d => {
-          const here = dayOrder(items, d)
-          const isToday = d === today
-          return (
-            <li key={d} className="flex items-stretch min-h-16">
-              <button type="button" onClick={() => open(d)} aria-label={`${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}, hour by hour`}
-                className="w-14 flex-shrink-0 flex flex-col items-center justify-center py-2 press ch-focus">
-                <span className={`t-cap ${isToday ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>{fmt(d, { weekday: 'short' })}</span>
-                <span className={`t-data text-[17px] w-9 h-9 leading-9 text-center rounded-full ${isToday ? 'bg-club text-on-club' : 'text-ink'}`}>{Number(d.slice(8))}</span>
-              </button>
-              <div className="flex-1 min-w-0 flex gap-2 overflow-x-auto py-2 pr-3 snap-x snap-mandatory">
-                {here.map(i => <WeekCard key={i.key} i={i} onNote={onNote} />)}
+      <div ref={scroller} className="overflow-x-auto overscroll-x-contain">
+        {ppm > 0 && (
+          <div style={{ width: DAY_COL + track }}>
+            {/* The timescale. */}
+            <div className="flex border-b border-line">
+              <div className="sticky left-0 z-20 bg-surface flex-shrink-0" style={{ width: DAY_COL }} />
+              <div className="relative h-8 flex-shrink-0" style={{ width: track }}>
+                {ticks.map(m => (
+                  <span key={m} className="absolute top-0 bottom-0 border-l border-line t-cap text-ink/65 tabular-nums pl-1 pt-1.5 leading-none" style={{ left: x(m) }}>{hourWord(m)}</span>
+                ))}
               </div>
-            </li>
-          )
-        })}
-      </ul>
+            </div>
+            <ul className="divide-y divide-line">
+              {days.map(d => {
+                const here = dayOrder(items, d)
+                const isToday = d === today
+                const sheet = bookable(items, d)
+                const rise = clockMinutes(sun[d]?.rise ?? null)
+                const set = clockMinutes(sun[d]?.set ?? null)
+                // Each thing's drawn extent — at least a readable card — laid in lanes so none overlaps.
+                const placed = lanesOf(here.map(i => {
+                  const s = span(i)
+                  const from = s ? s.from : start
+                  const to = s ? Math.max(s.to, from + CARD_MIN / ppm) : Math.max(MIDNIGHT, start + CARD_MIN / ppm)
+                  return { key: i.key, from, to, i, allDay: !s }
+                }))
+                const lanes = Math.max(1, ...placed.map(p => p.lanes))
+                const rows = Array.from({ length: lanes }, (_, n) => placed.filter(p => p.lane === n).sort((a, b) => a.from - b.from))
+                return (
+                  <li key={d} className="flex items-stretch min-h-16">
+                    <button type="button" onClick={() => open(d)} aria-label={`${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}, hour by hour`}
+                      className="sticky left-0 z-20 bg-surface border-r border-line flex-shrink-0 flex flex-col items-center justify-center py-2 press ch-focus" style={{ width: DAY_COL }}>
+                      <span className={`t-cap ${isToday ? 'text-club-deep font-semibold' : 'text-ink/65'}`}>{fmt(d, { weekday: 'short' })}</span>
+                      <span className={`t-data text-[17px] w-9 h-9 leading-9 text-center rounded-full ${isToday ? 'bg-club text-on-club' : 'text-ink'}`}>{Number(d.slice(8))}</span>
+                    </button>
+                    <div className="relative flex-shrink-0 py-1.5" style={{ width: track }}>
+                      {/* The dark either side of the day, faintly. */}
+                      {rise !== null && rise > start && <span aria-hidden="true" className="absolute top-0 bottom-0 left-0 bg-tint" style={{ width: x(rise) }} />}
+                      {set !== null && <span aria-hidden="true" className="absolute top-0 bottom-0 right-0 bg-tint" style={{ left: x(set) }} />}
+                      {sheet && (
+                        <button type="button" onClick={() => router.push(sheet.href!)} aria-label={`Book a tee time on ${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}`}
+                          className="absolute inset-0 z-0 ch-focus" />
+                      )}
+                      {isToday && nowMins !== null && nowMins >= start && (
+                        <span aria-hidden="true" className="absolute top-0 bottom-0 z-[5] border-l-2 border-club pointer-events-none" style={{ left: x(nowMins) }} />
+                      )}
+                      <div className="relative z-10 space-y-1.5 pointer-events-none">
+                        {rows.map((r, n) => (
+                          <div key={n} className="flex items-stretch">
+                            {r.map((p, k) => (
+                              <WeekCard key={p.key} i={p.i} onNote={onNote} allDay={p.allDay}
+                                style={{ marginLeft: (p.from - (k ? r[k - 1].to : start)) * ppm, width: (p.to - p.from) * ppm - 4 }} />
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
 /** One thing in a week's row: its colour down the left, the title (wrapping), the time and the member's line. */
-function WeekCard({ i, onNote }: { i: CalItem; onNote: (i: CalItem) => void }) {
+function WeekCard({ i, onNote, allDay, style }: { i: CalItem; onNote: (i: CalItem) => void; allDay: boolean; style: React.CSSProperties }) {
   const body = (
     <>
       <span aria-hidden="true" className={`w-1.5 flex-shrink-0 rounded-l-tile ${i.colour ? '' : KIND_BAR[i.kind]}`} style={edgeStyle(i)} />
-      <span className="flex-1 min-w-0 px-2.5 py-2 text-left">
-        <span className="block t-label text-ink leading-snug break-words">{i.kind === 'open' ? KIND_WORD.open : i.title}</span>
+      {/* An all-day card's words keep to the screen's left edge as it scrolls. */}
+      <span className={`min-w-0 px-2 py-1.5 text-left ${allDay ? 'sticky' : 'flex-1'}`} style={allDay ? { left: DAY_COL + 8, maxWidth: CARD_MIN * 2 } : undefined}>
+        <span className="block t-label text-ink leading-snug break-words">{i.title}</span>
         <span className="block t-cap text-ink/65">{whenLine(i, false) || 'All day'}</span>
         <StatusLines status={i.status} className="mt-0.5" />
       </span>
     </>
   )
-  const cls = 'snap-start flex-shrink-0 w-[min(15rem,72%)] flex items-stretch rounded-tile bg-tint press ch-focus'
-  if (i.href) return <Link href={i.href} className={cls}>{body}</Link>
-  if (i.note) return <button type="button" onClick={() => onNote(i)} className={cls}>{body}</button>
-  return <div className={cls}>{body}</div>
+  const cls = `pointer-events-auto flex-shrink-0 flex items-stretch rounded-tile bg-surface border border-line shadow-raised press ch-focus ${allDay ? '' : 'overflow-hidden'}`
+  const st = { ...style, ...(i.colour ? { background: `color-mix(in srgb, ${i.colour} 10%, var(--color-surface))` } : {}) }
+  if (i.href) return <Link href={i.href} className={cls} style={st}>{body}</Link>
+  if (i.note) return <button type="button" onClick={() => onNote(i)} className={cls} style={st}>{body}</button>
+  return <div className={cls} style={st}>{body}</div>
 }
 
 // ─── Day ─────────────────────────────────────────────────────────
@@ -295,10 +396,13 @@ const DAY_PPM = 1.1
  * Tee times on this day.
  */
 function DayView({ day, today, items, onNote }: { day: string; today: string; items: CalItem[]; onNote: (i: CalItem) => void }) {
-  const here = items.filter(i => onDay(i, day))
+  const router = useRouter()
+  const here = shown(items).filter(i => onDay(i, day))
   const { start, end } = useMemo(() => hoursOf(here), [here])
-  const open = here.find(i => i.kind === 'open' && i.date === day) ?? null
-  const timed = lanesOf(here.filter(i => i.kind !== 'open' && i.date === day).flatMap(i => {
+  // D289: the open sheet is no block — a tap on a free time books it; its line says when it cannot.
+  const sheet = items.find(i => i.kind === 'open' && i.date === day && i.status?.tone !== 'booked') ?? null
+  const canBook = bookable(items, day)
+  const timed = lanesOf(here.filter(i => i.date === day).flatMap(i => {
     const s = span(i)
     return s ? [{ ...s, key: i.key, i }] : []
   }))
@@ -306,26 +410,21 @@ function DayView({ day, today, items, onNote }: { day: string; today: string; it
   const nowMins = day === today ? clockMinutes(irishParts(Date.now()).clock) : null
   const firstAt = Math.min(...here.map(span).filter(Boolean).map(s => s!.from), 9 * 60)
   const box = useScrollTo(start, DAY_PPM, nowMins ?? firstAt, [day])
-  const openSpan = open ? span(open) : null
-  const RIGHT = open ? '38%' : '0%'
   return (
     <div className="mt-3">
       {allDay.length > 0 && <ul className="space-y-2 mb-3">{allDay.map(i => <ItemRow key={i.key} i={i} onNote={onNote} />)}</ul>}
-      {here.length === 0 && <p className="text-ink/80 text-[15px] mb-3">Nothing on at the club this day.</p>}
+      {here.length === 0 && <p className="text-ink/80 text-[15px] mb-1">Nothing on at the club this day.</p>}
+      {canBook ? <p className="t-cap text-ink/65 mb-3">Tap a free time to book a tee time.</p>
+        : sheet?.status ? <p className="t-cap text-ink/65 mb-3">Tee times: {sheet.status.line}</p> : here.length === 0 ? <div className="mb-2" /> : null}
       <div className={`${cardClass()} overflow-hidden`}>
         <div ref={box} className="relative overflow-y-auto" style={{ height: 'min(64dvh, 620px)' }}>
           <div className="relative" style={{ height: (end - start) * DAY_PPM + 8 }}>
             <HourRail start={start} end={end} ppm={DAY_PPM} />
             <div className="absolute top-0 bottom-0 right-1" style={{ left: '3rem' }}>
-              {open && openSpan && (
-                <Block i={open} onNote={onNote} top={(openSpan.from - start) * DAY_PPM} height={(openSpan.to - openSpan.from) * DAY_PPM}
-                  left="0" width={`calc(${RIGHT} - 4px)`}>
-                  <span className="block t-label">{KIND_WORD.open}</span>
-                  <span className="block t-cap opacity-90">{whenLine(open, false)}</span>
-                  <StatusLines status={open.status} className="mt-1" />
-                </Block>
+              {canBook && (
+                <button type="button" onClick={() => router.push(canBook.href!)} aria-label="Book a tee time this day" className="absolute inset-0 ch-focus" />
               )}
-              <div className="absolute top-0 bottom-0 right-0" style={{ left: RIGHT }}>
+              <div className="absolute top-0 bottom-0 right-0" style={{ left: 0 }}>
                 {timed.map(t => (
                   <Block key={t.key} i={t.i} onNote={onNote}
                     top={(t.from - start) * DAY_PPM} height={(t.to - t.from) * DAY_PPM - 2}

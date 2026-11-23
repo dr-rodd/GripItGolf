@@ -3169,6 +3169,11 @@ async function teeTimesTests() {
   eq(byKey(rc, 'comp:MEDAL1')?.href, '/club/pints/comp/MEDAL1/tee-times', '…and a tap goes straight to its tee times while booking is live')
   eq(byKey(rc, `open:${SAT}`)?.status, { line: `Booked in at ${describeTime(times[0])} with:`, names: ['Ann', 'Pat (guest)'], tone: 'booked' }, 'his casual tee time, with Ann and his guest')
   eq(byKey(rc, `open:${SAT}`)?.href, `/club/pints?tab=tee&day=${SAT}`, '…which opens Tee times on that day')
+  // D289: booked, the open sheet is the member's own time on the calendar — never the sheet's hours.
+  eq([byKey(rc, `open:${SAT}`)?.title, byKey(rc, `open:${SAT}`)?.from, byKey(rc, `open:${SAT}`)?.to], ['Your tee time', times[0], null], 'his tee time sits at its time, titled his')
+  const withSun = await ask('ross', 'calendar', { from: SAT, to: SAT })
+  const sunOf = (withSun.body as { sun?: Record<string, { rise: string | null; set: string | null }> }).sun?.[SAT]
+  ok(!!sunOf?.rise && !!sunOf?.set && sunOf.rise < sunOf.set, 'the calendar carries each day\'s sunrise and sunset for the week\'s timescale')
   eq(byKey(rc, 'comp:AWAY1')?.status, { line: 'Booking hasn’t opened. Opens Thu 19 Nov at 7:00 pm.', tone: 'wait' }, 'a competition not open yet says when it opens')
   eq(byKey(rc, 'comp:AWAY1')?.href, '/club/pints/comp/AWAY1', '…and opens its Summary, not its tee times')
   eq(byKey(rc, 'note:n1')?.kind, 'block', 'the outing that takes the sheet is a block on the day')
@@ -3418,3 +3423,15 @@ function insideClubTests() {
 }
 
 void main()
+
+// D289: the Week is a timescale; the open sheet no event; the art the same on every page.
+{
+  const readFileSync = (p: string, e: 'utf8') => fs.readFileSync(p, e)
+  const cal = readFileSync('app/club/[slug]/calendar/CalendarScreen.tsx', 'utf8')
+  if (!/function shown\(/.test(cal) || !/i\.kind !== 'open' \|\| i\.status\?\.tone === 'booked'/.test(cal)) throw new Error('D289: the calendar must not draw the open tee sheet as an event')
+  if (!/Tap a free time to book a tee time/.test(cal)) throw new Error('D289: a free time books the tee sheet')
+  if (!/sun\[d\]\?\.rise/.test(cal) || !/MIDNIGHT/.test(cal)) throw new Error('D289: the week runs sunrise to sunset across the screen, on to midnight')
+  const view = readFileSync('app/club/[slug]/ClubView.tsx', 'utf8')
+  if (!/const size = 'club-art-home'/.test(view)) throw new Error('D289: the club art is the same size on every page')
+  console.log('✓ D289: week timescale, no open-sheet event, art the same everywhere')
+}

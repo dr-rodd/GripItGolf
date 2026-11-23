@@ -208,10 +208,10 @@ export default function ClubView({ face }: { face: ClubFace }) {
   )
 }
 
-/** D123–D124: the art behind the page — the home's tall and strong, every other page's short and faint. */
-export function Art({ face, home }: { face: ClubFace; home: boolean }) {
+/** D123–D124, D289: the art behind the page — the same on every club page (Ross, 23 Nov 2026: it shrank off Home). */
+export function Art({ face }: { face: ClubFace; home?: boolean }) {
   if (!face.artUrl) return null
-  const size = home ? 'club-art-home' : ''
+  const size = 'club-art-home'
   return (
     <>
       {/* The club's own picture, resized on the server. Decorative: the page says everything it shows. */}
@@ -221,7 +221,7 @@ export function Art({ face, home }: { face: ClubFace; home: boolean }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={face.artDarkUrl} alt="" aria-hidden="true" className={`club-art club-art-night ${size}`} />
       )}
-      <div aria-hidden="true" className={`club-grain ${home ? 'club-grain-home' : ''}`} />
+      <div aria-hidden="true" className="club-grain club-grain-home" />
     </>
   )
 }

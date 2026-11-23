@@ -15,7 +15,8 @@ import type { CalItem, CalKind, CalStatus } from '@/lib/clubCalendar'
  * lib/clubCalendar.ts; these only draw it.
  */
 
-type Answer = { today: string; items: CalItem[] }
+export type SunTimes = Record<string, { rise: string | null; set: string | null }>
+type Answer = { today: string; items: CalItem[]; sun: SunTimes }
 
 /** Kept in this tab a minute, so moving between views and back is instant. */
 const kept = new Map<string, { at: number; answer: Promise<Answer | { error: string }> }>()
@@ -26,7 +27,7 @@ function ask(clubId: string, from: string, to: string, fresh = false): Promise<A
   const had = kept.get(key)
   if (!fresh && had && Date.now() - had.at < KEEP_MS) return had.answer
   const answer = askTeeTimes<Answer>('calendar', { clubId, from, to })
-    .then(r => (r.ok ? { today: r.today, items: r.items } : { error: r.error }))
+    .then(r => (r.ok ? { today: r.today, items: r.items, sun: r.sun ?? {} } : { error: r.error }))
     .catch(() => ({ error: 'Could not reach Green Dot — try again.' }))
   kept.set(key, { at: Date.now(), answer })
   return answer
@@ -34,7 +35,7 @@ function ask(clubId: string, from: string, to: string, fresh = false): Promise<A
 
 /** The calendar's items for some days — null while asked, with a way to ask again. */
 export function useMemberCalendar(clubId: string | null | undefined, from: string, to: string) {
-  const [state, setState] = useState<{ key: string; items: CalItem[] | null; today: string | null; error: string | null }>({ key: '', items: null, today: null, error: null })
+  const [state, setState] = useState<{ key: string; items: CalItem[] | null; today: string | null; sun: SunTimes; error: string | null }>({ key: '', items: null, today: null, sun: {}, error: null })
   const [n, setN] = useState(0)
   const key = `${clubId}:${from}:${to}`
   useEffect(() => {
@@ -42,12 +43,12 @@ export function useMemberCalendar(clubId: string | null | undefined, from: strin
     let live = true
     void ask(clubId, from, to, n > 0).then(r => {
       if (!live) return
-      setState('error' in r ? { key, items: null, today: null, error: r.error } : { key, items: r.items, today: r.today, error: null })
+      setState('error' in r ? { key, items: null, today: null, sun: {}, error: r.error } : { key, items: r.items, today: r.today, sun: r.sun, error: null })
     })
     return () => { live = false }
   }, [clubId, from, to, n, key])
   const here = state.key === key
-  return { items: here ? state.items : null, today: here ? state.today : null, error: here ? state.error : null, again: () => setN(x => x + 1) }
+  return { items: here ? state.items : null, today: here ? state.today : null, sun: here ? state.sun : {}, error: here ? state.error : null, again: () => setN(x => x + 1) }
 }
 
 /** The member's own line: "Booked in at 14:00 with:" and the names one a line, or one short line. */
@@ -81,7 +82,7 @@ export const KIND_BAR: Record<CalKind, string> = {
 }
 
 export const KIND_WORD: Record<CalKind, string> = {
-  comp: 'Competition', open: 'Tee sheet open', block: 'Course booked', event: 'Club event', golf: 'Golf event',
+  comp: 'Competition', open: 'Tee time', block: 'Course booked', event: 'Club event', golf: 'Golf event',
 }
 
 /** When, said short: "Sat 22 Nov · 14:00–16:30", or the day alone. */

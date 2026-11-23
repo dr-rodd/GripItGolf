@@ -34,6 +34,7 @@ import type { ClubNote } from '@/lib/clubEvents'
 import type { ActivityEntry, ClubRecord, MemberRecord } from './club'
 import { CAL_MAX_DAYS, compHref, compStatus, daysFrom, openHref, openStatus, plusDays, type CalItem, type CompFacts } from '@/lib/clubCalendar'
 import { irishInstant } from '@/lib/irishTime'
+import { sunDay } from '@/lib/sun'
 import { noteTimeLine } from '@/lib/clubEvents'
 
 /** What the calendar is worked out from (D286) — every read, handed to one pure-ish pass. */
@@ -111,8 +112,10 @@ export function calendarItems(f: CalendarFacts, names: ReadonlyMap<string, strin
         return n.guestOf ? `${n.name} (guest)` : n.name
       }) }))
     items.push({
-      key: `open:${d}`, kind: 'open', date: d, from: day.times[0], to: day.times[day.times.length - 1],
-      title: 'Tee sheet open',
+      // D289: the open sheet is no event of its own on the calendar — a tap on a free time books it. Booked, it is the member's time.
+      key: `open:${d}`, kind: 'open', date: d,
+      from: mine.length ? mine[0].clock : day.times[0], to: mine.length ? null : day.times[day.times.length - 1],
+      title: mine.length ? 'Your tee time' : 'Tee sheet open',
       status: openStatus({ mine, refusal: bookingRefusal(me, d, f.categories.length > 0, true), opening: openingLine(d, f.settings, new Date(f.now)) }),
       href: openHref(f.slug, d),
     })
@@ -201,7 +204,7 @@ export interface TeeTimesStore {
 }
 
 export type TeeOutcome =
-  | { status: 200; body: TeeDayBody | { ok: true; names: { id: string; name: string; why: string | null }[] } | { ok: true; settings: CasualSettings; categories: TeeCategory[]; ready: boolean } | { ok: true } | { ok: true; today: string; items: CalItem[] } }
+  | { status: 200; body: TeeDayBody | { ok: true; names: { id: string; name: string; why: string | null }[] } | { ok: true; settings: CasualSettings; categories: TeeCategory[]; ready: boolean } | { ok: true } | { ok: true; today: string; items: CalItem[]; sun: Record<string, { rise: string | null; set: string | null }> } }
   | { status: 400 | 401 | 403 | 404 | 409 | 503; body: { ok: false; error: string } }
 
 type FailStatus = 400 | 401 | 403 | 404 | 409 | 503
@@ -329,7 +332,9 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
     const names = new Map<string, string>([[row.id, row.name]])
     const mateIds = calendarMateIds(facts)
     for (const r of mateIds.length ? await store.rowsByIds(clubId, mateIds).catch(() => []) : []) names.set(r.id, r.name)
-    return { status: 200, body: { ok: true, today, items: calendarItems(facts, names) } }
+    // D289: each day's sunrise and sunset at the home course — the week's timescale.
+    const sun = Object.fromEntries(daysFrom(from, to).map(d => { const x = sunDay(d, place ? { lat: place.lat ?? NaN, lng: place.lng ?? NaN } : null); return [d, { rise: x.sunrise, set: x.sunset }] }))
+    return { status: 200, body: { ok: true, today, items: calendarItems(facts, names), sun } }
   }
 
   // ─── The day ────────────────────────────────────────────────
