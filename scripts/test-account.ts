@@ -513,8 +513,8 @@ function wiringTests() {
   const reached = files.filter(f => f.startsWith('app/api/')
     && /^import (?!type )[^\n]*from ['"](@\/app\/api\/account\/account|\.\/account)['"]/m.test(read(f)))
   eq(reached.sort(), ['app/api/account/route.ts'], 'only /api/account runs the account logic')
-  const accountWords = files.filter(f => /isAccount\(/.test(strip(read(f))) && !/^(lib\/account\.ts|app\/api\/account\/|app\/api\/club\/|app\/api\/card\/)/.test(f))
-  eq(accountWords, [], 'nothing outside the account’s and the clubs’ own files (a club competition’s card signing among them) asks whether a phone has an account')
+  const accountWords = files.filter(f => /isAccount\(/.test(strip(read(f))) && !/^(lib\/account\.ts|app\/api\/account\/|app\/api\/club\/|app\/api\/card\/|app\/api\/feed\/)/.test(f))
+  eq(accountWords, [], 'nothing outside the account’s and the clubs’ own files (a club competition’s card signing among them, and the members’ feed, D293) asks whether a phone has an account')
   for (const dir of ['app/golf', 'app/run', 'app/scoring', 'app/join', 'app/enter', 'app/api/entry', 'app/api/trip']) {
     if (!fs.existsSync(dir)) continue
     // Making an event is the one door an account opens (D135).
