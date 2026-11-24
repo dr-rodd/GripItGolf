@@ -9,6 +9,8 @@
 // This file decides; `app/admin/test-club/wipe.ts` does, on an injected
 // store, and `/admin/test-club` is the page. Pure.
 
+import type { CardForm } from './testClubCards'
+
 /** Pints, the one test club so far — named so the page can say what it is about. */
 export const PINTS_SLUG = 'pints-golf-club'
 
@@ -249,4 +251,103 @@ export function casualPlan(cast: readonly Character[], from: string, days = 7): 
     }
   }
   return out
+}
+
+// ─── Playing a competition (D311, D312) ───────────────────────────
+
+
+/**
+ * One competition the test club plays — the reseed's history and, from
+ * stage s2, a week file's. `key` names it for good (`test:<key>` on the
+ * event), so playing it again finds it rather than making a second.
+ */
+export interface PlaySpec {
+  key: string
+  name: string
+  /** The day, YYYY-MM-DD (Irish). */
+  day: string
+  scoring: 'stableford' | 'strokes'
+  /** Who may enter: the ladies (women only), or one membership by name. */
+  entry?: { genders?: ('M' | 'F')[]; membership?: string }
+  /** Each player's form, by character key. */
+  players: Record<string, CardForm>
+  /** The tee times' groups, by character key, first tee first. */
+  groups: string[][]
+  set?: { who: string; hole: number; gross: number }[]
+  certify: boolean
+}
+
+/** A list in a seeded order — the same every time for the same seed. */
+export function seededOrder<T>(items: readonly T[], seed: string): T[] {
+  return [...items].map((x, i) => ({ x, k: seedHash(`${seed}:${i}`) })).sort((a, b) => a.k - b.k).map(p => p.x)
+}
+
+/** Players into tee-time groups: fours, then threes so nobody plays alone. */
+export function groupsOf(keys: readonly string[]): string[][] {
+  const n = keys.length
+  if (n <= 4) return n ? [[...keys]] : []
+  // Five cannot be fours and threes: a three and a two.
+  if (n === 5) return [keys.slice(0, 3), keys.slice(3)]
+  const threes = (4 - (n % 4)) % 4
+  const fours = (n - threes * 3) / 4
+  const out: string[][] = []
+  let i = 0
+  for (let g = 0; g < fours; g++) { out.push(keys.slice(i, i + 4)); i += 4 }
+  for (let g = 0; g < threes; g++) { out.push(keys.slice(i, i + 3)); i += 3 }
+  return out
+}
+
+const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+const weekday = (d: string) => (new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7
+
+/** Whether a character may play on a day by their membership (0 Monday … 6 Sunday). */
+const playsOn = (c: Character, day: string) => (MEMBERSHIPS.find(m => m.name === c.membership)?.days ?? []).includes(weekday(day))
+
+/** A form for a character on a day — Jed's is always wild (D312). */
+function formFor(c: Character, seed: string): CardForm {
+  if (c.key === 'jed') return 'wild'
+  const roll = seedHash(`${seed}:${c.key}`) % 20
+  return roll < 2 ? 'hot' : roll < 6 ? 'good' : roll < 14 ? 'steady' : roll < 18 ? 'poor' : 'awful'
+}
+
+/**
+ * The reseed's history (D311): eight competitions over the last eight weeks
+ * before `today` — six Saturdays (Full and Senior members; a 6 Day member
+ * cannot play a Saturday), a ladies' Tuesday and a seniors' Wednesday — all
+ * certified, so Results and Golfer of the Year have a season behind them.
+ * Jed's 4 on the 18th in the President's Prize is the set piece.
+ */
+export function seasonPlan(cast: readonly Character[], today: string): PlaySpec[] {
+  const lastSat = addDays(today, -(((weekday(today) - 5) + 7) % 7 || 7))
+  const saturdays = ['Autumn Medal', 'Saturday Stableford', 'President’s Prize', 'Captain’s Prize', 'November Medal', 'November Stableford']
+  const out: PlaySpec[] = []
+  saturdays.forEach((name, i) => {
+    const day = addDays(lastSat, -7 * (saturdays.length - 1 - i))
+    const key = `season-${String(i + 1).padStart(2, '0')}`
+    const eligible = cast.filter(c => playsOn(c, day))
+    // Most weeks most of the club plays; somebody always has a reason not to.
+    const field = seededOrder(eligible, key).slice(0, Math.max(6, eligible.length - (seedHash(key) % 3)))
+    out.push({
+      key, name, day, scoring: name.includes('Medal') ? 'strokes' : 'stableford',
+      players: Object.fromEntries(field.map(c => [c.key, formFor(c, key)])),
+      groups: groupsOf(field.map(c => c.key)),
+      ...(name === 'President’s Prize' && field.some(c => c.key === 'jed') ? { set: [{ who: 'jed', hole: 18, gross: 4 }] } : {}),
+      certify: true,
+    })
+  })
+  const ladies = cast.filter(c => c.gender === 'F')
+  const ladiesDay = addDays(lastSat, -4 - 14)
+  out.push({
+    key: 'season-ladies', name: 'Ladies’ Stableford', day: ladiesDay, scoring: 'stableford', entry: { genders: ['F'] },
+    players: Object.fromEntries(ladies.filter(c => playsOn(c, ladiesDay)).map(c => [c.key, formFor(c, 'season-ladies')])),
+    groups: groupsOf(ladies.filter(c => playsOn(c, ladiesDay)).map(c => c.key)), certify: true,
+  })
+  const seniors = cast.filter(c => c.membership === 'Senior')
+  const seniorsDay = addDays(lastSat, -3 - 28)
+  out.push({
+    key: 'season-seniors', name: 'Seniors’ Stableford', day: seniorsDay, scoring: 'stableford', entry: { membership: 'Senior' },
+    players: Object.fromEntries(seniors.map(c => [c.key, formFor(c, 'season-seniors')])),
+    groups: groupsOf(seniors.map(c => c.key)), certify: true,
+  })
+  return out.sort((a, b) => a.day.localeCompare(b.day))
 }

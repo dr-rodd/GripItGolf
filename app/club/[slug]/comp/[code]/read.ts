@@ -30,6 +30,7 @@ import { readLabels } from '@/app/api/club/labelsStore'
 import { colourFor, withDefaults } from '@/lib/clubLabels'
 import type { EntryRules } from '@/lib/clubMembership'
 import { logTiming, startTimer } from '@/lib/timing'
+import { fictionalUsers } from '@/app/api/club/store'
 export const readCompPage = cache(async (slug: string, rawCode: string) => {
   const code = rawCode.trim().toUpperCase()
   const took = startTimer()
@@ -56,13 +57,15 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
   }
 
   // The sun on the day (Ross, 17 Nov 2026: sunrise at the head of the sheet, sunset at its foot).
-  const [sheet, place, places, colour] = await Promise.all([
+  const [sheet, place, places, colour, demoRows] = await Promise.all([
     readCompSheet(db, comp),
     db.from('courses').select('latitude, longitude').eq('id', comp.courseId).maybeSingle().then(r => r.data as { latitude: number | null; longitude: number | null } | null),
     // M8 (D278): a one-course club's header never names its course.
     readPlaces(db, comp.clubId, [comp.courseId]).catch(() => null),
     // D288: its label's colour (else Competition's) — the soft wash at the page's head.
     labelColour(db, comp.clubId, comp.entry),
+    // D315: a test club's characters, by their rows on the list — none anywhere else.
+    demoRowsOf(db, comp.clubId),
   ])
   const sun = sunDay(comp.date, place ? { lat: place.latitude ?? NaN, lng: place.longitude ?? NaN } : null)
   const sizes = slotGroupSizes(comp.rules)
@@ -86,7 +89,7 @@ export const readCompPage = cache(async (slug: string, rawCode: string) => {
       index, clock: describeTime(clock), size: sizes[index] ?? comp.rules.groupSize,
       gone: at !== null && now >= at,
       seats: sheet.seats.filter(s => s.slot === index)
-        .map(s => ({ rowId: s.rowId, playerId: s.playerId, name: s.name, handicap: s.handicap, bookedBy: s.bookedBy })),
+        .map(s => ({ rowId: s.rowId, playerId: s.playerId, name: s.name, handicap: s.handicap, bookedBy: s.bookedBy, ...(s.rowId && demoRows.has(s.rowId) ? { demo: true } : {}) })),
     }
   })
 
@@ -130,3 +133,11 @@ export const readCompGate = cache(async (slug: string, rawCode: string) => {
   const kind = comp ? 'stroke' as const : 'matchplay' as const
   return { slug, code, clubFace, here, kind, door: !entryAllowed(hash, jar.get(entryCookie(code))?.value, code) }
 })
+
+/** D315: the rows on a club's list that are a test club's characters — none before migration 103 or anywhere else. */
+async function demoRowsOf(db: ReturnType<typeof createAdminClient>, clubId: string): Promise<Set<string>> {
+  const users = await fictionalUsers(db, clubId).catch(() => new Set<string>())
+  if (users.size === 0) return new Set()
+  const { data } = await db.from('club_members').select('id').eq('club_id', clubId).in('user_id', [...users])
+  return new Set(((data ?? []) as { id: string }[]).map(r => r.id))
+}

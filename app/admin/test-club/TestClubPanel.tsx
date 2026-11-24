@@ -30,8 +30,9 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
   /** The reseed, pressed on until it says it is done. */
   const reseed = async (): Promise<boolean> => {
     const all: string[] = []
-    for (let i = 0; i < 12; i++) {
-      setStage('Reseeding…')
+    // The season takes a few minutes: about 45 seconds a press, pressed on.
+    for (let i = 0; i < 40; i++) {
+      setStage(`Reseeding… (${i + 1})`)
       const r = await seedAction(club.id)
       if (!r.ok) { setError(r.error); setSeedLines(all); return false }
       all.push(...r.lines)

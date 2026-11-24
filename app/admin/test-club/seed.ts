@@ -11,7 +11,7 @@
 
 import type { createAdminClient } from '@/lib/supabase-admin'
 import {
-  DEFAULT_MEMBERSHIP, MEMBERSHIPS, TEST_LABELS, casualPlan, memberNumber, testEmail, type Character,
+  DEFAULT_MEMBERSHIP, MEMBERSHIPS, TEST_LABELS, casualPlan, memberNumber, seasonPlan, testEmail, type Character,
 } from '@/lib/testClub'
 import { storedRole } from '@/lib/clubMay'
 import { irishToday } from '@/lib/clubs'
@@ -19,6 +19,8 @@ import { setIndex } from '@/app/api/handicaps/handicaps'
 import { handicapStore } from '@/app/api/handicaps/store'
 import { saveLabel } from '@/app/api/club/labelsStore'
 import { POST as teeTimesRoute } from '@/app/api/club/tee-times/route'
+import { POST as awardsRoute } from '@/app/api/club/awards/route'
+import { alreadyPlayed, playCompetition } from './play'
 import { findAccount } from '../accounts'
 import { callAs, characterToken, testPassword } from './characterCalls'
 
@@ -169,5 +171,33 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
     else lines.push(`${plan.who.join(', ')} on ${plan.day}: ${String(r.body.error ?? r.status)}`)
   }
   if (booked) lines.push(`${booked} casual tee times booked over the next seven days.`)
+
+  // ── The season so far: eight competitions, played, signed and certified ──
+  const { data: clubRow } = await db.from('clubs').select('home_course_id').eq('id', club.id).maybeSingle()
+  const homeCourseId = (clubRow as { home_course_id?: string | null } | null)?.home_course_id ?? null
+  if (!homeCourseId) {
+    lines.push(`${club.name} has no home course, so no season was played. Set it in the Clubhouse (Club settings), then press Reseed without wiping.`)
+    return { done: true, lines }
+  }
+  const today = irishToday(new Date())
+  for (const spec of seasonPlan(cast, today)) {
+    if (late()) return { done: false, lines }
+    if (await alreadyPlayed(db, club.id, spec)) continue
+    const r = await playCompetition({ db, club: { id: club.id, slug: club.slug, homeCourseId }, cast, rowOf, cats, deadline }, spec)
+    lines.push(...r.lines)
+    if (!r.done) return { done: false, lines }
+  }
+
+  // ── Golfer of the Year, the club's own rules at their defaults ──
+  if (office) {
+    const token = await characterToken(testEmail(office.username, club.slug))
+    const year = Number(today.slice(0, 4))
+    const list = await callAs(awardsRoute, '/api/club/awards', token, { action: 'list', clubId: club.id, year })
+    const awards = (list.body.awards ?? []) as { name: string }[]
+    if (list.status === 200 && !awards.some(a => a.name === 'Golfer of the Year')) {
+      const r = await callAs(awardsRoute, '/api/club/awards', token, { action: 'save', clubId: club.id, year, name: 'Golfer of the Year', rules: {} })
+      lines.push(r.status === 200 ? `Golfer of the Year ${year} set up.` : `Golfer of the Year not set up: ${String(r.body.error ?? r.status)}`)
+    } else if (list.status !== 200) lines.push(`Golfer of the Year not read: ${String(list.body.error ?? list.status)}`)
+  }
   return { done: true, lines }
 }

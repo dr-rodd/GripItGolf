@@ -9,8 +9,9 @@ import { notEligibleLine } from '@/lib/clubMembership'
 import { enterEvent } from '@/lib/entryClient'
 import { formatHandicap } from '@/lib/handicap'
 import { rememberPlayer } from '@/lib/playerCookie'
+import DemoPill from '@/app/components/DemoPill'
 
-export interface CompSeat { rowId: string | null; playerId: string; name: string; handicap: number | null; bookedBy: string | null }
+export interface CompSeat { rowId: string | null; playerId: string; name: string; handicap: number | null; bookedBy: string | null; /** D315: a test club's character. */ demo?: boolean }
 export interface CompSlot { index: number; clock: string; seats: CompSeat[]; gone: boolean; /** Players this tee time takes — its run's. */ size: number }
 
 type Me = Pick<BookingAnswer, 'myRowId' | 'myPlayerId' | 'admin' | 'entry' | 'myRefusal'> | null
@@ -95,7 +96,7 @@ export default function CompTeeSheet({ code, slots, sun, bookingOpen, waitLine }
                       <div key={seat.playerId}
                         className={`rounded-tile border px-2.5 py-2 flex items-start gap-1 ${mineSeat ? 'bg-accent-tint border-accent-deep' : 'bg-surface border-line'}`}>
                         <span className="flex-1 min-w-0">
-                          <span className="block text-[15px] font-medium text-ink leading-snug break-words">{seat.name}</span>
+                          <span className="block text-[15px] font-medium text-ink leading-snug break-words">{seat.name}{seat.demo && <DemoPill className="ml-1.5" />}</span>
                           <span className="block t-cap text-ink/65">{seat.handicap === null ? 'HCP pending' : `HCP ${formatHandicap(seat.handicap)}`}</span>
                         </span>
                         {mayTakeOff && (

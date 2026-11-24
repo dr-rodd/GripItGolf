@@ -19,6 +19,8 @@ import {
 } from '../lib/testClub'
 import { usernameIssue } from '../lib/account'
 import { LIST_FILTERS } from '../lib/clubhouse'
+import { seasonPlan, groupsOf } from '../lib/testClub'
+import { makeCard, holePoints, targetOver, seeded } from '../lib/testClubCards'
 import type { WipeRow } from '../lib/testClub'
 
 let passed = 0, failed = 0
@@ -328,17 +330,88 @@ function seedWiringTests() {
   ok(LIST_FILTERS.some(f => f.key === 'fictional' && f.label === 'Fictional'), 'Fictional is a filter')
   ok(/case 'fictional': q = live\(\)\.in\('user_id'/.test(read('app/api/club/store.ts')), 'it finds the club’s characters')
   ok(/f\.key !== 'fictional' \|\| fictional/.test(read('app/clubhouse/[slug]/members/MembersGrid.tsx')), 'offered only where the club has characters')
-  for (const f of ['app/clubhouse/[slug]/members/MembersGrid.tsx', 'app/club/[slug]/ClubTeeTimes.tsx', 'app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx']) {
+  for (const f of ['app/clubhouse/[slug]/members/MembersGrid.tsx', 'app/club/[slug]/ClubTeeTimes.tsx', 'app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx', 'app/club/[slug]/comp/[code]/CompTeeSheet.tsx']) {
     ok(/<DemoPill/.test(read(f)), `${f.split('/').slice(-1)[0]} draws the Demo pill`)
   }
   const pill = read('app/components/DemoPill.tsx')
   ok(/t-label/.test(pill) && /bg-tint/.test(pill) && /text-bark/.test(pill), 'the pill: t-label, the tint, bark text')
 }
 
+// ─── The season and its cards (D311, D312) ──────────────────────
+
+const PARS = [4, 4, 3, 5, 4, 4, 3, 4, 5, 4, 3, 4, 5, 4, 4, 3, 4, 5]
+const SIS = [7, 1, 15, 11, 3, 13, 17, 5, 9, 8, 16, 2, 10, 4, 14, 18, 6, 12]
+const HOLES = PARS.map((par, i) => ({ number: i + 1, par, si: SIS[i] }))
+const points = (card: { hole: number; gross: number }[], ch: number) =>
+  card.reduce((t, h) => t + holePoints(h.gross, PARS[h.hole - 1], SIS[h.hole - 1], ch), 0)
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)]
+
+function cardTests() {
+  section('A card follows handicap and form (D312)')
+  const card = makeCard({ holes: HOLES, courseHcp: 14, form: 'steady', seed: 'a' })
+  eq(card.map(h => h.hole), HOLES.map(h => h.number), 'eighteen holes, in order')
+  eq(JSON.stringify(card), JSON.stringify(makeCard({ holes: HOLES, courseHcp: 14, form: 'steady', seed: 'a' })), 'the same seed, the same card — a week loaded twice changes nothing')
+  ok(JSON.stringify(card) !== JSON.stringify(makeCard({ holes: HOLES, courseHcp: 14, form: 'steady', seed: 'b' })), 'another seed, another card')
+  const many = (ch: number, form: Parameters<typeof makeCard>[0]['form']) => Array.from({ length: 150 }, (_, i) => points(makeCard({ holes: HOLES, courseHcp: ch, form, seed: `m${i}` }), ch))
+  const scratch = median(many(0, 'steady')), mid = median(many(14, 'steady')), high = median(many(32, 'steady'))
+  ok(scratch >= 33 && scratch <= 37, `a scratch golfer about 35 points (${scratch})`)
+  ok(mid >= 30 && mid <= 35, `a 14 handicap about 33 (${mid})`)
+  ok(high >= 27 && high <= 33, `a 32 handicap about 31 (${high})`)
+  ok(median(many(14, 'hot')) > median(many(14, 'poor')) + 3, 'hot beats poor by a distance')
+  const wild = many(3, 'wild'), steady = many(3, 'steady')
+  const spread = (xs: number[]) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length * 0.9)] - s[Math.floor(s.length * 0.1)] }
+  ok(spread(wild) > spread(steady) * 1.5, 'wild form swings (Jed)')
+  eq(targetOver(10, 4, seeded('x')), 4, 'a number form is exact')
+  const plus = makeCard({ holes: HOLES, courseHcp: -1, form: 0, seed: 'p' })
+  eq(plus.reduce((t, h) => t + h.gross, 0), 71, 'a plus 1 playing to handicap breaks par by one — they give a shot back (on SI 18)')
+  eq(plus.find(h => h.hole === 16)?.gross, 2, 'the shot goes back on the stroke index 18 hole')
+  const all = Array.from({ length: 300 }, (_, i) => makeCard({ holes: HOLES, courseHcp: 36, form: 'awful', seed: `w${i}` })).flat()
+  ok(all.every(h => h.gross >= 2 && h.gross <= PARS[h.hole - 1] + 2 + 4), 'never below two, never more than four over nett par on a hole')
+  const set = makeCard({ holes: HOLES, courseHcp: 3, form: 'awful', seed: 's', set: [{ hole: 18, gross: 4 }] })
+  eq(set.find(h => h.hole === 18)?.gross, 4, 'a set piece is what the card says — Jed’s 4 on 18')
+
+  section('The season the reseed plays (D311)')
+  const cast = (readCharacters(JSON.parse(read('data/test-club/characters.json')), []) as { ok: true; cast: Character[] }).cast
+  const plan = seasonPlan(cast, '2026-11-24')
+  eq(plan.length, 8, 'eight competitions')
+  ok(plan.every(p => p.day < '2026-11-24' && p.day >= '2026-09-29'), 'all in the eight weeks before today')
+  ok(plan.every((p, i) => i === 0 || plan[i - 1].day <= p.day), 'in date order')
+  eq(new Set(plan.map(p => p.key)).size, 8, 'each with its own key')
+  ok(plan.every(p => p.certify), 'all certified, so Results and Golfer of the Year have a season')
+  const sats = plan.filter(p => new Date(`${p.day}T12:00:00Z`).getUTCDay() === 6)
+  eq(sats.length, 6, 'six Saturdays')
+  ok(sats.every(p => !p.groups.flat().includes('elizabeth')), 'a 6 Day member never on a Saturday')
+  const ladies = plan.find(p => p.entry?.genders?.[0] === 'F')
+  ok(!!ladies && ladies.groups.flat().every(k => cast.find(c => c.key === k)?.gender === 'F'), 'a ladies’ competition, women only')
+  const seniors = plan.find(p => p.entry?.membership === 'Senior')
+  ok(!!seniors && seniors.groups.flat().every(k => cast.find(c => c.key === k)?.membership === 'Senior'), 'a seniors’ competition, Senior members only')
+  ok(plan.some(p => p.set?.some(x => x.who === 'jed' && x.hole === 18 && x.gross === 4)), 'Jed’s suspicious 4 on 18 is in it')
+  ok(plan.every(p => p.groups.every(g => g.length >= 2 && g.length <= 4)), 'groups of two to four, nobody alone')
+  ok(plan.every(p => p.groups.flat().every(k => k in p.players)), 'every player has a form')
+  ok(plan.every(p => p.groups.flat().every(k => cast.some(c => c.key === k))), 'characters only (D314)')
+  eq(JSON.stringify(seasonPlan(cast, '2026-11-24')), JSON.stringify(plan), 'the same season every reseed')
+  for (let n = 1; n <= 13; n++) {
+    const g = groupsOf(Array.from({ length: n }, (_, i) => `p${i}`))
+    ok(g.flat().length === n && g.every(x => x.length >= Math.min(2, n) && x.length <= 4), `${n} players: everybody in a group of two to four`)
+  }
+  eq(groupsOf(['a', 'b', 'c', 'd', 'e']).map(g => g.length), [3, 2], 'five: a three and a two')
+  eq(groupsOf(['a', 'b', 'c', 'd', 'e', 'f', 'g']).map(g => g.length), [4, 3], 'seven: a four and a three')
+  eq(groupsOf(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']).map(g => g.length), [3, 3, 3], 'nine: three threes')
+
+  section('Playing a competition goes through the club’s own rules')
+  const play = read('app/admin/test-club/play.ts')
+  for (const fn of ['runNewCompetition', 'runBooking', 'runSign', 'runCertify']) ok(new RegExp(`await ${fn}\\(`).test(play), `${fn} — the route’s own rules`)
+  ok(!/from\('scores'\)/.test(play), 'never writes the signed scores itself — finalising does')
+  ok(/action: 'approve'/.test(play) && /action: 'mark'/.test(play), 'each player approves and each marker marks, on their own account')
+  ok(/here\[\(i \+ 1\) % here\.length\]/.test(play), 'a card is marked by the next in the group — never the player')
+  ok(/from: 'clubhouse'/.test(play), 'made from the Clubhouse, as the office makes them')
+}
+
 async function main() {
   guardTests()
   castTests()
   seedWiringTests()
+  cardTests()
   ruleTests()
   await wipeTests()
   wiringTests()
