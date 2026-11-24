@@ -15,6 +15,7 @@ import { dotPlan, testEmail, type Banter, type Character, type PlaySpec } from '
 import { POST as feedRoute } from '@/app/api/feed/route'
 import { callAs, characterToken } from './characterCalls'
 import { findComp } from './play'
+import { notAfterNow, rebump } from './stamp'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -94,8 +95,10 @@ export async function postBanter(o: {
     const minutes = 15 * 60 + 30 + i * 9
     const at = irishInstant(spec.day, `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`)
     // Never a moment still to come: a week loaded this morning has its afternoon's talk dated now.
-    if (id && at) await db.from('feed_items').update({ created_at: new Date(Math.min(at.getTime(), Date.now())).toISOString() }).eq('id', id)
+    if (id && at) await db.from('feed_items').update({ created_at: notAfterNow(at) }).eq('id', id)
   }
+  // D329: each card's last activity is its latest comment's, not the moment it was posted.
+  await rebump(db, cardIds)
 
   // ── Dots, by each character's comment rate ──
   for (const d of dotPlan(o.cast, played, spec.key)) {

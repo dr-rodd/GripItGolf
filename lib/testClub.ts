@@ -455,7 +455,21 @@ export interface WeekFile {
   title: string
   competitions: (PlaySpec & Banter)[]
   casual: WeekCasual[]
+  /** Streams v2 (D333): characters who are friends — so friends.stream has something in it. */
+  friends?: [string, string][]
+  /** A notice from the club in club.stream, by an Officer or Clubhouse character (D325). */
+  posts?: WeekPost[]
+  /** A status on its own in friends.stream, and the talk under it (D328). */
+  own?: WeekOwn[]
+  /** Talk under a club match play's result, in comp.stream (D332) — found by its winner. */
+  results?: WeekResult[]
 }
+
+export interface WeekTalk { by: string; text: string }
+export interface WeekPost { key: string; by: string; day: string; time?: string; title?: string; text: string; link?: string; comments?: WeekTalk[] }
+export interface WeekOwn { key: string; by: string; day: string; time?: string; text: string; comments?: WeekTalk[] }
+/** `winner` names the result; left out, the club's latest result — so a line need not know who won. */
+export interface WeekResult { key: string; winner?: string; comments: WeekTalk[] }
 
 const WEEK_DAY = /^\d{4}-\d{2}-\d{2}$/
 const KEY = /^[a-z0-9-]{3,40}$/
@@ -535,8 +549,81 @@ export function readWeek(raw: unknown, cast: readonly Character[]): { ok: true; 
     for (const k of who) { const bad = notCharacter(k); if (bad) return { ok: false, error: `A casual time on ${day}: ${bad}` } }
     cas.push({ day, time, who })
   }
-  return { ok: true, week: { week: monday, title: String(r.title ?? '').trim() || `Week of ${monday}`, competitions: out, casual: cas } }
+  // ── Streams v2 (D333): friendships, the club's notices, statuses on their own, talk under results ──
+  const friends: [string, string][] = []
+  for (const f of Array.isArray(r.friends) ? r.friends as unknown[] : []) {
+    const [a, b] = Array.isArray(f) ? f.map(String) : []
+    for (const k of [a, b]) { const bad = notCharacter(k ?? ''); if (bad) return { ok: false, error: `Friends: ${bad}` } }
+    if (a === b) return { ok: false, error: `Friends: ${a} with themselves.` }
+    friends.push([a, b])
+  }
+  if (friends.length > 60) return { ok: false, error: 'Friends: at most 60 pairs.' }
+  const keys = new Set<string>()
+  const talk = (label: string, list: unknown): WeekTalk[] | string => {
+    const out: WeekTalk[] = []
+    for (const t of Array.isArray(list) ? list as Record<string, unknown>[] : []) {
+      const by = String(t.by ?? ''), text = String(t.text ?? '').trim()
+      const bad = notCharacter(by)
+      if (bad) return `${label}: ${bad}`
+      if (!text || [...text].length > BANTER_COMMENT_MAX) return `${label}: ${by}’s comment is empty or over ${BANTER_COMMENT_MAX} characters.`
+      out.push({ by, text })
+    }
+    return out
+  }
+  const posts: WeekPost[] = []
+  for (const p of Array.isArray(r.posts) ? r.posts as Record<string, unknown>[] : []) {
+    const key = String(p.key ?? ''), by = String(p.by ?? ''), day = String(p.day ?? ''), text = String(p.text ?? '').trim()
+    if (!KEY.test(key) || keys.has(key)) return { ok: false, error: `A post’s key, ${key || 'none'}, is missing or used twice.` }
+    keys.add(key)
+    const bad = notCharacter(by)
+    if (bad) return { ok: false, error: `${key}: ${bad}` }
+    const who = cast.find(c => c.key === by)
+    if (!who?.officer && !who?.clubhouse) return { ok: false, error: `${key}: only an Officer or Clubhouse character posts to club.stream (D325).` }
+    if (!days.includes(day)) return { ok: false, error: `${key}: its day is not in the week of ${monday}.` }
+    if (p.time !== undefined && !CLOCK.test(String(p.time))) return { ok: false, error: `${key}: the time is HH:MM.` }
+    if (!text || [...text].length > 1000) return { ok: false, error: `${key}: words of 1 to 1,000 characters.` }
+    if (p.link !== undefined && !/^https:\/\/[^\s]+\.[^\s]+$/.test(String(p.link))) return { ok: false, error: `${key}: a link is https://…` }
+    const comments = talk(key, p.comments)
+    if (typeof comments === 'string') return { ok: false, error: comments }
+    posts.push({ key, by, day, text, ...(p.time ? { time: String(p.time) } : {}), ...(p.title ? { title: String(p.title).slice(0, 80) } : {}), ...(p.link ? { link: String(p.link) } : {}), ...(comments.length ? { comments } : {}) })
+  }
+  const own: WeekOwn[] = []
+  for (const o of Array.isArray(r.own) ? r.own as Record<string, unknown>[] : []) {
+    const key = String(o.key ?? ''), by = String(o.by ?? ''), day = String(o.day ?? ''), text = String(o.text ?? '').trim()
+    if (!KEY.test(key) || keys.has(key)) return { ok: false, error: `A status’s key, ${key || 'none'}, is missing or used twice.` }
+    keys.add(key)
+    const bad = notCharacter(by)
+    if (bad) return { ok: false, error: `${key}: ${bad}` }
+    if (!days.includes(day)) return { ok: false, error: `${key}: its day is not in the week of ${monday}.` }
+    if (o.time !== undefined && !CLOCK.test(String(o.time))) return { ok: false, error: `${key}: the time is HH:MM.` }
+    if (!text || [...text].length > OWN_STATUS_LIMIT) return { ok: false, error: `${key}: a status of 1 to ${OWN_STATUS_LIMIT} characters.` }
+    const comments = talk(key, o.comments)
+    if (typeof comments === 'string') return { ok: false, error: comments }
+    own.push({ key, by, day, text, ...(o.time ? { time: String(o.time) } : {}), ...(comments.length ? { comments } : {}) })
+  }
+  const results: WeekResult[] = []
+  for (const x of Array.isArray(r.results) ? r.results as Record<string, unknown>[] : []) {
+    const key = String(x.key ?? ''), winner = x.winner === undefined ? undefined : String(x.winner)
+    if (!KEY.test(key) || keys.has(key)) return { ok: false, error: `A result’s key, ${key || 'none'}, is missing or used twice.` }
+    keys.add(key)
+    const bad = winner === undefined ? null : notCharacter(winner)
+    if (bad) return { ok: false, error: `${key}: ${bad}` }
+    const comments = talk(key, x.comments)
+    if (typeof comments === 'string') return { ok: false, error: comments }
+    if (!comments.length) return { ok: false, error: `${key}: something said under the result.` }
+    results.push({ key, ...(winner ? { winner } : {}), comments })
+  }
+  return {
+    ok: true,
+    week: {
+      week: monday, title: String(r.title ?? '').trim() || `Week of ${monday}`, competitions: out, casual: cas,
+      ...(friends.length ? { friends } : {}), ...(posts.length ? { posts } : {}), ...(own.length ? { own } : {}), ...(results.length ? { results } : {}),
+    },
+  }
 }
+
+/** A status on its own (lib/feed.ts OWN_STATUS_MAX) — repeated here only to check a file; the feed checks again. */
+export const OWN_STATUS_LIMIT = 280
 
 /** One thing a week does, with a hash of what it is — a step recorded under a different hash is done again. */
 export interface WeekStep { id: string; label: string; hash: string; /** The day it can be done from (a competition's own day). */ from: string | null }
@@ -551,6 +638,10 @@ export function weekSteps(w: WeekFile): WeekStep[] {
         : []),
     ]),
     ...w.casual.map(c => ({ id: `casual:${c.day}@${c.time}:${c.who.join('+')}`, label: `${c.who.join(', ')} booked on ${c.day}`, hash: hash(c), from: null })),
+    ...(w.friends?.length ? [{ id: 'friends', label: `${w.friends.length} friendships`, hash: hash(w.friends), from: null }] : []),
+    ...(w.posts ?? []).map(p => ({ id: `post:${p.key}`, label: `${p.title ?? 'A notice'} in club.stream`, hash: hash(p), from: p.day })),
+    ...(w.own ?? []).map(o => ({ id: `own:${o.key}`, label: `A status by ${o.by}`, hash: hash(o), from: o.day })),
+    ...(w.results ?? []).map(x => ({ id: `result:${x.key}`, label: x.winner ? `Talk under ${x.winner}’s result` : 'Talk under the latest match play result', hash: hash(x), from: null })),
   ]
 }
 

@@ -20,6 +20,7 @@ import { bookCasual } from './casual'
 import { postBanter } from './banter'
 import { playCompetition } from './play'
 import { readRoster } from './roster'
+import { befriend, postNotice, postOwn, talkOnResult } from './social'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -79,6 +80,42 @@ export async function loadWeek(o: {
       // afternoon is posted on, and certified tonight, in one more load.
       if (isDone(`comp:${spec.key}`)) await record(banterId)
     }
+  }
+
+  // ── Streams v2 (D333): friendships, the club's notices, statuses, talk under results ──
+  const ctx = { db, club, cast, rowOf: roster.rowOf, userOf: roster.userOf }
+  if (week.friends?.length && !isDone('friends')) {
+    const f = await befriend(ctx, week.friends)
+    lines.push(...f.lines)
+    if (f.made) lines.push(`${f.made} friendships made.`)
+    if (f.lines.length === 0) await record('friends')
+  }
+  for (const p of week.posts ?? []) {
+    if (late()) return { done: false, lines }
+    const id = `post:${p.key}`
+    if (p.day > today || isDone(id)) continue
+    const r = await postNotice(ctx, p)
+    lines.push(...r.lines)
+    if (r.posted) lines.push(`${p.title ?? 'A notice'}: posted to club.stream${r.posted > 1 ? `, with ${r.posted - 1} comments` : ''}.`)
+    if (r.lines.length === 0) await record(id)
+  }
+  for (const s of week.own ?? []) {
+    if (late()) return { done: false, lines }
+    const id = `own:${s.key}`
+    if (s.day > today || isDone(id)) continue
+    const r = await postOwn(ctx, s)
+    lines.push(...r.lines)
+    if (r.posted) lines.push(`A status by ${cast.find(c => c.key === s.by)?.name ?? s.by}: ${r.posted} posted.`)
+    if (r.lines.length === 0) await record(id)
+  }
+  for (const x of week.results ?? []) {
+    if (late()) return { done: false, lines }
+    const id = `result:${x.key}`
+    if (isDone(id)) continue
+    const r = await talkOnResult(ctx, x)
+    lines.push(...r.lines)
+    if (r.posted) lines.push(`${r.posted} comments under ${cast.find(c => c.key === x.winner)?.name ?? x.winner}’s result.`)
+    if (r.lines.length === 0) await record(id)
   }
 
   // ── The casual tee times ──

@@ -573,7 +573,35 @@ function weekTests() {
   section('Steps, hashes and status')
   const w = (readWeek(base, cast) as { ok: true; week: import('../lib/testClub').WeekFile }).week
   const steps = weekSteps(w)
-  eq(steps.length, 4 * 2 + 3, 'a competition and its banter each, and each casual time')
+  eq(steps.length, 4 * 2 + 3 + 1 + (w.posts?.length ?? 0) + (w.own?.length ?? 0) + (w.results?.length ?? 0),
+    'a competition and its banter each, each casual time, the friendships, and each notice, status and talk under a result (D333)')
+  ok((w.posts?.length ?? 0) > 0 && (w.own?.length ?? 0) > 0 && (w.results?.length ?? 0) > 0 && (w.friends?.length ?? 0) > 0, 'this week uses every new piece')
+
+  section('Streams v2 in a week file (D333)')
+  {
+    const notOfficer = JSON.parse(JSON.stringify(base)); notOfficer.posts = [{ key: 'wk-x', by: 'gob', day: '2026-11-23', text: 'I am the club now' }]
+    ok(!readWeek(notOfficer, cast).ok, 'only an Officer or Clubhouse character posts to club.stream')
+    const real = JSON.parse(JSON.stringify(base)); real.own = [{ key: 'wk-y', by: 'ross', day: '2026-11-23', text: 'Hi' }]
+    ok(!readWeek(real, cast).ok, 'a status by anybody but a character is refused (D314)')
+    const long = JSON.parse(JSON.stringify(base)); long.own = [{ key: 'wk-z', by: 'gob', day: '2026-11-23', text: 'x'.repeat(281) }]
+    ok(!readWeek(long, cast).ok, 'a status over 280')
+    const self = JSON.parse(JSON.stringify(base)); self.friends = [['gob', 'gob']]
+    ok(!readWeek(self, cast).ok, 'nobody is their own friend')
+    const outside = JSON.parse(JSON.stringify(base)); outside.posts = [{ key: 'wk-w', by: 'cj', day: '2026-12-01', text: 'Next week' }]
+    ok(!readWeek(outside, cast).ok, 'a notice on a day outside the week')
+    const quiet = JSON.parse(JSON.stringify(base)); quiet.results = [{ key: 'wk-v', comments: [] }]
+    ok(!readWeek(quiet, cast).ok, 'talk under a result says something')
+    // Old Tom's and Pierce's remarks are answered on the same item (D313).
+    for (const item of [...(w.posts ?? []), ...(w.own ?? []), ...(w.results ?? [])]) {
+      const talk = item.comments ?? []
+      const author = 'by' in item ? (item as { by: string }).by : null
+      talk.forEach((c, i) => {
+        if (c.by !== 'tom' && c.by !== 'pierce') return
+        ok(talk.slice(i + 1).some(r => r.by !== c.by) || (author !== null && author !== c.by && i < talk.length - 1), `${item.key}: ${c.by}’s remark is answered`)
+      })
+      if (author === 'tom' || author === 'pierce') ok(talk.some(c => c.by !== author), `${item.key}: ${author}’s status is answered`)
+    }
+  }
   eq(JSON.stringify(weekSteps(w)), JSON.stringify(steps), 'the same steps every time')
   const changed = JSON.parse(JSON.stringify(base)); changed.competitions[0].players.jed = 'hot'
   const w2 = (readWeek(changed, cast) as { ok: true; week: import('../lib/testClub').WeekFile }).week
@@ -591,6 +619,15 @@ function weekTests() {
   section('The loader and the page')
   const wk = read('app/admin/test-club/week.ts')
   for (const fn of ['playCompetition', 'postBanter', 'bookCasual']) ok(new RegExp(`await ${fn}\\(`).test(wk), `${fn} — the same engines as the season`)
+  for (const fn of ['befriend', 'postNotice', 'postOwn', 'talkOnResult']) ok(new RegExp(`await ${fn}\\(`).test(wk), `${fn} — Streams v2's pieces in the week (D333)`)
+  {
+    const social = read('app/admin/test-club/social.ts')
+    ok(/action: 'post\.club'/.test(social) && /action: 'status\.post'/.test(social) && /action: 'request'/.test(social) && /action: 'respond'/.test(social) && /action: 'comment'/.test(social),
+      '…each through the feed’s own route, as the character')
+    ok(!/from\('feed_items'\)\.insert|from\('friendships'\)\.(insert|upsert)/.test(social), '…never written straight into the tables')
+    ok(/rebump\(/.test(read('app/admin/test-club/banter.ts')) && /stampItems\(/.test(read('app/admin/test-club/play.ts')) && /stampItems\(/.test(read('app/admin/test-club/matchplay.ts')),
+      'backdated items carry their last activity too (D329)')
+  }
   ok(/recorded\.get\(id\) === steps\.get\(id\)!\.hash/.test(wk), 'a step is skipped only when recorded against the same hash')
   ok(/if \(r\.complete\) await record/.test(wk), 'a competition is recorded only once it is complete — certified this evening, not before')
   ok(/c\.day < today/.test(wk), 'a casual day gone by is done with, never waited for')

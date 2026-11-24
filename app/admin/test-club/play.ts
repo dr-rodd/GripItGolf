@@ -16,6 +16,7 @@
 // short carries on. Real members are never booked, scored or signed for
 // (D314): a spec names characters only. Server only.
 
+import { stampItems } from './stamp'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { irishInstant } from '@/lib/irishTime'
 import { courseHandicap, teesForPlayer } from '@/lib/courseHandicap'
@@ -255,7 +256,7 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
   }
   // What it wrote to the feed is dated the competition's day, not today — never a comment, which is dated its own minute.
   const stamp = notFuture(at(spec.day, '15:00')).toISOString()
-  await db.from('feed_items').update({ created_at: stamp }).eq('trip_id', tripId).neq('kind', 'comment').gt('created_at', stamp)
+  await stampItems(db, stamp, q => q.eq('trip_id', tripId).neq('kind', 'comment').gt('created_at', stamp))
   return { done: true, code, lines, played: true, complete: !spec.certify || certified }
 }
 

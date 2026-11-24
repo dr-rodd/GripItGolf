@@ -20,6 +20,7 @@
 // finalised; one it leaves "waiting" is not even arranged (and so overdue).
 // Every step looks first, so pressing again changes nothing. Server only.
 
+import { stampItems } from './stamp'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { exactCourseHandicap } from '@/lib/courseHandicap'
 import { matchStrokes } from '@/lib/matchArrangements'
@@ -192,7 +193,7 @@ export async function playMatchPlay(ctx: MatchPlayContext, plan: MatchPlayPlan =
       const { error: wErr } = await db.from('matchplay_matches').upsert(change.changed.map(toRow), { onConflict: 'id' })
       if (wErr) { lines.push(`${plan.name}: ${a.name} v ${b.name} result not saved — ${wErr.message}`); continue }
       await writeMatchResult(db, m.id).catch(e => console.error('match result not in the feed:', e))
-      await db.from('feed_items').update({ created_at: stamp }).eq('key', `match:${m.id}`)
+      await stampItems(db, stamp, q => q.eq('key', `match:${m.id}`))
       lines.push(`${plan.name}, ${m.round_name}: ${players.get(winner)!.name} beat ${winner === a.id ? b.name : a.name} ${state.result}.`)
     }
   }

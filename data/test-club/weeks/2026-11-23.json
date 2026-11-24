@@ -1,7 +1,7 @@
 {
   "week": "2026-11-23",
   "title": "Week of Mon 23 Nov 2026",
-  "note": "The first week file (D312). Monday's and Tuesday's competitions are played the moment the week is loaded; Wednesday's Seniors' and Saturday's Medal are made and booked now and played when the week is loaded again from their day. Forms are Claude Code's calls and results are never asserted in the banter: the cards are made on the day, so a line talks about the round, not the board. Strong language and crude innuendo are fine (Ross), graphic sex and slurs are not.",
+  "note": "The first week file (D312). Monday's and Tuesday's competitions are played the moment the week is loaded; Wednesday's Seniors' and Saturday's Medal are made and booked now and played when the week is loaded again from their day. Forms are Claude Code's calls and results are never asserted in the banter: the cards are made on the day, so a line talks about the round, not the board. Strong language and crude innuendo are fine (Ross), graphic sex and slurs are not. Streams v2 (D333): characters made friends, CJ's notices in club.stream, statuses on their own in friends.stream, and talk under the latest match play result in comp.stream. A status or notice on a day still to come is posted when the week is loaded again from its day.",
   "competitions": [
     {
       "key": "wk-1123-mon",
@@ -391,6 +391,257 @@
         "paddy",
         "sloan",
         "elaine"
+      ]
+    }
+  ],
+  "friends": [
+    [
+      "jed",
+      "cj"
+    ],
+    [
+      "jed",
+      "elizabeth"
+    ],
+    [
+      "cj",
+      "sloan"
+    ],
+    [
+      "cj",
+      "elizabeth"
+    ],
+    [
+      "sloan",
+      "elaine"
+    ],
+    [
+      "elaine",
+      "don"
+    ],
+    [
+      "don",
+      "paddy"
+    ],
+    [
+      "paddy",
+      "michael"
+    ],
+    [
+      "michael",
+      "gob"
+    ],
+    [
+      "gob",
+      "pierce"
+    ],
+    [
+      "pierce",
+      "tom"
+    ],
+    [
+      "tom",
+      "paddy"
+    ],
+    [
+      "sloan",
+      "michael"
+    ],
+    [
+      "don",
+      "jed"
+    ]
+  ],
+  "posts": [
+    {
+      "key": "wk-1123-course",
+      "by": "cj",
+      "day": "2026-11-23",
+      "time": "09:30",
+      "title": "Course update",
+      "text": "Greens on the 4th, 9th and 16th were hollow-tined this morning. Temporary greens in play on all three until Friday.\n\nWinter rules from today: preferred lies through the green, six inches. Six inches, not six feet. You know who you are.",
+      "comments": [
+        {
+          "by": "jed",
+          "text": "I object to the timing of this notice and I'd like it entered into the record."
+        },
+        {
+          "by": "cj",
+          "text": "Noted, Mr President. Six inches."
+        },
+        {
+          "by": "pierce",
+          "text": "Six inches is plenty for some of us. Not for Paddy, apparently, he's always asking for more."
+        },
+        {
+          "by": "elaine",
+          "text": "Pierce, nobody asked. Nobody ever asks. That's sort of your whole thing."
+        }
+      ]
+    },
+    {
+      "key": "wk-1125-dinner",
+      "by": "cj",
+      "day": "2026-11-25",
+      "time": "18:00",
+      "title": "Christmas dinner",
+      "text": "The members' Christmas dinner is Saturday 19 December, 7:30 pm in the clubhouse. €45 a head, three courses, and a band that knows four songs.\n\nNames to the office by Friday 11 December. Partners welcome. Pierce, the band has been told.",
+      "comments": [
+        {
+          "by": "don",
+          "text": "Open bar?"
+        },
+        {
+          "by": "cj",
+          "text": "Cash bar, Don."
+        },
+        {
+          "by": "don",
+          "text": "Then I'll be bringing cash. A lot of it."
+        },
+        {
+          "by": "tom",
+          "text": "In my day the Christmas dinner was men only and nobody had to dance."
+        },
+        {
+          "by": "sloan",
+          "text": "In your day, Tom, the dinner was gruel and the band was a goat. Progress."
+        }
+      ]
+    }
+  ],
+  "own": [
+    {
+      "key": "wk-1123-elizabeth",
+      "by": "elizabeth",
+      "day": "2026-11-23",
+      "time": "20:00",
+      "text": "Lovely day at the Mixed! Jed, CJ, what time does everybody usually leave the clubhouse on weeknights? Just for car-sharing, of course.",
+      "comments": [
+        {
+          "by": "cj",
+          "text": "Nice try."
+        },
+        {
+          "by": "jed",
+          "text": "About ten past ten. The side door sticks, you have to really lean on it."
+        },
+        {
+          "by": "cj",
+          "text": "Sir."
+        }
+      ]
+    },
+    {
+      "key": "wk-1124-jed",
+      "by": "jed",
+      "day": "2026-11-24",
+      "time": "21:00",
+      "text": "Range session tonight. Hit 200 balls. Kept 40 of them. The other 160 were provisionals.",
+      "comments": [
+        {
+          "by": "cj",
+          "text": "There is no such thing as a provisional on a range."
+        },
+        {
+          "by": "jed",
+          "text": "There is in my administration."
+        },
+        {
+          "by": "paddy",
+          "text": "Your takeaway is shut and you're coming over the top. I watched from the car park. Range, Thursday, 6 o'clock. Bring a bucket."
+        }
+      ]
+    },
+    {
+      "key": "wk-1125-elaine",
+      "by": "elaine",
+      "day": "2026-11-25",
+      "time": "12:30",
+      "text": "New putter. Cost more than my rent. Putts exactly like the old one, but I look so much better missing.",
+      "comments": [
+        {
+          "by": "don",
+          "text": "Looking good while missing. I built a career on it."
+        },
+        {
+          "by": "sloan",
+          "text": "You missed 9 putts inside six feet on Monday. The putter is a sunk cost. So were the putts."
+        }
+      ]
+    },
+    {
+      "key": "wk-1126-pierce",
+      "by": "pierce",
+      "day": "2026-11-26",
+      "time": "22:40",
+      "text": "Bought the whole bar a round tonight. Nobody stayed for the second one. Their loss. More Cointreau for Pierce.",
+      "comments": [
+        {
+          "by": "michael",
+          "text": "Pierce, you bought the round at 10:55. The bar shuts at 11."
+        },
+        {
+          "by": "gob",
+          "text": "Pierce, buddy, I stayed. I was under the table, but I stayed."
+        }
+      ]
+    },
+    {
+      "key": "wk-1127-gob",
+      "by": "gob",
+      "day": "2026-11-27",
+      "time": "17:00",
+      "text": "Working on a new trick shot: the reverse chip off a champagne flute. Glass budget for the week: gone. Ego: rock hard and intact.",
+      "comments": [
+        {
+          "by": "michael",
+          "text": "I've been invoiced for the glasses. All of them. And the flute was the bar's."
+        },
+        {
+          "by": "gob",
+          "text": "Ignore the invoice. That's how they get you, Michael."
+        }
+      ]
+    },
+    {
+      "key": "wk-1129-tom",
+      "by": "tom",
+      "day": "2026-11-29",
+      "time": "10:00",
+      "text": "Watched a lady drive the 1st green this morning. The course is too short. I'll be writing to the committee.",
+      "comments": [
+        {
+          "by": "sloan",
+          "text": "The course is fine, Tom. The lady is just better than you."
+        },
+        {
+          "by": "elaine",
+          "text": "Write to the committee. Use crayon, it's what they read."
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "key": "wk-1123-matchplay-talk",
+      "comments": [
+        {
+          "by": "paddy",
+          "text": "Watched the back nine of that one. Somebody needs to stop taking the club back so far inside. I won't name names. I'll be at the range Thursday if anyone wants to find out who."
+        },
+        {
+          "by": "don",
+          "text": "Match play. Three hours of two grown men pretending they don't care. Best theatre in the county."
+        },
+        {
+          "by": "pierce",
+          "text": "I'd have won that. I'd have won it in a canter. I wasn't entered, but I'd have won it."
+        },
+        {
+          "by": "sloan",
+          "text": "Pierce, your odds of winning a match you weren't in are, technically, better than if you'd been in it."
+        }
       ]
     }
   ]
