@@ -81,10 +81,6 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
       else if (error && /already/i.test(error.message)) userId = (await findAccount(db, email))?.id ?? null
       if (!userId) throw new Error(`Could not make ${c.name}’s account: ${error?.message ?? 'unknown'}`)
       made.push(c.name)
-    } else {
-      // The password follows TEST_CLUB_PASSWORD, so changing it in Vercel and
-      // reseeding is how it is changed.
-      await db.auth.admin.updateUserById(userId, { password: testPassword()! })
     }
     const steps = await Promise.all([
       db.from('test_accounts').upsert({ user_id: userId, club_id: club.id, character_key: c.key }, { onConflict: 'user_id' }),
@@ -150,6 +146,10 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
   for (const plan of casualPlan(cast, irishToday(new Date()))) {
     if (late()) return { done: false, lines }
     const first = byKey.get(plan.who[0])!
+    // Booked by an earlier press: nobody signs in to find that out.
+    const wanted = plan.who.map(k => rowOf.get(k)).filter((x): x is string => !!x)
+    const { data: have } = await db.from('club_tee_bookings').select('id').eq('club_id', club.id).eq('play_on', plan.day).in('member_id', wanted).limit(1)
+    if ((have ?? []).length > 0) continue
     const token = await characterToken(testEmail(first.username, club.slug))
     const day = await callAs(teeTimesRoute, '/api/club/tee-times', token, { action: 'day', clubId: club.id, date: plan.day })
     if (day.status !== 200) { lines.push(`Tee times on ${plan.day} not read: ${String(day.body.error ?? day.status)}`); continue }
