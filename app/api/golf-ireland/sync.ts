@@ -8,6 +8,7 @@ import { golfIrelandClient } from '@/lib/golfIrelandClient'
 import { syncCards, type SyncResult, type SyncStore, type SyncTarget } from '@/lib/golfIrelandSync'
 import { readLiveScores, readScores } from '@/lib/scoreReads'
 import { loadClubs, loadLinks, type LoadedLeague } from './league'
+import { isTestTrip } from '@/app/admin/test-club/store'
 
 /**
  * One league's Golf Ireland cards read in, on the service role — the fetch
@@ -24,6 +25,9 @@ export async function syncLeague(
   const cfg = golfIrelandConfig()
   if (!cfg) return { state: 'not_ready' }
   const tripId = league.trip.id
+  // A test club's league is never read from or sent to Golf Ireland (D316):
+  // its players are fictional.
+  if (await isTestTrip(admin, tripId)) return { state: 'done', read: 0, added: 0, refreshed: 0, removed: 0, failed: [] }
   const today = new Date(now).toISOString().slice(0, 10)
 
   const [clubs, links, roundsRes] = await Promise.all([

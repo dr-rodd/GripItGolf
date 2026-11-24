@@ -33,6 +33,7 @@ import type { GridRow, ListCounts, Need, SeasonEvent } from './clubhouse'
 import type { SeasonRow } from './cardSummary'
 import { ACCOUNT_WORDS, normaliseEmail, normaliseUsername, type MyEvent } from './account'
 import { phoneIdentity } from './entryClient'
+import { DEMO_NO_INBOX, undeliverable } from './emailGuard'
 import { forgetOwnerUnlocks } from './passcode'
 import { forgetTier, hintClubs, readTierHint, rememberTier, storedAccountSession } from './tierHint'
 import { forgetAllClubHomes } from './clubHomeCopy'
@@ -220,6 +221,8 @@ export async function askServer(token: string, body: Record<string, unknown>, ur
  */
 export async function sendCode(raw: string): Promise<{ ok: true; pending: Pending } | { ok: false; error: string; exists?: true }> {
   const email = normaliseEmail(raw)
+  // A demo address (D308): Supabase is never asked to send to it.
+  if (undeliverable(email)) return { ok: false, error: DEMO_NO_INBOX }
   if (!inBrowser()) return { ok: false, error: ACCOUNT_WORDS.noReach }
   const phone = await phoneIdentity()
   if (!phone) return { ok: false, error: ACCOUNT_WORDS.noReach }
@@ -270,6 +273,7 @@ async function codeForExisting(
 /** "Forgot password?": a code to the email, then a new password (D132). */
 export async function sendForgotCode(raw: string): Promise<{ ok: true; pending: Pending } | { ok: false; error: string }> {
   const email = normaliseEmail(raw)
+  if (undeliverable(email)) return { ok: false, error: DEMO_NO_INBOX }
   if (!inBrowser()) return { ok: false, error: ACCOUNT_WORDS.noReach }
   const phone = await phoneIdentity()
   if (!phone) return { ok: false, error: ACCOUNT_WORDS.noReach }

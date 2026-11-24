@@ -1,6 +1,7 @@
 import { readLeadEmail } from '@/lib/leadEmail'
 import { NextRequest, NextResponse } from 'next/server'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
+import { undeliverable } from '@/lib/emailGuard'
 import { styledQrPng } from '@/lib/qrPng'
 import { createAdminClient } from '@/lib/supabase-admin'
 import { isEvent } from '@/lib/eventHub'
@@ -46,9 +47,6 @@ import { tripBase } from '@/lib/tripPaths'
 export const dynamic = 'force-dynamic'
 
 const CODE = /^[A-Z0-9]{6}$/
-
-/** Longer than a healthy send, shorter than the function's own limit. */
-const SEND_TIMEOUT_MS = 8_000
 
 export async function POST(req: NextRequest) {
   let tripCode = ''
@@ -97,6 +95,9 @@ export async function POST(req: NextRequest) {
   // Kept where no phone can read it (stage 5): lib/leadEmail.ts.
   const leadEmail = await readLeadEmail(admin, trip.id).catch(e => { console.error('trip-confirmation: email lookup failed:', e); return null })
   if (!leadEmail) return NextResponse.json({ ok: true, reason: 'no-email' })
+  // A demo account's address (D308): nothing is ever sent, and the claim is
+  // never taken, so the row reads exactly as a trip made with no address.
+  if (undeliverable(leadEmail)) return NextResponse.json({ ok: true, reason: 'no-email' })
   if (trip.confirmation_sent_at) return NextResponse.json({ ok: true, reason: 'already-sent' })
 
   // ── Claim before sending ──
@@ -152,8 +153,8 @@ export async function POST(req: NextRequest) {
     // ~490px for a 200px slot, so it stays crisp on a retina screen.
     const qrPng = styledQrPng(tripUrl)
 
-    const resend = new Resend(key)
-    const send = resend.emails.send({
+    // lib/sendEmail.ts: the one sender (D308).
+    await sendEmail({
       from: CONFIRMATION_FROM,
       to: leadEmail,
       subject: confirmationSubject(details.tripName, details.sport),
@@ -161,12 +162,6 @@ export async function POST(req: NextRequest) {
       text: confirmationText(details),
       attachments: [{ filename: 'trip-qr.png', content: qrPng, contentId: QR_CID }],
     })
-    const result = await Promise.race([
-      send,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('send timed out')), SEND_TIMEOUT_MS)),
-    ])
-    if (result.error) throw result.error
 
     return NextResponse.json({ ok: true })
   } catch (e) {

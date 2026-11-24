@@ -7,7 +7,7 @@ import { matchPlayKeyDates, matchPlayPhase, overdueMatches, readClubMatchPlay } 
 import { readMyClubMatches, readPairPartners } from './matchPlayStore'
 import { readClubDraw } from './matchPlayDraw'
 import { randomBytes } from 'crypto'
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import { handicapStore } from '../handicaps/store'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
@@ -37,7 +37,6 @@ export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow 
 type Db = ReturnType<typeof createAdminClient>
 
 const CLUB_COLS = 'id, slug, name, verified_at, refused_at, colour, crest_path'
-const SEND_TIMEOUT_MS = 8000
 
 type ClubRow = { id: string; slug: string; name: string; verified_at: string | null; refused_at: string | null; colour?: string | null; crest_path?: string | null }
 const asClub = (c: ClubRow): ClubRecord => ({
@@ -553,15 +552,8 @@ export function clubStore(db: Db): ClubStore {
       if (error) throw error
     },
     async sendEmail(to, subject, html, text) {
-      const key = process.env.RESEND_API_KEY
-      if (!key) return false
-      const send = new Resend(key).emails.send({ from: `Green Dot <${SITE.supportEmail}>`, to, subject, html, text })
-      const result = await Promise.race([
-        send,
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('send timed out')), SEND_TIMEOUT_MS)),
-      ])
-      if (result.error) throw result.error
-      return true
+      // lib/sendEmail.ts: the one sender (D308) — nothing to a demo account.
+      return (await sendEmail({ from: `Green Dot <${SITE.supportEmail}>`, to, subject, html, text })) === 'sent'
     },
     async inviteByHash(hash) {
       const { data, error } = await db.from('club_invites').select('id, member_id, expires_at, used_at').eq('code_hash', hash).maybeSingle()

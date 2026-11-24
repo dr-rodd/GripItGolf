@@ -1,0 +1,71 @@
+'use server'
+
+import { revalidatePath } from 'next/cache'
+import { createAdminClient } from '@/lib/supabase-admin'
+import { MAX_KEEP, readKeepList, TEST_CLUB_NOT_READY } from '@/lib/testClub'
+import { requireAdmin } from '../adminGate'
+import { findAccount } from '../accounts'
+import { isTestClubId, wipeStore } from './store'
+import { previewWipe, runWipe, type WipeOutcome } from './wipe'
+import type { WipePreview } from '@/lib/testClub'
+
+/**
+ * The test club's actions (D311): the keep-list, and the wipe — previewed
+ * first, then run once its name is typed. Each re-checks the admin session
+ * (the page's gate protected the page; this is a new request) and that the
+ * club is a test club. Nothing here works on a club that is not one.
+ */
+
+const SIGNED_OUT = 'Signed out — log in again.'
+
+/** The keep-list replaced by the usernames typed — each must be a Green Dot account. */
+export async function saveKeepList(clubId: string, raw: string): Promise<{ error: string | null; missing?: string[] }> {
+  if (!(await requireAdmin())) return { error: SIGNED_OUT }
+  const db = createAdminClient()
+  if (!(await isTestClubId(db, clubId))) return { error: 'Only a test club has a keep-list.' }
+  const names = readKeepList(raw)
+  if (names.length > MAX_KEEP) return { error: `The keep-list holds at most ${MAX_KEEP}.` }
+  try {
+    const found = await Promise.all(names.map(async n => ({ n, a: n.includes('@') ? null : await findAccount(db, n) })))
+    const missing = found.filter(f => !f.a).map(f => f.n)
+    if (missing.length) return { error: `No Green Dot account has the username ${missing.join(', ')}. Usernames only.`, missing }
+    const ids = found.map(f => f.a!.id)
+    const { error: delErr } = await db.from('test_club_keep').delete().eq('club_id', clubId)
+    if (delErr) return { error: delErr.code === '42P01' || delErr.code === 'PGRST205' ? TEST_CLUB_NOT_READY : 'Could not save — try again.' }
+    if (ids.length) {
+      const { error } = await db.from('test_club_keep').insert(ids.map(user_id => ({ club_id: clubId, user_id })))
+      if (error) { console.error('keep-list not saved:', error); return { error: 'Could not save — try again.' } }
+    }
+    revalidatePath('/admin/test-club')
+    return { error: null }
+  } catch (e) {
+    console.error('saveKeepList failed:', e)
+    return { error: 'Could not save — try again.' }
+  }
+}
+
+/** What a wipe will take, counted — read only. */
+export async function previewWipeAction(clubId: string): Promise<{ error: string | null; preview?: WipePreview }> {
+  if (!(await requireAdmin())) return { error: SIGNED_OUT }
+  try {
+    const r = await previewWipe(wipeStore(createAdminClient()), clubId)
+    return r.ok ? { error: null, preview: r.preview } : { error: r.error }
+  } catch (e) {
+    console.error('previewWipe failed:', e)
+    return { error: 'Could not count the club’s rows — try again.' }
+  }
+}
+
+/** The wipe. About fifty seconds a press; pressed again, it carries on. */
+export async function wipeAction(clubId: string, typed: string): Promise<WipeOutcome> {
+  if (!(await requireAdmin())) return { ok: false, error: SIGNED_OUT }
+  try {
+    const r = await runWipe(wipeStore(createAdminClient()), clubId, typed, Date.now() + 45_000)
+    revalidatePath('/admin/test-club')
+    revalidatePath('/admin/trips')
+    return r
+  } catch (e) {
+    console.error('wipe failed:', e)
+    return { ok: false, error: 'The wipe stopped partway — press again to carry on.' }
+  }
+}

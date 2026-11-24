@@ -3,15 +3,12 @@
 // email. Built on /api/entry's store so the memberships and the per-network
 // counts are written exactly as everywhere else.
 
-import { Resend } from 'resend'
+import { sendEmail } from '@/lib/sendEmail'
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { SITE } from '@/config/site'
 import { readLeadEmail } from '@/lib/leadEmail'
 import { serviceStore } from '../entry/store'
 import type { ResetStore, ResetTrip } from './pinReset'
-
-/** Longer than a healthy send, shorter than the function's own limit. */
-const SEND_TIMEOUT_MS = 8_000
 
 export function resetStore(db: ReturnType<typeof createAdminClient>): ResetStore {
   const base = serviceStore(db)
@@ -87,15 +84,8 @@ export function resetStore(db: ReturnType<typeof createAdminClient>): ResetStore
       if (error) throw error
     },
     async sendEmail(to, subject, html, text) {
-      const key = process.env.RESEND_API_KEY
-      if (!key) return false
-      const send = new Resend(key).emails.send({ from: `Green Dot <${SITE.supportEmail}>`, to, subject, html, text })
-      const result = await Promise.race([
-        send,
-        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('send timed out')), SEND_TIMEOUT_MS)),
-      ])
-      if (result.error) throw result.error
-      return true
+      // lib/sendEmail.ts: the one sender (D308) — nothing to a demo account.
+      return (await sendEmail({ from: `Green Dot <${SITE.supportEmail}>`, to, subject, html, text })) === 'sent'
     },
   }
 }

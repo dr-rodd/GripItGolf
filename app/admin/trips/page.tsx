@@ -10,6 +10,8 @@ import { requireAdmin } from '../adminGate'
 import AdminLogin from '../AdminLogin'
 import AdminShell from '../AdminShell'
 import DeleteTrip from './DeleteTrip'
+import { testTripIds } from '../test-club/store'
+import { countsOnPlatform } from '@/lib/testClub'
 
 export const dynamic = 'force-dynamic'
 
@@ -62,7 +64,12 @@ export default async function AdminTripsPage({
 
   if (error) console.error('AdminTripsPage trips query failed:', error)
   // The address lives apart from the row from stage 5 (lib/leadEmail.ts).
-  const emails = await readAllLeadEmails(db).catch(() => new Map<string, string>())
+  const [emails, testTrips] = await Promise.all([
+    readAllLeadEmails(db).catch(() => new Map<string, string>()),
+    // A test club's events are listed, marked Test, and left out of the
+    // header's counts (D316).
+    testTripIds(db),
+  ])
   const allTrips = ((data ?? []) as Omit<TripRow, 'lead_email'>[]).map(t => ({ ...t, lead_email: emails.get(t.id) ?? null })) as TripRow[]
 
   // Search narrows by name, code or lead email, case-blind. In memory: the
@@ -93,10 +100,12 @@ export default async function AdminTripsPage({
   }
 
   const today = todayString(new Date())
-  const withEmail = allTrips.filter(t => t.lead_email).length
+  const real = allTrips.filter(t => countsOnPlatform(t.id, testTrips))
+  const withEmail = real.filter(t => t.lead_email).length
+  const tests = allTrips.length - real.length
 
   return (
-    <AdminShell active="trips" subtitle={`${allTrips.length} trips · ${withEmail} with an email`}>
+    <AdminShell active="trips" subtitle={`${real.length} trips · ${withEmail} with an email${tests ? ` · ${tests} test, not counted` : ''}`}>
       <div className="mb-4">
         <Suspense fallback={null}><EmailCount /></Suspense>
         <div className="mt-2"><SummaryBackfill /></div>
@@ -172,6 +181,7 @@ export default async function AdminTripsPage({
                         <Pill tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'}>
                           {state.label}
                         </Pill>
+                        {testTrips.has(t.id) && <Pill className="ml-1.5">Test</Pill>}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <DeleteTrip tripId={t.id} tripCode={t.trip_code} tripName={t.name} />
@@ -206,6 +216,7 @@ export default async function AdminTripsPage({
                     <Pill tone={state.open ? 'win' : 'neutral'} live={state.key === 'active'} className="flex-shrink-0">
                       {state.label}
                     </Pill>
+                    {testTrips.has(t.id) && <Pill className="flex-shrink-0">Test</Pill>}
                   </div>
 
                   <div className="mt-3 flex flex-col gap-1 text-[13px]">
