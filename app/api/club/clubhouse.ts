@@ -37,7 +37,7 @@ import { entryRulesIssue } from '@/lib/clubMembership'
 import type { ActivityEntry, ClubOutcome, ClubRecord, ClubStore, ClubSummary, MemberRecord } from './club'
 
 /** A row as the grid's read returns it: the list row, when its code was last sent, and its own index. */
-export type PageRecord = MemberRecord & { invitedAt: string | null; ownIndex: number | null }
+export type PageRecord = MemberRecord & { invitedAt: string | null; ownIndex: number | null; demo?: boolean }
 
 export interface ListQuery {
   q: string
@@ -67,7 +67,7 @@ export interface ClubhouseStore {
   isStaff?(userId: string): Promise<boolean>
   /** Verified clubs whose name holds the words, for staff. */
   searchClubs?(q: string): Promise<ClubRecord[]>
-  listPage?(clubId: string, query: ListQuery): Promise<{ rows: PageRecord[]; total: number }>
+  listPage?(clubId: string, query: ListQuery): Promise<{ rows: PageRecord[]; total: number; fictional?: boolean }>
   listCounts?(clubId: string): Promise<ListCounts>
   /** When codes went out: written beside each new one (093). */
   markInvited?(memberId: string, at: string): Promise<void>
@@ -131,6 +131,7 @@ export function gridRow(r: PageRecord, accountIndex: number | null): GridRow {
     handicapIndex: r.userId ? accountIndex : r.ownIndex,
     credentials: credentialsOf(r), linked: !!r.userId, removed: !!r.removedAt, invitedAt: r.invitedAt, onBoards: r.onBoards,
     gender: r.gender ?? null, birthDate: r.birthDate ?? null, categoryId: r.categoryId ?? null,
+    ...(r.demo ? { demo: true } : {}),
   }
 }
 
@@ -257,8 +258,8 @@ export async function runClubhouse(
     if (!store.listPage) return fail(503, 'The Clubhouse isn’t set up yet — try again later.')
     const page = Math.max(0, Math.min(1000, Math.floor(Number(input.page) || 0)))
     const query: ListQuery = { q: cleanSearch(input.q), filter: readFilter(input.filter), sort: readSort(input.sort), desc: input.desc === true, page, size: PAGE_SIZE, ...peopleQuery(input, club, irishToday(now)) }
-    const { rows, total } = await store.listPage(club.id, query)
-    return { status: 200, body: { ok: true, grid: await gridRows(store, rows), total } }
+    const { rows, total, fictional } = await store.listPage(club.id, query)
+    return { status: 200, body: { ok: true, grid: await gridRows(store, rows), total, ...(fictional ? { fictional: true } : {}) } }
   }
 
   // Stage (m): a membership saved or deleted, and the club's age date — the office's.

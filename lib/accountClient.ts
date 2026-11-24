@@ -678,6 +678,8 @@ export interface ClubAnswer {
   /** Stage (k1), the Clubhouse. */
   grid?: GridRow[]
   total?: number
+  /** D315: the club has fictional members (a test club). */
+  fictional?: boolean
   counts?: ListCounts
   byPhase?: Record<string, number>
   needs?: Need[]

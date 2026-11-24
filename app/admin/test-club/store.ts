@@ -113,9 +113,9 @@ export function wipeStore(db: Db): WipeStore {
     },
     fictionalIds,
     async listRows(clubId) {
-      const { data, error } = await db.from('club_members').select('id, user_id').eq('club_id', clubId)
+      const { data, error } = await db.from('club_members').select('id, user_id, role').eq('club_id', clubId)
       if (error) throw error
-      return ((data ?? []) as { id: string; user_id: string | null }[]).map(r => ({ id: r.id, userId: r.user_id }))
+      return ((data ?? []) as { id: string; user_id: string | null; role: string }[]).map(r => ({ id: r.id, userId: r.user_id, owner: r.role === 'owner' }))
     },
     eventIds: clubId => eventIdsOf(db, [clubId]),
     async clubRowCounts(clubId) {

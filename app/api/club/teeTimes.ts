@@ -201,6 +201,8 @@ export interface TeeTimesStore {
   /** D286: golf events the club runs on their own pages — linked ones only (D285). */
   golfEvents?(clubId: string): Promise<{ code: string; name: string; startDate: string | null; endDate: string | null }[]>
   logActivity?(entries: ActivityEntry[]): Promise<void>
+  /** D315: a test club's fictional accounts — none for any other club. */
+  fictional?(clubId: string): Promise<Set<string>>
 }
 
 export type TeeOutcome =
@@ -386,7 +388,12 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
     const these = dayBookings(date)
     const names = new Map<string, string>()
     const ids = [...new Set(these.flatMap(b => [b.memberId, b.bookedBy]).filter((x): x is string => !!x))]
-    for (const r of ids.length ? await store.rowsByIds(clubId, ids).catch(() => []) : []) names.set(r.id, r.name)
+    const [rows, fictional] = await Promise.all([
+      ids.length ? store.rowsByIds(clubId, ids).catch(() => []) : Promise.resolve([]),
+      store.fictional ? store.fictional(clubId).catch(() => new Set<string>()) : Promise.resolve(new Set<string>()),
+    ])
+    const demoRows = new Set<string>()
+    for (const r of rows) { names.set(r.id, r.name); if (r.userId && fictional.has(r.userId)) demoRows.add(r.id) }
     if (row) names.set(row.id, row.name)
     const views: TeeBookingView[] = these.map(b => {
       const n = bookingName(b, names)
@@ -394,6 +401,7 @@ export async function runTeeTimes(input: Record<string, unknown> & { token: stri
         id: b.id, time: b.time, name: n.name, guestOf: n.guestOf, memberId: b.memberId,
         mayCancel: !casualCancelIssue(b, { memberId: row?.id ?? null, office }, now),
         mine: !!row && (b.memberId === row.id || (!b.memberId && b.bookedBy === row.id)),
+        ...(b.memberId && demoRows.has(b.memberId) ? { demo: true } : {}),
       }
     }).sort((a, b) => a.time.localeCompare(b.time))
     const body: TeeDayBody = {

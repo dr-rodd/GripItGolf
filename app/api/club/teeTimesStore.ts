@@ -8,6 +8,7 @@ import { readClubHidden, readMemberHiddenOf, readNotes } from './notesStore'
 import { readClubEvents } from './store'
 import { indexesOf, readLabels } from './labelsStore'
 import { TeeSheetNotReady, type StoredBooking, type TeeComp, type TeeTimesStore } from './teeTimes'
+import { fictionalUsers } from './store'
 
 // A club's casual tee sheet on the service role. Migration 096 is read
 // fail-soft: before it there are no bookings (the sheet says it is not set
@@ -92,6 +93,7 @@ export function teeTimesStore(db: Db): TeeTimesStore {
       }
       return 'ok'
     },
+    fictional: clubId => fictionalUsers(db, clubId),
     async rowsByIds(clubId, ids) {
       if (!ids.length) return []
       const { data, error } = await withTicks(t => db.from('club_members').select(rowCols(t)).eq('club_id', clubId).in('id', ids).is('removed_at', null))

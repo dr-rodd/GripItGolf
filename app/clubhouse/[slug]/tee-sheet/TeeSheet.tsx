@@ -18,6 +18,7 @@ import EventPanel from '../events/EventPanel'
 import { useShell } from '../ShellContext'
 import { useSeason } from '../useSeason'
 import SheetRow from '../SheetRow'
+import DemoPill from '@/app/components/DemoPill'
 
 type Day = { ok: true } & TeeDayBody
 const addDays = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
@@ -245,7 +246,7 @@ function TimeRow({ time, size, seats, picked, onToggle, onBook }: {
                 className={`ch-hover ch-focus w-full text-left rounded-tile border px-2.5 py-1.5 ${on ? 'border-accent-deep bg-accent-tint' : 'border-line bg-surface'}`}>
                 <span className="flex items-start gap-1.5">
                   <span className="flex-1 min-w-0">
-                    <span className="block text-ink font-medium leading-snug truncate">{b.name}</span>
+                    <span className="block text-ink font-medium leading-snug truncate">{b.name}{b.demo && <DemoPill className="ml-1.5" />}</span>
                     {b.memberId === null && <span className="block t-cap text-ink/65 truncate">{b.guestOf ? `Guest of ${b.guestOf}` : 'Guest'}</span>}
                   </span>
                   {on && <IconCheck size={16} className="text-accent-deep flex-shrink-0 mt-0.5" />}

@@ -10,6 +10,7 @@ import {
   type Overlay, type SheetRow, type TeeBookingView, type TeeDayBody,
 } from '@/lib/clubTeeSheet'
 import { describeTime } from '@/lib/itinerary'
+import DemoPill from '@/app/components/DemoPill'
 
 type Day = { ok: true } & TeeDayBody
 type Pick = { memberId: string; name: string } | { guestName: string }
@@ -159,7 +160,7 @@ export default function ClubTeeTimes({ clubId }: { clubId: string }) {
                   {seats.map(b => (
                     <div key={b.id} className={`rounded-tile border px-2.5 py-2 flex items-start gap-1 ${b.mine ? 'bg-accent-tint border-accent-deep' : 'bg-surface border-line'}`}>
                       <span className="flex-1 min-w-0">
-                        <span className="block text-[15px] font-medium text-ink leading-snug break-words">{b.name}</span>
+                        <span className="block text-[15px] font-medium text-ink leading-snug break-words">{b.name}{b.demo && <DemoPill className="ml-1.5" />}</span>
                         {b.memberId === null && <span className="block t-cap text-ink/65">{b.guestOf ? `Guest of ${b.guestOf}` : 'Guest'}</span>}
                       </span>
                       {b.mayCancel && !gone && (

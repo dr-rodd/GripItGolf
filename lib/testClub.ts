@@ -42,11 +42,12 @@ export const MAX_KEEP = 12
 // ─── The wipe (D311) ──────────────────────────────────────────────
 
 /** One row of the club's list, as the wipe sees it. */
-export interface WipeRow { id: string; userId: string | null }
+export interface WipeRow { id: string; userId: string | null; owner?: boolean }
 
 /**
  * Which of the club's list rows go. Every row but a keep-list account's own
- * row — and never a keep-list account's row, even one taken off the list.
+ * row and an owner's (a club keeps its owner, keep-list or not — Ross, 24
+ * Nov 2026) — and never a keep-list account's row, even one taken off the list.
  * A fictional account in the keep-list is not kept: the characters are
  * always the wipe’s (D311 — a reseed makes them afresh).
  */
@@ -58,7 +59,7 @@ export function rowsToWipe(
   const wipe: string[] = []
   const kept: string[] = []
   for (const r of rows) {
-    if (r.userId && keep.has(r.userId) && !fictional.has(r.userId)) kept.push(r.id)
+    if (r.userId && !fictional.has(r.userId) && (keep.has(r.userId) || r.owner)) kept.push(r.id)
     else wipe.push(r.id)
   }
   return { wipe, kept }
@@ -114,3 +115,138 @@ export function wipeConfirmed(typed: string, clubName: string): boolean {
  * set of test clubs' trip ids (`testTripIds` in app/admin/test-club/store.ts).
  */
 export const countsOnPlatform = (tripId: string, testTrips: ReadonlySet<string>) => !testTrips.has(tripId)
+
+// ─── The characters (D309) ────────────────────────────────────────
+
+export type CommentRate = 'low' | 'mid' | 'high' | 'every card'
+const COMMENT_RATES: readonly CommentRate[] = ['low', 'mid', 'high', 'every card']
+
+/** One fictional member, as data/test-club/characters.json keeps them. */
+export interface Character {
+  key: string
+  name: string
+  username: string
+  /** A handicap index; below zero is a plus handicap (-0.4 is +0.4). */
+  handicap: number
+  gender: 'M' | 'F'
+  /** A membership's name, one of `MEMBERSHIPS`. */
+  membership: string
+  birthDate: string
+  voice: string
+  needles: string[]
+  defersTo: string[]
+  commentRate: CommentRate
+  officer?: boolean
+  clubhouse?: boolean
+}
+
+/** The test club's memberships (D311): name, code, days played (0 Monday … 6 Sunday), junior. */
+export const MEMBERSHIPS: readonly { name: string; code: string; days: number[]; junior: boolean }[] = [
+  { name: 'Full', code: 'FULL', days: [0, 1, 2, 3, 4, 5, 6], junior: false },
+  { name: 'Senior', code: 'SNR', days: [0, 1, 2, 3, 4, 5, 6], junior: false },
+  { name: '6 Day', code: 'SIX', days: [0, 1, 2, 3, 4, 6], junior: false },
+  { name: 'Junior', code: 'JNR', days: [0, 1, 2, 3, 4, 5, 6], junior: true },
+]
+
+/** Where a keep-list member with no membership is put by a reseed. */
+export const DEFAULT_MEMBERSHIP = 'Full'
+
+/** The test club's labels (D311): each as a label's groups, memberships named rather than by id. */
+export const TEST_LABELS: readonly { name: string; colour: string; genders?: ('M' | 'F')[]; memberships?: string[]; maxIndex?: number }[] = [
+  { name: 'Ladies', colour: '#C24D7C', genders: ['F'] },
+  { name: 'Seniors', colour: '#4F6B7A', memberships: ['Senior'] },
+  { name: 'Single figures', colour: '#22375E', maxIndex: 9.9 },
+]
+
+/** Why a character will not do, in a sentence — null when it will. */
+export function characterIssue(c: Partial<Character>, deny: readonly string[]): string | null {
+  const who = c.name || c.key || 'A character'
+  if (!c.key || !/^[a-z0-9-]{1,40}$/.test(c.key)) return `${who}: a key is lower-case letters, numbers and dashes.`
+  if (!c.name || !c.name.trim()) return `${who}: no name.`
+  if (!c.username || !/^[a-z0-9._]{3,20}$/.test(c.username) || /^[.]|[.]$/.test(c.username)) return `${who}: the username is 3 to 20 letters, numbers, dots and underscores.`
+  if (typeof c.handicap !== 'number' || c.handicap < -10 || c.handicap > 54) return `${who}: a handicap is +10 to 54.`
+  if (c.gender !== 'M' && c.gender !== 'F') return `${who}: gender is M or F.`
+  if (!MEMBERSHIPS.some(m => m.name === c.membership)) return `${who}: no membership called ${c.membership}.`
+  if (!c.birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(c.birthDate)) return `${who}: a date of birth is YYYY-MM-DD.`
+  if (!COMMENT_RATES.includes(c.commentRate as CommentRate)) return `${who}: the comment rate is low, mid, high or every card.`
+  const real = deniedName(c.name, deny)
+  if (real) return `${who}: the name ${real} is a real person’s (deny-list.txt).`
+  return null
+}
+
+/** A deny-list name found in `name`, whole words, case aside — null when none. */
+export function deniedName(name: string, deny: readonly string[]): string | null {
+  const n = ` ${name.toLowerCase().replace(/[^a-z0-9' -]/g, ' ').replace(/\s+/g, ' ')} `
+  for (const d of deny) {
+    const t = d.trim().toLowerCase().replace(/\s+/g, ' ')
+    if (t && n.includes(` ${t} `)) return d.trim()
+  }
+  return null
+}
+
+/** The deny-list file read: one name a line, `#` comments and blank lines skipped. */
+export function readDenyList(text: string): string[] {
+  return text.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'))
+}
+
+/** The characters file read and checked — the cast, or the first thing wrong. */
+export function readCharacters(raw: unknown, deny: readonly string[]): { ok: true; cast: Character[] } | { ok: false; error: string } {
+  const list = (raw && typeof raw === 'object' ? (raw as { characters?: unknown }).characters : null)
+  if (!Array.isArray(list) || list.length === 0) return { ok: false, error: 'characters.json lists nobody.' }
+  const cast: Character[] = []
+  for (const c of list as Partial<Character>[]) {
+    const issue = characterIssue(c, deny)
+    if (issue) return { ok: false, error: issue }
+    if (cast.some(x => x.key === c.key)) return { ok: false, error: `Two characters have the key ${c.key}.` }
+    if (cast.some(x => x.username === c.username)) return { ok: false, error: `Two characters have the username ${c.username}.` }
+    cast.push({ needles: [], defersTo: [], ...c } as Character)
+  }
+  for (const c of cast) {
+    for (const k of c.defersTo) if (!cast.some(x => x.key === k)) return { ok: false, error: `${c.name} defers to ${k}, who is not a character.` }
+  }
+  return { ok: true, cast }
+}
+
+/** A character's number on the club's list: T01, T02… — never a real member's. */
+export const memberNumber = (i: number) => `T${String(i + 1).padStart(2, '0')}`
+
+// ─── Casual tee times for the coming week (D311) ──────────────────
+
+/** A small, steady hash — the same characters book the same times every reseed. */
+export function seedHash(s: string): number {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619) }
+  return h >>> 0
+}
+
+/**
+ * Who books a casual tee time on each of the next seven days, in twos and
+ * threes, at a morning time — by the characters' keys, never a real member.
+ * The times are wishes: the club's own sheet decides what exists (the seed
+ * books the nearest open time and skips a day it cannot).
+ */
+export function casualPlan(cast: readonly Character[], from: string, days = 7): { day: string; time: string; who: string[] }[] {
+  const out: { day: string; time: string; who: string[] }[] = []
+  const start = Date.parse(`${from}T12:00:00Z`)
+  for (let d = 1; d <= days; d++) {
+    const day = new Date(start + d * 86_400_000).toISOString().slice(0, 10)
+    const weekday = (new Date(`${day}T12:00:00Z`).getUTCDay() + 6) % 7
+    const h = seedHash(day)
+    const groups = 1 + (h % 2)
+    const used = new Set<string>()
+    for (let g = 0; g < groups; g++) {
+      const size = 2 + ((h >>> (g + 3)) % 2)
+      const who: string[] = []
+      for (let i = 0; who.length < size && i < cast.length * 3; i++) {
+        const c = cast[(seedHash(`${day}:${g}:${i}`)) % cast.length]
+        if (used.has(c.key)) continue
+        // A 6 Day member does not play on Saturday.
+        if (!(MEMBERSHIPS.find(m => m.name === c.membership)?.days ?? []).includes(weekday)) continue
+        used.add(c.key); who.push(c.key)
+      }
+      const minutes = 8 * 60 + 30 + ((h >>> (g * 4)) % 12) * 30
+      if (who.length >= 2) out.push({ day, time: `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`, who })
+    }
+  }
+  return out
+}

@@ -383,6 +383,8 @@ export interface TeeBookingView {
   mayCancel: boolean
   /** This member, or a guest they brought. */
   mine: boolean
+  /** D315: a test club's fictional member — drawn with a Demo pill. */
+  demo?: boolean
 }
 
 /** A day's sheet as the server answers it — the members app and the Clubhouse draw it. */

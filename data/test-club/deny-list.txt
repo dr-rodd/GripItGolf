@@ -1,0 +1,20 @@
+# Real living people's names the test club's characters must never use (D309).
+# One a line, matched whole and case aside against every character's name.
+# Ross extends it. The actors who play the characters' namesakes, and golfers.
+Martin Sheen
+Allison Janney
+Jon Hamm
+Will Arnett
+Jason Bateman
+Chevy Chase
+Julia Louis-Dreyfus
+Keri Russell
+Olivia Munn
+Aaron Sorkin
+Padraig Harrington
+Rory McIlroy
+Shane Lowry
+Paul McGinley
+Darren Clarke
+Graeme McDowell
+Leona Maguire

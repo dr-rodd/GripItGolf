@@ -2118,7 +2118,7 @@ async function clubhouseTests() {
   eq(cleanSearch('  O’Neill, (Seán)%_ '), 'O’Neill Seán', 'a search loses what the database reads as its own')
   eq([pageLine(0, 0), pageLine(0, 12), pageLine(1, 312)], ['Nobody', '12 people', '51–100 of 312'], 'where the page stands')
   eq(PAGE_SIZE, 50, '50 rows a page (D207)')
-  eq(LIST_FILTERS.map(f => f.key).length, 7, 'seven ways to narrow the list — Plays here follows the membership now (D275)')
+  eq(LIST_FILTERS.map(f => f.key).length, 8, 'eight ways to narrow the list — Plays here follows the membership (D275); Fictional only shows on a test club (D315)')
   eq([clubhouseHref('pints'), clubhouseHref('pints', 'members'), sectionAt('/clubhouse/pints/members', 'pints'), sectionAt('/clubhouse/pints', 'pints')],
     ['/clubhouse/pints', '/clubhouse/pints/members', 'members', 'overview'], 'the sections’ addresses')
   const csv = listCsv([{ id: '1', name: '=HYPERLINK("x")', email: 'a@b.ie', memberNumber: '12', guiNumber: '3110002', handicapIndex: -1.5,

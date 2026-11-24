@@ -35,7 +35,7 @@ export function standingOf(r: { linked: boolean; removed: boolean; invitedAt: st
 }
 
 /** What the grid can be narrowed to, read on the server. */
-export type ListFilter = 'all' | 'joined' | 'invited' | 'not_invited' | 'officer' | 'clubhouse' | 'off'
+export type ListFilter = 'all' | 'joined' | 'invited' | 'not_invited' | 'officer' | 'clubhouse' | 'off' | 'fictional'
 
 export const LIST_FILTERS: { key: ListFilter; label: string }[] = [
   { key: 'all', label: 'Everyone on the list' },
@@ -45,6 +45,8 @@ export const LIST_FILTERS: { key: ListFilter; label: string }[] = [
   { key: 'officer', label: 'Officers' },
   { key: 'clubhouse', label: 'Clubhouse' },
   { key: 'off', label: 'Taken off' },
+  // D315: a test club's characters — offered only where the club has any.
+  { key: 'fictional', label: 'Fictional' },
 ]
 
 export function readFilter(v: unknown): ListFilter {
@@ -99,6 +101,8 @@ export interface GridRow {
   gender: Gender | null
   birthDate: string | null
   categoryId: string | null
+  /** D315: a test club's fictional member — the grid wears a Demo pill. */
+  demo?: boolean
 }
 
 /** A cell as a spreadsheet would read it back: formulas defused, quoted where it must be. */

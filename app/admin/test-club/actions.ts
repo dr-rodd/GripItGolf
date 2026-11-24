@@ -8,6 +8,9 @@ import { findAccount } from '../accounts'
 import { isTestClubId, wipeStore } from './store'
 import { previewWipe, runWipe, type WipeOutcome } from './wipe'
 import type { WipePreview } from '@/lib/testClub'
+import { readCharacters } from '@/lib/testClub'
+import charactersFile from '@/data/test-club/characters.json'
+import { runSeed, type SeedProgress } from './seed'
 
 /**
  * The test club's actions (D311): the keep-list, and the wipe — previewed
@@ -67,5 +70,31 @@ export async function wipeAction(clubId: string, typed: string): Promise<WipeOut
   } catch (e) {
     console.error('wipe failed:', e)
     return { ok: false, error: 'The wipe stopped partway — press again to carry on.' }
+  }
+}
+
+/**
+ * The reseed (D311), about forty-five seconds a press: the characters, their
+ * accounts and places on the list, the memberships, labels and the coming
+ * week's casual tee times. Refused while the club still has events or
+ * fictional accounts from before — the page wipes first. Run again, it
+ * changes nothing.
+ */
+export async function seedAction(clubId: string): Promise<({ ok: true } & SeedProgress) | { ok: false; error: string }> {
+  if (!(await requireAdmin())) return { ok: false, error: SIGNED_OUT }
+  try {
+    const db = createAdminClient()
+    const club = await wipeStore(db).club(clubId)
+    if (club === 'not_ready') return { ok: false, error: TEST_CLUB_NOT_READY }
+    if (!club || !club.isTest) return { ok: false, error: 'Only a test club is seeded.' }
+    // The deny-list is checked in the repo (test:test-club); here the file is read as committed.
+    const cast = readCharacters(charactersFile, [])
+    if (!cast.ok) return { ok: false, error: cast.error }
+    const r = await runSeed(db, club, cast.cast, Date.now() + 45_000)
+    revalidatePath('/admin/test-club')
+    return { ok: true, ...r }
+  } catch (e) {
+    console.error('seed failed:', e)
+    return { ok: false, error: e instanceof Error && e.message ? e.message : 'The reseed stopped partway — press again to carry on.' }
   }
 }

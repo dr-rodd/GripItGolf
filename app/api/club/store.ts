@@ -197,7 +197,9 @@ const invitedOn = () => Date.now() - invitedMissingAt > 60_000
  * that match — one round trip — then each row's own index and when its code
  * went, for those rows alone. Every part fail-soft before 092 and 093.
  */
-export async function readListPage(db: Db, clubId: string, o: ListQuery): Promise<{ rows: PageRecord[]; total: number }> {
+export async function readListPage(db: Db, clubId: string, o: ListQuery): Promise<{ rows: PageRecord[]; total: number; fictional?: boolean }> {
+  // D315: a test club's characters (103) — none before it, or on any failure.
+  const fictional = await fictionalUsers(db, clubId)
   const run = (ticks: boolean, invited: boolean, people: boolean) => {
     let q = db.from('club_members').select(`${rowCols(ticks, people)}${invited ? ', invited_at' : ''}`, { count: 'exact' }).eq('club_id', clubId)
     if (o.q) {
@@ -212,6 +214,7 @@ export async function readListPage(db: Db, clubId: string, o: ListQuery): Promis
       case 'not_invited': q = invited ? live().is('user_id', null).is('invited_at', null) : live().is('user_id', null); break
       case 'officer': q = ticks ? live().eq('officer', true) : live().in('role', LEGACY_RUNNING_ROLES); break
       case 'clubhouse': q = ticks ? live().eq('clubhouse', true) : live().in('role', LEGACY_RUNNING_ROLES); break
+      case 'fictional': q = live().in('user_id', fictional.size ? [...fictional] : ['00000000-0000-0000-0000-000000000000']); break
       default: q = live()
     }
     // Stage (m): gender, membership and age (094). Before it, asking for any
@@ -247,9 +250,16 @@ export async function readListPage(db: Db, clubId: string, o: ListQuery): Promis
   const own = ids.length ? await db.from('club_members').select('id, handicap_index').in('id', ids).not('handicap_index', 'is', null) : { data: [], error: null }
   const ownOf = new Map((own.error ? [] : (own.data ?? []) as { id: string; handicap_index: unknown }[]).map(x => [x.id, Number(x.handicap_index)]))
   return {
-    rows: raw.map(x => ({ ...asRow(x), invitedAt: x.invited_at ?? null, ownIndex: ownOf.get(x.id) ?? null })),
+    rows: raw.map(x => ({ ...asRow(x), invitedAt: x.invited_at ?? null, ownIndex: ownOf.get(x.id) ?? null, ...(x.user_id && fictional.has(x.user_id) ? { demo: true } : {}) })),
     total: r.count ?? raw.length,
+    ...(fictional.size ? { fictional: true } : {}),
   }
+}
+
+/** D315: the fictional accounts of a test club (migration 103) — an empty set before it, or on any failure. */
+export async function fictionalUsers(db: Db, clubId: string): Promise<Set<string>> {
+  const { data, error } = await db.from('test_accounts').select('user_id').eq('club_id', clubId)
+  return new Set(error ? [] : ((data ?? []) as { user_id: string }[]).map(r => r.user_id))
 }
 
 /** The list's counts for the Overview and the filters, all at once — head counts, no rows read. */

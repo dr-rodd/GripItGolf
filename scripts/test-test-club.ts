@@ -14,6 +14,11 @@ import {
   CLUB_TABLES, PINTS_SLUG, TEST_CLUB_NOT_READY, type Counts,
 } from '../lib/testClub'
 import { previewWipe, runWipe, type WipeStore, type TestClub } from '../app/admin/test-club/wipe'
+import {
+  readCharacters, readDenyList, deniedName, casualPlan, memberNumber, MEMBERSHIPS, TEST_LABELS, DEFAULT_MEMBERSHIP, type Character,
+} from '../lib/testClub'
+import { usernameIssue } from '../lib/account'
+import { LIST_FILTERS } from '../lib/clubhouse'
 import type { WipeRow } from '../lib/testClub'
 
 let passed = 0, failed = 0
@@ -257,8 +262,83 @@ function wiringTests() {
   ok(!/^'use server'/.test(read('app/admin/accounts.ts')), 'findAccount lives outside a server-action file (so it is no request anybody can make)')
 }
 
+// ─── The characters and the reseed (D309–D311, D315) ────────────
+
+function castTests() {
+  section('The characters (D309)')
+  const deny = readDenyList(read('data/test-club/deny-list.txt'))
+  ok(deny.length >= 10 && !deny.some(d => d.startsWith('#')), 'the deny-list reads, comments skipped')
+  const r = readCharacters(JSON.parse(read('data/test-club/characters.json')), deny)
+  ok(r.ok, `characters.json reads and passes the deny-list${r.ok ? '' : `: ${r.error}`}`)
+  const cast: Character[] = r.ok ? r.cast : []
+  eq(cast.length, 11, 'eleven characters (Ross’s amendment)')
+  for (const c of cast) {
+    ok(usernameIssue(c.username) === null, `${c.name}: a username the site itself accepts`)
+    ok(undeliverable(testEmail(c.username, PINTS_SLUG)), `${c.name}: an address nothing is sent to`)
+  }
+  ok(cast.some(c => c.handicap < 0), 'a plus handicap among them (stored below zero)')
+  eq(cast.filter(c => c.gender === 'F').length, 4, 'four women, for the ladies’ competitions')
+  eq(cast.filter(c => c.clubhouse && c.officer).map(c => c.key), ['cj'], 'CJ is the office — never Ross’s name on the log')
+  ok(cast.every(c => MEMBERSHIPS.some(m => m.name === c.membership)), 'every membership is one the reseed makes')
+  ok(MEMBERSHIPS.some(m => m.junior) && MEMBERSHIPS.some(m => m.name === DEFAULT_MEMBERSHIP), 'a Junior membership, and the keep-list’s default')
+  ok(TEST_LABELS.length >= 2 && TEST_LABELS.length <= 3, 'two or three labels')
+
+  section('The deny-list catches a real name (D309)')
+  eq(deniedName('Martin Sheen', deny), 'Martin Sheen', 'a real name, whole')
+  eq(deniedName('Sir martin  sheen jr', deny), 'Martin Sheen', 'case and spacing aside, inside a longer name')
+  eq(deniedName('Martina Sheener', deny), null, 'never part of a word')
+  const planted = readCharacters({ characters: [{ ...cast[0], name: 'Rory McIlroy' }] }, deny)
+  ok(!planted.ok && /real person/.test(planted.error), 'a character given a real name is refused')
+  const clash = readCharacters({ characters: [cast[0], { ...cast[1], username: cast[0]?.username }] }, deny)
+  ok(!clash.ok, 'two characters with one username are refused')
+
+  section('Numbers on the list')
+  eq([memberNumber(0), memberNumber(10)], ['T01', 'T11'], 'T01… — never a real member’s')
+
+  section('The coming week’s casual tee times')
+  const plan = casualPlan(cast, '2026-11-24')
+  eq(JSON.stringify(plan), JSON.stringify(casualPlan(cast, '2026-11-24')), 'the same every reseed')
+  ok(plan.length >= 5 && plan.every(p => p.who.length >= 2 && p.who.length <= 3), 'twos and threes, most days')
+  ok(plan.every(p => p.day > '2026-11-24' && p.day <= '2026-12-01'), 'the next seven days')
+  ok(plan.every(p => p.time >= '08:30' && p.time <= '14:00'), 'a daytime wish, never before half eight')
+  const sat = plan.filter(p => new Date(`${p.day}T12:00:00Z`).getUTCDay() === 6)
+  ok(sat.every(p => p.who.every(k => cast.find(c => c.key === k)?.membership !== '6 Day')), 'a 6 Day member never on a Saturday')
+  ok(plan.every(p => { const seen = plan.filter(q => q.day === p.day).flatMap(q => q.who); return new Set(seen).size === seen.length }), 'nobody twice in a day')
+  ok(plan.every(p => p.who.every(k => cast.some(c => c.key === k))), 'characters only — never a real member (D314)')
+
+  section('A club keeps its owner through a wipe')
+  const rows = rowsToWipe([{ id: 'r-owner', userId: 'u-ross', owner: true }, { id: 'r-x', userId: 'u-x' }], new Set(), new Set())
+  eq(rows.kept, ['r-owner'], 'the owner’s row stays, keep-list or not')
+}
+
+function seedWiringTests() {
+  section('The reseed (D310, D311)')
+  const seed = read('app/admin/test-club/seed.ts')
+  ok(/createUser\(\{[\s\S]*?email_confirm: true/.test(seed), 'accounts are made with the email already confirmed')
+  ok(/testEmail\(c\.username, club\.slug\)/.test(seed), 'on the .invalid domain')
+  ok(/password: testPassword\(\)!/.test(seed) && /updateUserById\(userId, \{ password: testPassword\(\)! \}\)/.test(seed), 'with the shared password, kept in step on every reseed')
+  ok(/if \(!testPassword\(\)\) throw/.test(seed), 'refused without TEST_CLUB_PASSWORD')
+  ok(!/sendEmail|signInWithOtp|inviteUserByEmail|generateLink/.test(seed), 'sends nothing')
+  ok(/callAs\(teeTimesRoute/.test(seed), 'tee times are booked through the club’s own route, as the character')
+  ok(/process\.env\.TEST_CLUB_PASSWORD/.test(read('app/admin/test-club/characterCalls.ts')), 'characters sign in with TEST_CLUB_PASSWORD')
+  const actions = read('app/admin/test-club/actions.ts')
+  ok(/data\/test-club\/characters\.json/.test(actions), 'the reseed reads the committed cast')
+
+  section('The Demo pill and the Fictional filter (D315)')
+  ok(LIST_FILTERS.some(f => f.key === 'fictional' && f.label === 'Fictional'), 'Fictional is a filter')
+  ok(/case 'fictional': q = live\(\)\.in\('user_id'/.test(read('app/api/club/store.ts')), 'it finds the club’s characters')
+  ok(/f\.key !== 'fictional' \|\| fictional/.test(read('app/clubhouse/[slug]/members/MembersGrid.tsx')), 'offered only where the club has characters')
+  for (const f of ['app/clubhouse/[slug]/members/MembersGrid.tsx', 'app/club/[slug]/ClubTeeTimes.tsx', 'app/clubhouse/[slug]/tee-sheet/TeeSheet.tsx']) {
+    ok(/<DemoPill/.test(read(f)), `${f.split('/').slice(-1)[0]} draws the Demo pill`)
+  }
+  const pill = read('app/components/DemoPill.tsx')
+  ok(/t-label/.test(pill) && /bg-tint/.test(pill) && /text-bark/.test(pill), 'the pill: t-label, the tint, bark text')
+}
+
 async function main() {
   guardTests()
+  castTests()
+  seedWiringTests()
   ruleTests()
   await wipeTests()
   wiringTests()

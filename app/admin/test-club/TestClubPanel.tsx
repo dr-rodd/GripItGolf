@@ -4,14 +4,16 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import { MAX_KEEP, OUTSIDE_TABLES, wipeConfirmed, type Counts, type WipePreview } from '@/lib/testClub'
-import { previewWipeAction, saveKeepList, wipeAction } from './actions'
+import { previewWipeAction, saveKeepList, seedAction, wipeAction } from './actions'
 
 /**
  * One test club on /admin/test-club (D311, D314): the keep-list — Ross and
  * his friends, by username, never wiped — and the wipe, which counts what it
  * will take, asks for the club's name, and shows the rows outside the club
- * before and after so it can be seen that nothing else changed. The reseed
- * joins it in the next stage (s1); until then it only wipes.
+ * before and after so it can be seen that nothing else changed — then
+ * reseeds (s1): the characters, their accounts and places on the list, the
+ * memberships, labels and the coming week's tee times. Each half stops at
+ * about 45 seconds and is pressed on by the page until done.
  */
 export default function TestClubPanel({ club, keep }: { club: { id: string; name: string; slug: string }; keep: string[] }) {
   const router = useRouter()
@@ -22,6 +24,23 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ done: boolean; deleted: { events: number; listRows: number; accounts: number }; before: Counts; after: Counts; changed: string[] } | null>(null)
   const [pending, start] = useTransition()
+  const [seedLines, setSeedLines] = useState<string[] | null>(null)
+  const [stage, setStage] = useState<string | null>(null)
+
+  /** The reseed, pressed on until it says it is done. */
+  const reseed = async (): Promise<boolean> => {
+    const all: string[] = []
+    for (let i = 0; i < 12; i++) {
+      setStage('Reseeding…')
+      const r = await seedAction(club.id)
+      if (!r.ok) { setError(r.error); setSeedLines(all); return false }
+      all.push(...r.lines)
+      setSeedLines([...all])
+      if (r.done) return true
+    }
+    setError('The reseed is taking a long time — press Reseed to carry on.')
+    return false
+  }
 
   const save = () => start(async () => {
     setKeepMsg(null)
@@ -36,11 +55,24 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
     setPreview(r.preview)
   })
   const wipe = () => start(async () => {
-    setError(null)
-    const r = await wipeAction(club.id, typed)
-    if (!r.ok) { setError(r.error); return }
-    setResult(r)
-    if (r.done) { setPreview(null); setTyped('') }
+    setError(null); setSeedLines(null)
+    // The wipe, pressed on until done; then the reseed.
+    for (let i = 0; i < 12; i++) {
+      setStage('Wiping…')
+      const r = await wipeAction(club.id, typed)
+      if (!r.ok) { setError(r.error); setStage(null); return }
+      setResult(r)
+      if (r.done) break
+    }
+    setPreview(null); setTyped('')
+    await reseed()
+    setStage(null)
+    router.refresh()
+  })
+  const reseedOnly = () => start(async () => {
+    setError(null); setResult(null)
+    await reseed()
+    setStage(null)
     router.refresh()
   })
 
@@ -68,15 +100,21 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
 
       {/* The wipe */}
       <div className="mt-6 pt-5 border-t border-line">
-        <h3 className="t-label text-ink">Wipe</h3>
+        <h3 className="t-label text-ink">Wipe and reseed</h3>
         <p className="t-cap text-ink/65 mt-1">
-          Takes out every event, booking, label, preset, award and list row of the club, and its fictional accounts. Keeps the club itself — its name, address, crest, art and home course — and the keep-list. The reseed arrives in the next stage.
+          Takes out every event, booking, label, preset, award and list row of the club, and its fictional accounts. Keeps the club itself — its name, address, crest, art and home course — the club’s owners and the keep-list. Then seeds the characters afresh: their accounts (each signs in with TEST_CLUB_PASSWORD), memberships, labels, handicaps and the coming week’s tee times.
         </p>
         {!preview && (
-          <button type="button" onClick={count} disabled={pending} className={`${buttonClass('secondary', false)} mt-3`}>
-            {pending ? 'Counting…' : 'Count what it would take'}
-          </button>
+          <div className="flex flex-wrap gap-3 mt-3">
+            <button type="button" onClick={count} disabled={pending} className={buttonClass('secondary', false)}>
+              {pending && !stage ? 'Counting…' : 'Count what it would take'}
+            </button>
+            <button type="button" onClick={reseedOnly} disabled={pending} className={buttonClass('quiet', false)}>
+              Reseed without wiping
+            </button>
+          </div>
         )}
+        {stage && <p role="status" className="t-cap text-ink/65 mt-3">{stage}</p>}
 
         {preview && (
           <div className="mt-4">
@@ -95,7 +133,7 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
             <input id={`confirm-${club.id}`} className={FIELD} value={typed} onChange={e => { setTyped(e.target.value); setError(null) }} autoComplete="off" />
             <div className="flex flex-wrap gap-3 mt-3">
               <button type="button" onClick={wipe} disabled={pending || !wipeConfirmed(typed, club.name)} className={buttonClass('danger', false)}>
-                {pending ? 'Wiping…' : 'Wipe the club'}
+                {pending ? 'Working…' : 'Wipe and reseed'}
               </button>
               <button type="button" onClick={() => { setPreview(null); setTyped(''); setError(null) }} disabled={pending} className={buttonClass('quiet', false)}>
                 Cancel
@@ -109,7 +147,7 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
         {result && (
           <div className="mt-4" role="status">
             <p className="t-cap text-ink">
-              {result.done ? 'Wiped.' : 'Wiped partway — press Wipe the club again to carry on.'}{' '}
+              {result.done ? 'Wiped.' : 'Wiped partway — press Wipe and reseed again to carry on.'}{' '}
               {result.deleted.events} events, {result.deleted.listRows} list rows and {result.deleted.accounts} fictional accounts deleted.
             </p>
             <table className="mt-3 t-cap w-full max-w-md">
@@ -130,6 +168,11 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
                 : 'Nothing outside the club changed.'}
             </p>
           </div>
+        )}
+        {seedLines && seedLines.length > 0 && (
+          <ul className="mt-4 t-cap text-ink space-y-1" role="status">
+            {seedLines.map((l, i) => <li key={i}>{l}</li>)}
+          </ul>
         )}
       </div>
     </section>

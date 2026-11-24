@@ -19,6 +19,7 @@ import { useShell } from '../ShellContext'
 import { useCategories } from '../useCategories'
 import RowPanel, { indexValue, tickWhy } from './RowPanel'
 import PasteSheet, { UPLOAD_ACCEPT, readListFile } from './PasteSheet'
+import DemoPill from '@/app/components/DemoPill'
 
 type Field = 'name' | 'email' | 'memberNumber' | 'guiNumber' | 'handicapIndex' | 'birthDate'
 const FIELDS: Field[] = ['name', 'email', 'memberNumber', 'guiNumber', 'handicapIndex']
@@ -74,6 +75,8 @@ export default function MembersGrid() {
   const [desc, setDesc] = useState(false)
   const [page, setPage] = useState(0)
   const [data, setData] = useState<{ grid: GridRow[]; total: number } | null>(null)
+  // D315: the club has fictional members (a test club) — offers the Fictional filter.
+  const [fictional, setFictional] = useState(false)
   const [lost, setLost] = useState(false)
   const [reload, setReload] = useState(0)
   const [ticked, setTicked] = useState<Set<string>>(new Set())
@@ -164,7 +167,7 @@ export default function MembersGrid() {
     }
     void askClub('page', { clubId: club.id, q: searched, filter, sort, desc, page, ...people }).then(r => {
       if (!live) return
-      if (r.ok && r.grid) { setData({ grid: r.grid, total: r.total ?? r.grid.length }); setLost(false) } else setLost(true)
+      if (r.ok && r.grid) { setData({ grid: r.grid, total: r.total ?? r.grid.length }); setFictional(!!r.fictional); setLost(false) } else setLost(true)
     })
     return () => { live = false }
   }, [club.id, searched, filter, sort, desc, page, reload, gender, category, ages])
@@ -349,7 +352,7 @@ export default function MembersGrid() {
         </div>
         <div className={`${filtersOpen ? 'flex' : 'hidden'} md:contents flex-col gap-3 w-full`}>
         <select value={filter} onChange={e => chooseFilter(e.target.value as ListFilter)} aria-label="Show" className={`${FIELD} ch-focus md:max-w-[240px]`}>
-          {LIST_FILTERS.map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
+          {LIST_FILTERS.filter(f => f.key !== 'fictional' || fictional || filter === 'fictional').map(f => <option key={f.key} value={f.key}>{f.label}</option>)}
         </select>
         <select value={gender} onChange={e => setGender(e.target.value as typeof gender)} aria-label="Gender" className={`${FIELD} ch-focus md:max-w-[180px]`}>
           <option value="">Any gender</option>
@@ -510,6 +513,7 @@ export default function MembersGrid() {
                               aria-label={`${HEAD[f]} for ${r.name}: ${text || 'empty'}. Change`}
                               className={`ch-focus block -mx-2 w-[calc(100%+1rem)] min-h-9 px-2 rounded-tile text-[15px] truncate ${right ? 'text-right tabular-nums' : 'text-left'} ${failedCell === key ? 'border border-rust text-rust-deep' : ''} ${f === 'name' ? 'text-ink font-medium' : 'text-ink/80'} ${r.removed ? 'line-through text-ink/50' : ''}`}>
                               {text || <span className="text-ink/65">—</span>}
+                              {f === 'name' && r.demo && <DemoPill className="ml-2" />}
                             </button>
                           )}
                         </td>
@@ -554,7 +558,7 @@ export default function MembersGrid() {
                 </span>
                 <button type="button" onClick={() => setPanel({ row: r })} className="flex-1 min-w-0 text-left flex items-center gap-3 min-h-14 pl-3 pr-4 py-3 press">
                   <span className="flex-1 min-w-0">
-                    <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}</span>
+                    <span className={`block text-[17px] font-medium leading-snug ${r.removed ? 'text-ink/50 line-through' : 'text-ink'}`}>{r.name}{r.demo && <DemoPill className="ml-2" />}</span>
                     <span className="block t-cap text-ink/65 mt-0.5">{[r.memberNumber ? `No. ${r.memberNumber}` : null, r.handicapIndex !== null ? `Index ${indexLabel(r.handicapIndex)}` : null, catName(r.categoryId)].filter(Boolean).join(' · ') || (r.email ?? 'No email')}</span>
                   </span>
                   <StandingPill s={standingOf(r)} />
