@@ -8,7 +8,10 @@ import { findAccount } from '../accounts'
 import { isTestClubId, wipeStore } from './store'
 import { previewWipe, runWipe, type WipeOutcome } from './wipe'
 import type { WipePreview } from '@/lib/testClub'
-import { readCharacters, type Banter } from '@/lib/testClub'
+import { readCharacters, readWeek, type Banter } from '@/lib/testClub'
+import { irishToday } from '@/lib/clubs'
+import { WEEKS } from '@/data/test-club/weeks'
+import { loadWeek } from './week'
 import charactersFile from '@/data/test-club/characters.json'
 import banterFile from '@/data/test-club/season-banter.json'
 import { runSeed, type SeedProgress } from './seed'
@@ -97,5 +100,32 @@ export async function seedAction(clubId: string): Promise<({ ok: true } & SeedPr
   } catch (e) {
     console.error('seed failed:', e)
     return { ok: false, error: e instanceof Error && e.message ? e.message : 'The reseed stopped partway — press again to carry on.' }
+  }
+}
+
+/**
+ * Loading a week file (D312), about forty-five seconds a press — the page
+ * presses on until it says it is done. A week naming anybody who is not a
+ * character is refused whole (D314). Loaded again, it changes nothing.
+ */
+export async function loadWeekAction(clubId: string, week: string): Promise<{ ok: true; done: boolean; lines: string[] } | { ok: false; error: string }> {
+  if (!(await requireAdmin())) return { ok: false, error: SIGNED_OUT }
+  try {
+    const db = createAdminClient()
+    const club = await wipeStore(db).club(clubId)
+    if (club === 'not_ready') return { ok: false, error: TEST_CLUB_NOT_READY }
+    if (!club || !club.isTest) return { ok: false, error: 'Only a test club loads a week.' }
+    const raw = (WEEKS as Record<string, unknown>)[week]
+    if (!raw) return { ok: false, error: `There is no week file for ${week}.` }
+    const cast = readCharacters(charactersFile, [])
+    if (!cast.ok) return { ok: false, error: cast.error }
+    const parsed = readWeek(raw, cast.cast)
+    if (!parsed.ok) return { ok: false, error: parsed.error }
+    const r = await loadWeek({ db, club, cast: cast.cast, week: parsed.week, today: irishToday(new Date()), deadline: Date.now() + 45_000 })
+    revalidatePath('/admin/test-club')
+    return { ok: true, ...r }
+  } catch (e) {
+    console.error('loadWeek failed:', e)
+    return { ok: false, error: e instanceof Error && e.message ? e.message : 'The week stopped partway — press again to carry on.' }
   }
 }

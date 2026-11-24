@@ -1,0 +1,397 @@
+{
+  "week": "2026-11-23",
+  "title": "Week of Mon 23 Nov 2026",
+  "note": "The first week file (D312). Monday's and Tuesday's competitions are played the moment the week is loaded; Wednesday's Seniors' and Saturday's Medal are made and booked now and played when the week is loaded again from their day. Forms are Claude Code's calls and results are never asserted in the banter: the cards are made on the day, so a line talks about the round, not the board. Strong language and crude innuendo are fine (Ross), graphic sex and slurs are not.",
+  "competitions": [
+    {
+      "key": "wk-1123-mon",
+      "name": "Monday Mixed Stableford",
+      "day": "2026-11-23",
+      "scoring": "stableford",
+      "players": {
+        "jed": "wild",
+        "cj": "steady",
+        "elizabeth": "good",
+        "sloan": "hot",
+        "paddy": "steady",
+        "don": "poor",
+        "gob": "poor",
+        "michael": "good",
+        "tom": "steady",
+        "pierce": "awful",
+        "elaine": "steady"
+      },
+      "groups": [
+        [
+          "jed",
+          "cj",
+          "elizabeth",
+          "sloan"
+        ],
+        [
+          "paddy",
+          "don",
+          "gob",
+          "michael"
+        ],
+        [
+          "tom",
+          "pierce",
+          "elaine"
+        ]
+      ],
+      "set": [
+        {
+          "who": "jed",
+          "hole": 12,
+          "gross": 3
+        }
+      ],
+      "certify": true,
+      "statuses": {
+        "jed": "Monday Stableford: the one competition where creative scoring is the point. A three on the 12th. I have a witness. He's a tree.",
+        "cj": "Played with the President, his bag man and a woman who asked me what time the West Wing locks up. Three hours of my life. Need a Scotch.",
+        "elizabeth": "Lovely round! Met so many interesting people. Learned a few things. Wrote nothing down. Honestly.",
+        "sloan": "Played the back nine in 17 points. Dreadful. Looked at the data. The data is me. Moving on.",
+        "paddy": "Perfect rhythm from the 4th to the 11th. Then I thought about my grip. Never think about your grip. Think about rhythm. Not your grip.",
+        "don": "Monday. A day for golf, or the other thing. Chose golf. Chose it twice. Chose the bar after.",
+        "gob": "Hit a trick shot over the lake on the 5th. Landed. In the lake. Another trick: I walked on water. Just kidding. Fetching my shoes.",
+        "michael": "Quiet round. No dramas, no ego, no brother making an entrance. I only took one deep breath on the 14th, which is a personal best.",
+        "tom": "Modern balls go too far. Modern clubs go too far. Modern fourballs have too many women in them. Played my age plus fifteen.",
+        "pierce": "Shot a score I'm not going to share. It's a round for people with more imagination than skill. I have both. The first, anyway.",
+        "elaine": "Played with Tom and Pierce. They argued about whose money was older. I'm thirty years younger and the only one with a sense of humour."
+      },
+      "comments": [
+        {
+          "on": "jed",
+          "by": "cj",
+          "text": "Sir, the tree did not witness it. The tree was on the other side of the fence. I watched you drop a second ball in the rough and walk off whistling. You were whistling the national anthem."
+        },
+        {
+          "on": "jed",
+          "by": "elizabeth",
+          "text": "Congratulations on the three, Mr President! Is that a security detail or a caddie in the bushes? Which agency, if I might ask? Just curious."
+        },
+        {
+          "on": "jed",
+          "by": "sloan",
+          "text": "Jed, your three on the 12th is a 4.6 standard deviations from your mean. The tree is not a statistically valid witness."
+        },
+        {
+          "on": "jed",
+          "by": "jed",
+          "text": "Sloan, trees are among the most reliable witnesses in the historical record. See: the Oak of Mamre. See also: your last two comments, which I'd consider hearsay."
+        },
+        {
+          "on": "cj",
+          "by": "elizabeth",
+          "text": "CJ, I only asked because my cousin is thinking of visiting. What time do they usually lock up? And is there a back door?"
+        },
+        {
+          "on": "cj",
+          "by": "cj",
+          "text": "Elizabeth, you've asked about the doors five times now. Next time ask about the garden. It's lovely. It's also under surveillance."
+        },
+        {
+          "on": "paddy",
+          "by": "gob",
+          "text": "Paddy, thinking about your grip is the only thing you've ever done that ended in a happy finish."
+        },
+        {
+          "on": "gob",
+          "by": "michael",
+          "text": "Gob, the lake is eleven feet deep and full of other people's golf balls and one wedding ring. I don't know whose. Don't ask me how I know."
+        },
+        {
+          "on": "gob",
+          "by": "don",
+          "text": "He walked on water, but only after the lifeguard blew the whistle. I enjoyed it very much, I'm sorry to say."
+        },
+        {
+          "on": "don",
+          "by": "elaine",
+          "text": "Don, twice? I counted three trips to the bar between the 14th and 16th, and a conversation with a woman in a visor that went on far too long."
+        },
+        {
+          "on": "don",
+          "by": "don",
+          "text": "Elaine, that was market research."
+        },
+        {
+          "on": "tom",
+          "by": "sloan",
+          "text": "Tom, 'too many women in the fourball': the field was two women and one tree. You're losing to a statistical rounding error."
+        },
+        {
+          "on": "pierce",
+          "by": "elaine",
+          "text": "Pierce has more imagination than skill. That's accurate. His imagination is shit too."
+        },
+        {
+          "on": "elaine",
+          "by": "tom",
+          "text": "Elaine, my money is older than your family tree. Show some respect for your elders."
+        },
+        {
+          "on": "elaine",
+          "by": "sloan",
+          "text": "Tom, your money is older than the euro, and about as useful."
+        }
+      ]
+    },
+    {
+      "key": "wk-1124-ladies",
+      "name": "Tuesday Ladies' Stableford",
+      "day": "2026-11-24",
+      "scoring": "stableford",
+      "entry": {
+        "genders": [
+          "F"
+        ]
+      },
+      "players": {
+        "sloan": "good",
+        "elaine": "steady",
+        "cj": "hot",
+        "elizabeth": "steady"
+      },
+      "groups": [
+        [
+          "sloan",
+          "elaine",
+          "cj",
+          "elizabeth"
+        ]
+      ],
+      "certify": true,
+      "statuses": {
+        "cj": "Ladies' day. A round without a single mention of the Constitution, the pool or the Commander-in-Chief. Sort of. I said it once on the 9th.",
+        "sloan": "Eleven fairways, four three-putts. One bar of chocolate on the 11th. All fuel, all spreadsheet-justified.",
+        "elaine": "Played well, apparently. I was thinking about the guy in the pro shop. He's got great forearms. Don't tell Sloan.",
+        "elizabeth": "Another lovely ladies' round. I asked CJ about her weekend and I think she's warming to me. Honestly I'm just a regular golfer."
+      },
+      "comments": [
+        {
+          "on": "elaine",
+          "by": "sloan",
+          "text": "I knew it. I saw you staring. Forearms. Nine out of ten, Elaine. I'd be embarrassed too."
+        },
+        {
+          "on": "elaine",
+          "by": "tom",
+          "text": "A ladies' day on a Tuesday. In my day you'd have been at home with the washing."
+        },
+        {
+          "on": "elaine",
+          "by": "elaine",
+          "text": "Tom, in your day you'd have been at home too. Your wife had the sense to leave you the house. I'd rather be here."
+        },
+        {
+          "on": "cj",
+          "by": "elizabeth",
+          "text": "CJ, you played so well! Is the President as relaxed as you? Do you ever play together? Just the two of you? With nobody else around?"
+        },
+        {
+          "on": "cj",
+          "by": "cj",
+          "text": "Elizabeth, no. And please stop. The next one goes in the file."
+        },
+        {
+          "on": "sloan",
+          "by": "cj",
+          "text": "Sloan, chocolate is fine. Chocolate and a three-putt is a lifestyle."
+        },
+        {
+          "on": "elizabeth",
+          "by": "pierce",
+          "text": "Elizabeth, a woman who listens that closely is a woman who wants to be listened to. My door is always open. Like my heart. Like my wallet."
+        },
+        {
+          "on": "elizabeth",
+          "by": "elaine",
+          "text": "Elizabeth, Pierce's heart is a revolving door and his wallet is a hostage situation. Run."
+        }
+      ]
+    },
+    {
+      "key": "wk-1125-seniors",
+      "name": "Wednesday Seniors' Stableford",
+      "day": "2026-11-25",
+      "scoring": "stableford",
+      "entry": {
+        "membership": "Senior"
+      },
+      "players": {
+        "tom": "steady",
+        "pierce": "poor"
+      },
+      "groups": [
+        [
+          "tom",
+          "pierce"
+        ]
+      ],
+      "certify": true,
+      "statuses": {
+        "tom": "Wednesday Seniors. A true test of character, knees and the contents of one's flask.",
+        "pierce": "Another day, another victory over the elderly. Not that I count Tom as elderly. He's more of a fossil."
+      },
+      "comments": [
+        {
+          "on": "tom",
+          "by": "sloan",
+          "text": "Tom, a flask is not a club. Please leave it in the bag."
+        },
+        {
+          "on": "pierce",
+          "by": "cj",
+          "text": "Pierce, a two-man field is a duel, not a victory. And only one of you has a pistol."
+        },
+        {
+          "on": "pierce",
+          "by": "elaine",
+          "text": "Pierce called Tom a fossil. Tom gave him one look. I've never seen a man age ten years in a second."
+        },
+        {
+          "on": "tom",
+          "by": "don",
+          "text": "Tom, I once met a man with a flask like yours. He's now a very, very happy man. And a bit dead."
+        }
+      ]
+    },
+    {
+      "key": "wk-1128-medal",
+      "name": "Saturday Medal",
+      "day": "2026-11-28",
+      "scoring": "strokes",
+      "players": {
+        "paddy": "good",
+        "jed": "wild",
+        "gob": "steady",
+        "don": "steady",
+        "sloan": "steady",
+        "michael": "good",
+        "elaine": "poor",
+        "tom": "steady",
+        "pierce": "steady",
+        "cj": "steady"
+      },
+      "groups": [
+        [
+          "paddy",
+          "jed",
+          "gob",
+          "don"
+        ],
+        [
+          "sloan",
+          "michael",
+          "elaine"
+        ],
+        [
+          "tom",
+          "pierce",
+          "cj"
+        ]
+      ],
+      "certify": true,
+      "statuses": {
+        "paddy": "Saturday Medal. Every shot counts and I made all of them count. In my head. The card disagrees. The card is a liar.",
+        "jed": "Medal day. I carried my own bag, played the ball as it lay and counted every stroke. Don't verify that.",
+        "gob": "Told the starter I'd open with a trick shot. He asked me not to. I did it on the 2nd. We're not speaking.",
+        "don": "Medal play. Better than match play, because there's nobody to talk to. Mostly.",
+        "sloan": "Medal day, level with the field on fairways in regulation. The field is wrong.",
+        "michael": "Steady round, no dramas. My brother tried a trick shot on the 9th. I apologised to the groundstaff on his behalf.",
+        "elaine": "Played well, played badly, played with Sloan. Her stats are scary. I'm just here for the sandwich.",
+        "tom": "Medal day on a Saturday. A proper day for proper golfers, with proper manners, and not a woman in sight. Oh. Wait.",
+        "pierce": "Saturday Medal. My day. My dirt. My caddie, who is also my chauffeur.",
+        "cj": "Medal day. The bag was heavier than the Constitution. And this time I didn't carry the President's."
+      },
+      "comments": [
+        {
+          "on": "paddy",
+          "by": "gob",
+          "text": "Paddy, the card isn't lying. You are. To yourself. Every Saturday."
+        },
+        {
+          "on": "jed",
+          "by": "cj",
+          "text": "Sir, no, you didn't carry your own bag. The bag carried itself. It has legs, and a staff of four."
+        },
+        {
+          "on": "jed",
+          "by": "jed",
+          "text": "CJ, I carried it spiritually. Which is the only valid way."
+        },
+        {
+          "on": "gob",
+          "by": "michael",
+          "text": "Gob, I'd like it on record that I didn't see it. I saw the aftermath. It involved a swan."
+        },
+        {
+          "on": "don",
+          "by": "elaine",
+          "text": "Don, a day without a bar story is a day without a golf round. Which is it?"
+        },
+        {
+          "on": "elaine",
+          "by": "sloan",
+          "text": "Elaine, I'm not scary. I'm accurate. And the sandwich was a bad call on the 12th."
+        },
+        {
+          "on": "tom",
+          "by": "cj",
+          "text": "Tom, there were three women in the field. Two were in your group. One was carrying your bag. Count again."
+        },
+        {
+          "on": "tom",
+          "by": "sloan",
+          "text": "And Tom's the only man in the field who can cancel his own tee time by turning up."
+        },
+        {
+          "on": "pierce",
+          "by": "don",
+          "text": "Pierce, a caddie who is also your chauffeur is just an employee who hates his job twice."
+        },
+        {
+          "on": "cj",
+          "by": "elizabeth",
+          "text": "CJ, which bag did the President carry, if he didn't? Is it the same bag he takes to meetings? Is it the black one?"
+        },
+        {
+          "on": "cj",
+          "by": "cj",
+          "text": "Elizabeth, I like you. I really do. Stop."
+        }
+      ]
+    }
+  ],
+  "casual": [
+    {
+      "day": "2026-11-26",
+      "time": "10:30",
+      "who": [
+        "don",
+        "michael"
+      ]
+    },
+    {
+      "day": "2026-11-27",
+      "time": "12:00",
+      "who": [
+        "jed",
+        "cj",
+        "elizabeth"
+      ]
+    },
+    {
+      "day": "2026-11-29",
+      "time": "09:30",
+      "who": [
+        "paddy",
+        "sloan",
+        "elaine"
+      ]
+    }
+  ]
+}

@@ -22,7 +22,8 @@ import { LIST_FILTERS } from '../lib/clubhouse'
 import { seasonPlan, groupsOf, banterIssue, dotPlan, type Banter } from '../lib/testClub'
 import { makeCard, holePoints, targetOver, seeded, extraHoleGross } from '../lib/testClubCards'
 import { scoreMatch, type CourseHole, type MatchPlayerSpec } from '../lib/testClubMatch'
-import { matchPlayPlan, stageOf } from '../lib/testClub'
+import { matchPlayPlan, stageOf, readWeek, weekSteps, weekStatus, weekDays } from '../lib/testClub'
+import { WEEKS } from '../data/test-club/weeks'
 import type { WipeRow } from '../lib/testClub'
 
 let passed = 0, failed = 0
@@ -325,10 +326,12 @@ function seedWiringTests() {
   const calls = read('app/admin/test-club/characterCalls.ts')
   ok(/getUser\(held\.token\)/.test(calls), 'a token kept from an earlier press is checked before it is used')
   ok(/updateUserById\(account\.id, \{ password \}\)/.test(calls) && calls.indexOf('updateUserById') > calls.indexOf('passwordSignIn(email, password)'), 'a password changed in Vercel is brought into line only when the sign-in is refused')
-  ok(/club_tee_bookings'\)\.select\('id'\)/.test(seed) && seed.indexOf("from('club_tee_bookings')") < seed.indexOf('characterToken(testEmail(first.username'), 'casual times already booked are found without signing in')
+  const casualSrc = read('app/admin/test-club/casual.ts')
+  ok(/club_tee_bookings'\)\.select\('id'\)/.test(casualSrc) && casualSrc.indexOf("from('club_tee_bookings')") < casualSrc.indexOf('characterToken(testEmail(first.username'), 'casual times already booked are found without signing in')
+  ok(/bookCasual\(/.test(seed), 'the reseed books its coming week through the one casual booker')
   ok(/if \(!testPassword\(\)\) throw/.test(seed), 'refused without TEST_CLUB_PASSWORD')
   ok(!/sendEmail|signInWithOtp|inviteUserByEmail|generateLink/.test(seed), 'sends nothing')
-  ok(/callAs\(teeTimesRoute/.test(seed), 'tee times are booked through the club’s own route, as the character')
+  ok(/callAs\(teeTimesRoute/.test(casualSrc), 'tee times are booked through the club’s own route, as the character')
   ok(/process\.env\.TEST_CLUB_PASSWORD/.test(read('app/admin/test-club/characterCalls.ts')), 'characters sign in with TEST_CLUB_PASSWORD')
   const actions = read('app/admin/test-club/actions.ts')
   ok(/data\/test-club\/characters\.json/.test(actions), 'the reseed reads the committed cast')
@@ -514,6 +517,95 @@ function matchPlayTests() {
   ok(read('app/admin/test-club/seed.ts').indexOf('playMatchPlay(') > read('app/admin/test-club/seed.ts').indexOf('postBanter('), 'after the season and its banter')
 }
 
+// ─── Week files (D312) ──────────────────────────────────────────
+
+function weekTests() {
+  const cast = (readCharacters(JSON.parse(read('data/test-club/characters.json')), []) as { ok: true; cast: Character[] }).cast
+  const deny = readDenyList(read('data/test-club/deny-list.txt'))
+
+  section('Every week file is registered, and reads')
+  const files = fs.readdirSync('data/test-club/weeks').filter(f => /^\d{4}-\d{2}-\d{2}\.json$/.test(f)).map(f => f.replace('.json', '')).sort()
+  eq(Object.keys(WEEKS).sort(), files, 'data/test-club/weeks/index.ts lists every file in the folder — and none that is not there')
+  ok(files.length >= 1, 'at least the first week')
+  for (const wk of files) {
+    const parsed = readWeek(JSON.parse(read(`data/test-club/weeks/${wk}.json`)), cast)
+    ok(parsed.ok, `${wk}.json reads${parsed.ok ? '' : `: ${parsed.error}`}`)
+    if (!parsed.ok) continue
+    const w = parsed.week
+    eq(w.week, wk, `${wk}: named for its Monday`)
+    const lines = w.competitions.flatMap(c => [...Object.values(c.statuses ?? {}), ...(c.comments ?? []).map(x => x.text)])
+    ok(lines.every(t => deniedName(t, deny) === null), `${wk}: no real living person named`)
+    for (const c of w.competitions) {
+      const cs = c.comments ?? []
+      ok(cs.filter(x => x.by === 'tom').every(t => cs.some((r, i) => r.on === t.on && r.by !== 'tom' && i > cs.indexOf(t))), `${c.name}: Old Tom is always answered on the same card`)
+      ok(cs.filter(x => x.by === 'pierce').every(t => cs.some((r, i) => r.on === t.on && r.by !== 'pierce' && i > cs.indexOf(t))), `${c.name}: Pierce is always answered too`)
+    }
+    ok(w.competitions.every(c => !c.entry?.genders || c.groups.flat().every(k => cast.find(x => x.key === k)?.gender === 'F')), `${wk}: a ladies’ competition has only women`)
+    ok(w.competitions.every(c => !c.entry?.membership || c.groups.flat().every(k => cast.find(x => x.key === k)?.membership === c.entry!.membership)), `${wk}: a membership’s competition has only its members`)
+    ok(w.competitions.every(c => new Date(`${c.day}T12:00:00Z`).getUTCDay() !== 6 || !c.groups.flat().includes('elizabeth')), `${wk}: a 6 Day member never on a Saturday`)
+  }
+
+  section('A week file that would touch a real member is refused (D314)')
+  const base = JSON.parse(read('data/test-club/weeks/2026-11-23.json'))
+  const withPlayer = (k: string) => { const b = JSON.parse(JSON.stringify(base)); b.competitions[0].players[k] = 'steady'; b.competitions[0].groups[0].push(k); return b }
+  const real = readWeek(withPlayer('ross'), cast)
+  ok(!real.ok && /real member/.test(real.error), 'a real friend among the players')
+  const casualReal = JSON.parse(JSON.stringify(base)); casualReal.casual[0].who = ['don', 'ross']
+  ok(!readWeek(casualReal, cast).ok, 'a real friend in a casual time')
+  const commentReal = JSON.parse(JSON.stringify(base)); commentReal.competitions[0].comments.push({ on: 'jed', by: 'ross', text: 'hello' })
+  ok(!readWeek(commentReal, cast).ok, 'a real friend writing a comment')
+  const wrongDay = JSON.parse(JSON.stringify(base)); wrongDay.competitions[0].day = '2026-12-05'
+  ok(!readWeek(wrongDay, cast).ok, 'a day outside the week')
+  const notMonday = { ...base, week: '2026-11-24' }
+  ok(!readWeek(notMonday, cast).ok, 'a week that does not start on a Monday')
+  const dup = JSON.parse(JSON.stringify(base)); dup.competitions[1].key = dup.competitions[0].key
+  ok(!readWeek(dup, cast).ok, 'two competitions with one key')
+  const orphan = JSON.parse(JSON.stringify(base)); orphan.competitions[0].groups[0].pop()
+  ok(!readWeek(orphan, cast).ok, 'a player with form in no group')
+  const sp = JSON.parse(JSON.stringify(base)); sp.competitions[1].set = [{ who: 'jed', hole: 5, gross: 3 }]
+  ok(!readWeek(sp, cast).ok, 'a set piece for somebody not playing')
+  const mp = JSON.parse(JSON.stringify(base)); mp.competitions[3].comments.push({ on: 'elizabeth', by: 'cj', text: 'x' })
+  ok(!readWeek(mp, cast).ok, 'a comment on a card that does not exist')
+  const badForm = JSON.parse(JSON.stringify(base)); badForm.competitions[0].players.jed = 'legendary'
+  ok(!readWeek(badForm, cast).ok, 'a form that is not a word or a number')
+  eq(weekDays('2026-11-23').length, 7, 'a week is seven days, Monday first')
+
+  section('Steps, hashes and status')
+  const w = (readWeek(base, cast) as { ok: true; week: import('../lib/testClub').WeekFile }).week
+  const steps = weekSteps(w)
+  eq(steps.length, 4 * 2 + 3, 'a competition and its banter each, and each casual time')
+  eq(JSON.stringify(weekSteps(w)), JSON.stringify(steps), 'the same steps every time')
+  const changed = JSON.parse(JSON.stringify(base)); changed.competitions[0].players.jed = 'hot'
+  const w2 = (readWeek(changed, cast) as { ok: true; week: import('../lib/testClub').WeekFile }).week
+  ok(weekSteps(w2)[0].hash !== steps[0].hash, 'a competition changed in the file is done again')
+  eq(weekSteps(w2)[1].hash, steps[1].hash, 'its banter, unchanged, is not')
+  const done = new Map<string, string>()
+  eq(weekStatus(steps, done, '2026-11-24').state, 'none', 'nothing loaded')
+  for (const st of steps.filter(x => !x.from || x.from <= '2026-11-24')) done.set(st.id, st.hash)
+  const partly = weekStatus(steps, done, '2026-11-24')
+  eq([partly.state, partly.waitingFor], ['partly', '2026-11-25'], 'part loaded, waiting for Wednesday')
+  for (const st of steps) done.set(st.id, st.hash)
+  eq(weekStatus(steps, done, '2026-11-30').state, 'loaded', 'everything loaded')
+  eq(weekStatus(steps, new Map(steps.map(x => [x.id, 'old'])), '2026-11-30').state, 'none', 'a step recorded under another hash is not done')
+
+  section('The loader and the page')
+  const wk = read('app/admin/test-club/week.ts')
+  for (const fn of ['playCompetition', 'postBanter', 'bookCasual']) ok(new RegExp(`await ${fn}\\(`).test(wk), `${fn} — the same engines as the season`)
+  ok(/recorded\.get\(id\) === steps\.get\(id\)!\.hash/.test(wk), 'a step is skipped only when recorded against the same hash')
+  ok(/if \(r\.complete\) await record/.test(wk), 'a competition is recorded only once it is complete — certified this evening, not before')
+  ok(/c\.day < today/.test(wk), 'a casual day gone by is done with, never waited for')
+  const act = read('app/admin/test-club/actions.ts')
+  ok(/isTest|only a test club loads a week/i.test(act) && act.indexOf('readWeek(raw') < act.indexOf('await loadWeek('), 'a week is read and checked whole before anything is loaded')
+  const play = read('app/admin/test-club/play.ts')
+  ok(/ctx\.today && spec\.day > ctx\.today/.test(play), 'a day still to come is made and booked, not played')
+  ok(/notFuture\(at\(spec\.day, '10:00', 6\)\)/.test(play), 'its clock never runs ahead of now')
+  ok(/\.neq\('kind', 'comment'\)/.test(play), 'dating the feed never flattens a comment’s own time')
+  ok(/adopt\?: \{ name: string; day: string \}/.test(play), 'a competition the club already has that day by that name is resolved, never doubled')
+  const page = read('app/admin/test-club/page.tsx')
+  ok(/Object\.keys\(WEEKS\)/.test(page) && /weekStatus\(/.test(page), 'the page lists the week files with their status')
+  ok(/loadWeekAction\(club\.id, week\)/.test(read('app/admin/test-club/TestClubPanel.tsx')), 'Load week presses on until done')
+}
+
 async function main() {
   guardTests()
   castTests()
@@ -521,6 +613,7 @@ async function main() {
   cardTests()
   banterTests()
   matchPlayTests()
+  weekTests()
   ruleTests()
   await wipeTests()
   wiringTests()

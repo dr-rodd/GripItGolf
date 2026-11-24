@@ -18,11 +18,11 @@ import { irishToday } from '@/lib/clubs'
 import { setIndex } from '@/app/api/handicaps/handicaps'
 import { handicapStore } from '@/app/api/handicaps/store'
 import { saveLabel } from '@/app/api/club/labelsStore'
-import { POST as teeTimesRoute } from '@/app/api/club/tee-times/route'
 import { POST as awardsRoute } from '@/app/api/club/awards/route'
 import { alreadyPlayed, playCompetition } from './play'
 import { postBanter } from './banter'
 import { playMatchPlay } from './matchplay'
+import { bookCasual } from './casual'
 import { findAccount } from '../accounts'
 import { callAs, characterToken, testPassword } from './characterCalls'
 
@@ -142,37 +142,11 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
   }
 
   // ── Casual tee times for the next seven days ──
-  const byKey = new Map(cast.map(c => [c.key, c]))
   const office = cast.find(c => c.clubhouse)
-  let booked = 0
-  for (const plan of casualPlan(cast, irishToday(new Date()))) {
-    if (late()) return { done: false, lines }
-    const first = byKey.get(plan.who[0])!
-    // Booked by an earlier press: nobody signs in to find that out.
-    const wanted = plan.who.map(k => rowOf.get(k)).filter((x): x is string => !!x)
-    const { data: have } = await db.from('club_tee_bookings').select('id').eq('club_id', club.id).eq('play_on', plan.day).in('member_id', wanted).limit(1)
-    if ((have ?? []).length > 0) continue
-    const token = await characterToken(testEmail(first.username, club.slug))
-    const day = await callAs(teeTimesRoute, '/api/club/tee-times', token, { action: 'day', clubId: club.id, date: plan.day })
-    if (day.status !== 200) { lines.push(`Tee times on ${plan.day} not read: ${String(day.body.error ?? day.status)}`); continue }
-    const d = day.body as unknown as { times: string[]; bookings: { time: string; memberId: string | null }[]; settings: { groupSize: number } }
-    const memberIds = plan.who.map(k => rowOf.get(k)).filter((x): x is string => !!x)
-    // Booked already (an earlier reseed): left as it is.
-    if (d.bookings.some(b => b.memberId && memberIds.includes(b.memberId))) continue
-    const taken = (t: string) => d.bookings.filter(b => b.time === t).length
-    const time = d.times.find(t => t >= plan.time && taken(t) + memberIds.length <= Math.min(4, d.settings.groupSize))
-    if (!time) continue
-    const people = memberIds.map(memberId => ({ memberId }))
-    let r = await callAs(teeTimesRoute, '/api/club/tee-times', token, { action: 'book', clubId: club.id, date: plan.day, time, people })
-    // Booking not open yet, or a time under a competition: the office books it, as a club's office would.
-    if (r.status !== 200 && office) {
-      const officeToken = await characterToken(testEmail(office.username, club.slug))
-      r = await callAs(teeTimesRoute, '/api/club/tee-times', officeToken, { action: 'office.book', clubId: club.id, date: plan.day, time, people })
-    }
-    if (r.status === 200) booked++
-    else lines.push(`${plan.who.join(', ')} on ${plan.day}: ${String(r.body.error ?? r.status)}`)
-  }
-  if (booked) lines.push(`${booked} casual tee times booked over the next seven days.`)
+  const casual = await bookCasual({ db, club, cast, rowOf, wishes: casualPlan(cast, irishToday(new Date())), late })
+  lines.push(...casual.lines)
+  if (casual.booked) lines.push(`${casual.booked} casual tee times booked over the next seven days.`)
+  if (!casual.done) return { done: false, lines }
 
   // ── The season so far: eight competitions, played, signed and certified ──
   const { data: clubRow } = await db.from('clubs').select('home_course_id').eq('id', club.id).maybeSingle()

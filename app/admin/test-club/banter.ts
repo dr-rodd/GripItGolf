@@ -31,7 +31,7 @@ export async function postBanter(o: {
   const { db, spec } = o
   const lines: string[] = []
   let posted = 0
-  const comp = await findComp(db, o.club.id, spec.key)
+  const comp = await findComp(db, o.club.id, spec.key, { name: spec.name, day: spec.day })
   if (!comp) return { done: true, posted, lines }
   const byKey = new Map(o.cast.map(c => [c.key, c]))
   const tokenOf = (k: string) => characterToken(testEmail(byKey.get(k)!.username, o.club.slug))
@@ -93,7 +93,8 @@ export async function postBanter(o: {
     const id = (r.body.comment as { id?: string } | undefined)?.id
     const minutes = 15 * 60 + 30 + i * 9
     const at = irishInstant(spec.day, `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`)
-    if (id && at) await db.from('feed_items').update({ created_at: at.toISOString() }).eq('id', id)
+    // Never a moment still to come: a week loaded this morning has its afternoon's talk dated now.
+    if (id && at) await db.from('feed_items').update({ created_at: new Date(Math.min(at.getTime(), Date.now())).toISOString() }).eq('id', id)
   }
 
   // ── Dots, by each character's comment rate ──

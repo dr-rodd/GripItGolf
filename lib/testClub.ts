@@ -442,3 +442,122 @@ export function matchPlayPlan(today: string): MatchPlayPlan {
 
 /** The stage of the nth real match of a round — anything beyond the plan is waiting. */
 export const stageOf = (p: MatchPlayPlan, round: number, n: number): MatchStage => p.stages[round]?.[n] ?? 'waiting'
+
+// ─── Week files (D312) ────────────────────────────────────────────
+
+/** A casual tee time a week file books: the characters, by key, on a day at about a time. */
+export interface WeekCasual { day: string; time: string; who: string[] }
+
+/** One week of the club's play, as data/test-club/weeks/<Monday>.json holds it. */
+export interface WeekFile {
+  /** The Monday it starts on. */
+  week: string
+  title: string
+  competitions: (PlaySpec & Banter)[]
+  casual: WeekCasual[]
+}
+
+const WEEK_DAY = /^\d{4}-\d{2}-\d{2}$/
+const KEY = /^[a-z0-9-]{3,40}$/
+const CLOCK = /^([01]\d|2[0-3]):[0-5]\d$/
+const FORM_WORDS = ['hot', 'good', 'steady', 'poor', 'awful', 'wild']
+
+/** The seven days a week covers, Monday first. */
+export function weekDays(monday: string): string[] {
+  return Array.from({ length: 7 }, (_, i) => dayOffset(monday, i))
+}
+
+/**
+ * A week file read and checked whole — the week, or the first thing wrong.
+ * **Only characters** (D314): a name that is not in characters.json — a real
+ * friend's, above all — is refused, so nothing is ever booked, scored or
+ * signed for a real member.
+ */
+export function readWeek(raw: unknown, cast: readonly Character[]): { ok: true; week: WeekFile } | { ok: false; error: string } {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  const monday = String(r.week ?? '')
+  if (!WEEK_DAY.test(monday) || new Date(`${monday}T12:00:00Z`).getUTCDay() !== 1) return { ok: false, error: 'A week file names its Monday as YYYY-MM-DD.' }
+  const days = weekDays(monday)
+  const known = new Set(cast.map(c => c.key))
+  const notCharacter = (k: string) => (known.has(k) ? null : `${k} is not a character — a real member is never booked, scored or signed for (D314).`)
+  const comps = Array.isArray(r.competitions) ? r.competitions as Record<string, unknown>[] : []
+  const casual = Array.isArray(r.casual) ? r.casual as Record<string, unknown>[] : []
+  if (comps.length > 12 || casual.length > 20) return { ok: false, error: 'A week holds at most 12 competitions and 20 casual times.' }
+  const out: (PlaySpec & Banter)[] = []
+  for (const c of comps) {
+    const key = String(c.key ?? '')
+    const label = key || 'A competition'
+    if (!KEY.test(key)) return { ok: false, error: `${label}: a key is lower-case letters, numbers and dashes.` }
+    if (out.some(x => x.key === key)) return { ok: false, error: `${key}: used twice.` }
+    const name = String(c.name ?? '').trim()
+    if (!name || name.length > 60) return { ok: false, error: `${key}: a name of 1 to 60 characters.` }
+    const day = String(c.day ?? '')
+    if (!days.includes(day)) return { ok: false, error: `${key}: its day, ${day || 'none'}, is not in the week of ${monday}.` }
+    if (c.scoring !== 'stableford' && c.scoring !== 'strokes') return { ok: false, error: `${key}: scoring is stableford or strokes.` }
+    const entry = (c.entry && typeof c.entry === 'object' ? c.entry : undefined) as PlaySpec['entry']
+    if (entry?.membership && !MEMBERSHIPS.some(m => m.name === entry.membership)) return { ok: false, error: `${key}: no membership called ${entry.membership}.` }
+    const players = (c.players && typeof c.players === 'object' ? c.players : {}) as Record<string, CardForm>
+    for (const [k, f] of Object.entries(players)) {
+      const bad = notCharacter(k)
+      if (bad) return { ok: false, error: `${key}: ${bad}` }
+      if (!(typeof f === 'number' ? Number.isFinite(f) && f >= -10 && f <= 30 : FORM_WORDS.includes(f))) return { ok: false, error: `${key}: ${k}’s form is ${FORM_WORDS.join(', ')} or a number.` }
+    }
+    const groups = Array.isArray(c.groups) ? c.groups as string[][] : []
+    const grouped = groups.flat()
+    if (!groups.length || groups.some(g => !Array.isArray(g) || g.length < 1 || g.length > 4)) return { ok: false, error: `${key}: groups of one to four players.` }
+    if (new Set(grouped).size !== grouped.length) return { ok: false, error: `${key}: somebody is in two groups.` }
+    for (const k of grouped) {
+      const bad = notCharacter(k)
+      if (bad) return { ok: false, error: `${key}: ${bad}` }
+      if (!(k in players)) return { ok: false, error: `${key}: ${k} is in a group with no form.` }
+    }
+    if (Object.keys(players).some(k => !grouped.includes(k))) return { ok: false, error: `${key}: a player with form is in no group.` }
+    const set = (Array.isArray(c.set) ? c.set : []) as { who: string; hole: number; gross: number }[]
+    for (const s of set) {
+      if (!(s.who in players)) return { ok: false, error: `${key}: a set piece for ${s.who}, who is not playing.` }
+      if (!Number.isInteger(s.hole) || s.hole < 1 || s.hole > 18 || !Number.isInteger(s.gross) || s.gross < 1 || s.gross > 15) return { ok: false, error: `${key}: a set piece is a hole 1–18 and a gross 1–15.` }
+    }
+    const banter: Banter = { statuses: (c.statuses ?? {}) as Record<string, string>, comments: (c.comments ?? []) as Banter['comments'] }
+    for (const b of banter.comments ?? []) {
+      const bad = notCharacter(String(b.by))
+      if (bad) return { ok: false, error: `${key}: ${bad}` }
+    }
+    const issue = banterIssue(banter, cast, grouped)
+    if (issue) return { ok: false, error: `${key}: ${issue}` }
+    out.push({ key, name, day, scoring: c.scoring, ...(entry ? { entry } : {}), players, groups, ...(set.length ? { set } : {}), certify: c.certify !== false, ...banter })
+  }
+  const cas: WeekCasual[] = []
+  for (const c of casual) {
+    const day = String(c.day ?? ''), time = String(c.time ?? ''), who = Array.isArray(c.who) ? c.who.map(String) : []
+    if (!days.includes(day)) return { ok: false, error: `A casual time on ${day || 'no day'} is not in the week of ${monday}.` }
+    if (!CLOCK.test(time)) return { ok: false, error: `A casual time on ${day}: the time is HH:MM.` }
+    if (who.length < 2 || who.length > 4 || new Set(who).size !== who.length) return { ok: false, error: `A casual time on ${day}: two to four different players.` }
+    for (const k of who) { const bad = notCharacter(k); if (bad) return { ok: false, error: `A casual time on ${day}: ${bad}` } }
+    cas.push({ day, time, who })
+  }
+  return { ok: true, week: { week: monday, title: String(r.title ?? '').trim() || `Week of ${monday}`, competitions: out, casual: cas } }
+}
+
+/** One thing a week does, with a hash of what it is — a step recorded under a different hash is done again. */
+export interface WeekStep { id: string; label: string; hash: string; /** The day it can be done from (a competition's own day). */ from: string | null }
+
+export function weekSteps(w: WeekFile): WeekStep[] {
+  const hash = (v: unknown) => String(seedHash(JSON.stringify(v)))
+  return [
+    ...w.competitions.flatMap(c => [
+      { id: `comp:${c.key}`, label: `${c.name} played${c.certify ? ' and certified' : ''}`, hash: hash({ ...c, statuses: undefined, comments: undefined }), from: c.day },
+      ...((c.statuses && Object.keys(c.statuses).length) || c.comments?.length
+        ? [{ id: `banter:${c.key}`, label: `${c.name}: statuses and comments`, hash: hash({ s: c.statuses, c: c.comments }), from: c.day }]
+        : []),
+    ]),
+    ...w.casual.map(c => ({ id: `casual:${c.day}@${c.time}:${c.who.join('+')}`, label: `${c.who.join(', ')} booked on ${c.day}`, hash: hash(c), from: null })),
+  ]
+}
+
+/** Where a week stands: each step done, to do, or waiting for its day; and the line to say. */
+export function weekStatus(steps: readonly WeekStep[], recorded: ReadonlyMap<string, string>, today: string): { done: number; total: number; waitingFor: string | null; state: 'loaded' | 'partly' | 'none' } {
+  const isDone = (s: WeekStep) => recorded.get(s.id) === s.hash
+  const done = steps.filter(isDone).length
+  const waiting = steps.filter(s => !isDone(s) && s.from && s.from > today).map(s => s.from!).sort()[0] ?? null
+  return { done, total: steps.length, waitingFor: waiting, state: done === steps.length ? 'loaded' : done === 0 ? 'none' : 'partly' }
+}

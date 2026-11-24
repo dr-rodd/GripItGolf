@@ -4,7 +4,23 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FIELD, FIELD_LABEL, buttonClass, cardClass } from '@/app/components/ui'
 import { MAX_KEEP, OUTSIDE_TABLES, wipeConfirmed, type Counts, type WipePreview } from '@/lib/testClub'
-import { previewWipeAction, saveKeepList, seedAction, wipeAction } from './actions'
+import { loadWeekAction, previewWipeAction, saveKeepList, seedAction, wipeAction } from './actions'
+
+/** A week file and where it stands at this club (D312). */
+export interface WeekRow {
+  week: string
+  title: string
+  error: string | null
+  competitions: number
+  casual: number
+  state: 'loaded' | 'partly' | 'none'
+  done: number
+  total: number
+  /** The day the next thing waits for, if something does. */
+  waitingFor: string | null
+}
+
+const dayWords = (d: string) => new Date(`${d}T12:00:00Z`).toLocaleDateString('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 /**
  * One test club on /admin/test-club (D311, D314): the keep-list — Ross and
@@ -15,7 +31,7 @@ import { previewWipeAction, saveKeepList, seedAction, wipeAction } from './actio
  * memberships, labels and the coming week's tee times. Each half stops at
  * about 45 seconds and is pressed on by the page until done.
  */
-export default function TestClubPanel({ club, keep }: { club: { id: string; name: string; slug: string }; keep: string[] }) {
+export default function TestClubPanel({ club, keep, weeks }: { club: { id: string; name: string; slug: string }; keep: string[]; weeks: WeekRow[] }) {
   const router = useRouter()
   const [keepText, setKeepText] = useState(keep.join('\n'))
   const [keepMsg, setKeepMsg] = useState<{ ok: boolean; text: string } | null>(null)
@@ -25,6 +41,24 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
   const [result, setResult] = useState<{ done: boolean; deleted: { events: number; listRows: number; accounts: number }; before: Counts; after: Counts; changed: string[] } | null>(null)
   const [pending, start] = useTransition()
   const [seedLines, setSeedLines] = useState<string[] | null>(null)
+  const [weekLines, setWeekLines] = useState<{ week: string; lines: string[] } | null>(null)
+  const [weekError, setWeekError] = useState<string | null>(null)
+  const [loading, setLoading] = useState<string | null>(null)
+
+  /** A week file loaded, pressed on until it says it is done (about 45 seconds a press). */
+  const loadWeek = (week: string) => start(async () => {
+    setWeekError(null); setWeekLines(null); setLoading(week)
+    const all: string[] = []
+    for (let i = 0; i < 20; i++) {
+      const r = await loadWeekAction(club.id, week)
+      if (!r.ok) { setWeekError(r.error); break }
+      all.push(...r.lines)
+      setWeekLines({ week, lines: [...all] })
+      if (r.done) break
+    }
+    setLoading(null)
+    router.refresh()
+  })
   const [stage, setStage] = useState<string | null>(null)
 
   /** The reseed, pressed on until it says it is done. */
@@ -175,6 +209,43 @@ export default function TestClubPanel({ club, keep }: { club: { id: string; name
             {seedLines.map((l, i) => <li key={i}>{l}</li>)}
           </ul>
         )}
+      </div>
+
+      {/* The week files */}
+      <div className="mt-6 pt-5 border-t border-line">
+        <h3 className="t-label text-ink">Week files</h3>
+        <p className="t-cap text-ink/65 mt-1">
+          Each week is played through the club’s own screens by the characters: its competitions made and booked, played, signed, co-signed and certified once their day has come, with the banter posted. Loading a week again changes nothing, and loads what has since come due.
+        </p>
+        {weeks.length === 0 && <p className="t-cap text-ink/65 mt-3">No week file yet. Ask Claude Code to play a week.</p>}
+        <ul className="mt-3 space-y-3">
+          {weeks.map(w => (
+            <li key={w.week} className="rounded-tile border border-line p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="t-label text-ink">{w.title}</p>
+                  <p className="t-cap text-ink/65 mt-0.5">
+                    {w.error
+                      ? <span className="text-rust-deep">{w.error}</span>
+                      : <>
+                          {w.competitions} competition{w.competitions === 1 ? '' : 's'}, {w.casual} casual time{w.casual === 1 ? '' : 's'} ·{' '}
+                          {w.state === 'loaded' ? 'Loaded' : w.state === 'partly' ? `${w.done} of ${w.total} done` : 'Not loaded'}
+                          {w.waitingFor ? ` · waiting for ${dayWords(w.waitingFor)}` : ''}
+                        </>}
+                  </p>
+                </div>
+                <button type="button" onClick={() => loadWeek(w.week)} disabled={pending || !!w.error}
+                  className={buttonClass('secondary', false, true)}>
+                  {loading === w.week ? 'Loading…' : w.state === 'none' ? 'Load week' : 'Load again'}
+                </button>
+              </div>
+              {weekLines?.week === w.week && weekLines.lines.length > 0 && (
+                <ul className="mt-3 t-cap text-ink space-y-1" role="status">{weekLines.lines.map((l, i) => <li key={i}>{l}</li>)}</ul>
+              )}
+            </li>
+          ))}
+        </ul>
+        {weekError && <p role="alert" className="t-cap text-rust-deep mt-3">{weekError}</p>}
       </div>
     </section>
   )

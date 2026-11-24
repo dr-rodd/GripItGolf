@@ -43,9 +43,20 @@ export interface PlayContext {
   /** Membership ids by name. */
   cats: ReadonlyMap<string, string>
   deadline: number
+  /** The Irish day today — a competition on a later day is made and booked but not played (a week file loaded early). */
+  today?: string
 }
 
-export type PlayResult = { done: boolean; code: string | null; lines: string[] }
+export type PlayResult = {
+  done: boolean; code: string | null; lines: string[]
+  /** Its day has come: the cards are played and signed. */
+  played?: boolean
+  /** Certified (or not asked to be) — nothing more to do. */
+  complete?: boolean
+}
+
+/** A moment no later than now — a competition's own afternoon is not in the future of a week loaded this morning. */
+const notFuture = (d: Date): Date => new Date(Math.min(d.getTime(), Date.now()))
 
 export const at = (day: string, time: string, daysBefore = 0): Date => {
   const d = new Date(Date.parse(`${day}T12:00:00Z`) - daysBefore * 86_400_000).toISOString().slice(0, 10)
@@ -53,10 +64,22 @@ export const at = (day: string, time: string, daysBefore = 0): Date => {
 }
 export const said = (r: { status: number; body: unknown }) => String((r.body as { error?: string })?.error ?? r.status)
 
-/** The competition a spec made before (`test:<key>`), or null. */
-export async function findComp(db: Db, clubId: string, key: string): Promise<{ tripId: string; code: string; roundId: string } | null> {
+/**
+ * The competition a spec made before (`test:<key>`) — or, failing that, one
+ * of the club's own on the same day by the same name that nobody here made
+ * (a real competition a week file meets, D312: resolved, never doubled).
+ */
+export async function findComp(db: Db, clubId: string, key: string, adopt?: { name: string; day: string }): Promise<{ tripId: string; code: string; roundId: string } | null> {
   const { data } = await db.from('trip_private').select('trip_id').eq('club_id', clubId).eq('import_ref', `test:${key}`).maybeSingle()
-  const tripId = (data as { trip_id?: string } | null)?.trip_id
+  let tripId = (data as { trip_id?: string } | null)?.trip_id
+  if (!tripId && adopt) {
+    const { data: priv } = await db.from('trip_private').select('trip_id, import_ref').eq('club_id', clubId)
+    const free = ((priv ?? []) as { trip_id: string; import_ref: string | null }[]).filter(p => !p.import_ref?.startsWith('test:')).map(p => p.trip_id)
+    if (free.length) {
+      const { data: same } = await db.from('trips').select('id').in('id', free).eq('name', adopt.name).eq('start_date', adopt.day).eq('competition', 'club').limit(1)
+      tripId = ((same ?? []) as { id: string }[])[0]?.id
+    }
+  }
   if (!tripId) return null
   const [{ data: trip }, { data: round }] = await Promise.all([
     db.from('trips').select('trip_code').eq('id', tripId).maybeSingle(),
@@ -84,7 +107,7 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
   const keys = spec.groups.flat().filter(k => byKey.has(k))
 
   // ── Made ──
-  let comp = await findComp(db, club.id, spec.key)
+  let comp = await findComp(db, club.id, spec.key, { name: spec.name, day: spec.day })
   if (!comp) {
     const perTime = Math.max(3, ...spec.groups.map(g => g.length))
     const form: CompForm = {
@@ -99,12 +122,12 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
           }
         : null,
     }
-    const made = await runNewCompetition({ token: await tokenOf(office), clubId: club.id, form, from: 'clubhouse' }, competitionRouteStore(db), at(spec.day, '10:00', 6))
+    const made = await runNewCompetition({ token: await tokenOf(office), clubId: club.id, form, from: 'clubhouse' }, competitionRouteStore(db), notFuture(at(spec.day, '10:00', 6)))
     if (made.status !== 200) return { done: true, code: null, lines: [`${spec.name}: not made — ${said(made)}`] }
     const code = (made.body as { code: string }).code
     const { data: t } = await db.from('trips').select('id').eq('trip_code', code).single()
     await db.from('trip_private').update({ import_ref: `test:${spec.key}` }).eq('trip_id', (t as { id: string }).id)
-    comp = await findComp(db, club.id, spec.key)
+    comp = await findComp(db, club.id, spec.key, { name: spec.name, day: spec.day })
     if (!comp) return { done: true, code, lines: [`${spec.name}: made, but not found again — press again.`] }
     lines.push(`${spec.name} (${spec.day}) made.`)
   }
@@ -122,7 +145,7 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
       if (!c || !rowId) continue
       const pid = players.get(rowId)
       if (pid && bookings.some(b => b.playerId === pid)) continue
-      const r = await runBooking({ token: await tokenOf(c), action: 'book', code, slot, memberIds: [rowId] }, book, at(spec.day, '10:00', 3))
+      const r = await runBooking({ token: await tokenOf(c), action: 'book', code, slot, memberIds: [rowId] }, book, notFuture(at(spec.day, '10:00', 3)))
       if (r.status !== 200) lines.push(`${c.name} not booked into ${spec.name}: ${said(r)}`)
     }
   }
@@ -130,6 +153,11 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
   bookings = await book.bookings(roundId)
   const playerOf = (k: string) => { const row = ctx.rowOf.get(k); return row ? players.get(row) ?? null : null }
   const booked = (k: string) => { const p = playerOf(k); return !!p && bookings.some(b => b.playerId === p) }
+
+  // A day still to come: the competition is made and its players booked, as they would have been; the cards wait for the day.
+  if (ctx.today && spec.day > ctx.today) {
+    return { done: true, code, lines: [...lines, `${spec.name}: booked, to be played on ${spec.day}.`], played: false, complete: false }
+  }
 
   // The course as each player plays it.
   const [{ data: holeRows }, { data: teeRows }, { data: sigRows }] = await Promise.all([
@@ -192,7 +220,7 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
         const m = markerOf(i)
         return [playerOf(k)!, m && playerOf(m) ? { playerId: playerOf(m)! } : { memberId: ctx.rowOf.get(office.key)! }]
       }))
-      const f = await runSign({ token: await tokenOf(finaliser), action: 'finalise', code, liveRoundId: liveId, markers }, signStore(db), at(spec.day, '14:30'))
+      const f = await runSign({ token: await tokenOf(finaliser), action: 'finalise', code, liveRoundId: liveId, markers }, signStore(db), notFuture(at(spec.day, '14:30')))
       if (f.status !== 200) { lines.push(`${spec.name}: ${finaliser.name}’s group not signed — ${said(f)}`); continue }
     }
     // Every other player approves; every marker marks — each on their own account.
@@ -202,12 +230,12 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
       const pid = playerOf(k)!
       const s = signed.get(pid)
       if (!s?.approved_at) {
-        const r = await runSign({ token: await tokenOf(c), action: 'approve', code, playerId: pid }, signStore(db), at(spec.day, '14:40'))
+        const r = await runSign({ token: await tokenOf(c), action: 'approve', code, playerId: pid }, signStore(db), notFuture(at(spec.day, '14:40')))
         if (r.status !== 200) lines.push(`${c.name} did not approve: ${said(r)}`)
       }
       if (!s?.marked_at) {
         const mk = byKey.get(markerOf(i) ?? office.key)!
-        const r = await runSign({ token: await tokenOf(mk), action: 'mark', code, playerId: pid }, signStore(db), at(spec.day, '14:45'))
+        const r = await runSign({ token: await tokenOf(mk), action: 'mark', code, playerId: pid }, signStore(db), notFuture(at(spec.day, '14:45')))
         if (r.status !== 200) lines.push(`${mk.name} did not mark ${c.name}: ${said(r)}`)
       }
     }
@@ -215,21 +243,25 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
   if (keys.length) lines.push(`${spec.name}: ${keys.filter(booked).length} cards played and signed.`)
 
   // ── Certified ──
-  if (spec.certify && at(spec.day, '19:00').getTime() <= Date.now()) {
+  let certified = false
+  {
     const { data: r } = await db.from('rounds').select('certified_at').eq('id', roundId).maybeSingle()
-    if (!(r as { certified_at?: string | null } | null)?.certified_at) {
-      const c = await runCertify({ token: await tokenOf(office), action: 'certify', code }, certifyStore(db), at(spec.day, '19:00'))
-      lines.push(c.status === 200 ? `${spec.name}: certified.` : `${spec.name}: not certified — ${said(c)}`)
-    }
+    certified = !!(r as { certified_at?: string | null } | null)?.certified_at
   }
-  // What it wrote to the feed is dated the competition's day, not today.
-  await db.from('feed_items').update({ created_at: at(spec.day, '15:00').toISOString() }).eq('trip_id', tripId)
-  return { done: true, code, lines }
+  if (spec.certify && !certified && at(spec.day, '19:00').getTime() <= Date.now()) {
+    const c = await runCertify({ token: await tokenOf(office), action: 'certify', code }, certifyStore(db), notFuture(at(spec.day, '19:00')))
+    lines.push(c.status === 200 ? `${spec.name}: certified.` : `${spec.name}: not certified — ${said(c)}`)
+    certified = c.status === 200
+  }
+  // What it wrote to the feed is dated the competition's day, not today — never a comment, which is dated its own minute.
+  const stamp = notFuture(at(spec.day, '15:00')).toISOString()
+  await db.from('feed_items').update({ created_at: stamp }).eq('trip_id', tripId).neq('kind', 'comment').gt('created_at', stamp)
+  return { done: true, code, lines, played: true, complete: !spec.certify || certified }
 }
 
 /** Whether a spec is played out already — made, and certified (or every card signed where it is not to be). */
 export async function alreadyPlayed(db: Db, clubId: string, spec: PlaySpec): Promise<boolean> {
-  const comp = await findComp(db, clubId, spec.key)
+  const comp = await findComp(db, clubId, spec.key, { name: spec.name, day: spec.day })
   if (!comp) return false
   const { data } = await db.from('rounds').select('certified_at').eq('id', comp.roundId).maybeSingle()
   return spec.certify && !!(data as { certified_at?: string | null } | null)?.certified_at
