@@ -140,6 +140,8 @@ export type World = {
   /** Card players: round → trip code, trip id, player → account. */
   cards: Map<string, { code: string; tripId: string; accounts: Map<string, string> }>
   live: { playerId: string; name: string; tripId: string; clubId: string | null; userId: string | null; thru: number }[]
+  reports: { itemId: string; reporterId: string; clubId: string | null; reason: string | null; resolved: string | null }[]
+  creds: Map<string, { role: 'owner' | 'admin' | 'member'; officer?: boolean; clubhouse?: boolean }>
 }
 
 export function world(): World {
@@ -158,6 +160,8 @@ export function world(): World {
     profiles: new Set(),
     cards: new Map(),
     live: [],
+    reports: [],
+    creds: new Map(),
   }
 }
 
@@ -202,6 +206,26 @@ export function standIn(w: World): FeedStore {
     async names(ids) { return new Map(ids.map(id => [id, { name: w.rows.find(r => r.userId === id)?.name ?? id, club: 'Pints GC' }])) },
     async juniorProfile(u) { return w.profiles.has(u) },
     async liveNow() { return w.live },
+    async insertComment(o) {
+      const c = itemRow({ kind: 'comment', authorId: o.authorId, parentId: o.parentId, tripId: o.tripId, clubId: o.clubId, data: { name: o.name, text: o.text } })
+      w.items.push(c)
+      return c
+    },
+    async deleteItem(id) { w.items = w.items.filter(r => r.id !== id && r.parentId !== id) },
+    async setDot(itemId, userId, on) {
+      w.dots = w.dots.filter(d => !(d.itemId === itemId && d.userId === userId))
+      if (on) w.dots.push({ itemId, userId })
+    },
+    async insertReport(o) { if (!w.reports.some(r => r.itemId === o.itemId && r.reporterId === o.reporterId)) w.reports.push({ ...o, resolved: null }) },
+    async clubCredentials(clubId, userId) { return w.creds.get(`${clubId}:${userId}`) ?? null },
+    async isStaff() { return false },
+    async reportsFor(clubId) {
+      return w.reports.filter(r => !r.resolved && r.clubId === clubId).map((r, i) => ({ id: `rep${i}`, itemId: r.itemId, reason: r.reason, createdAt: '', item: { kind: 'card', name: '', text: '', event: null, removed: false }, reporter: r.reporterId }))
+    },
+    async resolveReports(itemId, by, outcome, at) {
+      if (outcome === 'removed') { const it = w.items.find(r => r.id === itemId); if (it) it.removedAt = at }
+      for (const r of w.reports) if (r.itemId === itemId && !r.resolved) r.resolved = outcome
+    },
     async cardPlayers(code, roundId, playerIds) {
       const c = w.cards.get(roundId)
       if (!c || c.code !== code) return null
@@ -411,6 +435,56 @@ async function coSignTests() {
   eq(fed, [{ playerId: 'p-ann', marker: 'Mark' }], 'Mark co-signs: the card goes in, “co-signed by Mark”')
 }
 
+async function socialTests() {
+  section('Comments and the dot (D301): only on a card you may see')
+  const w = world()
+  const s = standIn(w)
+  const C1 = '00000000-0000-0000-0000-0000000000c1'
+  const ask = (who: string, body: Record<string, unknown>) => runFeed({ ...body, token: `tok-${who}` }, s, NOW)
+  // Y's card is Y's friends' only (no club, no event Z is in). X is Y's friend; Z is X's friend only.
+  const ycard = itemRow({ kind: 'card', authorId: 'y', tripId: 'TY', data: { name: 'Yvonne' } })
+  w.items.push(ycard)
+  w.friends.push({ a: 'x', b: 'y', by: 'x', accepted: true }, { a: 'x', b: 'z', by: 'x', accepted: true })
+  eq((await ask('z', { action: 'comment', itemId: ycard.id, text: 'Hi' })).status, 404, 'Z cannot comment on a card Z may not see')
+  eq((await ask('z', { action: 'dot', itemId: ycard.id })).status, 404, '…nor dot it')
+  const made = await ask('x', { action: 'comment', itemId: ycard.id, text: '  Shot!  ' })
+  eq(made.status, 200, 'X, Y’s friend, comments on Y’s card')
+  const commentId = (made.body as unknown as { comment: { id: string } }).comment.id
+  eq(w.items.find(r => r.id === commentId)?.data, { name: 'x', text: 'Shot!' }, '…stored with X’s name, trimmed')
+  eq((await ask('z', { action: 'comments', itemId: ycard.id })).status, 404, 'X’s friend Z, who may not see Y’s card, sees none of its comments')
+  const zFeed = ((await ask('z', { action: 'page', stream: 'friends' })).body as unknown as { items: unknown[] }).items
+  eq(zFeed, [], '…and no item announcing X’s comment in Z’s Friends stream (the M9 test)')
+  eq(((await ask('y', { action: 'comments', itemId: ycard.id })).body as unknown as { comments: { text: string; canDelete: boolean }[] }).comments.map(c => [c.text, c.canDelete]), [['Shot!', true]], 'Y sees it, and may delete it — the card is Y’s')
+  eq(((await ask('y', { action: 'home' })).body as unknown as { newComments: number }).newComments, 1, 'a comment on your card puts a dot on Home (D307)')
+  await ask('y', { action: 'seen' })
+  eq(((await ask('y', { action: 'home' })).body as unknown as { newComments: number }).newComments, 0, '…until you have looked')
+  await ask('x', { action: 'dot', itemId: ycard.id })
+  await ask('x', { action: 'dot', itemId: ycard.id })
+  eq(w.dots.length, 1, 'a dot is once a person')
+  const yPage = ((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string; dots: number; comments: number }[] }).items.find(i => i.id === ycard.id)
+  eq([yPage?.dots, yPage?.comments], [1, 1], 'the card shows its dot and comment counts')
+  await ask('x', { action: 'dot', itemId: ycard.id, on: false })
+  eq(w.dots.length, 0, 'tapped again, it comes off')
+  w.friends.push({ a: 'c', b: 'y', by: 'c', accepted: true })
+  eq((await ask('c', { action: 'comment.delete', id: commentId })).status, 403, 'somebody else cannot delete X’s comment')
+  eq((await ask('y', { action: 'comment.delete', id: commentId })).status, 200, 'the card’s owner deletes any comment on it')
+  eq(w.items.some(r => r.id === commentId), false, '…gone')
+
+  section('Reports (D303): a club card to its Clubhouse, anything else to Green Dot')
+  const ccard = itemRow({ kind: 'card', authorId: 'y', clubId: C1, tripId: 'TC', data: { name: 'Yvonne' } })
+  w.items.push(ccard)
+  eq((await ask('x', { action: 'report', itemId: ccard.id, reason: 'Not golf' })).body, { ok: true, to: 'club' }, 'a club card’s report goes to the club')
+  eq((await ask('x', { action: 'report', itemId: ycard.id })).body, { ok: true, to: 'green_dot' }, 'a card outside a club goes to Green Dot')
+  eq((await ask('y', { action: 'report', itemId: ycard.id })).status, 400, 'nobody reports their own')
+  eq((await ask('x', { action: 'reports.club', clubId: C1 })).status, 403, 'a member without Clubhouse cannot see the club’s reports')
+  w.creds.set(`${C1}:c`, { role: 'member', clubhouse: true })
+  eq(((await ask('c', { action: 'reports.club', clubId: C1 })).body as unknown as { reports: { itemId: string }[] }).reports.map(r => r.itemId), [ccard.id], 'the Clubhouse sees its club’s report — never Green Dot’s')
+  const cPage = async () => ((await ask('x', { action: 'page', stream: `club:${C1}` })).body as unknown as { items: { id: string }[] }).items.map(i => i.id)
+  eq(await cPage(), [ccard.id], 'a report hides nothing by itself')
+  await ask('c', { action: 'reports.resolve', clubId: C1, itemId: ccard.id, outcome: 'removed' })
+  eq(await cPage(), [], 'taken down, it is gone from every stream')
+}
+
 // ─── Wiring ─────────────────────────────────────────────────────
 
 function wiringTests() {
@@ -442,6 +516,13 @@ function wiringTests() {
   ok(/gd\.feed\.stream\.v1/.test(feedUi), 'the last stream chosen is remembered on the phone')
   ok(!/setInterval/.test(feedUi), 'the feed is never polled — read on show and on coming back')
 
+  section('Wiring: comments, the dot, reports (D301, D303, D307)')
+  ok(/askFeed\('seen'\)/.test(feedUi), 'looking at your own cards clears the Home dot')
+  ok(/reports\.club/.test(read('app/clubhouse/[slug]/Overview.tsx')) && fs.existsSync('app/clubhouse/[slug]/reports/Reports.tsx'), 'a club card’s reports wait in the Clubhouse’s Alerts and its Reports page')
+  ok(/openReports\(createAdminClient\(\), null\)/.test(read('app/admin/reports/page.tsx')) && /'reports'/.test(read('app/admin/AdminShell.tsx')), 'anything else waits in /admin → Reports')
+  ok(/tidyFeed\(/.test(read('app/api/cleanup/route.ts')), 'the nightly cleanup keeps the feed to FEED_KEEP_DAYS')
+  ok(!/resend|sendEmail/i.test(read('app/api/feed/social.ts')), 'a comment never sends an email (D307)')
+
 }
 
 async function main() {
@@ -450,6 +531,7 @@ async function main() {
   await friendTests()
   await statusTests()
   await coSignTests()
+  await socialTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

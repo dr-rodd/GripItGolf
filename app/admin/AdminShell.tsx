@@ -11,13 +11,14 @@ import { buttonClass, cardClass } from '@/app/components/ui'
  * is added in exactly one place.
  */
 
-export type AdminSection = 'trips' | 'live' | 'courses' | 'clubs' | 'style'
+export type AdminSection = 'trips' | 'live' | 'courses' | 'clubs' | 'reports' | 'style'
 
 const TABS: { key: AdminSection; href: string; label: string }[] = [
   { key: 'trips',   href: '/admin/trips',   label: 'Trips' },
   { key: 'live',    href: '/admin/live',    label: 'Live cards' },
   { key: 'courses', href: '/admin/courses', label: 'Courses' },
   { key: 'clubs',   href: '/admin/clubs',   label: 'Clubs' },
+  { key: 'reports', href: '/admin/reports', label: 'Reports' },
   { key: 'style',   href: '/admin/style',   label: 'Style lab' },
 ]
 

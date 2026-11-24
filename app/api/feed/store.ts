@@ -121,6 +121,34 @@ export async function namesOf(db: Db, userIds: string[]): Promise<Map<string, { 
   return out
 }
 
+/**
+ * Open reports (D303): a club's, or — `null` — Green Dot's own (every report
+ * with no club). Each with what was reported, as it reads, and who reported it.
+ */
+export async function openReports(db: Db, clubId: string | null) {
+  let q = db.from('feed_reports').select('id, item_id, reason, created_at, reporter_id').is('resolved_at', null)
+  q = clubId ? q.eq('club_id', clubId) : q.is('club_id', null)
+  const { data, error } = await q.order('created_at', { ascending: false }).limit(100)
+  if (error) return []
+  const rows = (data ?? []) as { id: string; item_id: string; reason: string | null; created_at: string; reporter_id: string }[]
+  const itemIds = [...new Set(rows.map(r => r.item_id))]
+  const [items, names] = await Promise.all([
+    itemIds.length ? db.from('feed_items').select(ITEM_COLS).in('id', itemIds) : Promise.resolve({ data: [] }),
+    namesOf(db, [...new Set(rows.map(r => r.reporter_id))]),
+  ])
+  const byId = new Map(((items.data ?? []) as unknown as ItemDbRow[]).map(r => [r.id, asItem(r)]))
+  return rows.flatMap(r => {
+    const it = byId.get(r.item_id)
+    if (!it) return []
+    const text = it.kind === 'comment' ? String(it.data.text ?? '') : it.kind === 'card' ? (it.status ?? '') : String(it.data.line ?? '')
+    return [{
+      id: r.id, itemId: r.item_id, reason: r.reason, createdAt: r.created_at,
+      item: { kind: it.kind, name: String(it.data.name ?? 'A member'), text, event: typeof it.data.event === 'string' ? it.data.event : null, removed: !!it.removedAt },
+      reporter: names.get(r.reporter_id)?.name ?? 'A member',
+    }]
+  })
+}
+
 export function feedStore(db: Db): FeedStore {
   return {
     async userFromToken(token) {
@@ -229,6 +257,53 @@ export function feedStore(db: Db): FeedStore {
         .eq('kind', 'comment').in('parent_id', ids).neq('author_id', userId)
         .is('removed_at', null).gt('created_at', from)
       return count ?? 0
+    },
+    // ─── Comments, dots, reports (D301, D303) ───
+    async insertComment(o) {
+      const { data, error } = await db.from('feed_items').insert({
+        kind: 'comment', author_id: o.authorId, parent_id: o.parentId, trip_id: o.tripId, club_id: o.clubId,
+        data: { name: o.name, text: o.text },
+      }).select(ITEM_COLS).single()
+      if (error) throw error
+      return asItem(data as unknown as ItemDbRow)
+    },
+    async deleteItem(itemId) {
+      const { error } = await db.from('feed_items').delete().eq('id', itemId)
+      if (error) throw error
+    },
+    async setDot(itemId, userId, on) {
+      const { error } = on
+        ? await db.from('feed_dots').upsert({ item_id: itemId, user_id: userId }, { onConflict: 'item_id,user_id', ignoreDuplicates: true })
+        : await db.from('feed_dots').delete().eq('item_id', itemId).eq('user_id', userId)
+      if (error) throw error
+    },
+    async insertReport(o) {
+      const { error } = await db.from('feed_reports').upsert(
+        { item_id: o.itemId, reporter_id: o.reporterId, club_id: o.clubId, reason: o.reason },
+        { onConflict: 'item_id,reporter_id', ignoreDuplicates: true })
+      if (error) throw error
+    },
+    async clubCredentials(clubId, userId) {
+      if (!/^[0-9a-f-]{36}$/i.test(clubId)) return null
+      const ask = (ticks: boolean) => db.from('club_members').select(`role${ticks ? ', officer, clubhouse' : ''}`)
+        .eq('club_id', clubId).eq('user_id', userId).is('removed_at', null).limit(1)
+      let res = await ask(true)
+      if (res.error) res = await ask(false)
+      const r = ((res.data ?? []) as unknown as { role: 'owner' | 'admin' | 'member'; officer?: boolean | null; clubhouse?: boolean | null }[])[0]
+      return r ? { role: r.role, officer: r.officer, clubhouse: r.clubhouse } : null
+    },
+    async isStaff(userId) {
+      const { data, error } = await db.from('green_dot_staff').select('user_id').eq('user_id', userId).maybeSingle()
+      return !error && !!data
+    },
+    reportsFor: clubId => openReports(db, clubId),
+    async resolveReports(itemId, by, outcome, at) {
+      if (outcome === 'removed') {
+        const { error } = await db.from('feed_items').update({ removed_at: at, removed_by: by }).eq('id', itemId)
+        if (error) throw error
+      }
+      const { error } = await db.from('feed_reports').update({ resolved_at: at, resolved_by: by, outcome }).eq('item_id', itemId).is('resolved_at', null)
+      if (error) throw error
     },
     async liveNow() {
       const since = new Date(Date.now() - 12 * 3_600_000).toISOString()

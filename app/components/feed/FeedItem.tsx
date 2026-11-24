@@ -37,16 +37,15 @@ export interface FeedView {
  * else — a comment, a leaderboard move, a result, a cut — is one line on a
  * flat card. Never an animated number (D9).
  */
-export function FeedItem({ item, now, actions }: { item: FeedView; now: Date; actions?: React.ReactNode }) {
+export function FeedItem({ item, now, actions, onOpen }: { item: FeedView; now: Date; actions?: React.ReactNode; onOpen?: () => void }) {
   if (item.kind !== 'card') {
+    const words = item.kind === 'comment' ? <>{item.name} {item.on ?? ''}: <span className="font-normal">{item.line}</span></> : item.line
     return (
-      <article className={`${cardClass('flat')} px-4 py-3`}>
-        <p className="flex items-baseline gap-2">
-          <span className="flex-1 min-w-0 t-label text-ink break-words">
-            {item.kind === 'comment' ? <>{item.name} {item.on ?? ''}: <span className="font-normal">{item.line}</span></> : item.line}
-          </span>
-          <time dateTime={item.at} className="t-cap text-ink/65 flex-shrink-0">{ago(item.at, now)}</time>
-        </p>
+      <article className={`${cardClass('flat')} pl-4 pr-2 py-1.5 flex items-center gap-2 min-h-12`}>
+        {onOpen
+          ? <button type="button" onClick={onOpen} className="flex-1 min-w-0 text-left t-label text-ink break-words py-1.5 press ch-focus rounded-tile">{words}</button>
+          : <p className="flex-1 min-w-0 t-label text-ink break-words py-1.5">{words}</p>}
+        <time dateTime={item.at} className="t-cap text-ink/65 flex-shrink-0">{ago(item.at, now)}</time>
         {actions}
       </article>
     )

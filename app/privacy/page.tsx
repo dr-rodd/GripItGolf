@@ -1,5 +1,6 @@
 import { INVITE_DAYS } from '@/lib/clubs'
 import { ACTIVITY_KEEP_MONTHS } from '@/lib/clubhouse'
+import { FEED_KEEP_DAYS, REPORT_KEEP_DAYS, STATUS_MAX } from '@/lib/feed'
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SITE } from '@/config/site'
@@ -220,6 +221,40 @@ export default function PrivacyPage() {
           your golf stays on the leaderboards it was played on, and the club may choose to delete it
           from its own events. A club&apos;s list is deleted when the club is closed, and anybody on it can
           ask the club, or write to {mail}, to be taken off it.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="The feed">
+        <p>
+          A Green Dot member&apos;s Home has a <B>feed</B>: signed cards, highlights (an eagle, a personal best, a
+          handicap cut, a win), match results and leaderboard moves from their friends, their clubs and the
+          competitions they play in. It holds, for each item, the player&apos;s name, the event, the gross and
+          points and the place — what the card already says — and anything written on it: an optional{' '}
+          <B>status</B> of up to {STATUS_MAX} characters the player adds when signing, <B>comments</B>, and the{' '}
+          <B>dots</B> people give it. Nothing goes in for anybody without an account, for a junior, or from a run.
+        </p>
+        <p className="mt-3">
+          <B>Who sees it</B> is your choice, kept on your account: <B>Friends and my clubs</B> — your friends, and
+          the people you share a club, competition or team with — or <B>Only me</B>. It governs the feed alone;
+          leaderboards, scorecards and tee sheets are as they always were. A comment is seen only by people who
+          may see the card it is on.
+        </p>
+        <p className="mt-3">
+          <B>Friends.</B> You find friends only by searching the lists of the clubs you are on — by name, two
+          letters at least, and only people with an account are shown, by name and club alone. A friendship needs
+          both to agree; either can end it, and it is kept on both accounts until they do. Juniors never appear
+          and cannot be asked. The streams you keep and when you last looked at your comments are kept on your
+          account too.
+        </p>
+        <p className="mt-3">
+          <B>Reports.</B> Anybody may report a card, a status or a comment. A club card&apos;s report goes to that
+          club&apos;s office, anything else to Green Dot; either may take it down. Who reported it is seen only
+          by them. A report is kept {REPORT_KEEP_DAYS} days after it is dealt with.
+        </p>
+        <p className="mt-3">
+          An item is kept for {FEED_KEEP_DAYS} days, and goes with its comments and dots. You delete your own
+          status and comments, and any comment on your card, whenever you like; deleting your account deletes
+          everything you wrote in the feed with it.
         </p>
       </LegalSection>
 

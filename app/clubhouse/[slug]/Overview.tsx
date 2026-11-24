@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { askClub, askTeeTimes, type ClubAnswer } from '@/lib/accountClient'
+import { askFeed } from '@/lib/feedClient'
 import { clubhouseHref, eventHref, formatLine, isOfficeOnly, opensOutside, seasonType, type ListCounts, type Need, type SeasonEvent } from '@/lib/clubhouse'
 import { NO_YOURS, dayWord, periodRange, quietLine, whatsOn, yoursIn, type On, type Period, type YoursItem } from '@/lib/clubOverview'
 import { PHASE_WORDS } from '@/lib/compPhase'
@@ -58,6 +59,16 @@ export default function Overview() {
   }, [club.id, attempt])
 
   const today = data?.today ?? irishToday(new Date())
+  // D303: feed reports on this club's cards wait in Alerts — asked on their own, fail-soft before 102.
+  const [reports, setReports] = useState(0)
+  useEffect(() => {
+    let live = true
+    void askFeed<{ reports: unknown[] }>('reports.club', { clubId: club.id }).then(r => { if (live && r.ok) setReports(r.reports.length) })
+    return () => { live = false }
+  }, [club.id])
+  const needs = data?.needs ? (reports > 0
+    ? [...data.needs, { key: 'feed-reports', line: `${reports} ${reports === 1 ? 'report' : 'reports'} on the feed to look at.`, href: `${clubhouseHref(face.slug)}/reports` }]
+    : data.needs) : null
   useEffect(() => {
     if (!keepsSheet) return
     let live = true
@@ -128,7 +139,7 @@ export default function Overview() {
             more={moreHref(face.slug, period, from)} row={o => <EventRow o={o} slug={face.slug} today={today} period={period} linked={keepsCalendar} />} />
         )}
         {keepsSheet && teeShown && teeShown.length > 0 && <TeeCard days={teeShown} today={today} period={period} slug={face.slug} />}
-        <AlertsCard needs={data?.needs ?? null} />
+        <AlertsCard needs={needs} />
       </div>
 
       {keepsList && data?.counts && <StatsStrip c={data.counts} slug={face.slug} />}

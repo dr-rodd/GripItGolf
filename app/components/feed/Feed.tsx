@@ -9,6 +9,7 @@ import { IconPlus } from '../icons'
 import { IconButton, LiveDot, buttonClass, cardClass } from '../ui'
 import { FeedItem, type FeedView } from './FeedItem'
 import StreamsSheet from './StreamsSheet'
+import { CommentsSheet, ItemActions } from './ItemActions'
 
 type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string }
 type Home = {
@@ -52,6 +53,7 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
   const [panels, setPanels] = useState<Record<string, Panel>>({})
   const [compPick, setCompPick] = useState<{ code: string; over: string | null } | null>(null)
   const [sheet, setSheet] = useState(false)
+  const [comments, setComments] = useState<{ cardId: string; title: string } | null>(null)
   const [now, setNow] = useState(() => new Date())
   const scroller = useRef<HTMLDivElement>(null)
   const panelRefs = useRef<Record<string, HTMLDivElement | null>>({})
@@ -170,6 +172,28 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pills.length, active === null])
 
+  // One item changed (a dot, a status, a comment) — the same item wherever it is shown.
+  const patchItem = useCallback((id: string, p: Partial<FeedView> | null) => {
+    setPanels(all => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, {
+      ...v, items: p === null ? v.items.filter(i => i.id !== id) : v.items.map(i => (i.id === id ? { ...i, ...p } : i)),
+    }])))
+  }, [])
+  const openComments = useCallback((cardId: string) => {
+    const card = Object.values(panels).flatMap(p => p.items).find(i => i.id === cardId)
+    setComments({ cardId, title: card ? `${card.name}’s card` : 'Comments' })
+  }, [panels])
+
+  // D307: the Home dot is cleared once the member has looked at their own cards — the Friends stream holds them.
+  const newComments = home?.newComments ?? 0
+  const friendsShown = active === 'friends' && !!panels.friends && !panels.friends.loading
+  useEffect(() => {
+    if (!friendsShown || newComments === 0) return
+    const t = window.setTimeout(() => {
+      void askFeed('seen').then(r => { if (r.ok) setHome(h => (h ? { ...h, newComments: 0 } : h)) })
+    }, 1500)
+    return () => window.clearTimeout(t)
+  }, [friendsShown, newComments])
+
   if (!home || !home.ready || home.junior) return null
 
   const pickComp = (c: CompRef) => {
@@ -234,11 +258,17 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
                 className="feed-stream relative w-full flex-shrink-0 px-4 pb-1">
                 <StreamPanel stream={p} panel={panel} now={now} empty={view?.empty ?? ''}
                   comp={p.kind === 'comp' ? comp : null} mePath={mePath} onFindFriends={onFindFriends}
-                  onMore={() => void load(p, true)} onRetry={() => void load(p)} />
+                  onMore={() => void load(p, true)} onRetry={() => void load(p)}
+                  onPatch={patchItem} onOpenComments={openComments} />
               </div>
             )
           })}
         </div>
+      )}
+
+      {comments && (
+        <CommentsSheet cardId={comments.cardId} title={comments.title} onClose={() => setComments(null)}
+          onChanged={(count, latest) => patchItem(comments.cardId, { comments: count, latest })} />
       )}
 
       {sheet && (
@@ -249,9 +279,10 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
   )
 }
 
-function StreamPanel({ stream, panel, now, empty, comp, mePath, onFindFriends, onMore, onRetry }: {
+function StreamPanel({ stream, panel, now, empty, comp, mePath, onFindFriends, onMore, onRetry, onPatch, onOpenComments }: {
   stream: StreamRef; panel: Panel | undefined; now: Date; empty: string; comp: CompRef | null; mePath: string; onFindFriends?: () => void
   onMore: () => void; onRetry: () => void
+  onPatch: (id: string, p: Partial<FeedView> | null) => void; onOpenComments: (cardId: string) => void
 }) {
   if (stream.kind === 'comp' && !comp) return <p className="t-cap text-ink/65 py-4">No comps in the last month.</p>
   if (!panel || (panel.loading && panel.items.length === 0)) {
@@ -288,7 +319,11 @@ function StreamPanel({ stream, panel, now, empty, comp, mePath, onFindFriends, o
             : <Link href={mePath} className={`${buttonClass('quiet', false)} mt-1`}>Find friends</Link>)}
         </div>
       )}
-      {panel.items.map(it => <FeedItem key={it.id} item={it} now={now} />)}
+      {panel.items.map(it => (
+        <FeedItem key={it.id} item={it} now={now}
+          onOpen={it.kind === 'comment' && it.parentId ? () => onOpenComments(it.parentId!) : undefined}
+          actions={<ItemActions item={it} onPatch={p => onPatch(it.id, p)} onGone={() => onPatch(it.id, null)} onOpenComments={onOpenComments} />} />
+      ))}
       {panel.next != null && (
         <button type="button" disabled={panel.loading} onClick={onMore} className={`${buttonClass('secondary', true, true)}`}>
           {panel.loading ? 'Loading…' : 'Show more'}
