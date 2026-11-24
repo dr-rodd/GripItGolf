@@ -14,6 +14,7 @@ import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
 import FeedSettings from '@/app/components/feed/FeedSettings'
+import Feed from '@/app/components/feed/Feed'
 import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import type { MyEvent } from '@/lib/account'
@@ -89,7 +90,7 @@ export default function HomeScreen() {
               className={`${buttonClass('secondary', false)} mt-4`}>Try again</button>
           </div>
         )}
-        {tab === 'home' && <HomeTabPage home={state.kind === 'ready' ? state.home : null} />}
+        {tab === 'home' && <HomeTabPage home={state.kind === 'ready' ? state.home : null} onMe={() => choose('me')} />}
         {state.kind === 'ready' && tab === 'events' && <EventsTab events={state.home.events} onChanged={load} />}
         {state.kind === 'ready' && tab === 'board' && <BoardTab events={state.home.events} />}
         {state.kind === 'ready' && tab === 'stats' && <StatsTab home={state.home} />}
@@ -109,7 +110,7 @@ function useGroups(events: MyEvent[]) {
  * an event is the front page's — making an event, then Live now, Coming up
  * and Your season, each drawn only when it has something in it.
  */
-function HomeTabPage({ home }: { home: HomeData | null }) {
+function HomeTabPage({ home, onMe }: { home: HomeData | null; onMe: () => void }) {
   const now = new Date()
   const events = home?.events ?? []
   const g = useGroups(events)
@@ -148,6 +149,9 @@ function HomeTabPage({ home }: { home: HomeData | null }) {
           </ul>
         </section>
       )}
+
+      {/* D293: the feed — /home has no Your bookings, so under Live now and Coming up. */}
+      {home && <Feed mePath="/home?tab=me" onFindFriends={onMe} />}
 
       {home && home.season.length > 0 && (
         <section className="mt-8">

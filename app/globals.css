@@ -1224,3 +1224,25 @@ input[type="date"] {
 /* A phone's keyboard is up: the bars fixed to the bottom step aside rather
    than ride up over the box being typed in (app/components/KeyboardWatch.tsx). */
 html.keyboard-open .hide-with-keyboard { display: none; }
+
+/* ── The feed's streams (D295) ───────────────────────────────────
+   One stream a screen's width, side by side, a sideways swipe moving one
+   at a time — the browser's own scroll snap, no library. The frame takes
+   the height of the stream on show (Feed.tsx), so the others are clipped
+   below it rather than leaving a short stream with a tall one's gap. The
+   pill rows above scroll sideways without a bar. Under Reduce Motion a pill
+   tap jumps (Feed.tsx asks); the swipe itself is the finger's own. */
+.feed-streams {
+  scroll-snap-type: x mandatory;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.feed-streams::-webkit-scrollbar,
+.feed-pills::-webkit-scrollbar { display: none; }
+.feed-pills { scrollbar-width: none; -ms-overflow-style: none; }
+.feed-stream {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}

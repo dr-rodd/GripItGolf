@@ -139,6 +139,7 @@ export type World = {
   profiles: Set<string>
   /** Card players: round → trip code, trip id, player → account. */
   cards: Map<string, { code: string; tripId: string; accounts: Map<string, string> }>
+  live: { playerId: string; name: string; tripId: string; clubId: string | null; userId: string | null; thru: number }[]
 }
 
 export function world(): World {
@@ -156,6 +157,7 @@ export function world(): World {
     rows: [],
     profiles: new Set(),
     cards: new Map(),
+    live: [],
   }
 }
 
@@ -199,6 +201,7 @@ export function standIn(w: World): FeedStore {
     async dropFriend(a, b) { w.friends = w.friends.filter(f => !(f.a === a && f.b === b)) },
     async names(ids) { return new Map(ids.map(id => [id, { name: w.rows.find(r => r.userId === id)?.name ?? id, club: 'Pints GC' }])) },
     async juniorProfile(u) { return w.profiles.has(u) },
+    async liveNow() { return w.live },
     async cardPlayers(code, roundId, playerIds) {
       const c = w.cards.get(roundId)
       if (!c || c.code !== code) return null
@@ -273,6 +276,22 @@ async function routeTests() {
 
   section('A Team stream (D294): nothing until interclub panels exist')
   eq(((await ask('x', { action: 'page', stream: 'team:00000000-0000-0000-0000-000000000099' })).body as unknown as { items: unknown[] }).items, [], 'empty for everybody')
+
+  section('On the course (D302): live players in the strip, never as items')
+  w.friends.push({ a: 'x', b: 'y', by: 'x', accepted: true })
+  w.live = [
+    { playerId: 'py', name: 'Yvonne', tripId: 'T1', clubId: C1, userId: 'y', thru: 11 },
+    { playerId: 'pg', name: 'A guest', tripId: 'T1', clubId: C1, userId: null, thru: 7 },
+    { playerId: 'pj', name: 'Junior', tripId: 'T1', clubId: C1, userId: 'j', thru: 5 },
+    { playerId: 'pc', name: 'Clubmate', tripId: 'T1', clubId: C1, userId: 'c', thru: 3 },
+  ]
+  const strip = async (who: string, stream: string) => ((await ask(who, { action: 'oncourse', stream })).body as unknown as { players: { name: string; thru: number }[] }).players.map(p => `${p.name} ${p.thru}`)
+  eq(await strip('x', 'friends'), ['Yvonne 11'], 'Friends: a friend out on the course, thru 11')
+  eq(await strip('x', `club:${C1}`), ['Yvonne 11', 'Clubmate 3'], 'Club: the club’s members with accounts — never a guest without one, never a junior')
+  w.settings.set('y', { audience: 'me', streams: null, commentsSeenAt: null })
+  eq(await strip('x', 'friends'), [], 'Only me keeps a player out of the strip too')
+  w.settings.delete('y')
+  w.friends = []
 
   section('Settings')
   eq((await ask('x', { action: 'audience', audience: 'me' })).status, 200, 'a member keeps their cards to themselves')
@@ -411,6 +430,17 @@ function wiringTests() {
   ok(/afterWrite: read => feedAfterSummaries/.test(read('app/api/stats/store.ts')), 'a round’s signed cards follow its card summaries')
   ok(/trip\.competition === 'club'\) return/.test(read('app/api/feed/write.ts')), '…except a club competition’s, which wait for the co-sign')
   ok(/noteMatchResults\(changed\.map/.test(read('lib/matchplayStore.ts')), 'a knockout result recorded asks for its feed item')
+
+  section('Wiring: the feed on Home (D293, D295)')
+  const club = read('app/club/[slug]/ClubView.tsx')
+  ok(club.indexOf('<Feed ') > club.indexOf('>Your bookings</h2>'), 'the club home draws the feed under Your bookings')
+  ok(/<Feed mePath=/.test(read('app/home/HomeScreen.tsx')), '/home draws it too')
+  for (const bar of ['app/home/HomeTabBar.tsx', 'app/club/[slug]/ClubTabBar.tsx', 'lib/clubBar.ts']) ok(!/feed/i.test(read(bar)), `${bar} knows nothing of the feed — no new tab, no dot on a footer`)
+  const feedUi = read('app/components/feed/Feed.tsx')
+  ok(/feed-streams/.test(feedUi) && /scroll-snap-type: x mandatory/.test(read('app/globals.css')), 'streams swipe on the browser’s own scroll snap — no library')
+  ok(/reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and switch instantly under Reduce Motion')
+  ok(/gd\.feed\.stream\.v1/.test(feedUi), 'the last stream chosen is remembered on the phone')
+  ok(!/setInterval/.test(feedUi), 'the feed is never polled — read on show and on coming back')
 
 }
 

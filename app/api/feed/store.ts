@@ -230,6 +230,41 @@ export function feedStore(db: Db): FeedStore {
         .is('removed_at', null).gt('created_at', from)
       return count ?? 0
     },
+    async liveNow() {
+      const since = new Date(Date.now() - 12 * 3_600_000).toISOString()
+      const { data, error } = await db.from('live_rounds')
+        .select('round_id, rounds!inner(trip_id), live_player_locks(player_id)')
+        .eq('status', 'active').gt('activated_at', since).limit(200)
+      if (error) return []
+      type R = { round_id: string; rounds: { trip_id: string } | { trip_id: string }[]; live_player_locks: { player_id: string }[] | null }
+      const cards = ((data ?? []) as unknown as R[]).map(r => ({
+        roundId: r.round_id, tripId: (Array.isArray(r.rounds) ? r.rounds[0] : r.rounds).trip_id,
+        players: (r.live_player_locks ?? []).map(l => l.player_id),
+      }))
+      const playerIds = [...new Set(cards.flatMap(c => c.players))]
+      if (playerIds.length === 0) return []
+      const roundIds = [...new Set(cards.map(c => c.roundId))]
+      const tripIds = [...new Set(cards.map(c => c.tripId))]
+      const { accountsOfPlayers } = await import('./write')
+      const [names, scores, accounts, privs] = await Promise.all([
+        db.from('players').select('id, name').in('id', playerIds),
+        db.from('live_scores').select('player_id, round_id').in('player_id', playerIds).in('round_id', roundIds).not('gross_score', 'is', null).limit(5000),
+        accountsOfPlayers(db, playerIds),
+        db.from('trip_private').select('trip_id, club_id, club_unlinked_at, clubs(verified_at)').in('trip_id', tripIds),
+      ])
+      const nameOf = new Map(((names.data ?? []) as { id: string; name: string }[]).map(p => [p.id, p.name]))
+      const thru = new Map<string, number>()
+      for (const r of (scores.data ?? []) as { player_id: string; round_id: string }[]) thru.set(`${r.player_id}:${r.round_id}`, (thru.get(`${r.player_id}:${r.round_id}`) ?? 0) + 1)
+      const clubOf = new Map<string, string | null>()
+      for (const p of (privs.data ?? []) as unknown as { trip_id: string; club_id: string | null; club_unlinked_at: string | null; clubs: { verified_at: string | null } | { verified_at: string | null }[] | null }[]) {
+        const c = Array.isArray(p.clubs) ? p.clubs[0] : p.clubs
+        clubOf.set(p.trip_id, p.club_id && !p.club_unlinked_at && c?.verified_at ? p.club_id : null)
+      }
+      return cards.flatMap(c => c.players.map(playerId => ({
+        playerId, name: nameOf.get(playerId) ?? 'A player', tripId: c.tripId, clubId: clubOf.get(c.tripId) ?? null,
+        userId: accounts.get(playerId) ?? null, thru: thru.get(`${playerId}:${c.roundId}`) ?? 0,
+      }))).filter(p => p.thru > 0)
+    },
     // ─── Friends (D297) ───
     async friendRows(userId) {
       const { data, error } = await db.from('friendships').select('user_a, user_b, requested_by, accepted')

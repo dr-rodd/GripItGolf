@@ -62,6 +62,8 @@ export interface Bundle {
   more: boolean
 }
 
+export interface LivePlayer { playerId: string; name: string; tripId: string; clubId: string | null; userId: string | null; thru: number }
+
 export interface StreamQuery { authors?: string[]; clubId?: string; tripId?: string; before: Cursor | null; limit: number }
 
 export interface FeedStore extends FriendsStore, CardsStore {
@@ -87,6 +89,12 @@ export interface FeedStore extends FriendsStore, CardsStore {
   recentComps(userId: string, clubIds: string[], since: string, today: string): Promise<CompRef[]>
   /** Comments by others on this account's cards since a moment — the Home dot. */
   commentsSince(userId: string, since: string | null): Promise<number>
+  /**
+   * Everybody with an open card right now (D302's On the course strip):
+   * who, in which event and club, their account, and how many holes in.
+   * One read for every viewer (a shared copy, D305); each viewer's eyes after.
+   */
+  liveNow(): Promise<LivePlayer[]>
   /**
    * One shared copy a stream (D305): Club and Comp streams' first page read
    * once for every viewer, at most FEED_COPY_SECONDS old. A store without a
@@ -286,6 +294,7 @@ export async function runFeed(
 
   if (action === 'home') return home(input, a, store, now)
   if (action === 'page') return page(input, a, store, now)
+  if (action === 'oncourse') return onCourse(input, a, store, now)
   if (action === 'audience') {
     const audience = readAudience(input.audience)
     if (!audience) return fail(400, 'Choose who sees your cards.')
@@ -368,6 +377,34 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
   const b = before ? await readBundle(store, { tripId: comp.tripId, before, limit: FEED_READ })
     : store.shared ? await store.shared(`comp:${comp.tripId}`, read) : await read()
   return done(viewBundle(b, viewer, { kind: 'comp', id: comp.tripId }))
+}
+
+/**
+ * The On the course strip (D302): live players appear here and never as
+ * items — only those with an account, never a junior, never one who chose
+ * Only me, and only in the stream they belong to.
+ */
+async function onCourse(input: Record<string, unknown>, a: Asker, store: FeedStore, now: Date): Promise<FeedOutcome> {
+  const stream = readStreamKey(input.stream)
+  if (!stream || stream.kind === 'team') return done({ players: [] })
+  const all = store.shared ? await store.shared('live', () => store.liveNow()) : await store.liveNow()
+  const { viewer } = await viewerOf(a, store)
+  let tripId: string | null = null
+  if (stream.kind === 'comp') {
+    const today = irishDay(now)
+    const comps = await store.recentComps(a.user.id, [...viewer.clubs], sinceDay(today), today)
+    tripId = comps.find(c => c.code === str(input.comp).trim().toUpperCase())?.tripId ?? null
+    if (!tripId) return done({ players: [] })
+  }
+  if (stream.kind === 'club' && !viewer.clubs.has(stream.id)) return done({ players: [] })
+  const here = all.filter(p => !!p.userId && (
+    stream.kind === 'friends' ? viewer.friends.has(p.userId!)
+      : stream.kind === 'club' ? p.clubId === stream.id
+      : p.tripId === tripId))
+  const users = [...new Set(here.map(p => p.userId as string))]
+  const [audiences, juniors] = await Promise.all([store.audiences(users), store.juniors(users)])
+  const shown = here.filter(p => p.userId === a.user.id || (audiences.get(p.userId as string) !== 'me' && !juniors.has(p.userId as string)))
+  return done({ players: shown.sort((x, y) => y.thru - x.thru || x.name.localeCompare(y.name)).slice(0, 12).map(p => ({ name: p.name, thru: p.thru })) })
 }
 
 // Re-exported for the stand-in store in the tests.

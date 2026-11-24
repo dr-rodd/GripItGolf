@@ -1,5 +1,6 @@
 'use client'
 
+import Feed from '@/app/components/feed/Feed'
 import { bookedItems, byWeek, nextItems, plusDays } from '@/lib/clubCalendar'
 import { ItemRow, useMemberCalendar } from './calendarParts'
 import Link from 'next/link'
@@ -524,6 +525,9 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           </ul>
         </section>
       )}
+
+      {/* D293: the feed, under Your bookings — asked after the page paints, never in Home's own answer (D305). */}
+      <Feed club={{ slug: face.slug }} mePath={`/club/${face.slug}/me`} />
 
       {/* Never from the copy (D194): Live now waits for the fresh answer. */}
       {!m.fromCopy && live.length > 0 && (
