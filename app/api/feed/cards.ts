@@ -4,7 +4,7 @@
 // card waiting on its marker), it is kept **held**, shown to nobody, until the
 // card arrives; a held status whose card never comes goes in the night.
 
-import { cleanText, readAudience, statusIssue, STATUS_MAX } from '@/lib/feed'
+import { OWN_STATUS_MAX, cleanText, ownStatusIssue, readAudience, statusIssue, STATUS_MAX } from '@/lib/feed'
 import { done, fail, str, type FeedOutcome } from './outcome'
 import type { Asker, FeedStore } from './feed'
 
@@ -46,13 +46,14 @@ export async function runCards(action: string, input: Record<string, unknown>, a
     return done()
   }
 
-  // The owner edits or deletes their status afterwards (D299).
+  // The owner edits or deletes their status afterwards (D299) — a card's (140), or one on its own (280, D328; never emptied).
   if (action === 'status.edit') {
-    const text = cleanText(input.text, STATUS_MAX)
-    const why = statusIssue(text)
-    if (why) return fail(400, why)
     const item = await store.ownItem(str(input.itemId), a.user.id)
-    if (!item || item.kind !== 'card') return fail(404, 'That card isn’t yours.')
+    if (!item || (item.kind !== 'card' && item.kind !== 'status')) return fail(404, 'That isn’t yours.')
+    const max = item.kind === 'status' ? OWN_STATUS_MAX : STATUS_MAX
+    const text = cleanText(input.text, max)
+    const why = item.kind === 'status' ? ownStatusIssue(text) : statusIssue(text)
+    if (why) return fail(400, why)
     await store.updateStatus(item.id, text || null, now.toISOString())
     return done({ status: text || null })
   }

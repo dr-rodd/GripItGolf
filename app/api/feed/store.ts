@@ -7,16 +7,21 @@ import { makeCopyKeeper } from '@/lib/sharedCopy'
 import { DEFAULT_AUDIENCE, FEED_COPY_SECONDS, readAudience, type Audience, type CompRef, type FeedKind } from '@/lib/feed'
 import { asUser } from '../account/store'
 import type { ClubRef, FeedStore, ItemRow, Settings, StreamQuery } from './feed'
+import { readMemberHiddenOf } from '../club/notesStore'
+import { readCardDetail } from './cardDetail'
 
 export type Db = ReturnType<typeof createAdminClient>
 
 export const ITEM_COLS = 'id, key, kind, author_id, parent_id, trip_id, round_id, player_id, club_id, data, status, audience, held, created_at, edited_at, removed_at'
+/** With 104 (Streams v2): when an item last had activity, where a status went, a post's link. */
+export const ITEM_COLS_V2 = `${ITEM_COLS}, bumped_at, stream, link`
 
 export type ItemDbRow = {
   id: string; key: string | null; kind: FeedKind; author_id: string | null; parent_id: string | null
   trip_id: string | null; round_id: string | null; player_id: string | null; club_id: string | null
   data: Record<string, unknown> | null; status: string | null; audience: string | null; held: boolean
   created_at: string; edited_at: string | null; removed_at: string | null
+  bumped_at?: string | null; stream?: string | null; link?: string | null
 }
 
 export function asItem(r: ItemDbRow): ItemRow {
@@ -25,6 +30,7 @@ export function asItem(r: ItemDbRow): ItemRow {
     tripId: r.trip_id, roundId: r.round_id, playerId: r.player_id, clubId: r.club_id,
     data: r.data && typeof r.data === 'object' ? r.data : {}, status: r.status,
     audience: readAudience(r.audience), held: r.held, createdAt: r.created_at,
+    bumpedAt: r.bumped_at ?? r.created_at, stream: r.stream ?? null, link: r.link ?? null,
     editedAt: r.edited_at, removedAt: r.removed_at,
   }
 }
@@ -34,6 +40,21 @@ const copies = makeCopyKeeper<unknown>({ maxAgeMs: FEED_COPY_SECONDS * 1000, hol
 
 /** Whether 102 is in — once yes, never asked again by this server. */
 let readyOnce = false
+
+/** Whether 104 is in (Streams v2) — once yes, never asked again by this server. */
+let v2Once = false
+
+export async function feedV2(db: Db): Promise<boolean> {
+  if (v2Once) return true
+  const { error } = await db.from('feed_items').select('bumped_at', { head: true, count: 'exact' }).limit(1)
+  if (!error) v2Once = true
+  return !error
+}
+
+/** The columns an item is read with: 104's too, once it is in. */
+export async function itemCols(db: Db): Promise<string> {
+  return (await feedV2(db)) ? ITEM_COLS_V2 : ITEM_COLS
+}
 
 export async function feedReady(db: Db): Promise<boolean> {
   if (readyOnce) return true
@@ -180,26 +201,73 @@ export function feedStore(db: Db): FeedStore {
     myClubs: userId => myClubsOf(db, userId),
     friendIds: userId => friendIdsOf(db, userId),
     async items(q: StreamQuery) {
-      let r = db.from('feed_items').select(ITEM_COLS)
-        .or('parent_id.is.null,kind.eq.comment')
-        .is('removed_at', null).eq('held', false)
+      // D329: items standing on their own, by their latest activity — before 104, when each was made.
+      const v2 = await feedV2(db)
+      if (q.stream && !v2) return []
+      const at = v2 ? 'bumped_at' : 'created_at'
+      let r = db.from('feed_items').select(v2 ? ITEM_COLS_V2 : ITEM_COLS)
+        .is('parent_id', null).is('removed_at', null).eq('held', false)
       if (q.authors) r = r.in('author_id', q.authors.length ? q.authors : ['00000000-0000-0000-0000-000000000000'])
       if (q.clubId) r = r.eq('club_id', q.clubId)
       if (q.tripId) r = r.eq('trip_id', q.tripId)
-      if (q.before) r = r.or(`created_at.lt."${q.before.at}",and(created_at.eq."${q.before.at}",id.lt.${q.before.id})`)
-      const { data, error } = await r.order('created_at', { ascending: false }).order('id', { ascending: false }).limit(q.limit)
+      if (q.stream) r = r.eq('stream', q.stream)
+      if (q.kinds) r = r.in('kind', q.kinds)
+      if (q.notKinds?.length) r = r.not('kind', 'in', `(${q.notKinds.join(',')})`)
+      if (q.before) r = r.or(`${at}.lt."${q.before.at}",and(${at}.eq."${q.before.at}",id.lt.${q.before.id})`)
+      const { data, error } = await r.order(at, { ascending: false }).order('id', { ascending: false }).limit(q.limit)
       if (error) throw error
       return ((data ?? []) as unknown as ItemDbRow[]).map(asItem)
     },
+    async commentsBy(authors, before, limit) {
+      if (authors.length === 0) return []
+      let r = db.from('feed_items').select('parent_id, author_id, created_at')
+        .eq('kind', 'comment').in('author_id', authors).is('removed_at', null).not('parent_id', 'is', null)
+      // A card's activity is never earlier than a comment on it, so comments before the cursor reach every card before it.
+      if (before) r = r.lte('created_at', before.at)
+      const { data, error } = await r.order('created_at', { ascending: false }).limit(limit)
+      if (error) return []
+      return ((data ?? []) as { parent_id: string; author_id: string; created_at: string }[])
+        .map(c => ({ parentId: c.parent_id, authorId: c.author_id, createdAt: c.created_at }))
+    },
+    v2: () => feedV2(db),
+    async follows(userId) {
+      const { data, error } = await db.from('feed_follows').select('stream').eq('user_id', userId)
+      if (error) return []
+      return ((data ?? []) as { stream: string }[]).map(r => r.stream)
+    },
+    // D332: nothing to follow until the Clubhouse lists interclub teams. The day it
+    // does, this asks whether the team behind the key exists.
+    async followable() { return false },
+    async setFollow(userId, stream, on) {
+      const { error } = on
+        ? await db.from('feed_follows').upsert({ user_id: userId, stream }, { onConflict: 'user_id,stream', ignoreDuplicates: true })
+        : await db.from('feed_follows').delete().eq('user_id', userId).eq('stream', stream)
+      if (error) throw error
+    },
+    async insertOwn(o) {
+      const { data, error } = await db.from('feed_items').insert({
+        kind: o.kind, author_id: o.authorId, club_id: o.clubId, stream: o.stream,
+        status: o.kind === 'status' ? o.text : null, link: o.link, data: o.data,
+        created_at: o.at, bumped_at: o.at,
+      }).select(ITEM_COLS_V2).single()
+      if (error) throw error
+      return asItem(data as unknown as ItemDbRow)
+    },
+    async bump(itemId, at) {
+      const { error } = await db.from('feed_items').update({ bumped_at: at }).eq('id', itemId).lt('bumped_at', at)
+      if (error) throw error
+    },
+    hiddenTypes: userId => readMemberHiddenOf(db, userId),
+    cardDetail: (roundId, playerId) => readCardDetail(db, roundId, playerId),
     async itemsByIds(ids) {
       if (ids.length === 0) return []
-      const { data, error } = await db.from('feed_items').select(ITEM_COLS).in('id', ids)
+      const { data, error } = await db.from('feed_items').select(await itemCols(db)).in('id', ids)
       if (error) throw error
       return ((data ?? []) as unknown as ItemDbRow[]).map(asItem)
     },
     async childrenOf(parentIds) {
       if (parentIds.length === 0) return []
-      const { data, error } = await db.from('feed_items').select(ITEM_COLS)
+      const { data, error } = await db.from('feed_items').select(await itemCols(db))
         .in('parent_id', parentIds).is('removed_at', null).eq('held', false)
         .order('created_at', { ascending: false }).limit(1000)
       if (error) throw error
@@ -218,7 +286,7 @@ export function feedStore(db: Db): FeedStore {
       const ids = [...new Set([...played.keys(), ...((clubComps.data ?? []) as { trip_id: string }[]).map(r => r.trip_id)])]
       if (ids.length === 0) return []
       const [trips, privs] = await Promise.all([
-        db.from('trips').select('id, trip_code, name, kind, start_date, end_date, competition').in('id', ids),
+        db.from('trips').select('id, trip_code, name, kind, start_date, end_date, competition, format:bracket_setup->>format').in('id', ids),
         db.from('trip_private').select('trip_id, club_id, club_unlinked_at, clubs(name, verified_at)').in('trip_id', ids),
       ])
       if (trips.error) return []
@@ -229,7 +297,7 @@ export function feedStore(db: Db): FeedStore {
         clubOf.set(p.trip_id, p.club_id && !p.club_unlinked_at && c?.verified_at ? { id: p.club_id, name: c.name } : null)
       }
       const out: CompRef[] = []
-      for (const t of (trips.data ?? []) as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null }[]) {
+      for (const t of (trips.data ?? []) as unknown as { id: string; trip_code: string; name: string; kind: string | null; start_date: string | null; end_date: string | null; competition: string | null; format: string | null }[]) {
         if (t.kind === 'run') continue
         const playing = played.has(t.id)
         const club = clubOf.get(t.id) ?? null
@@ -243,6 +311,8 @@ export function feedStore(db: Db): FeedStore {
           tripId: t.id, code: t.trip_code, name: t.name, date: start, endDate: t.end_date,
           playing, live: start <= today && (end ?? start) >= today,
           clubId: club?.id ?? null, clubName: club?.name ?? null,
+          // D323, D332: the menu's heading — a club's match plays apart from its other competitions.
+          category: t.competition === 'club' ? (t.format === 'match_play' ? 'matchplay' : 'club') : 'events',
         })
       }
       return out.slice(0, 60)

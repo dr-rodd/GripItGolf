@@ -9,7 +9,7 @@
 // a report hides nothing until somebody takes the item down.
 
 import { clubMay, credentialsOf, type StoredCredentials } from '@/lib/clubMay'
-import { REPORT_REASON_MAX, cleanText, commentIssue, COMMENT_MAX, mayView, reportDestination } from '@/lib/feed'
+import { REPORT_REASON_MAX, cleanText, commentIssue, COMMENT_MAX, mayView, reportDestination, talksOn } from '@/lib/feed'
 import { done, fail, str, type FeedOutcome } from './outcome'
 import { factsOf, type Asker, type FeedStore, type ItemRow } from './feed'
 
@@ -45,11 +45,11 @@ async function cardOf(store: FeedStore, itemId: string): Promise<{ item: ItemRow
 
 async function seeing(a: Asker, store: FeedStore, card: ItemRow): Promise<boolean> {
   const authors = card.authorId ? [card.authorId] : []
-  const [friends, clubs, audiences, juniors] = await Promise.all([
-    store.friendIds(a.user.id), store.myClubs(a.user.id), store.audiences(authors), store.juniors(authors),
+  const [friends, clubs, follows, audiences, juniors] = await Promise.all([
+    store.friendIds(a.user.id), store.myClubs(a.user.id), store.follows(a.user.id), store.audiences(authors), store.juniors(authors),
   ])
   // In the event itself? Only asked where the card is an event's and not already seen as a friend's or a club's.
-  const viewer = { userId: a.user.id, junior: a.junior, friends: new Set(friends), clubs: new Set(clubs.map(c => c.id)), events: new Set<string>() }
+  const viewer = { userId: a.user.id, junior: a.junior, friends: new Set(friends), clubs: new Set(clubs.map(c => c.id)), events: new Set<string>(), follows: new Set(follows) }
   const facts = factsOf(card, audiences, juniors)
   if (mayView(facts, viewer)) return true
   if (!card.tripId) return false
@@ -80,9 +80,11 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
     const why = commentIssue(text)
     if (why) return fail(400, why)
     const found = await cardOf(store, str(input.itemId))
-    if (!found || found.item.kind !== 'card' || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
+    if (!found || found.item.parentId || !talksOn(found.item.kind) || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
     const name = (await store.names([me])).get(me)?.name ?? 'A member'
     const c = await store.insertComment({ parentId: found.card.id, authorId: me, tripId: found.card.tripId, clubId: found.card.clubId, name, text, at: now.toISOString() })
+    // D329: a comment lifts its item to the top of every stream it is in; a dot does not.
+    if (await store.v2()) await store.bump(found.card.id, c.createdAt)
     return done({ comment: { id: c.id, name, text, at: c.createdAt, mine: true, canDelete: true, canReport: false } })
   }
 
@@ -97,7 +99,7 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
 
   if (action === 'dot') {
     const found = await cardOf(store, str(input.itemId))
-    if (!found || found.item.kind !== 'card' || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
+    if (!found || found.item.parentId || !talksOn(found.item.kind) || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
     await store.setDot(found.card.id, me, input.on !== false)
     return done({ on: input.on !== false })
   }

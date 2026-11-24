@@ -45,7 +45,15 @@ export function effectiveAudience(setting: Audience | null | undefined, override
 
 // ─── Items ─────────────────────────────────────────────────────
 
-export type FeedKind = 'card' | 'highlight' | 'comment' | 'board_move' | 'match_result'
+export type FeedKind = 'card' | 'highlight' | 'comment' | 'board_move' | 'match_result' | 'status' | 'post'
+
+/** The kinds that stand in a stream on their own (everything but what hangs off a card). */
+export const TOP_KINDS: readonly FeedKind[] = ['card', 'board_move', 'match_result', 'status', 'post']
+
+/** The kinds a member may comment on and dot (D301, D329): anything standing on its own but a leaderboard move. */
+export function talksOn(kind: FeedKind): boolean {
+  return kind === 'card' || kind === 'match_result' || kind === 'status' || kind === 'post'
+}
 
 /** What every visibility question needs to know about an item. */
 export interface ItemFacts {
@@ -60,6 +68,8 @@ export interface ItemFacts {
   removed: boolean
   /** A status written before its card exists (a club card waiting for its marker) — never shown. */
   held: boolean
+  /** Where a standalone status was posted: 'friends', or a match stream 'match:<id>' (D326, D328). */
+  stream?: string | null
 }
 
 /** What the server knows about the person looking. */
@@ -71,8 +81,8 @@ export interface Viewer {
   clubs: ReadonlySet<string>
   /** Events the viewer is in — asked for the one event a Comp stream shows. */
   events: ReadonlySet<string>
-  /** Interclub panels the viewer is on — none until interclub teams exist. */
-  teams?: ReadonlySet<string>
+  /** Match streams the viewer follows, as 'match:<id>' (D326) — none until interclub teams exist. */
+  follows?: ReadonlySet<string>
 }
 
 /**
@@ -89,7 +99,11 @@ export interface Viewer {
 export function mayView(item: ItemFacts, viewer: Viewer): boolean {
   if (item.removed || item.held || viewer.junior) return false
   if (item.authorId && item.authorId === viewer.userId) return true
+  // The club's official word (D325): everybody on its list, whatever its poster's own setting.
+  if (item.kind === 'post') return !!item.clubId && viewer.clubs.has(item.clubId)
   if (item.audience === 'me') return false
+  // A status in a match stream: its followers only (D326).
+  if (isMatchStream(item.stream)) return !!viewer.follows?.has(item.stream as string)
   if (item.authorId && viewer.friends.has(item.authorId)) return true
   if (item.clubId && viewer.clubs.has(item.clubId)) return true
   if (item.tripId && viewer.events.has(item.tripId)) return true
@@ -196,13 +210,67 @@ export function pillsFor(streams: readonly StreamRef[], o: { here: string | null
   return [...comp, ...shown.filter(s => s.kind !== 'comp')]
 }
 
-/** Which stream an item belongs in. Comments and highlights ride in their card's place. */
-export function inStream(item: Pick<ItemFacts, 'authorId' | 'tripId' | 'clubId'>, stream: { kind: StreamKind; id?: string | null }, viewer: Pick<Viewer, 'userId' | 'friends'>): boolean {
+/** A match stream's key, 'match:<id>' (D326). */
+export function isMatchStream(v: unknown): boolean {
+  return typeof v === 'string' && /^match:[0-9a-f-]{36}$/i.test(v)
+}
+
+/**
+ * Which stream an item belongs in (D321–D328). `pulled` is a card a friend
+ * commented on (D327): it belongs in friends.stream too — the caller has
+ * already asked `mayView` of the card itself, which is the guard.
+ *
+ * - friends: friends' (and your own) cards, statuses and results — never a
+ *   club post, never a status posted to a match stream.
+ * - club: the club's own posts only (D325) — its cards are comp.stream's.
+ * - comp: one competition's cards and results — never a status or a post.
+ * - match: statuses posted to that match stream (D326).
+ */
+export function inStream(
+  item: Pick<ItemFacts, 'authorId' | 'tripId' | 'clubId'> & { kind?: FeedKind; stream?: string | null },
+  stream: { kind: StreamKind; id?: string | null },
+  viewer: Pick<Viewer, 'userId' | 'friends'>,
+  o: { pulled?: boolean } = {},
+): boolean {
+  const kind = item.kind ?? 'card'
   switch (stream.kind) {
-    case 'friends': return !!item.authorId && (item.authorId === viewer.userId || viewer.friends.has(item.authorId))
-    case 'club': return !!stream.id && item.clubId === stream.id
-    case 'comp': return !!stream.id && item.tripId === stream.id
-    case 'match': return false // head-to-head: switched on with interclub teams (D332)
+    case 'friends':
+      if (kind === 'post' || isMatchStream(item.stream)) return false
+      return !!o.pulled || (!!item.authorId && (item.authorId === viewer.userId || viewer.friends.has(item.authorId)))
+    case 'club': return kind === 'post' && !!stream.id && item.clubId === stream.id
+    case 'comp': return kind !== 'post' && kind !== 'status' && !!stream.id && item.tripId === stream.id
+    case 'match': return !!stream.id && item.stream === `match:${stream.id}`
+  }
+}
+
+// ─── Comments grouped on their card (D329) ──────────────────────
+
+/** A comment as the grouping needs it, newest first. */
+export interface CommenterFacts { authorId: string | null; name: string }
+
+/**
+ * The line under a card (D329): "2 comments · John and 1 other". The name
+ * is a friend of the viewer's who commented, if any — the most recent of
+ * them — else the most recent commenter; "others" counts the other people,
+ * so two comments from one person are "2 comments · John". Never the
+ * viewer's own name: their own comment reads "You".
+ */
+export function commentLine(newestFirst: readonly CommenterFacts[], viewer: Pick<Viewer, 'userId' | 'friends'>): { count: string; who: string } | null {
+  if (newestFirst.length === 0) return null
+  const people: CommenterFacts[] = []
+  const seen = new Set<string>()
+  for (const c of newestFirst) {
+    const k = c.authorId ?? `name:${c.name}`
+    if (seen.has(k)) continue
+    seen.add(k)
+    people.push(c)
+  }
+  const lead = people.find(p => p.authorId && p.authorId !== viewer.userId && viewer.friends.has(p.authorId)) ?? people[0]
+  const name = lead.authorId && lead.authorId === viewer.userId ? 'You' : lead.name
+  const others = people.length - 1
+  return {
+    count: `${newestFirst.length} comment${newestFirst.length === 1 ? '' : 's'}`,
+    who: others === 0 ? name : `${name} and ${others} other${others === 1 ? '' : 's'}`,
   }
 }
 
@@ -222,6 +290,34 @@ export interface CompRef {
   live: boolean
   clubId: string | null
   clubName: string | null
+  /** Which heading of the menu it sits under (D323). Absent in a copy kept before: worked out by `compCategory`. */
+  category?: CompCategory
+}
+
+/**
+ * comp.stream's menu headings (D323): the club's competitions, its match
+ * plays (D332 — club match plays live in comp.stream), and the member's own
+ * events outside a club (trips and tournaments).
+ */
+export type CompCategory = 'club' | 'matchplay' | 'events'
+
+export const COMP_CATEGORIES: readonly { key: CompCategory; label: string }[] = [
+  { key: 'club', label: 'Club competitions' },
+  { key: 'matchplay', label: 'Match play' },
+  { key: 'events', label: 'Your events' },
+]
+
+export function compCategory(c: Pick<CompRef, 'category' | 'clubId'>): CompCategory {
+  return c.category ?? (c.clubId ? 'club' : 'events')
+}
+
+/** The menu (D323): each heading with its comps newest first, a heading with none left out. */
+export function compMenu(comps: readonly CompRef[], today: string): { key: CompCategory; label: string; comps: CompRef[] }[] {
+  const shown = comps.filter(c => (c.date ?? '') <= today)
+  return COMP_CATEGORIES.map(h => ({
+    ...h,
+    comps: shown.filter(c => compCategory(c) === h.key).sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || a.name.localeCompare(b.name)),
+  })).filter(h => h.comps.length > 0)
 }
 
 /** How long a finished comp stays in the picker. */
@@ -233,23 +329,29 @@ export function orderComps(comps: readonly CompRef[]): CompRef[] {
   return [...comps.filter(c => c.playing).sort(by), ...comps.filter(c => !c.playing).sort(by)]
 }
 
-/** The comp the stream opens on: the most recent one played in, else the first offered. */
+/**
+ * The comp the stream opens on (D323, amending D300): the most recent one
+ * that is live or finished — one the member plays in first among those on
+ * the same day — never one still to come.
+ */
 export function defaultComp(comps: readonly CompRef[], today: string): CompRef | null {
-  const played = comps.filter(c => c.playing && (c.date ?? '') <= today)
-    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''))
-  return played[0] ?? orderComps(comps)[0] ?? null
+  const started = comps.filter(c => !!c.date && c.date <= today)
+    .sort((a, b) => (b.date ?? '').localeCompare(a.date ?? '') || Number(b.playing) - Number(a.playing) || Number(b.live) - Number(a.live) || a.name.localeCompare(b.name))
+  return started[0] ?? null
 }
 
 /**
- * Which comp to show (D300, question 2): the one the member picked, **kept
- * until they play a newer one**. `pick` is what the phone remembered — the
- * comp chosen and the default it was chosen over.
+ * Which comp to show (D300, question 2, amended by D323): the one the member
+ * picked, **kept until a newer comp goes live or finishes**. `pick` is what the
+ * phone remembered — the comp chosen and the default it was chosen over. A
+ * pick still to come is never shown.
  */
 export function shownComp(comps: readonly CompRef[], today: string, pick: { code: string; over: string | null } | null): CompRef | null {
   const fallback = defaultComp(comps, today)
   if (!pick) return fallback
   if ((fallback?.code ?? null) !== pick.over) return fallback
-  return comps.find(c => c.code === pick.code) ?? fallback
+  const picked = comps.find(c => c.code === pick.code)
+  return picked && (picked.date ?? '') <= today ? picked : fallback
 }
 
 // ─── Cards, highlights, words ───────────────────────────────────
@@ -337,7 +439,12 @@ export function contextLine(d: { event?: string | null; club?: string | null; co
 
 // ─── Status and comments (D299, D301) ───────────────────────────
 
+/** A card's status at signing (D299, D306) — unchanged. */
 export const STATUS_MAX = 140
+/** A status on its own (D328). */
+export const OWN_STATUS_MAX = 280
+/** A club post's words (D325). */
+export const POST_MAX = 1000
 export const COMMENT_MAX = 280
 export const REPORT_REASON_MAX = 200
 
@@ -348,8 +455,42 @@ export function cleanText(v: unknown, max: number): string {
 }
 
 /** Why a status cannot be kept — empty is fine (no status at all). */
-export function statusIssue(text: string): string | null {
-  return [...text].length > STATUS_MAX ? `Keep it to ${STATUS_MAX} characters.` : null
+export function statusIssue(text: string, max = STATUS_MAX): string | null {
+  return [...text].length > max ? `Keep it to ${max} characters.` : null
+}
+
+/** A status on its own (D328): something to say, up to 280. */
+export function ownStatusIssue(text: string): string | null {
+  if (!text) return 'Write something first.'
+  return statusIssue(text, OWN_STATUS_MAX)
+}
+
+/** A club post's words keep their line breaks (a notice has paragraphs); control characters out. */
+export function cleanPost(v: unknown): string {
+  // eslint-disable-next-line no-control-regex
+  return String(typeof v === 'string' ? v : '').replace(/\r\n?/g, '\n').replace(/[\u0000-\u0009\u000b-\u001f\u007f]+/g, ' ')
+    .replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim().slice(0, POST_MAX + 1)
+}
+
+export function postIssue(text: string): string | null {
+  if (!text) return 'Write something first.'
+  return [...text].length > POST_MAX ? `Keep it to ${POST_MAX} characters.` : null
+}
+
+/**
+ * A club post's one link (D325): https only, a real host, at most 500
+ * characters. Empty is no link; anything else is refused with why.
+ */
+export function readLink(v: unknown): { link: string | null } | { issue: string } {
+  const t = String(typeof v === 'string' ? v : '').trim()
+  if (!t) return { link: null }
+  const withScheme = /^[a-z][a-z0-9+.-]*:/i.test(t) ? t : `https://${t}`
+  let u: URL
+  try { u = new URL(withScheme) } catch { return { issue: 'That link doesn’t look right.' } }
+  if (u.protocol !== 'https:') return { issue: 'Links start https://.' }
+  if (!u.hostname.includes('.') || u.username || u.password) return { issue: 'That link doesn’t look right.' }
+  const out = u.toString()
+  return out.length > 500 ? { issue: 'That link is too long.' } : { link: out }
 }
 
 export function commentIssue(text: string): string | null {

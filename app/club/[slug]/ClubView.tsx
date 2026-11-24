@@ -1,6 +1,6 @@
 'use client'
 
-import Stream from '@/app/components/feed/Feed'
+import Stream from '@/app/components/feed/Stream'
 import { bookedItems, byWeek, nextItems, plusDays } from '@/lib/clubCalendar'
 import { ItemRow, useMemberCalendar } from './calendarParts'
 import Link from 'next/link'
@@ -202,7 +202,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
           {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
           {members && tab === 'tee' && <ClubTeeTimes clubId={members.clubId} />}
           {members && tab === 'stats' && <Stats face={face} m={members} />}
-          {members && tab === 'stream' && <Stream club={{ slug: face.slug }} mePath={`/club/${face.slug}/settings`} />}
+          {members && tab === 'stream' && <Stream club={{ slug: face.slug }} settingsPath={`/club/${face.slug}/settings`} />}
         </div>
       </div>
     </main>

@@ -9,7 +9,7 @@ import fs from 'fs'
 import {
   cardFacts, cardHighlights, defaultComp, effectiveAudience, inStream, mayView, mayViewChild, pillsFor, readStreams,
   searchTerm, shownComp, statusIssue, cleanText, counter, friendState, standingWith, pair, reportDestination, moveLine,
-  matchLine, contextLine, olderThan, newestFirst, STREAMS_V2, keptStreams, streamKey, streamWord,
+  matchLine, contextLine, olderThan, newestFirst, commentLine, compMenu, STREAMS_V2, keptStreams, streamKey, streamWord,
   type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
 import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
@@ -67,7 +67,12 @@ function ruleTests() {
   ok(inStream({ authorId: 'f', tripId: 't', clubId: 'c' }, { kind: 'friends' }, viewer), 'a friend’s item is in Friends')
   ok(inStream({ authorId: 'me', tripId: 't', clubId: null }, { kind: 'friends' }, viewer), '…and my own, to see comments on it')
   ok(!inStream({ authorId: 'x', tripId: 't', clubId: 'c' }, { kind: 'friends' }, viewer), 'a stranger’s is not in Friends')
-  ok(inStream({ authorId: 'x', tripId: 't', clubId: 'c' }, { kind: 'club', id: 'c' }, viewer), 'a club item is in that club’s stream')
+  ok(inStream({ authorId: 'x', tripId: null, clubId: 'c', kind: 'post' }, { kind: 'club', id: 'c' }, viewer), 'a club’s post is in that club’s stream (D325)')
+  ok(!inStream({ authorId: 'x', tripId: 't', clubId: 'c', kind: 'card' }, { kind: 'club', id: 'c' }, viewer), '…its cards are comp.stream’s, not club.stream’s')
+  ok(!inStream({ authorId: 'f', tripId: null, clubId: 'c', kind: 'post' }, { kind: 'friends' }, viewer), 'a post is never in friends.stream, even a friend’s')
+  ok(!inStream({ authorId: 'f', tripId: null, clubId: null, kind: 'status', stream: 'match:00000000-0000-0000-0000-000000000001' }, { kind: 'friends' }, viewer), '…nor a status posted to a match stream')
+  ok(inStream({ authorId: 'z', tripId: 't', clubId: 'c', kind: 'card' }, { kind: 'friends' }, viewer, { pulled: true }), 'a card a friend commented on is in friends.stream (D327)')
+  ok(!inStream({ authorId: 'x', tripId: 't', clubId: null, kind: 'status' }, { kind: 'comp', id: 't' }, viewer), 'a status is never in comp.stream')
   ok(!inStream({ authorId: 'x', tripId: 't', clubId: 'c' }, { kind: 'club', id: 'd' }, viewer), '…never another club’s')
   ok(inStream({ authorId: 'x', tripId: 't', clubId: null }, { kind: 'comp', id: 't' }, viewer), 'an event’s item is in its Comp stream')
   ok(!inStream({ authorId: 'x', tripId: 'u', clubId: null }, { kind: 'comp', id: 't' }, viewer), '…never another event’s')
@@ -92,9 +97,12 @@ function ruleTests() {
   section('The Comp picker (D300): the latest comp played, a pick kept until a newer one')
   const comp = (code: string, date: string, playing: boolean): CompRef => ({ tripId: code, code, name: code, date, endDate: null, playing, live: false, clubId: null, clubName: null })
   const comps = [comp('OLD', '2026-11-01', true), comp('NEW', '2026-11-20', true), comp('CLUB', '2026-11-22', false)]
-  eq(defaultComp(comps, '2026-11-24')?.code, 'NEW', 'opens on the most recent comp played in')
-  eq(shownComp(comps, '2026-11-24', { code: 'CLUB', over: 'NEW' })?.code, 'CLUB', 'a comp picked is kept…')
-  eq(shownComp([...comps, comp('NEWER', '2026-11-23', true)], '2026-11-24', { code: 'CLUB', over: 'NEW' })?.code, 'NEWER', '…until they play a newer one')
+  eq(defaultComp(comps, '2026-11-24')?.code, 'CLUB', 'opens on the most recent comp that is live or finished (D323)')
+  eq(defaultComp([...comps, comp('FUTURE', '2026-11-30', true)], '2026-11-24')?.code, 'CLUB', '…never one still to come')
+  eq(compMenu([...comps, { ...comp('MP', '2026-11-10', false), category: 'matchplay' }, comp('FUTURE', '2026-11-30', true)], '2026-11-24').map(h => [h.label, h.comps.map(c => c.code)]),
+    [['Match play', ['MP']], ['Your events', ['CLUB', 'NEW', 'OLD']]], 'the menu: its headings, each newest first, a future comp nowhere (D323)')
+  eq(shownComp(comps, '2026-11-24', { code: 'OLD', over: 'CLUB' })?.code, 'OLD', 'a comp picked is kept…')
+  eq(shownComp([...comps, comp('NEWER', '2026-11-23', true)], '2026-11-24', { code: 'OLD', over: 'CLUB' })?.code, 'NEWER', '…until a newer one goes live or finishes')
 
   section('Cards and highlights (D302)')
   const h = (n: number, par: number, gross: number | null, noReturn = false) => ({ number: n, par, gross, noReturn, points: gross == null ? 0 : Math.max(0, par + 2 - gross) })
@@ -148,6 +156,12 @@ export type World = {
   live: { playerId: string; name: string; tripId: string; clubId: string | null; userId: string | null; thru: number }[]
   reports: { itemId: string; reporterId: string; clubId: string | null; reason: string | null; resolved: string | null }[]
   creds: Map<string, { role: 'owner' | 'admin' | 'member'; officer?: boolean; clubhouse?: boolean }>
+  /** 104 in (Streams v2). */
+  v2: boolean
+  follows: { userId: string; stream: string }[]
+  /** Match streams that exist to be followed — none on the live site until interclub teams (D332). */
+  followable: Set<string>
+  hidden: Map<string, string[]>
 }
 
 export function world(): World {
@@ -168,8 +182,14 @@ export function world(): World {
     live: [],
     reports: [],
     creds: new Map(),
+    v2: true,
+    follows: [],
+    followable: new Set(),
+    hidden: new Map(),
   }
 }
+
+const activity = (r: ItemRow) => r.bumpedAt ?? r.createdAt
 
 export function standIn(w: World): FeedStore {
   const club = () => [...w.clubs.values()]
@@ -186,13 +206,36 @@ export function standIn(w: World): FeedStore {
     async myClubs(u) { return club().filter(c => c.members.includes(u)).map(c => ({ id: c.id, slug: c.slug, name: c.name })) },
     async friendIds(u) { return w.friends.filter(f => f.accepted && (f.a === u || f.b === u)).map(f => (f.a === u ? f.b : f.a)) },
     async items(q) {
-      return w.items.filter(r => !r.removedAt && !r.held && (!r.parentId || r.kind === 'comment'))
+      const c = q.before
+      return w.items.filter(r => !r.removedAt && !r.held && !r.parentId)
         .filter(r => !q.authors || (!!r.authorId && q.authors.includes(r.authorId)))
         .filter(r => !q.clubId || r.clubId === q.clubId)
         .filter(r => !q.tripId || r.tripId === q.tripId)
-        .filter(olderThan(q.before))
-        .sort(newestFirst).slice(0, q.limit)
+        .filter(r => !q.stream || r.stream === q.stream)
+        .filter(r => !q.kinds || q.kinds.includes(r.kind))
+        .filter(r => !q.notKinds || !q.notKinds.includes(r.kind))
+        .filter(r => !c || activity(r) < c.at || (activity(r) === c.at && r.id < c.id))
+        .sort((a, b) => activity(b).localeCompare(activity(a)) || b.id.localeCompare(a.id)).slice(0, q.limit)
     },
+    async commentsBy(authors, before, limit) {
+      return w.items.filter(r => r.kind === 'comment' && r.parentId && r.authorId && authors.includes(r.authorId) && !r.removedAt && (!before || r.createdAt <= before.at))
+        .sort(newestFirst).slice(0, limit).map(r => ({ parentId: r.parentId as string, authorId: r.authorId as string, createdAt: r.createdAt }))
+    },
+    async v2() { return w.v2 },
+    async follows(u) { return w.follows.filter(f => f.userId === u).map(f => f.stream) },
+    async followable(stream) { return w.followable.has(stream) },
+    async setFollow(u, stream, on) {
+      w.follows = w.follows.filter(f => !(f.userId === u && f.stream === stream))
+      if (on) w.follows.push({ userId: u, stream })
+    },
+    async insertOwn(o) {
+      const r = itemRow({ kind: o.kind, authorId: o.authorId, clubId: o.clubId, stream: o.stream, status: o.kind === 'status' ? o.text : null, link: o.link, data: o.data })
+      w.items.push(r)
+      return r
+    },
+    async bump(id, at) { const r = w.items.find(x => x.id === id); if (r && activity(r) < at) r.bumpedAt = at },
+    async hiddenTypes(u) { return w.hidden.get(u) ?? [] },
+    async cardDetail() { return { course: 'Pints', tees: 'White', handicap: 12, holes: [{ number: 1, par: 4, si: 7, gross: 5, net: 4, points: 2 }] } },
     async itemsByIds(ids) { return w.items.filter(r => ids.includes(r.id)) },
     async childrenOf(ids) { return w.items.filter(r => r.parentId && ids.includes(r.parentId) && !r.removedAt && !r.held) },
     async dotsOn(ids) { return w.dots.filter(d => ids.includes(d.itemId)) },
@@ -287,13 +330,18 @@ async function routeTests() {
   const yItems = (yFriends.body as unknown as { items: { id: string; comments: number; latest: unknown; mine: boolean }[] }).items
   eq(yItems.map(i => [i.id, i.comments, i.mine]), [[ycard.id, 1, true]], 'Y sees their own card, with X’s comment counted on it')
 
-  const xClub = await ask('x', { action: 'page', stream: `club:${C1}` })
-  eq((xClub.body as unknown as { items: { kind: string }[] }).items.map(i => i.kind), ['comment', 'card'], 'a club-mate sees the club card and the comment on it in the Club stream')
+  const T1 = { tripId: 'T1', code: 'T1CODE', name: 'Medal', date: '2026-11-24', endDate: null, playing: false, live: true, clubId: C1, clubName: 'Pints GC' }
+  w.comps.set('x', [T1])
+  const xComp = await ask('x', { action: 'page', stream: 'comp', comp: 'T1CODE' })
+  eq((xComp.body as unknown as { items: { kind: string; comments: number }[] }).items.map(i => [i.kind, i.comments]), [['card', 1]],
+    'a club-mate sees the club card in comp.stream, the comment on it grouped on it — never an item of its own (D329)')
+  eq(((await ask('x', { action: 'page', stream: `club:${C1}` })).body as unknown as { items: unknown[] }).items, [], 'club.stream holds the club’s own posts, never its cards (D325)')
+  void xcomment
   eq((await ask('z', { action: 'page', stream: `club:${C1}` })).status, 403, 'somebody not on the club’s list cannot open its stream')
 
   w.settings.set('y', { audience: 'me', streams: null, commentsSeenAt: null })
-  const xClub2 = await ask('x', { action: 'page', stream: `club:${C1}` })
-  eq((xClub2.body as unknown as { items: unknown[] }).items, [], 'Only me hides the card and the comment on it from everybody else')
+  const xComp2 = await ask('x', { action: 'page', stream: 'comp', comp: 'T1CODE' })
+  eq((xComp2.body as unknown as { items: unknown[] }).items, [], 'Only me hides the card and the comment on it from everybody else')
   eq(((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as { items: unknown[] }).items.length, 1, '…and Y still sees their own')
   w.settings.delete('y')
 
@@ -302,7 +350,10 @@ async function routeTests() {
   eq((await ask('z', { action: 'page', stream: 'comp', comp: 'T1CODE' })).status, 404, 'a comp that isn’t yours is refused')
   w.comps.set('c', [{ tripId: 'T1', code: 'T1CODE', name: 'Medal', date: '2026-11-24', endDate: null, playing: false, live: true, clubId: C1, clubName: 'Pints GC' }])
   const cComp = await ask('c', { action: 'page', stream: 'comp', comp: 'T1CODE' })
-  eq((cComp.body as unknown as { items: { id: string }[] }).items.map(i => i.id), [xcomment.id, ycard.id], 'a club-mate watching the comp sees its cards and comments')
+  eq((cComp.body as unknown as { items: { id: string }[] }).items.map(i => i.id), [ycard.id], 'a club-mate watching the comp sees its cards')
+  w.comps.set('c', [{ ...T1, date: '2026-11-30', code: 'LATER' }])
+  eq((await ask('c', { action: 'page', stream: 'comp', comp: 'LATER' })).status, 404, 'never a comp still to come (D323)')
+  w.comps.set('c', [T1])
 
   eq((await ask('x', { action: 'badge' })).status, 200, 'the Stream tab’s badge answers a count (D320)')
 
@@ -338,6 +389,115 @@ async function routeTests() {
   w.ready = false
   eq((await ask('x', { action: 'home' })).body, { ok: true, ready: false }, 'before migration 102 the feed simply does not show')
   w.ready = true
+}
+
+async function streamsV2Tests() {
+  section('friends.stream pulls in a card a friend commented on — only one you may see (D327, M8)')
+  const w = world()
+  const s = standIn(w)
+  const C1 = '00000000-0000-0000-0000-0000000000c1'
+  const ask = (who: string, body: Record<string, unknown>) => runFeed({ ...body, token: `tok-${who}` }, s, NOW)
+  // X and Z are friends; Y and C are X's clubmates at Pints (not Z's friends); Z is on Pints too here.
+  w.friends.push({ a: 'x', b: 'z', by: 'x', accepted: true })
+  w.clubs.get('club-1')!.members.push('z')
+  const clubmate = itemRow({ kind: 'card', authorId: 'y', tripId: 'T1', clubId: C1, roundId: 'R1', playerId: 'PY', data: { name: 'Yvonne' } })
+  const hidden = itemRow({ kind: 'card', authorId: 'c', tripId: 'T1', clubId: C1, roundId: 'R1', playerId: 'PC', data: { name: 'Cathal' } })
+  w.items.push(clubmate, hidden)
+  w.settings.set('c', { audience: 'me', streams: null, commentsSeenAt: null })
+  const read = async (who: string) => ((await ask(who, { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string; why: string | null; commentLine: { count: string; who: string } | null }[] }).items
+  eq(await read('z'), [], 'before anybody comments, a clubmate’s card is not in friends.stream')
+  eq((await ask('x', { action: 'comment', itemId: clubmate.id, text: 'Some round' })).status, 200, 'friend X comments on a clubmate’s card')
+  const zSees = await read('z')
+  eq(zSees.map(i => i.id), [clubmate.id], '…and it appears in Z’s friends.stream')
+  eq(zSees[0].why, 'x commented', '…saying why it is there')
+  eq(zSees[0].commentLine, { count: '1 comment', who: 'x' }, '…its comments grouped on it (D329)')
+  // An Only-me card: X (Cathal's clubmate) cannot comment on what X cannot see; nor does a comment pull it in.
+  w.items.push(itemRow({ kind: 'comment', authorId: 'x', parentId: hidden.id, tripId: 'T1', clubId: C1, data: { name: 'x', text: 'leaked?' } }))
+  eq((await read('z')).map(i => i.id), [clubmate.id], 'a friend’s comment on an Only-me card never pulls it in (D301 stands)')
+  eq((await ask('x', { action: 'comment', itemId: hidden.id, text: 'hi' })).status, 404, '…and nobody else may comment on it')
+
+  section('A comment lifts its card; a dot does not (D329, M10)')
+  const older = itemRow({ kind: 'card', authorId: 'x', tripId: 'T2', data: { name: 'x' } })
+  const newer = itemRow({ kind: 'card', authorId: 'x', tripId: 'T2', data: { name: 'x' } })
+  w.items.push(older, newer)
+  const xOwn = async () => ((await ask('x', { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string }[] }).items.map(i => i.id).filter(id => id === older.id || id === newer.id)
+  eq(await xOwn(), [newer.id, older.id], 'newest first')
+  await ask('z', { action: 'dot', itemId: older.id })
+  eq(await xOwn(), [newer.id, older.id], 'a dot moves nothing')
+  await ask('z', { action: 'comment', itemId: older.id, text: 'Ha' })
+  eq(await xOwn(), [older.id, newer.id], 'a comment moves the whole card to the top')
+
+  section('The comment line (D329)')
+  const v = { userId: 'me', friends: new Set(['f']) }
+  eq(commentLine([], v), null, 'no comments, no line')
+  eq(commentLine([{ authorId: 'a', name: 'Ann' }], v), { count: '1 comment', who: 'Ann' }, 'one comment: that person')
+  eq(commentLine([{ authorId: 'a', name: 'Ann' }, { authorId: 'f', name: 'Fred' }, { authorId: 'b', name: 'Bob' }], v), { count: '3 comments', who: 'Fred and 2 others' }, 'more: a friend who commented leads')
+  eq(commentLine([{ authorId: 'a', name: 'Ann' }, { authorId: 'b', name: 'Bob' }], v), { count: '2 comments', who: 'Ann and 1 other' }, '…else the most recent commenter')
+  eq(commentLine([{ authorId: 'a', name: 'Ann' }, { authorId: 'a', name: 'Ann' }], v), { count: '2 comments', who: 'Ann' }, 'others counts people, not comments')
+  eq(commentLine([{ authorId: 'me', name: 'Ross' }], v), { count: '1 comment', who: 'You' }, 'your own reads You')
+
+  section('Statuses on their own (D328, M9)')
+  eq((await ask('x', { action: 'status.post', text: '' })).status, 400, 'something to say')
+  eq((await ask('x', { action: 'status.post', text: 'x'.repeat(281) })).status, 400, 'at most 280')
+  eq((await ask('x', { action: 'status.post', text: 'x'.repeat(280) })).status, 200, '280 is fine')
+  eq((await ask('x', { action: 'status.post', text: 'Range session', stream: 'club:' + C1 })).status, 400, 'never into club.stream')
+  eq((await ask('x', { action: 'status.post', text: 'Range session', stream: 'comp' })).status, 400, '…or comp.stream')
+  const posted = await ask('x', { action: 'status.post', text: 'Range session done' })
+  eq(posted.status, 200, 'into friends.stream')
+  const zStream = ((await ask('z', { action: 'page', stream: 'friends' })).body as unknown as { items: { kind: string; status: string; talk: boolean }[] }).items
+  ok(zStream.some(i => i.kind === 'status' && i.status === 'Range session done' && i.talk), 'a friend sees it, and may comment and dot')
+  ok(!((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as { items: { kind: string }[] }).items.some(i => i.kind === 'status'), 'a clubmate who is not a friend does not')
+  const sid = (posted.body as unknown as { id: string }).id
+  eq((await ask('z', { action: 'comment', itemId: sid, text: 'Good man' })).status, 200, 'comments on a status')
+  eq((await ask('z', { action: 'report', itemId: sid })).status, 200, 'and reports cover statuses (D303)')
+  eq(w.reports.find(r => r.itemId === sid)?.clubId, null, '…to Green Dot')
+  eq((await ask('z', { action: 'item.delete', itemId: sid })).status, 403, 'only its author deletes it')
+  eq((await ask('x', { action: 'status.edit', itemId: sid, text: 'Range session done, hitting it well' })).status, 200, 'its author edits it')
+  eq((await ask('x', { action: 'item.delete', itemId: sid })).status, 200, '…and deletes it')
+  w.v2 = false
+  eq((await ask('x', { action: 'status.post', text: 'Before 104' })).status, 503, 'before migration 104: not set up yet')
+  w.v2 = true
+
+  section('Match streams (D326, D332): follow, post, only followers see')
+  const M = 'match:00000000-0000-0000-0000-0000000000f1'
+  eq((await ask('x', { action: 'follow', stream: M })).status, 404, 'nothing to follow until interclub teams exist')
+  w.followable.add(M)
+  eq((await ask('x', { action: 'follow', stream: M })).status, 200, 'the day a team stream exists, it can be followed')
+  eq((await ask('z', { action: 'status.post', text: 'Up the Pints', stream: M })).status, 403, 'a status into a match stream needs following it')
+  const m = await ask('x', { action: 'status.post', text: 'Away to Lahinch Sunday', stream: M })
+  eq(m.status, 200, 'a follower posts into it')
+  const mPage = async (who: string) => ask(who, { action: 'page', stream: 'match', match: M })
+  eq(((await mPage('x')).body as unknown as { items: { status: string }[] }).items.map(i => i.status), ['Away to Lahinch Sunday'], 'followers read it')
+  eq((await mPage('z')).status, 403, 'somebody not following cannot open it')
+  ok(!((await ask('z', { action: 'page', stream: 'friends' })).body as unknown as { items: { status: string | null }[] }).items.some(i => i.status === 'Away to Lahinch Sunday'),
+    '…and a match stream’s status never shows in friends.stream, even to a friend')
+  await ask('x', { action: 'follow', stream: M, on: false })
+  eq((await mPage('x')).status, 403, 'unfollowed, gone')
+
+  section('club.stream: the club’s own posts (D325, M5)')
+  eq((await ask('y', { action: 'post.club', clubId: C1, text: 'Course closed Monday' })).status, 403, 'a member does not post to club.stream')
+  w.creds.set(`${C1}:c`, { role: 'member', officer: true })
+  eq((await ask('c', { action: 'post.club', clubId: C1, text: 'Course closed Monday', link: 'http://pints.ie' })).status, 400, 'links are https only')
+  const post = await ask('c', { action: 'post.club', clubId: C1, text: 'Course closed Monday\n\nGreens hollow-tined.', link: 'pints.ie/news' })
+  eq(post.status, 200, 'an Officer posts, with a link')
+  const yClub = ((await ask('y', { action: 'page', stream: `club:${C1}` })).body as unknown as { items: { kind: string; text: string; link: string; canDelete: boolean; talk: boolean }[] }).items
+  eq(yClub.map(i => [i.kind, i.text, i.link]), [['post', 'Course closed Monday\n\nGreens hollow-tined.', 'https://pints.ie/news']], 'members read it — its paragraphs kept, its link made whole')
+  ok(yClub[0].talk && !yClub[0].canDelete, '…comment on it and dot it, never delete it')
+  const pid = (post.body as unknown as { id: string }).id
+  eq((await ask('y', { action: 'comment', itemId: pid, text: 'Grand' })).status, 200, 'a member comments on a post')
+  eq((await ask('y', { action: 'item.delete', itemId: pid })).status, 403, 'a member cannot take it down')
+  w.creds.set(`${C1}:x`, { role: 'member', clubhouse: true })
+  eq((await ask('x', { action: 'item.delete', itemId: pid })).status, 200, 'the club’s Clubhouse can')
+  w.settings.set('c', { audience: 'me', streams: null, commentsSeenAt: null })
+  const p2 = await ask('c', { action: 'post.club', clubId: C1, text: 'AGM Friday' })
+  ok(((await ask('y', { action: 'page', stream: `club:${C1}` })).body as unknown as { items: { id: string }[] }).items.some(i => i.id === (p2.body as unknown as { id: string }).id),
+    'a post is the club’s word: its poster’s Only me does not hide it')
+  eq(((await ask('z', { action: 'page', stream: 'friends' })).body as unknown as { items: { kind: string }[] }).items.filter(i => i.kind === 'post'), [], 'never in friends.stream')
+
+  section('The card sheet (D330)')
+  const sheet = await ask('z', { action: 'card.detail', itemId: clubmate.id })
+  eq(sheet.status, 200, 'a card you may see opens with its holes')
+  eq((await ask('z', { action: 'card.detail', itemId: hidden.id })).status, 404, 'an Only-me card does not')
 }
 
 async function friendTests() {
@@ -488,7 +648,8 @@ async function socialTests() {
   eq((await ask('x', { action: 'reports.club', clubId: C1 })).status, 403, 'a member without Clubhouse cannot see the club’s reports')
   w.creds.set(`${C1}:c`, { role: 'member', clubhouse: true })
   eq(((await ask('c', { action: 'reports.club', clubId: C1 })).body as unknown as { reports: { itemId: string }[] }).reports.map(r => r.itemId), [ccard.id], 'the Clubhouse sees its club’s report — never Green Dot’s')
-  const cPage = async () => ((await ask('x', { action: 'page', stream: `club:${C1}` })).body as unknown as { items: { id: string }[] }).items.map(i => i.id)
+  w.comps.set('x', [{ tripId: 'TC', code: 'TCCODE', name: 'Medal', date: '2026-11-24', endDate: null, playing: false, live: true, clubId: C1, clubName: 'Pints GC' }])
+  const cPage = async () => ((await ask('x', { action: 'page', stream: 'comp', comp: 'TCCODE' })).body as unknown as { items: { id: string }[] }).items.map(i => i.id)
   eq(await cPage(), [ccard.id], 'a report hides nothing by itself')
   await ask('c', { action: 'reports.resolve', clubId: C1, itemId: ccard.id, outcome: 'removed' })
   eq(await cPage(), [], 'taken down, it is gone from every stream')
@@ -523,14 +684,32 @@ function wiringTests() {
     const dot = read('app/components/feed/useStreamDot.ts')
     ok(/requestIdleCallback/.test(dot) && /setTimeout/.test(dot) && /askFeed<\{ count\?: number \}>\('badge'\)/.test(dot) && !/setInterval/.test(dot), '…asked once the page is idle after its paint, one count, never polled (M3)')
   }
-  const feedUi = read('app/components/feed/Feed.tsx')
+  const feedUi = read('app/components/feed/Stream.tsx')
+  ok(!fs.existsSync('app/components/feed/Feed.tsx'), 'the feed on Home is gone — the Stream tab is its place (M3)')
   ok(/feed-streams/.test(feedUi) && /scroll-snap-type: x mandatory/.test(read('app/globals.css')), 'streams swipe on the browser’s own scroll snap — no library')
   ok(/reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and switch instantly under Reduce Motion')
   ok(/gd\.feed\.stream\.v1/.test(feedUi), 'the last stream chosen is remembered on the phone')
-  ok(!/setInterval/.test(feedUi), 'the feed is never polled — read on show and on coming back')
+  ok(!/setInterval/.test(feedUi), 'the stream is never polled — read on show and on coming back')
+  ok(/<StreamName kind=\{activeRef\.kind\} \/>/.test(feedUi) && /compMenu\(comps, home\.today\)/.test(feedUi) && /role="menu"/.test(feedUi),
+    'the stream on show is named at the top, a chevron opening comp.stream’s menu of headings and comps (D321, D323)')
+  ok(/touchstart/.test(feedUi) && /PULL_AT/.test(feedUi) && /stream-arrive/.test(read('app/components/feed/FeedItem.tsx')) && /\.stream-arrive/.test(read('app/globals.css')),
+    'pull to refresh, and what is new fades in at the top (M13)')
+  {
+    const name = read('app/components/feed/StreamName.tsx'), css = read('app/globals.css')
+    ok(/sr-only">\{word\} stream/.test(name) && /stream-name-dot/.test(name) && /\.stream-name-dot \{[^}]*background: var\(--color-accent\)/.test(css) && /0\.32em/.test(css),
+      'club•stream: the word, a CSS dot in the accent sized to the text, "stream" — read aloud as "club stream" (D321)')
+    ok(!/gd-mark|<svg|<img/i.test(name.replace(/\/\*[\s\S]*?\*\//g, '')), '…never the wordmark’s artwork')
+  }
+  {
+    const sheet = read('app/components/feed/ItemSheet.tsx')
+    ok(/card\.detail/.test(sheet) && /Scorecard/.test(sheet) && /'comments'/.test(sheet) && /visualViewport/.test(sheet) && /onPointerDown=\{onDown\}/.test(sheet) && /onClick=\{close\}/.test(sheet),
+      'the sheet: the scorecard, the comments, a box above the keyboard; closed by a swipe down, a tap outside or the ✕ (D330, M11)')
+    ok(/reducedMotion\(\)[^\n]*\n?[^\n]*opacity: 0/.test(sheet) && /openKeyframes\(from, to\)/.test(sheet), '…grown out of the card, a fade under Reduce Motion (M12)')
+    ok(!/from ['"](framer-motion|motion|react-spring|gsap)/.test(sheet), '…with no animation library')
+  }
 
   section('Wiring: comments, the dot, reports (D301, D303, D307)')
-  ok(/askFeed\('seen'\)/.test(feedUi), 'looking at your own cards clears the Home dot')
+  ok(/askFeed\('seen'\)/.test(feedUi) && /streamSeen\(\)/.test(feedUi), 'looking at friends.stream clears the Stream tab’s dot (D307, D320)')
   ok(/reports\.club/.test(read('app/clubhouse/[slug]/Overview.tsx')) && fs.existsSync('app/clubhouse/[slug]/reports/Reports.tsx'), 'a club card’s reports wait in the Clubhouse’s Alerts and its Reports page')
   ok(/openReports\(createAdminClient\(\), null\)/.test(read('app/admin/reports/page.tsx')) && /'reports'/.test(read('app/admin/AdminShell.tsx')), 'anything else waits in /admin → Reports')
   ok(/tidyFeed\(/.test(read('app/api/cleanup/route.ts')), 'the nightly cleanup keeps the feed to FEED_KEEP_DAYS')
@@ -541,6 +720,7 @@ function wiringTests() {
 async function main() {
   ruleTests()
   await routeTests()
+  await streamsV2Tests()
   await friendTests()
   await statusTests()
   await coSignTests()

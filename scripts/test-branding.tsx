@@ -30,6 +30,7 @@ import {
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 import CountUp from '../app/components/CountUp'
+import { SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_SETTLE, SETTLE_AT, openKeyframes } from '../lib/sheetMotion'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1742,6 +1743,32 @@ section('One count-up, one celebration, and never on a board')
   ok(!/cubic-bezier\([^)]*1\.\d/.test(db), '  …and never overshoots')
   ok(/100% \{ transform: scale\(1\); +background-color: color-mix\(in srgb, var\(--color-accent\) 20%/.test(db),
     '  …settling on the quiet tinted disc that is its Reduce Motion version')
+}
+
+section('The one settle (D331, amending D8): the card sheet opening, and nothing else')
+{
+  // D8 says no springs and no overshoot. Ross allowed exactly one exception,
+  // on purpose (Streams v2, M12): the card sheet lands a hair past its place
+  // before it rests — at most 2% of the way it travelled, inside 400ms, on the
+  // putt curve, a plain fade under Reduce Motion. Held here so it cannot
+  // quietly become two.
+  ok(SHEET_SETTLE > 0 && SHEET_SETTLE <= 0.02, `the settle is at most 2% (${SHEET_SETTLE * 100}%)`)
+  ok(SHEET_OPEN_MS <= 400 && SHEET_CLOSE_MS <= 400, `inside the 400ms ceiling (${SHEET_OPEN_MS}ms, ${SHEET_CLOSE_MS}ms)`)
+  ok(SETTLE_AT > 0.5 && SETTLE_AT < 1, '  …past its place late in the move, then at rest')
+  // From a card high on the screen to a sheet at its foot: how far past it goes.
+  const from = { left: 16, top: 200, width: 358, height: 180 }, to = { left: 0, top: 120, width: 390, height: 700 }
+  const k = openKeyframes(from, to)
+  const nums = (t: string) => (t.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
+  const [ox, oy, osx, osy] = nums(String(k[1].transform))
+  ok(Math.abs(ox) <= Math.abs(from.left - to.left) * 0.02 + 0.001 && Math.abs(oy) <= Math.abs(from.top - to.top) * 0.02 + 0.001,
+    `  …past its place by at most 2% of the travel (${ox}px, ${oy}px)`)
+  ok(osx <= 1.02 && osy <= 1.02 && osx >= 1 && osy >= 1, `  …and at most 2% bigger (${osx}, ${osy})`)
+  eq(String(k[k.length - 1].transform), 'translate(0px, 0px) scale(1, 1)', '  …and at rest in its place')
+  const sheet = read('app/components/feed/ItemSheet.tsx')
+  ok(/if \(reducedMotion\(\) \|\| !origin \|\| !el\.animate\) \{\s*el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/.test(sheet),
+    '  …and under Reduce Motion it is a plain fade')
+  const settlers = uiFiles().filter(f => /openKeyframes|SHEET_SETTLE/.test(read(f)))
+  eq(settlers, ['app/components/feed/ItemSheet.tsx'], 'the card sheet is the only thing that settles')
 }
 
 section('No spaced capitals')

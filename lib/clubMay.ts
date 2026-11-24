@@ -121,6 +121,11 @@ export type ClubAct =
    * member books their own through `play`.
    */
   | 'keep_tee_sheet'
+  /**
+   * club.stream (D325): post the club's official word, and take down any of
+   * its posts — its Officers and its Clubhouse holders, from either app.
+   */
+  | 'post_club_stream'
   /** The list: add, paste, change a row, take off, put back, email a code, download. */
   | 'keep_list'
   /** The club's look and its home course. */
@@ -138,6 +143,7 @@ export function clubMay(act: ClubAct, a: Asker): boolean {
     case 'see_members_home': return !!r
     case 'play': return !!r?.playsHere
     case 'run_events': return !!r?.officer
+    case 'post_club_stream': return staff || !!r?.officer || !!r?.clubhouse
     case 'open_clubhouse':
     case 'keep_calendar':
     case 'keep_tee_sheet':

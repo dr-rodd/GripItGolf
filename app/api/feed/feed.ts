@@ -10,13 +10,15 @@
 // membership — D230, migration 102) is told there is no feed at all.
 
 import { isAccount, type AuthUser } from '@/lib/account'
+import { clubMay, credentialsOf } from '@/lib/clubMay'
 import { FEED_NOT_READY, done, fail, str, type FeedOutcome } from './outcome'
 import { runFriends, type FriendsStore } from './friends'
 import { runCards, type CardsStore } from './cards'
 import { runSocial, type SocialStore } from './social'
+import { runOwn } from './own'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
-  mayView, mayViewChild, newestFirst, olderThan, orderComps, readAudience, readCursor, readStreamKey, readStreams,
+  commentLine, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
   STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel,
   type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type StreamRef, type Viewer,
 } from '@/lib/feed'
@@ -39,6 +41,12 @@ export interface ItemRow {
   audience: Audience | null
   held: boolean
   createdAt: string
+  /** When anything last happened to it — made, or commented on (D329). Before 104, when it was made. */
+  bumpedAt?: string
+  /** Where a standalone status was posted (D326, D328). */
+  stream?: string | null
+  /** A club post's one link (D325). */
+  link?: string | null
   editedAt?: string | null
   removedAt: string | null
 }
@@ -49,10 +57,11 @@ export interface ClubRef { id: string; slug: string; name: string }
 
 /** What a stream's page is read from, before anybody's eyes are applied. */
 export interface Bundle {
+  /** Items standing on their own, latest activity first (D329). */
   rows: ItemRow[]
-  /** The cards the comments among `rows` hang off. */
-  parents: ItemRow[]
-  /** Every comment and highlight on the cards in `rows`. */
+  /** friends.stream: the cards friends commented on, with who (D327) — the guard is the card's own `mayView`. */
+  pulledBy: Map<string, string[]>
+  /** Every comment and highlight on the items in `rows`. */
   children: ItemRow[]
   dots: { itemId: string; userId: string }[]
   /** Each author's audience setting. */
@@ -65,12 +74,47 @@ export interface Bundle {
 
 export interface LivePlayer { playerId: string; name: string; tripId: string; clubId: string | null; userId: string | null; thru: number }
 
-export interface StreamQuery { authors?: string[]; clubId?: string; tripId?: string; before: Cursor | null; limit: number }
+export interface StreamQuery {
+  authors?: string[]
+  clubId?: string
+  tripId?: string
+  /** A match stream's key (D326). */
+  stream?: string
+  /** Only these kinds (club.stream: posts). */
+  kinds?: FeedKind[]
+  /** Never these kinds. */
+  notKinds?: FeedKind[]
+  /** friends.stream: also the items these accounts commented on (D327). */
+  pullFrom?: string[]
+  before: Cursor | null
+  limit: number
+}
+
+/** A comment, as pulling its card into friends.stream needs it. */
+export interface CommentRef { parentId: string; authorId: string; createdAt: string }
+
+/** A card's holes for the sheet (D330): par, stroke index, gross, net and points. */
+export interface CardHole { number: number; par: number; si: number | null; gross: number | null; net: number | null; points: number | null }
+export interface CardDetail { holes: CardHole[]; course: string | null; tees: string | null; handicap: number | null }
+
+/** What a member posts on their own (D325, D328). */
+export interface OwnWrite {
+  kind: 'status' | 'post'
+  authorId: string
+  clubId: string | null
+  stream: string | null
+  text: string
+  link: string | null
+  data: Record<string, unknown>
+  at: string
+}
 
 export interface FeedStore extends FriendsStore, CardsStore, SocialStore {
   userFromToken(token: string): Promise<AuthUser | null>
   /** Whether migration 102 is in. */
   ready(): Promise<boolean>
+  /** Whether migration 104 (Streams v2) is in — statuses, club posts, follows, last activity. */
+  v2(): Promise<boolean>
   /** This account's settings — the defaults when it has none. */
   settings(userId: string): Promise<Settings>
   saveSettings(userId: string, patch: { audience?: Audience; streams?: string[]; commentsSeenAt?: string }): Promise<void>
@@ -81,8 +125,23 @@ export interface FeedStore extends FriendsStore, CardsStore, SocialStore {
   myClubs(userId: string): Promise<ClubRef[]>
   /** Accepted friends' account ids. */
   friendIds(userId: string): Promise<string[]>
-  /** Top-level items and comments, newest first, the page's worth plus one. */
+  /** Items standing on their own, latest activity first, the page's worth plus one (D329). */
   items(q: StreamQuery): Promise<ItemRow[]>
+  /** The latest comments by these accounts, older than the cursor's activity — for pulling cards in (D327). */
+  commentsBy(authors: string[], before: Cursor | null, limit: number): Promise<CommentRef[]>
+  /** Match streams this account follows (D326), as 'match:<id>'. */
+  follows(userId: string): Promise<string[]>
+  /** Whether a match stream exists to be followed — none until interclub teams exist (D332). */
+  followable(stream: string): Promise<boolean>
+  setFollow(userId: string, stream: string, on: boolean): Promise<void>
+  /** A status or a club post (D325, D328). */
+  insertOwn(o: OwnWrite): Promise<ItemRow>
+  /** A comment lifts its item to the top (D329). */
+  bump(itemId: string, at: string): Promise<void>
+  /** The club event types this account turned off (095) — a club post about one is not shown to them. */
+  hiddenTypes(userId: string): Promise<string[]>
+  /** A signed card's holes, for the sheet (D330). */
+  cardDetail(roundId: string, playerId: string): Promise<CardDetail | null>
   itemsByIds(ids: string[]): Promise<ItemRow[]>
   childrenOf(parentIds: string[]): Promise<ItemRow[]>
   dotsOn(itemIds: string[]): Promise<{ itemId: string; userId: string }[]>
@@ -124,6 +183,15 @@ export interface FeedView {
   dotted: boolean
   comments: number
   latest: { name: string; text: string } | null
+  /** "2 comments · John and 1 other" (D329). */
+  commentLine: { count: string; who: string } | null
+  /** Why a card is in friends.stream when it is not a friend's: "Dave commented" (D327). */
+  why: string | null
+  /** A club post's words (with its line breaks) and link (D325). */
+  text: string | null
+  link: string | null
+  /** May this viewer comment on it and dot it (D301, D329). */
+  talk: boolean
   mine: boolean
   /** The card's own audience — to its owner only. */
   audience: Audience | null
@@ -158,14 +226,15 @@ export function isOutcome(v: unknown): v is FeedOutcome {
   return !!v && typeof v === 'object' && 'status' in v && 'body' in v
 }
 
-async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: string | null } = {}): Promise<{ viewer: Viewer; clubs: ClubRef[] }> {
-  const [friends, clubs] = await Promise.all([store.friendIds(asker.user.id), store.myClubs(asker.user.id)])
+export async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: string | null } = {}): Promise<{ viewer: Viewer; clubs: ClubRef[] }> {
+  const [friends, clubs, follows] = await Promise.all([store.friendIds(asker.user.id), store.myClubs(asker.user.id), store.follows(asker.user.id)])
   return {
     clubs,
     viewer: {
       userId: asker.user.id, junior: asker.junior,
       friends: new Set(friends), clubs: new Set(clubs.map(c => c.id)),
       events: new Set(o.tripId ? [o.tripId] : []),
+      follows: new Set(follows),
     },
   }
 }
@@ -176,36 +245,67 @@ export function factsOf(r: ItemRow, audiences: Map<string, Audience>, juniors: R
     audience: effectiveAudience(r.authorId ? audiences.get(r.authorId) ?? null : null, r.audience),
     removed: !!r.removedAt || (!!r.authorId && juniors.has(r.authorId)),
     held: r.held,
+    stream: r.stream ?? null,
   }
 }
 
 // ─── Reading a stream ───────────────────────────────────────────
 
+/** The order every stream reads in (D329): latest activity first, the id breaking a tie. */
+export function activityOf(r: Pick<ItemRow, 'bumpedAt' | 'createdAt'>): string {
+  return r.bumpedAt ?? r.createdAt
+}
+
+function latestFirst(a: ItemRow, b: ItemRow): number {
+  return activityOf(b).localeCompare(activityOf(a)) || b.id.localeCompare(a.id)
+}
+
+function olderThanCursor(c: Cursor | null) {
+  return (r: ItemRow) => !c || activityOf(r) < c.at || (activityOf(r) === c.at && r.id < c.id)
+}
+
 /** The raw page a stream reads, with everything its items need — nothing about who is looking. */
 export async function readBundle(store: FeedStore, q: StreamQuery): Promise<Bundle> {
-  const rows = await store.items({ ...q, limit: FEED_READ + 1 })
-  const more = rows.length > FEED_READ
-  const page = rows.slice(0, FEED_READ)
-  const parentIds = [...new Set(page.filter(r => r.kind === 'comment' && r.parentId).map(r => r.parentId as string))]
-  const cardIds = page.filter(r => !r.parentId).map(r => r.id)
-  const [parents, children] = await Promise.all([
-    parentIds.length ? store.itemsByIds(parentIds) : Promise.resolve([]),
-    cardIds.length ? store.childrenOf(cardIds) : Promise.resolve([]),
+  const [own, comments] = await Promise.all([
+    store.items({ ...q, limit: FEED_READ + 1 }),
+    q.pullFrom?.length ? store.commentsBy(q.pullFrom, q.before, FEED_READ) : Promise.resolve([] as CommentRef[]),
   ])
-  const dots = await store.dotsOn([...cardIds, ...parentIds])
-  const authors = [...new Set([...page, ...parents, ...children].map(r => r.authorId).filter((a): a is string => !!a))]
+  // friends.stream (D327): a card a friend commented on joins the page.
+  const pulledBy = new Map<string, string[]>()
+  for (const c of comments) pulledBy.set(c.parentId, [...(pulledBy.get(c.parentId) ?? []), c.authorId])
+  const have = new Set(own.map(r => r.id))
+  const extra = pulledBy.size
+    ? (await store.itemsByIds([...pulledBy.keys()].filter(id => !have.has(id))))
+      .filter(r => !r.parentId && !r.removedAt && !r.held).filter(olderThanCursor(q.before))
+    : []
+  const all = [...own, ...extra].sort(latestFirst)
+  const more = own.length > FEED_READ || comments.length >= FEED_READ || all.length > FEED_READ
+  const page = all.slice(0, FEED_READ)
+  const ids = page.map(r => r.id)
+  const [children, dots] = await Promise.all([
+    ids.length ? store.childrenOf(ids) : Promise.resolve([]),
+    ids.length ? store.dotsOn(ids) : Promise.resolve([]),
+  ])
+  const authors = [...new Set([...page, ...children].map(r => r.authorId).filter((x): x is string => !!x))]
   const [audiences, juniors] = await Promise.all([store.audiences(authors), store.juniors(authors)])
-  return { rows: page, parents, children, dots, audiences, juniors, more }
+  return { rows: page, pulledBy, children, dots, audiences, juniors, more }
+}
+
+/** Who else the viewer sees as a poster's authority on club posts: the clubs whose posts they may take down (D325). */
+export interface ViewExtras {
+  /** Clubs where this viewer may post to and take down club.stream (D325). */
+  postClubs?: ReadonlySet<string>
+  /** Club event types this viewer turned off — a club post about one is not shown (D325, 095). */
+  hiddenTypes?: ReadonlySet<string>
 }
 
 /**
  * A bundle through one viewer's eyes (D305): only what `mayView` lets them
- * see, in its stream, with the counts and the latest comment worked out
- * from what they may see too.
+ * see, in its stream, one item a card with its comments grouped on it
+ * (D329) — the counts and the line worked out from what they may see too.
  */
-export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef['kind']; id?: string | null }): { items: FeedView[]; next: Cursor | null } {
+export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef['kind']; id?: string | null }, extras: ViewExtras = {}): { items: FeedView[]; next: Cursor | null } {
   const facts = (r: ItemRow) => factsOf(r, b.audiences, b.juniors)
-  const byId = new Map([...b.rows, ...b.parents].map(r => [r.id, r]))
   const kids = new Map<string, ItemRow[]>()
   for (const c of b.children) {
     if (!c.parentId) continue
@@ -213,39 +313,37 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
     if (list) list.push(c)
     else kids.set(c.parentId, [c])
   }
-  const dotsOf = (id: string) => b.dots.filter(d => d.itemId === id)
   const items: FeedView[] = []
   for (const r of b.rows) {
+    if (r.parentId) continue
     const f = facts(r)
-    if (r.kind === 'comment') {
-      const parent = r.parentId ? byId.get(r.parentId) ?? null : null
-      if (!parent || !mayViewChild(f, facts(parent), viewer) || !inStream(f, stream, viewer)) continue
-      items.push({
-        ...blank(r, viewer), kind: 'comment', name: str(r.data.name) || 'A member',
-        line: str(r.data.text), parentId: parent.id,
-        on: str(parent.data.name) ? `on ${str(parent.data.name)}’s card` : null,
-        canDelete: r.authorId === viewer.userId || parent.authorId === viewer.userId,
-      })
-      continue
-    }
-    if (r.parentId || !mayView(f, viewer) || !inStream(f, stream, viewer)) continue
+    const friendsIn = (b.pulledBy.get(r.id) ?? []).filter(id => id !== viewer.userId && viewer.friends.has(id))
+    if (!mayView(f, viewer) || !inStream({ ...f, kind: r.kind, stream: r.stream ?? null }, stream, viewer, { pulled: friendsIn.length > 0 })) continue
+    if (r.kind === 'post' && typeof r.data.eventType === 'string' && extras.hiddenTypes?.has(r.data.eventType)) continue
     const children = (kids.get(r.id) ?? []).filter(c => mayViewChild(facts(c), f, viewer))
     const comments = children.filter(c => c.kind === 'comment').sort(newestFirst)
-    const highlights = children.filter(c => c.kind === 'highlight').sort((a, z) => a.createdAt.localeCompare(z.createdAt))
-    const dots = dotsOf(r.id)
+    const highlights = children.filter(c => c.kind === 'highlight').sort((x, z) => x.createdAt.localeCompare(z.createdAt))
+    const dots = b.dots.filter(d => d.itemId === r.id)
     const mine = !!r.authorId && r.authorId === viewer.userId
+    const friendAuthor = !!r.authorId && viewer.friends.has(r.authorId)
+    // D327: say why a card a friend commented on is here, when it is not a friend's own.
+    const whyName = stream.kind === 'friends' && !mine && !friendAuthor && friendsIn.length
+      ? str(comments.find(c => c.authorId === friendsIn[0])?.data.name) : ''
+    const postAdmin = r.kind === 'post' && !!r.clubId && !!extras.postClubs?.has(r.clubId)
     items.push({
       ...blank(r, viewer),
       dots: dots.length, dotted: dots.some(d => d.userId === viewer.userId),
       comments: comments.length,
       latest: comments[0] ? { name: str(comments[0].data.name) || 'A member', text: str(comments[0].data.text) } : null,
+      commentLine: commentLine(comments.map(c => ({ authorId: c.authorId, name: str(c.data.name) || 'A member' })), viewer),
+      why: whyName ? `${whyName} commented` : null,
       highlights: highlights.map(h => str(h.data.line)).filter(Boolean),
-      audience: mine ? r.audience : null,
-      canDelete: mine && r.kind === 'card' && !!r.status,
+      audience: mine && r.kind === 'card' ? r.audience : null,
+      canDelete: (mine && (r.kind === 'status' || r.kind === 'post' || (r.kind === 'card' && !!r.status))) || postAdmin,
     })
   }
   const last = b.rows[b.rows.length - 1]
-  return { items: items.slice(0, FEED_PAGE * 2), next: b.more && last ? { at: last.createdAt, id: last.id } : null }
+  return { items: items.slice(0, FEED_PAGE * 2), next: b.more && last ? { at: activityOf(last), id: last.id } : null }
 }
 
 function blank(r: ItemRow, viewer: Viewer): FeedView {
@@ -253,12 +351,14 @@ function blank(r: ItemRow, viewer: Viewer): FeedView {
   const mine = !!r.authorId && r.authorId === viewer.userId
   const line = r.kind === 'card'
     ? contextLine({ event: str(d.event) || null, club: str(d.club) || null, course: str(d.course) || null, marker: str(d.marker) || null })
-    : str(d.line)
+    : r.kind === 'post' ? str(d.title) || str(d.club) : r.kind === 'status' ? '' : str(d.line)
   return {
     id: r.id, kind: r.kind, at: r.createdAt, name: str(d.name) || 'A member', line,
-    status: r.kind === 'card' ? r.status : null,
+    status: r.kind === 'card' || r.kind === 'status' ? r.status : null,
     gross: num(d.gross), points: num(d.points), holes: num(d.holes), place: num(d.place),
-    highlights: [], dots: 0, dotted: false, comments: 0, latest: null,
+    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, commentLine: null, why: null,
+    text: r.kind === 'post' ? str(d.text) || null : null, link: r.kind === 'post' ? r.link ?? null : null,
+    talk: talksOn(r.kind),
     mine, audience: null, parentId: null, on: null, canDelete: false, canReport: !mine,
     code: str(d.code) || null,
   }
@@ -294,6 +394,8 @@ export async function runFeed(
   if (cards) return cards
   const social = await runSocial(action, input, a, store, now)
   if (social) return social
+  const own = await runOwn(action, input, a, store, now)
+  if (own) return own
 
   if (action === 'home') return home(input, a, store, now)
   // The Stream tab's dot (D307, moved by D320): one count, nothing else read.
@@ -328,7 +430,7 @@ export async function runFeed(
  */
 async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, now: Date): Promise<FeedOutcome> {
   const today = irishDay(now)
-  const [settings, clubs] = await Promise.all([store.settings(a.user.id), store.myClubs(a.user.id)])
+  const [settings, clubs, follows, v2] = await Promise.all([store.settings(a.user.id), store.myClubs(a.user.id), store.follows(a.user.id), store.v2()])
   const [comps, newComments] = await Promise.all([
     store.recentComps(a.user.id, clubs.map(c => c.id), sinceDay(today), today),
     store.commentsSince(a.user.id, settings.commentsSeenAt),
@@ -338,17 +440,31 @@ async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, 
   const view = (s: StreamRef): StreamView => ({ key: streamKey(s), kind: s.kind, label: streamLabel(s, { club: clubName }), empty: emptyLine(s.kind), about: streamAbout(s.kind) })
   // Every stream the member could keep (D321): their clubs', comp, match, friends.
   const offered = offeredStreams(clubs.map(c => c.id))
-  const here = str(input.club)
+  const here = clubs.find(c => c.slug === str(input.club))?.id ?? null
+  const posts = here && v2 ? await postClubsOf(a, store, [here]) : new Set<string>()
   return done({
-    ready: true, junior: false,
+    ready: true, junior: false, v2,
     audience: settings.audience, audiences: AUDIENCES,
     streams: streams.map(view), offered: offered.map(view),
     clubs: clubs.map(c => ({ id: c.id, slug: c.slug, name: c.name })),
-    here: clubs.find(c => c.slug === here)?.id ?? null,
-    comps: orderComps(comps),
+    here,
+    // D325: whether this member may post to the club's stream here.
+    canPost: !!here && posts.has(here),
+    // D326, D332: the match streams followed — none until interclub teams exist.
+    follows: follows.map(key => ({ key, label: 'Match' })),
+    comps: orderComps(comps).filter(c => (c.date ?? '') <= today),
     newComments,
     today,
   })
+}
+
+/** The clubs (of these) where this account may post to club.stream and take its posts down (D325). */
+async function postClubsOf(a: Asker, store: FeedStore, clubIds: string[]): Promise<Set<string>> {
+  const [staff, rows] = await Promise.all([
+    store.isStaff(a.user.id),
+    Promise.all(clubIds.map(id => store.clubCredentials(id, a.user.id).then(r => [id, r] as const))),
+  ])
+  return new Set(rows.filter(([, r]) => clubMay('post_club_stream', { row: r ? credentialsOf(r) : null, staff })).map(([id]) => id))
 }
 
 /** One page of one stream, through this viewer's eyes. */
@@ -356,35 +472,51 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
   const stream = readStreamKey(input.stream)
   if (!stream) return fail(400, 'Which stream?')
   const before = readCursor(input.before)
-  // match.stream is vacant until interclub teams exist (D332).
-  if (stream.kind === 'match') return done({ items: [], next: null })
 
   if (stream.kind === 'friends') {
     const { viewer } = await viewerOf(a, store)
-    const b = await readBundle(store, { authors: [a.user.id, ...viewer.friends], before, limit: FEED_READ })
+    const friends = [...viewer.friends]
+    const b = await readBundle(store, { authors: [a.user.id, ...friends], notKinds: ['post'], pullFrom: friends, before, limit: FEED_READ })
     return done(viewBundle(b, viewer, { kind: 'friends' }))
+  }
+
+  if (stream.kind === 'match') {
+    // D326, D332: a match stream the member follows — none until interclub teams exist.
+    const { viewer } = await viewerOf(a, store)
+    const key = str(input.match)
+    if (!key) return done({ items: [], next: null })
+    if (!isMatchStream(key) || !viewer.follows?.has(key)) return fail(403, 'Follow that match stream first.')
+    const read = () => readBundle(store, { stream: key, before: null, limit: FEED_READ })
+    const b = before ? await readBundle(store, { stream: key, before, limit: FEED_READ })
+      : store.shared ? await store.shared(key, read) : await read()
+    return done(viewBundle(b, viewer, { kind: 'match', id: key.slice('match:'.length) }))
   }
 
   if (stream.kind === 'club') {
     const { viewer } = await viewerOf(a, store)
-    // A Club stream is for the club's own people only (D294).
+    // A club's stream is for the club's own people only (D294); its posts only (D325).
     if (!viewer.clubs.has(stream.id)) return fail(403, 'That stream is for the club’s members.')
-    const read = () => readBundle(store, { clubId: stream.id, before: null, limit: FEED_READ })
-    const b = before ? await readBundle(store, { clubId: stream.id, before, limit: FEED_READ })
-      : store.shared ? await store.shared(`club:${stream.id}`, read) : await read()
-    return done(viewBundle(b, viewer, { kind: 'club', id: stream.id }))
+    const q = { clubId: stream.id, kinds: ['post'] as FeedKind[], limit: FEED_READ }
+    const read = () => readBundle(store, { ...q, before: null })
+    const [b, postClubs, hidden] = await Promise.all([
+      before ? readBundle(store, { ...q, before }) : store.shared ? store.shared(`club:${stream.id}`, read) : read(),
+      postClubsOf(a, store, [stream.id]),
+      store.hiddenTypes(a.user.id),
+    ])
+    return done(viewBundle(b, viewer, { kind: 'club', id: stream.id }, { postClubs, hiddenTypes: new Set(hidden) }))
   }
 
-  // Comp: only a comp the picker offers this member (D300).
+  // Comp: only a comp the picker offers this member (D300), never one still to come (D323).
   const code = str(input.comp).trim().toUpperCase()
   const today = irishDay(now)
   const clubs = await store.myClubs(a.user.id)
   const comps = await store.recentComps(a.user.id, clubs.map(c => c.id), sinceDay(today), today)
-  const comp = comps.find(c => c.code === code)
+  const comp = comps.find(c => c.code === code && (c.date ?? '') <= today)
   if (!comp) return fail(404, 'That comp isn’t one of yours.')
   const { viewer } = await viewerOf(a, store, { tripId: comp.playing ? comp.tripId : null })
-  const read = () => readBundle(store, { tripId: comp.tripId, before: null, limit: FEED_READ })
-  const b = before ? await readBundle(store, { tripId: comp.tripId, before, limit: FEED_READ })
+  const q = { tripId: comp.tripId, notKinds: ['post', 'status'] as FeedKind[], limit: FEED_READ }
+  const read = () => readBundle(store, { ...q, before: null })
+  const b = before ? await readBundle(store, { ...q, before })
     : store.shared ? await store.shared(`comp:${comp.tripId}`, read) : await read()
   return done(viewBundle(b, viewer, { kind: 'comp', id: comp.tripId }))
 }

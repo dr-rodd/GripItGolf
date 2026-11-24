@@ -10,7 +10,7 @@ import LegalLinks from '@/app/components/LegalLinks'
 import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
 import { IconChevronRight, IconSettings } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
-import Stream from '@/app/components/feed/Feed'
+import Stream from '@/app/components/feed/Stream'
 import Initials from '@/app/components/Initials'
 import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
@@ -90,7 +90,7 @@ export default function HomeScreen() {
           </div>
         )}
         {tab === 'home' && <HomeTabPage home={state.kind === 'ready' ? state.home : null} />}
-        {state.kind === 'ready' && tab === 'stream' && <Stream mePath="/home/settings" />}
+        {state.kind === 'ready' && tab === 'stream' && <Stream settingsPath="/home/settings" />}
         {state.kind === 'ready' && tab === 'events' && <EventsTab events={state.home.events} onChanged={load} />}
         {state.kind === 'ready' && tab === 'board' && <BoardTab events={state.home.events} />}
         {state.kind === 'ready' && tab === 'stats' && <StatsTab home={state.home} />}
