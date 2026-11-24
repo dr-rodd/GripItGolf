@@ -237,7 +237,15 @@ export function standIn(w: World): FeedStore {
     },
     async bump(id, at) { const r = w.items.find(x => x.id === id); if (r && activity(r) < at) r.bumpedAt = at },
     async hiddenTypes(u) { return w.hidden.get(u) ?? [] },
-    async cardDetail() { return { course: 'Pints', tees: 'White', handicap: 12, holes: [{ number: 1, par: 4, si: 7, gross: 5, net: 4, points: 2 }] } },
+    async cardDetail(roundId, playerId) {
+      return {
+        player: { id: playerId, name: 'Yvonne', handicap: 12, gender: 'F' },
+        round: { id: roundId, round_number: 1, courses: { id: 'C', name: 'Pints' } },
+        holes: [{ id: 'H1', hole_number: 1, par: 4, stroke_index: 7, course_id: 'C' }],
+        resolved: [{ playerId, roundId, holeId: 'H1', holeNumber: 1, gross: 5, points: 2, noReturn: false, live: false }],
+        handicap: 12,
+      }
+    },
     async itemsByIds(ids) { return w.items.filter(r => ids.includes(r.id)) },
     async childrenOf(ids) { return w.items.filter(r => r.parentId && ids.includes(r.parentId) && !r.removedAt && !r.held) },
     async dotsOn(ids) { return w.dots.filter(d => ids.includes(d.itemId)) },
@@ -499,6 +507,7 @@ async function streamsV2Tests() {
   section('The card sheet (D330)')
   const sheet = await ask('z', { action: 'card.detail', itemId: clubmate.id })
   eq(sheet.status, 200, 'a card you may see opens with its holes')
+  ok(!!(sheet.body as unknown as { detail: { player: unknown; holes: unknown[]; resolved: unknown[] } }).detail?.holes.length, '…in the shape the trip’s own scorecard draws (D334)')
   eq((await ask('z', { action: 'card.detail', itemId: hidden.id })).status, 404, 'an Only-me card does not')
 }
 
@@ -708,6 +717,10 @@ function wiringTests() {
       'the sheet: the scorecard, the comments, a box above the keyboard; closed by a swipe down, a tap outside or the ✕ (D330, M11)')
     ok(/reducedMotion\(\)[^\n]*\n?[^\n]*opacity: 0/.test(sheet) && /openKeyframes\(from, to\)/.test(sheet), '…grown out of the card, a fade under Reduce Motion (M12)')
     ok(!/from ['"](framer-motion|motion|react-spring|gsap)/.test(sheet), '…with no animation library')
+    ok(/import\('@\/app\/golf\/\[root\]\/\[tripCode\]\/leaderboard\/TripLeaderboardClient'\)/.test(sheet) && /<Card bare inline/.test(sheet),
+      'a card pops out as the trip’s own scorecard — one card for the site, never a second copy (D334)')
+    ok(/warmCard\(\)/.test(read('app/components/feed/Stream.tsx')), '…fetched ahead once the Stream tab is idle')
+    ok(!/co-signed/.test(read('app/api/feed/feed.ts').slice(read('app/api/feed/feed.ts').indexOf('function blank'))), 'a card’s line never says co-signed (D334)')
   }
 
   section('Wiring: club.stream from both apps (D325)')

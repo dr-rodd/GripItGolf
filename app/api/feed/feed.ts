@@ -93,9 +93,18 @@ export interface StreamQuery {
 /** A comment, as pulling its card into friends.stream needs it. */
 export interface CommentRef { parentId: string; authorId: string; createdAt: string }
 
-/** A card's holes for the sheet (D330): par, stroke index, gross, net and points. */
-export interface CardHole { number: number; par: number; si: number | null; gross: number | null; net: number | null; points: number | null }
-export interface CardDetail { holes: CardHole[]; course: string | null; tees: string | null; handicap: number | null }
+/**
+ * A signed card for the pop-out (D330, D334): what the trip's own scorecard
+ * (`ScorecardSheet`) draws — one player, the round and its course, the
+ * course's holes, the player's scores, and the handicap it was scored off.
+ */
+export interface CardDetail {
+  player: { id: string; name: string; handicap: number | null; gender: string }
+  round: { id: string; round_number: number; courses: { id: string; name: string } }
+  holes: { id: string; hole_number: number; par: number; stroke_index: number; course_id: string; par_ladies?: number | null; stroke_index_ladies?: number | null }[]
+  resolved: { playerId: string; roundId: string; holeId: string; holeNumber: number; gross: number | null; points: number; noReturn: boolean; live: boolean }[]
+  handicap: number | null
+}
 
 /** What a member posts on their own (D325, D328). */
 export interface OwnWrite {
@@ -350,7 +359,8 @@ function blank(r: ItemRow, viewer: Viewer): FeedView {
   const d = r.data
   const mine = !!r.authorId && r.authorId === viewer.userId
   const line = r.kind === 'card'
-    ? contextLine({ event: str(d.event) || null, club: str(d.club) || null, course: str(d.course) || null, marker: str(d.marker) || null })
+    // D334: the event and where — the marker is left off, as the trip scorecard leaves it.
+    ? contextLine({ event: str(d.event) || null, club: str(d.club) || null, course: str(d.course) || null })
     : r.kind === 'post' ? str(d.title) || str(d.club) : r.kind === 'status' ? '' : str(d.line)
   return {
     id: r.id, kind: r.kind, at: r.createdAt, name: str(d.name) || 'A member', line,

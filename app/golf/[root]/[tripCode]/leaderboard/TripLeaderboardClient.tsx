@@ -282,8 +282,10 @@ function Row({ children, className = '' }: { children: React.ReactNode; classNam
  */
 export function ScorecardSheet({
   title, subtitle, players, round, holes, resolved, handicapFor, onClose,
-  teamHolePoints = null, inline = false,
+  teamHolePoints = null, inline = false, bare = false,
 }: {
+  /** Inline and with no card of its own — inside another card (the stream's pop-out, D334). */
+  bare?: boolean
   /**
    * Drawn in place, under the row it belongs to, rather than over the page
    * (Ross, 10 Nov 2026): one card to show opens as a slider below its row;
@@ -608,7 +610,7 @@ export function ScorecardSheet({
     // which is also what makes tapping outside to close an obvious thing to
     // try. See app/components/scorecardStyle.ts.
     inline ? (
-      <div className={`relative w-full flex flex-col overflow-hidden ${SC_CARD}`}>
+      <div className={`relative w-full flex flex-col overflow-hidden ${bare ? 'flex-1 min-h-0' : SC_CARD}`}>
         {body}
       </div>
     ) : (

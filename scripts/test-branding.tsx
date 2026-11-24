@@ -1765,8 +1765,12 @@ section('The one settle (D331, amending D8): the card sheet opening, and nothing
   ok(osx <= 1.02 && osy <= 1.02 && osx >= 1 && osy >= 1, `  …and at most 2% bigger (${osx}, ${osy})`)
   eq(String(k[k.length - 1].transform), 'translate(0px, 0px) scale(1, 1)', '  …and at rest in its place')
   const sheet = read('app/components/feed/ItemSheet.tsx')
-  ok(/if \(reducedMotion\(\) \|\| !origin \|\| !el\.animate\) \{\s*el\.animate\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/.test(sheet),
+  ok(/if \(reducedMotion\(\) \|\| !origin \|\| !el\.animate\) \{\s*el\.animate\?\.\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/.test(sheet),
     '  …and under Reduce Motion it is a plain fade')
+  // D334: X's pop-out (Ross, 24 Nov 2026) — a fifth of a second, soft to sharp, back into the tile on close.
+  ok(SHEET_OPEN_MS <= 250 && SHEET_CLOSE_MS <= 200, `  …quick, as the X menu Ross sent is (${SHEET_OPEN_MS}ms open, ${SHEET_CLOSE_MS}ms close)`)
+  ok(/blur\(\d+px\)/.test(String(k[0].filter)) && String(k[k.length - 1].filter) === 'blur(0px)', '  …soft as it leaves the tile, sharp at rest')
+  ok(/closeKeyframes\(seen/.test(sheet), '  …and it goes back into the tile it came out of')
   const settlers = uiFiles().filter(f => /openKeyframes|SHEET_SETTLE/.test(read(f)))
   eq(settlers, ['app/components/feed/ItemSheet.tsx'], 'the card sheet is the only thing that settles')
 }

@@ -8,7 +8,7 @@ import { reducedMotion } from '@/lib/motion'
 import { IconCheck, IconChevronDown, IconSettings } from '../icons'
 import { LiveDot, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { FeedItem, type FeedView } from './FeedItem'
-import ItemSheet from './ItemSheet'
+import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
 import { ClubPostComposer, StatusComposer } from './Composer'
 import { streamSeen } from './useStreamDot'
@@ -88,6 +88,11 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     setCompPick(remembered(COMP_KEY))
     setMatchPick(remembered(MATCH_KEY))
   }, [loadHome])
+  // D334: the trip's scorecard, fetched ahead once the tab is idle, so a card pops out without waiting on it.
+  useEffect(() => {
+    const t = window.setTimeout(() => { void warmCard().catch(() => undefined) }, 1200)
+    return () => window.clearTimeout(t)
+  }, [])
 
   const comps = useMemo(() => home?.comps ?? [], [home])
   const follows = useMemo(() => home?.follows ?? [], [home])

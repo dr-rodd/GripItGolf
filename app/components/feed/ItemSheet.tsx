@@ -3,36 +3,60 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
-import { COMMENT_MAX, ago, contextLine } from '@/lib/feed'
+import { COMMENT_MAX, ago } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { SHEET_OPEN_MS, SHEET_CLOSE_MS, openKeyframes } from '@/lib/sheetMotion'
+import { SHEET_CLOSE_MS, SHEET_OPEN_MS, closeKeyframes, openKeyframes } from '@/lib/sheetMotion'
+import { SC_CARD } from '../scorecardStyle'
 import { IconX } from '../icons'
 import { FIELD, buttonClass } from '../ui'
-import { CardFigures, type FeedView } from './FeedItem'
+import type { FeedView } from './FeedItem'
 import { DotButton, MoreMenu, ReportSheet } from './ItemActions'
 
 type Comment = { id: string; name: string; text: string; at: string; mine: boolean; canDelete: boolean; canReport: boolean }
-type Hole = { number: number; par: number; si: number | null; gross: number | null; net: number | null; points: number | null }
-type Detail = { holes: Hole[]; course: string | null; tees: string | null; handicap: number | null }
+type Detail = {
+  player: { id: string; name: string; handicap: number | null; gender: string }
+  round: { id: string; round_number: number; courses: { id: string; name: string } }
+  holes: { id: string; hole_number: number; par: number; stroke_index: number; course_id: string; par_ladies?: number | null; stroke_index_ladies?: number | null }[]
+  resolved: { playerId: string; roundId: string; holeId: string; holeNumber: number; gross: number | null; points: number; noReturn: boolean; live: boolean }[]
+  handicap: number | null
+}
 
 /** The putt curve as the Web Animations API takes it — `--gd-ease`, which a script cannot read. */
 const PUTT = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
 /**
- * An item opened (D330, M11, M12): the card grows out of where it sat into
- * this sheet — its scorecard (holes, gross, net, points), then its comments
- * oldest first, then a comment box held just above the keyboard, and the
- * dot. Closed by a swipe down, a tap outside, the ✕ or Escape.
+ * The trip's own pop-up scorecard (`ScorecardSheet`), loaded only when a card
+ * is first opened — and warmed by the Stream tab once it is idle (`warmCard`),
+ * so the pop-out never waits on it. One card for the whole site (D334): the
+ * stream draws no second copy.
+ */
+type CardComponent = typeof import('@/app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient').ScorecardSheet
+let cardComponent: CardComponent | null = null
+let cardLoading: Promise<CardComponent> | null = null
+export function warmCard(): Promise<CardComponent> {
+  if (cardComponent) return Promise.resolve(cardComponent)
+  cardLoading ??= import('@/app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient').then(m => (cardComponent = m.ScorecardSheet))
+  return cardLoading
+}
+
+/**
+ * An item popped out of the stream (D330, amended D334). A signed card is
+ * **the trip's scorecard**, its title bar the player and the round — cream
+ * rows, the colour-coded score shapes, Out, In and Total — and under it, in
+ * the same card, the comments oldest first, a comment box held above the
+ * keyboard, and the dot. A status, a post or a result is the same card with
+ * its own words in place of the scorecard. Closed by a swipe down on its
+ * handle, a tap outside, the ✕ or Escape.
  *
- * **The opening is the one settle the site allows** (D331, amending D8): the
- * sheet travels from the card's own place on the putt curve and lands a
- * hair past it — at most 2% — before it rests, all inside 400ms
- * (`lib/sheetMotion.ts`, held by test:branding). No library: the browser's
- * own Web Animations. Under Reduce Motion, a plain fade.
+ * **It grows out of the tile** the way X's menus do (Ross, 24 Nov 2026): soft
+ * and blurred as it leaves the tile, sharp as it lands a hair past its place
+ * and rests — about a fifth of a second (`lib/sheetMotion.ts`, the site's one
+ * settle, D331, held by test:branding). It shrinks back into the tile when
+ * closed. No library: the browser's Web Animations. Reduce Motion: a fade.
  */
 export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
   item: FeedView
-  /** Where the item sat when it was tapped — the sheet grows out of it. */
+  /** The tile it was opened from — the card grows out of it and goes back into it. */
   origin: HTMLElement | null
   onClose: () => void
   onPatch: (p: Partial<FeedView>) => void
@@ -41,7 +65,9 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
   const panel = useRef<HTMLDivElement>(null)
   const backdrop = useRef<HTMLDivElement>(null)
   const [comments, setComments] = useState<Comment[] | null>(null)
-  const [detail, setDetail] = useState<Detail | null | 'none'>(item.kind === 'card' ? null : 'none')
+  const isCard = item.kind === 'card'
+  const [detail, setDetail] = useState<Detail | null | 'none'>(isCard ? null : 'none')
+  const [Card, setCard] = useState<CardComponent | null>(() => cardComponent)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -50,7 +76,7 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
   const closing = useRef(false)
   const now = new Date()
 
-  // Read once, on opening: the comments, and a card's holes.
+  // Read once, on opening: the comments, and a card's scorecard.
   useEffect(() => {
     let live = true
     void askFeed<{ comments: Comment[] }>('comments', { itemId: item.id }).then(r => {
@@ -58,21 +84,22 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
       if (!r.ok) { setError(r.error); setComments([]); return }
       setComments(r.comments)
     })
-    if (item.kind === 'card') {
+    if (isCard) {
       void askFeed<{ detail: Detail | null }>('card.detail', { itemId: item.id }).then(r => {
         if (live) setDetail(r.ok && r.detail ? r.detail : 'none')
       })
+      if (!cardComponent) void warmCard().then(c => { if (live) setCard(() => c) }).catch(() => { if (live) setDetail('none') })
     }
     return () => { live = false }
-  }, [item.id, item.kind])
+  }, [item.id, isCard])
 
-  // The opening (M12): from the card's place, the one settle; a fade under Reduce Motion.
+  // The opening (M12, D334): out of the tile, soft to sharp, the one settle; a fade under Reduce Motion.
   useLayoutEffect(() => {
     const el = panel.current
     if (!el) return
-    backdrop.current?.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, easing: 'ease-out' })
+    backdrop.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: SHEET_OPEN_MS, easing: 'ease-out' })
     if (reducedMotion() || !origin || !el.animate) {
-      el.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' })
+      el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' })
       return
     }
     const from = origin.getBoundingClientRect()
@@ -87,17 +114,24 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     closing.current = true
     const el = panel.current
     if (!el?.animate) { onClose(); return }
-    backdrop.current?.animate([{ opacity: 1 }, { opacity: 0 }], { duration: SHEET_CLOSE_MS, easing: 'ease-out', fill: 'forwards' })
-    const anim = reducedMotion()
-      ? el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out', fill: 'forwards' })
-      : el.animate([{ transform: el.style.transform || 'translateY(0)' }, { transform: 'translateY(100%)' }], { duration: SHEET_CLOSE_MS, easing: PUTT, fill: 'forwards' })
+    backdrop.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: SHEET_CLOSE_MS, easing: 'ease-out', fill: 'forwards' })
+    let anim: Animation
+    if (reducedMotion()) {
+      anim = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out', fill: 'forwards' })
+    } else {
+      // Back into the tile it came out of, if it is still on screen.
+      const tile = origin && origin.isConnected ? origin.getBoundingClientRect() : null
+      const seen = tile && tile.bottom > 0 && tile.top < window.innerHeight ? tile : null
+      el.style.transform = ''
+      anim = el.animate(closeKeyframes(seen, el.getBoundingClientRect()), { duration: SHEET_CLOSE_MS, easing: PUTT, fill: 'forwards' })
+    }
     anim.onfinish = () => onClose()
-  }, [onClose])
+  }, [onClose, origin])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     window.addEventListener('keydown', onKey)
-    // The page under the sheet stays where it was.
+    // The page under the card stays where it was.
     const was = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = was }
@@ -113,10 +147,9 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     return () => { vv.removeEventListener('resize', fit); vv.removeEventListener('scroll', fit) }
   }, [])
 
-  // A swipe down on the sheet's head closes it; short of the line, it settles back.
+  // A swipe down on the handle closes it; short of the line, it settles back.
   const drag = useRef<{ y: number; t: number; dy: number } | null>(null)
   const onDown = (e: React.PointerEvent) => {
-    if ((e.target as HTMLElement).closest('button, a, input')) return
     drag.current = { y: e.clientY, t: performance.now(), dy: 0 }
     ;(e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId)
   }
@@ -162,7 +195,6 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     if (!r.ok) { setError(r.error); return }
     setText('')
     tell([...(comments ?? []), r.comment])
-    // The newest comment is the last: bring it into view.
     requestAnimationFrame(() => panel.current?.querySelector('[data-comments-end]')?.scrollIntoView({ block: 'end', behavior: reducedMotion() ? 'auto' : 'smooth' }))
   }
 
@@ -172,78 +204,86 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     tell((comments ?? []).filter(x => x.id !== c.id))
   }
 
-  const title = item.kind === 'card' ? `${item.name}’s card` : item.kind === 'post' ? item.line || 'Club notice' : item.name
+  const title = isCard ? item.name : item.kind === 'post' ? item.line || 'Club notice' : item.name
+  const handle = (
+    <div className="flex-shrink-0 pt-2 pb-1 flex justify-center touch-none cursor-grab"
+      onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} aria-hidden="true">
+      <span className="block w-10 h-1 rounded-full bg-line-strong" />
+    </div>
+  )
 
   return createPortal(
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
-      <div ref={backdrop} className="absolute inset-0 bg-ink/40" onClick={close} />
-      <div ref={panel}
-        className="absolute inset-x-0 mx-auto max-w-lg paper rounded-t-card shadow-floating flex flex-col overflow-hidden"
-        style={{ bottom: keyboard, maxHeight: `calc(100dvh - ${keyboard}px - 24px)`, transformOrigin: 'top left' }}>
-        {/* The head: a handle to swipe down, the title, the ⋯ and the ✕. */}
-        <div className="px-4 pt-2 pb-2 touch-none select-none" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
-          <span aria-hidden="true" className="block mx-auto w-10 h-1 rounded-full bg-line-strong" />
-          <div className="flex items-center gap-1 mt-2">
-            <div className="flex-1 min-w-0">
-              <h2 className="t-card text-ink break-words">{title}</h2>
-              {item.kind === 'card' && item.line && <p className="t-cap text-ink/65 break-words">{item.line}</p>}
-            </div>
-            <MoreMenu item={item} onPatch={onPatch} onGone={() => { onGone(); close() }} />
-            <button type="button" onClick={close} aria-label="Close" className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-ink press ch-focus flex-shrink-0">
-              <IconX size={22} />
-            </button>
+    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={isCard ? `${item.name}’s card` : title}>
+      <div ref={backdrop} className="absolute inset-0 bg-ink/50" onClick={close} />
+      <div className="absolute inset-x-0 top-0 flex items-center justify-center p-3 pointer-events-none"
+        style={{ bottom: keyboard, paddingTop: 'max(env(safe-area-inset-top), 12px)', paddingBottom: keyboard ? 8 : 'max(env(safe-area-inset-bottom), 12px)' }}>
+        <div ref={panel} className={`${SC_CARD} pointer-events-auto relative w-full max-w-lg max-h-full flex flex-col overflow-hidden`}
+          style={{ transformOrigin: 'top left' }}>
+          {handle}
+
+          {!isCard && <SheetTitle title={title} line="" onClose={close} />}
+
+          {/* One scroll: a card's scorecard — the trip's own, its title bar the
+              player and the round (D334) — then what was said, then the comments. */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+          {isCard && (
+            detail && detail !== 'none' && Card ? (
+              <Card bare inline title={item.name} subtitle={item.line}
+                players={[detail.player]} round={detail.round} holes={detail.holes} resolved={detail.resolved}
+                handicapFor={() => detail.handicap} onClose={close} />
+            ) : (
+              <>
+                <SheetTitle title={item.name} line={item.line} onClose={close} />
+                {detail === 'none'
+                  ? <p className="t-cap text-ink/65 px-4 pb-3">The scorecard isn’t to hand — the comments are below.</p>
+                  : <div className="px-4 pb-3 space-y-2" aria-busy="true">{[0, 1, 2, 3, 4, 5].map(i => <div key={i} className="skeleton h-9 rounded-tile" />)}</div>}
+              </>
+            )
+          )}
+
+          <div className={`px-4 pb-3 ${isCard ? 'border-t border-line' : ''}`}>
+            {item.status && <p className="t-body text-ink break-words pt-3">{item.status}</p>}
+            {item.kind === 'post' && item.text && (
+              <div className="space-y-2 pt-3">{item.text.split(/\n{2,}/).map((p, i) => <p key={i} className="t-body text-ink break-words whitespace-pre-line">{p}</p>)}</div>
+            )}
+            {item.kind === 'post' && item.link && (
+              <a href={item.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-11 items-center t-label text-accent-deep press ch-focus break-all">{item.link}</a>
+            )}
+            {!isCard && item.kind !== 'post' && item.kind !== 'status' && <p className="t-label text-ink break-words pt-3">{item.line}</p>}
+
+            <h3 className="t-label text-ink/80 mt-4">Comments</h3>
+            {!comments && <div className="space-y-2 mt-3">{[0, 1].map(i => <div key={i} className="skeleton h-12 rounded-tile" />)}</div>}
+            {comments && comments.length === 0 && !error && <p className="t-cap text-ink/65 mt-2">No comments yet — say something.</p>}
+            {comments && comments.length > 0 && (
+              <ul className="mt-1 divide-y divide-line">
+                {comments.map(c => (
+                  <li key={c.id} className="py-3 flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[15px] leading-snug text-ink break-words"><span className="font-semibold">{c.mine ? 'You' : c.name}</span> {c.text}</p>
+                      <p className="t-cap text-ink/65 mt-0.5">{ago(c.at, now)}</p>
+                    </div>
+                    {c.canDelete && <button type="button" onClick={() => void remove(c)} className="t-cap text-ink/65 min-h-11 px-1 press ch-focus">Delete</button>}
+                    {c.canReport && <button type="button" onClick={() => setReporting(c)} className="t-cap text-ink/65 min-h-11 px-1 press ch-focus">Report</button>}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <span data-comments-end />
+            {error && <p role="alert" className="t-cap text-rust-deep mt-2">{error}</p>}
           </div>
+          </div>
+
+          {/* The comment box, held above the keyboard (M11), the dot and the ⋯ beside it. */}
+          <form className="flex-shrink-0 border-t border-line px-3 py-2 flex items-center gap-2 bg-surface"
+            onSubmit={e => { e.preventDefault(); void send() }}>
+            <DotButton item={item} onPatch={onPatch} />
+            <label htmlFor="sheet-comment" className="sr-only">Add a comment</label>
+            <input id="sheet-comment" type="text" value={text} maxLength={COMMENT_MAX} onChange={e => setText(e.target.value)}
+              className={`${FIELD} flex-1 min-w-0`} placeholder="Add a comment" autoComplete="off" enterKeyHint="send" />
+            <button type="submit" disabled={busy || !text.trim()} className={buttonClass('primary', false, true)}>{busy ? '…' : 'Send'}</button>
+            <MoreMenu item={item} onPatch={onPatch} onGone={() => { onGone(); close() }} />
+          </form>
         </div>
-
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 pb-4">
-          {item.status && <p className="t-body text-ink break-words">{item.status}</p>}
-          {item.kind === 'post' && item.text && (
-            <div className="space-y-2">{item.text.split(/\n{2,}/).map((p, i) => <p key={i} className="t-body text-ink break-words whitespace-pre-line">{p}</p>)}</div>
-          )}
-          {item.kind === 'post' && item.link && (
-            <a href={item.link} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex min-h-11 items-center t-label text-accent-deep press ch-focus break-all">{item.link}</a>
-          )}
-          {item.kind !== 'card' && item.kind !== 'post' && item.kind !== 'status' && <p className="t-label text-ink break-words">{item.line}</p>}
-
-          {item.kind === 'card' && (
-            <>
-              <CardFigures item={item} />
-              {detail === null && <div className="skeleton h-28 rounded-tile mt-3" aria-busy="true" />}
-              {detail && detail !== 'none' && <Scorecard detail={detail} />}
-            </>
-          )}
-
-          <h3 className="t-label text-ink/80 mt-6">Comments</h3>
-          {!comments && <div className="space-y-2 mt-3">{[0, 1].map(i => <div key={i} className="skeleton h-12 rounded-tile" />)}</div>}
-          {comments && comments.length === 0 && !error && <p className="t-cap text-ink/65 mt-2">No comments yet — say something.</p>}
-          {comments && comments.length > 0 && (
-            <ul className="mt-1 divide-y divide-line">
-              {comments.map(c => (
-                <li key={c.id} className="py-3 flex items-start gap-2">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[15px] leading-snug text-ink break-words"><span className="font-semibold">{c.mine ? 'You' : c.name}</span> {c.text}</p>
-                    <p className="t-cap text-ink/65 mt-0.5">{ago(c.at, now)}</p>
-                  </div>
-                  {c.canDelete && <button type="button" onClick={() => void remove(c)} className="t-cap text-ink/65 min-h-11 px-1 press ch-focus">Delete</button>}
-                  {c.canReport && <button type="button" onClick={() => setReporting(c)} className="t-cap text-ink/65 min-h-11 px-1 press ch-focus">Report</button>}
-                </li>
-              ))}
-            </ul>
-          )}
-          <span data-comments-end />
-          {error && <p role="alert" className="t-cap text-rust-deep mt-2">{error}</p>}
-        </div>
-
-        {/* The comment box, held above the keyboard (M11), with the dot beside it. */}
-        <form className="border-t border-line px-4 pt-2 flex items-center gap-2 paper"
-          style={{ paddingBottom: keyboard ? 8 : 'max(env(safe-area-inset-bottom), 8px)' }}
-          onSubmit={e => { e.preventDefault(); void send() }}>
-          <DotButton item={item} onPatch={onPatch} />
-          <label htmlFor="sheet-comment" className="sr-only">Add a comment</label>
-          <input id="sheet-comment" type="text" value={text} maxLength={COMMENT_MAX} onChange={e => setText(e.target.value)}
-            className={`${FIELD} flex-1 min-w-0 rounded-field`} placeholder="Add a comment" autoComplete="off" enterKeyHint="send" />
-          <button type="submit" disabled={busy || !text.trim()} className={buttonClass('primary', false, true)}>{busy ? '…' : 'Send'}</button>
-        </form>
       </div>
       {reporting && <ReportSheet item={{ id: reporting.id, kind: 'comment' } as FeedView} onClose={() => setReporting(null)} />}
     </div>,
@@ -251,50 +291,18 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
   )
 }
 
-/**
- * The card, hole by hole (D330): two nines across, par, gross, net and
- * points, each nine's total. Dense — 13px, 4px cells — in Bespoke Serif for
- * the figures, as every scorecard on the site reads.
- */
-function Scorecard({ detail }: { detail: Detail }) {
-  const nines = [detail.holes.filter(h => h.number <= 9), detail.holes.filter(h => h.number > 9)].filter(n => n.length > 0)
-  const sum = (hs: Hole[], k: 'par' | 'gross' | 'net' | 'points') => {
-    const v = hs.map(h => h[k])
-    return v.every(x => x != null) ? v.reduce((a, b) => (a as number) + (b as number), 0) : null
-  }
-  const rows: { k: 'par' | 'gross' | 'net' | 'points'; label: string }[] = [
-    { k: 'par', label: 'Par' }, { k: 'gross', label: 'Gross' }, { k: 'net', label: 'Net' }, { k: 'points', label: 'Pts' },
-  ]
+/** The card's title bar where there is no scorecard to carry it — the scorecard's own look (t-h2 and its line, the ✕). */
+function SheetTitle({ title, line, onClose }: { title: string; line: string; onClose: () => void }) {
   return (
-    <div className="mt-3">
-      <p className="t-cap text-ink/65">
-        {contextLine({ course: detail.course, round: detail.tees ? `${detail.tees} tees` : null })}{detail.handicap != null ? ` · plays off ${detail.handicap}` : ''}
-      </p>
-      {nines.map((nine, i) => (
-        <div key={i} className="mt-2 overflow-x-auto">
-          <table className="w-full text-[13px] tabular-nums border-collapse">
-            <caption className="sr-only">{i === 0 ? 'Front nine' : 'Back nine'}</caption>
-            <thead>
-              <tr className="text-ink/65">
-                <th scope="col" className="text-left font-normal px-1 py-1">Hole</th>
-                {nine.map(h => <th key={h.number} scope="col" className="font-normal px-1 py-1 text-center">{h.number}</th>)}
-                <th scope="col" className="font-semibold px-1 py-1 text-center">{i === 0 && nines.length > 1 ? 'Out' : nines.length > 1 ? 'In' : 'Tot'}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(r => (
-                <tr key={r.k} className="border-t border-line">
-                  <th scope="row" className="text-left font-normal text-ink/80 px-1 py-1">{r.label}</th>
-                  {nine.map(h => (
-                    <td key={h.number} className={`px-1 py-1 text-center font-serif ${r.k === 'par' ? 'text-ink/65' : 'text-ink'}`}>{h[r.k] ?? '–'}</td>
-                  ))}
-                  <td className="px-1 py-1 text-center font-serif font-semibold text-ink">{sum(nine, r.k) ?? '–'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ))}
+    <div className="flex-shrink-0 flex items-center justify-between gap-2 px-4 pt-1 pb-3">
+      <div className="min-w-0 flex items-baseline gap-3 flex-wrap">
+        <p className="t-h2 text-ink break-words">{title}</p>
+        {line && <p className="text-ink/65 text-base truncate">{line}</p>}
+      </div>
+      <button type="button" onClick={onClose} aria-label="Close"
+        className="w-11 h-11 -mr-2 rounded-full flex items-center justify-center text-ink/65 press ch-focus flex-shrink-0">
+        <IconX size={22} />
+      </button>
     </div>
   )
 }
