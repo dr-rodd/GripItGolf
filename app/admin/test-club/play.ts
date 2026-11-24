@@ -47,11 +47,11 @@ export interface PlayContext {
 
 export type PlayResult = { done: boolean; code: string | null; lines: string[] }
 
-const at = (day: string, time: string, daysBefore = 0): Date => {
+export const at = (day: string, time: string, daysBefore = 0): Date => {
   const d = new Date(Date.parse(`${day}T12:00:00Z`) - daysBefore * 86_400_000).toISOString().slice(0, 10)
   return irishInstant(d, time) ?? new Date(`${d}T${time}:00Z`)
 }
-const said = (r: { status: number; body: unknown }) => String((r.body as { error?: string })?.error ?? r.status)
+export const said = (r: { status: number; body: unknown }) => String((r.body as { error?: string })?.error ?? r.status)
 
 /** The competition a spec made before (`test:<key>`), or null. */
 export async function findComp(db: Db, clubId: string, key: string): Promise<{ tripId: string; code: string; roundId: string } | null> {
@@ -65,6 +65,12 @@ export async function findComp(db: Db, clubId: string, key: string): Promise<{ t
   const code = (trip as { trip_code?: string } | null)?.trip_code
   const roundId = (round as { id?: string } | null)?.id
   return code && roundId ? { tripId, code, roundId } : null
+}
+
+/** The tee a character plays off: a man off the second tee down where there is one (the club's medal tee), a woman off her first. Rated tees only. */
+export function teeOf<T extends { gender: string; slope: number | null; course_rating: number | null; par: number | null; name: string }>(tees: readonly T[], gender: string): T & { slope: number; course_rating: number; par: number } {
+  const rated = teesForPlayer(tees.filter(t => t.slope && t.course_rating && t.par), gender)
+  return rated[gender === 'M' && rated.length > 1 ? 1 : 0] as T & { slope: number; course_rating: number; par: number }
 }
 
 export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise<PlayResult> {
@@ -163,9 +169,7 @@ export async function playCompetition(ctx: PlayContext, spec: PlaySpec): Promise
       await db.from('live_player_locks').upsert(pids.map(p => ({ live_round_id: liveId, player_id: p })), { onConflict: 'live_round_id,player_id' })
       for (const [i, k] of here.entries()) {
         const c = byKey.get(k)!
-        const rated = teesForPlayer(tees.filter(t => t.slope && t.course_rating && t.par), c.gender)
-        // A man off the second tee down where there is one (the club's medal tee), a woman off her first.
-        const tee = rated[c.gender === 'M' && rated.length > 1 ? 1 : 0]
+        const tee = teeOf(tees, c.gender)
         const ch = courseHandicap(c.handicap, { slope: tee.slope!, course_rating: tee.course_rating!, par: tee.par! })
         await db.from('round_handicaps').upsert({ round_id: roundId, player_id: pids[i], playing_handicap: ch, tee_id: tee.id }, { onConflict: 'round_id,player_id' })
         const asPlayed = holes.map(h => ({

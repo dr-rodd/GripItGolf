@@ -22,6 +22,7 @@ import { POST as teeTimesRoute } from '@/app/api/club/tee-times/route'
 import { POST as awardsRoute } from '@/app/api/club/awards/route'
 import { alreadyPlayed, playCompetition } from './play'
 import { postBanter } from './banter'
+import { playMatchPlay } from './matchplay'
 import { findAccount } from '../accounts'
 import { callAs, characterToken, testPassword } from './characterCalls'
 
@@ -200,6 +201,13 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
     if (!r.done) return { done: false, lines: posted ? [...lines, `${posted} statuses, comments and dots posted so far.`] : lines }
   }
   if (posted) lines.push(`${posted} statuses, comments and dots posted to the feed.`)
+
+  // ── The club match play, part-way through its draw (s1c) ──
+  {
+    const r = await playMatchPlay({ db, club: { id: club.id, slug: club.slug, homeCourseId }, cast, rowOf, today, deadline })
+    lines.push(...r.lines)
+    if (!r.done) return { done: false, lines }
+  }
 
   // ── Golfer of the Year, the club's own rules at their defaults ──
   if (office) {

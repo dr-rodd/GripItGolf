@@ -20,7 +20,9 @@ import {
 import { usernameIssue } from '../lib/account'
 import { LIST_FILTERS } from '../lib/clubhouse'
 import { seasonPlan, groupsOf, banterIssue, dotPlan, type Banter } from '../lib/testClub'
-import { makeCard, holePoints, targetOver, seeded } from '../lib/testClubCards'
+import { makeCard, holePoints, targetOver, seeded, extraHoleGross } from '../lib/testClubCards'
+import { scoreMatch, type CourseHole, type MatchPlayerSpec } from '../lib/testClubMatch'
+import { matchPlayPlan, stageOf } from '../lib/testClub'
 import type { WipeRow } from '../lib/testClub'
 
 let passed = 0, failed = 0
@@ -457,12 +459,68 @@ function banterTests() {
   ok(/in\('author_id', characterIds\)/.test(banter) && /in\('parent_id', cardIds\)/.test(banter), 'only characters’ comments, only on the season’s cards — a real friend’s are never touched (D314)')
 }
 
+// ─── The match play, part-way through its draw (D311, s1c) ──────
+
+function matchPlayTests() {
+  section('The plan reads off today')
+  const plan = matchPlayPlan('2026-11-24')
+  ok(plan.madeOn < plan.closesOn && plan.closesOn < plan.deadlines[0], 'made, then entries close, then the first round is due')
+  ok(plan.deadlines.every((d, i) => i === 0 || d > plan.deadlines[i - 1]), 'play-by dates run to the Final')
+  eq(plan.deadlines.length, 4, 'four rounds — a field of sixteen')
+  ok(plan.deadlines[0] < '2026-11-24' && plan.deadlines[1] < '2026-11-24', 'the first two rounds are past due — one match in the second is overdue')
+  ok(plan.deadlines[2] > '2026-11-24', 'the semi-finals are still to come')
+  eq(JSON.stringify(matchPlayPlan('2026-12-08')) === JSON.stringify(plan), false, 'a reseed later moves every date')
+  eq([stageOf(plan, 1, 0), stageOf(plan, 1, 2), stageOf(plan, 2, 2), stageOf(plan, 2, 3), stageOf(plan, 3, 0)], ['finalised', 'finalised', 'live', 'waiting', 'waiting'], 'the stages: round one done, quarter-finals part-way')
+
+  section('A match is scored hole by hole by the card’s own rules')
+  const holes: CourseHole[] = PARS.map((par, i) => ({ number: i + 1, par, parLadies: null, si: SIS[i], siLadies: null }))
+  const spec = (id: string, ch: number, receives: number, seed: string): MatchPlayerSpec => ({ id, gender: 'M', courseHcp: ch, receives, form: 'steady', seed })
+  let extra = 0, settled = 0
+  const results = new Set<string>()
+  for (let i = 0; i < 400; i++) {
+    const hcpA = 4 + (i % 12), hcpB = 6 + ((i * 7) % 14)
+    const lo = Math.min(hcpA, hcpB)
+    const m = scoreMatch({ holes, a: spec('a', hcpA, hcpA - lo, `m${i}:a`), b: spec('b', hcpB, hcpB - lo, `m${i}:b`) })
+    if (m.state.settled && m.state.leader && m.state.result) settled++
+    if (m.upTo > 18) extra++
+    results.add(m.state.result ?? 'none')
+    if (!m.rows.every(r => r.hole >= 1 && r.hole <= m.upTo && r.gross >= 2 && r.gross <= 15)) { ok(false, 'every score on a played hole, between 2 and 15'); break }
+  }
+  eq(settled, 400, 'every match is decided')
+  ok(extra > 5 && extra < 120, `some go down the 19th, most do not (${extra} of 400)`)
+  ok([...results].some(r => /^\d&\d$/.test(r)) && [...results].some(r => /up$/.test(r) || /at \d+/.test(r)), 'the margins read as a golfer reads them: 3&2, 1 up, at 19th')
+  const a = scoreMatch({ holes, a: spec('a', 10, 0, 'x:a'), b: spec('b', 14, 4, 'x:b') })
+  eq(JSON.stringify(a), JSON.stringify(scoreMatch({ holes, a: spec('a', 10, 0, 'x:a'), b: spec('b', 14, 4, 'x:b') })), 'the same match every time')
+  const mid = scoreMatch({ holes, a: spec('a', 10, 0, 'y:a'), b: spec('b', 14, 4, 'y:b'), stopAfter: 9 })
+  ok(!mid.state.settled && mid.upTo === 9 && mid.rows.length === 18, 'a match in play: nine holes, two players, nothing settled')
+  eq(mid.rows.map(r => r.hole).sort((x, y) => x - y).join(), [1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9].join(), 'both players’ scores for each hole so far')
+  for (let i = 0; i < 100; i++) {
+    const live = scoreMatch({ holes, a: spec('a', 3, 0, `l${i}:a`), b: spec('b', 24, 21, `l${i}:b`), stopAfter: 9 })
+    if (live.state.settled) { ok(false, 'a match stopped at nine holes is never settled'); break }
+  }
+  const x = [extraHoleGross(4, 5, 12, 's'), extraHoleGross(4, 5, 12, 's')]
+  ok(x[0] === x[1] && x[0] >= 2 && x[0] <= 8, 'an extra hole is the same every time and an ordinary score')
+
+  section('Played through the club’s own paths')
+  const mp = read('app/admin/test-club/matchplay.ts')
+  for (const fn of ['runNewMatchPlay', 'runMatchPlayEntry', 'makeDueDraw']) ok(new RegExp(`await ${fn}\\(`).test(mp), `${fn} — the route’s own rules`)
+  ok(/at\(plan\.madeOn, '10:00'\)/.test(mp) && /at\(plan\.closesOn, '18:05'\)/.test(mp), 'made and drawn with the clock at those moments')
+  ok(/recordWinner<StoredMatch>/.test(mp) && /toRow/.test(mp), 'the winner goes into the bracket through recordWinner, so the next round fills as it does on a phone')
+  ok(/from\('match_scores'\)\.upsert/.test(mp) && /scoreMatch\(/.test(mp), 'the card is written as the phone writes it, from the one card model')
+  ok(/seeding: 'handicap'/.test(mp), 'drawn by handicap — the best players have byes')
+  ok(/writeMatchResult/.test(mp), 'each result into the feed')
+  ok(/waiting'\) continue/.test(mp) && /stage === 'live'/.test(mp), 'a waiting match is left alone; one in play is not finalised')
+  ok(/matchPlayEntryStore/.test(read('app/api/club/matchplay/route.ts')), 'the entry route uses the shared store')
+  ok(read('app/admin/test-club/seed.ts').indexOf('playMatchPlay(') > read('app/admin/test-club/seed.ts').indexOf('postBanter('), 'after the season and its banter')
+}
+
 async function main() {
   guardTests()
   castTests()
   seedWiringTests()
   cardTests()
   banterTests()
+  matchPlayTests()
   ruleTests()
   await wipeTests()
   wiringTests()

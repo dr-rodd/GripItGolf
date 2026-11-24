@@ -103,3 +103,14 @@ export function makeCard(o: {
 /** Stableford points for a hole off the full course handicap — the canonical rule, through lib/handicap.ts. */
 export const holePoints = (gross: number, par: number, si: number, courseHcp: number) =>
   Math.max(0, par + 2 - (gross - shotsReceived(courseHcp, si)))
+
+/**
+ * One extra hole of a match that went down the 19th (D311): nett par, give or
+ * take — the same seed, the same hole. Level matches are decided here, so it
+ * is kept to a golfer's ordinary range rather than a card's whole story.
+ */
+export function extraHoleGross(par: number, si: number, courseHcp: number, seed: string): number {
+  const r = seeded(seed)()
+  const delta = r < 0.14 ? -1 : r < 0.62 ? 0 : r < 0.92 ? 1 : 2
+  return Math.max(2, par + shotsReceived(courseHcp, si) + delta)
+}

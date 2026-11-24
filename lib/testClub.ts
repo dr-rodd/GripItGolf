@@ -304,7 +304,7 @@ const weekday = (d: string) => (new Date(`${d}T12:00:00Z`).getUTCDay() + 6) % 7
 const playsOn = (c: Character, day: string) => (MEMBERSHIPS.find(m => m.name === c.membership)?.days ?? []).includes(weekday(day))
 
 /** A form for a character on a day — Jed's is always wild (D312). */
-function formFor(c: Character, seed: string): CardForm {
+export function formFor(c: Character, seed: string): CardForm {
   if (c.key === 'jed') return 'wild'
   const roll = seedHash(`${seed}:${c.key}`) % 20
   return roll < 2 ? 'hot' : roll < 6 ? 'good' : roll < 14 ? 'steady' : roll < 18 ? 'poor' : 'awful'
@@ -391,3 +391,54 @@ export function dotPlan(cast: readonly Character[], players: readonly string[], 
   }
   return out
 }
+
+// ─── The club match play, part-way through its draw (D311) ────────
+
+/** How far each match of the reseeded match play has got. */
+export type MatchStage = 'finalised' | 'live' | 'waiting'
+
+/**
+ * The reseeded match play (D311, s1c): made three weeks ago, entries closed
+ * the Friday before last, the draw made then **by handicap** (so the best
+ * players have byes), the first round played and decided, the quarter-finals
+ * part-way — two decided, one in play, one not even arranged, and so a day
+ * or two overdue. Every date comes off `today`, so a reseed always reads
+ * as a match play in its fourth week.
+ */
+export interface MatchPlayPlan {
+  key: string
+  name: string
+  /** When it is made (the clock it is made at). */
+  madeOn: string
+  /** Entries close: a day, 18:00. The draw is made then. */
+  closesOn: string
+  /** A play-by date a round, the Final last. */
+  deadlines: string[]
+  /** The day each round's matches were played, by round number — a later match plays a day after an earlier one. */
+  playedOn: Record<number, string>
+  /** What each real match has reached, by round number then the match's order among that round's real matches. */
+  stages: Record<number, MatchStage[]>
+  /** How many holes the match in play has been scored through. */
+  liveHoles: number
+}
+
+const dayOffset = (d: string, n: number) => new Date(Date.parse(`${d}T12:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
+
+export function matchPlayPlan(today: string): MatchPlayPlan {
+  return {
+    key: 'matchplay-1',
+    name: 'Pints Matchplay',
+    madeOn: dayOffset(today, -21),
+    closesOn: dayOffset(today, -18),
+    deadlines: [dayOffset(today, -9), dayOffset(today, -2), dayOffset(today, 12), dayOffset(today, 26)],
+    playedOn: { 1: dayOffset(today, -12), 2: dayOffset(today, -4) },
+    stages: {
+      1: ['finalised', 'finalised', 'finalised'],
+      2: ['finalised', 'finalised', 'live', 'waiting'],
+    },
+    liveHoles: 9,
+  }
+}
+
+/** The stage of the nth real match of a round — anything beyond the plan is waiting. */
+export const stageOf = (p: MatchPlayPlan, round: number, n: number): MatchStage => p.stages[round]?.[n] ?? 'waiting'
