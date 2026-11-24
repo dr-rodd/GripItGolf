@@ -2,7 +2,8 @@
 
 import { type LeaguePeriod, type PeriodRule, periodRoundId, periodRuleFact } from '@/lib/leagueSetup'
 import { placeClass } from '@/lib/leaderboardStyle'
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { popClose, popOpen, popOrigin } from '@/app/components/popOut'
 import Link from 'next/link'
 import { resolveCustomPoints } from '@/lib/customPoints'
 import type { TeamScoring } from '@/lib/teamScoring'
@@ -319,6 +320,25 @@ export function ScorecardSheet({
 }) {
   const { register, onScroll } = useSyncedStrips()
 
+  // D335: as a pop-up (never inline) it is the site's pop-out — out of the tile
+  // that opened it, soft to sharp, and back into it when closed.
+  const popCard = useRef<HTMLDivElement>(null)
+  const popBackdrop = useRef<HTMLDivElement>(null)
+  const popFrom = useRef<Element | null>(null)
+  const popping = useRef(false)
+  useLayoutEffect(() => {
+    if (inline) return
+    popFrom.current = popOrigin()
+    popOpen(popCard.current, popFrom.current, popBackdrop.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+  const close = useCallback(() => {
+    if (inline) { onClose(); return }
+    if (popping.current) return
+    popping.current = true
+    void popClose(popCard.current, popFrom.current, popBackdrop.current).then(onClose)
+  }, [inline, onClose])
+
   const courseHoles = holes
     .filter(h => h.course_id === (round.courses?.id ?? ''))
     .sort((a, b) => a.hole_number - b.hole_number)
@@ -471,7 +491,7 @@ export function ScorecardSheet({
             <p className="text-ink/65 text-base truncate">{subtitle}</p>
           </div>
           <button
-            onClick={onClose}
+            onClick={close}
             className="text-ink/65 hover:text-ink transition-colors min-w-[44px] min-h-[44px] flex items-center justify-center text-xl flex-shrink-0"
             aria-label="Close scorecard"
           >
@@ -620,11 +640,12 @@ export function ScorecardSheet({
         paddingTop: 'max(env(safe-area-inset-top), 16px)',
         paddingBottom: 'max(env(safe-area-inset-bottom), 16px)',
       }}
-      onClick={onClose}
+      onClick={close}
     >
-      <div className="absolute inset-0 bg-ink/50 page-enter" />
+      <div ref={popBackdrop} className="absolute inset-0 bg-ink/50" />
       <div
-        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden page-enter ${SC_CARD}`}
+        ref={popCard}
+        className={`relative w-full max-w-lg flex flex-col max-h-full overflow-hidden ${SC_CARD}`}
         onClick={e => e.stopPropagation()}
       >
         {body}

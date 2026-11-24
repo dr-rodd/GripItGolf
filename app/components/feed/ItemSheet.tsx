@@ -5,7 +5,8 @@ import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
 import { COMMENT_MAX, ago } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { SHEET_CLOSE_MS, SHEET_OPEN_MS, closeKeyframes, openKeyframes } from '@/lib/sheetMotion'
+import { PUTT_EASING } from '@/lib/popOut'
+import { popClose, popOpen } from '../popOut'
 import { SC_CARD } from '../scorecardStyle'
 import { IconX } from '../icons'
 import { FIELD, buttonClass } from '../ui'
@@ -21,8 +22,7 @@ type Detail = {
   handicap: number | null
 }
 
-/** The putt curve as the Web Animations API takes it — `--gd-ease`, which a script cannot read. */
-const PUTT = 'cubic-bezier(0.16, 1, 0.3, 1)'
+const PUTT = PUTT_EASING
 
 /**
  * The trip's own pop-up scorecard (`ScorecardSheet`), loaded only when a card
@@ -48,11 +48,12 @@ export function warmCard(): Promise<CardComponent> {
  * its own words in place of the scorecard. Closed by a swipe down on its
  * handle, a tap outside, the ✕ or Escape.
  *
- * **It grows out of the tile** the way X's menus do (Ross, 24 Nov 2026): soft
- * and blurred as it leaves the tile, sharp as it lands a hair past its place
- * and rests — about a fifth of a second (`lib/sheetMotion.ts`, the site's one
- * settle, D331, held by test:branding). It shrinks back into the tile when
- * closed. No library: the browser's Web Animations. Reduce Motion: a fade.
+ * **It is the site's pop-out** (D335): out of the tile the way X's menus
+ * grow (Ross, 24 Nov 2026), soft and blurred, springing a hair past its place
+ * as it sharpens, then resting; back into the tile when closed — the one
+ * motion every expanding pop-out shares (`app/components/popOut.ts`,
+ * `lib/popOut.ts`, the site's one settle, held by test:branding). No library:
+ * the browser's Web Animations. Reduce Motion: a fade.
  */
 export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
   item: FeedView
@@ -93,39 +94,16 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     return () => { live = false }
   }, [item.id, isCard])
 
-  // The opening (M12, D334): out of the tile, soft to sharp, the one settle; a fade under Reduce Motion.
+  // The opening (M12, D335): the site's pop-out, out of the tile it came from.
   useLayoutEffect(() => {
-    const el = panel.current
-    if (!el) return
-    backdrop.current?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: SHEET_OPEN_MS, easing: 'ease-out' })
-    if (reducedMotion() || !origin || !el.animate) {
-      el.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: 150, easing: 'ease-out' })
-      return
-    }
-    const from = origin.getBoundingClientRect()
-    const to = el.getBoundingClientRect()
-    if (!to.width || !to.height) return
-    el.animate(openKeyframes(from, to), { duration: SHEET_OPEN_MS, easing: PUTT })
+    popOpen(panel.current, origin, backdrop.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const close = useCallback(() => {
     if (closing.current) return
     closing.current = true
-    const el = panel.current
-    if (!el?.animate) { onClose(); return }
-    backdrop.current?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: SHEET_CLOSE_MS, easing: 'ease-out', fill: 'forwards' })
-    let anim: Animation
-    if (reducedMotion()) {
-      anim = el.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out', fill: 'forwards' })
-    } else {
-      // Back into the tile it came out of, if it is still on screen.
-      const tile = origin && origin.isConnected ? origin.getBoundingClientRect() : null
-      const seen = tile && tile.bottom > 0 && tile.top < window.innerHeight ? tile : null
-      el.style.transform = ''
-      anim = el.animate(closeKeyframes(seen, el.getBoundingClientRect()), { duration: SHEET_CLOSE_MS, easing: PUTT, fill: 'forwards' })
-    }
-    anim.onfinish = () => onClose()
+    void popClose(panel.current, origin, backdrop.current).then(onClose)
   }, [onClose, origin])
 
   useEffect(() => {

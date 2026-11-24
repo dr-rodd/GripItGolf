@@ -715,7 +715,7 @@ function wiringTests() {
     const sheet = read('app/components/feed/ItemSheet.tsx')
     ok(/card\.detail/.test(sheet) && /Scorecard/.test(sheet) && /'comments'/.test(sheet) && /visualViewport/.test(sheet) && /onPointerDown=\{onDown\}/.test(sheet) && /onClick=\{close\}/.test(sheet),
       'the sheet: the scorecard, the comments, a box above the keyboard; closed by a swipe down, a tap outside or the ✕ (D330, M11)')
-    ok(/reducedMotion\(\)[^\n]*\n?[^\n]*opacity: 0/.test(sheet) && /openKeyframes\(from, to\)/.test(sheet), '…grown out of the card, a fade under Reduce Motion (M12)')
+    ok(/popOpen\(panel\.current, origin, backdrop\.current\)/.test(sheet) && /popClose\(panel\.current, origin/.test(sheet), '…the site’s pop-out: grown out of the card and back into it, a fade under Reduce Motion (M12, D335)')
     ok(!/from ['"](framer-motion|motion|react-spring|gsap)/.test(sheet), '…with no animation library')
     ok(/import\('@\/app\/golf\/\[root\]\/\[tripCode\]\/leaderboard\/TripLeaderboardClient'\)/.test(sheet) && /<Card bare inline/.test(sheet),
       'a card pops out as the trip’s own scorecard — one card for the site, never a second copy (D334)')

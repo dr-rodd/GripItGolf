@@ -1,16 +1,23 @@
-// The card pop-out's motion (D330, D331, amended D334) — the one copy, pure so
-// test:branding can hold it. Modelled on the menu Ross sent from X (24 Nov
-// 2026): the card grows out of the tile that was tapped as a soft, blurred
-// shape and sharpens into place in about a fifth of a second. FLIP — laid out
-// where it ends, drawn from the tile's place and let go — on the putt curve,
-// and it lands **a hair past its place, at most 2% of the way it travelled,
-// before it rests**: the one exception to D8's "no springs or overshoot",
-// written down here and nowhere else. Closing is the same in reverse, back
-// into the tile. Under Reduce Motion it fades (ItemSheet.tsx).
+// The pop-out (D330, D331, D334, D335) — the site's one motion for a tile
+// that opens into a card over the page, the one copy, pure so test:branding
+// can hold it. Modelled on the menu Ross sent from X (24 Nov 2026): the card
+// grows out of the tile that was tapped as a soft, blurred shape, springs a
+// hair past its place as it sharpens, and rests. FLIP — laid out where it
+// ends, drawn from the tile's place and let go — on the putt curve, landing
+// **at most 2% past its place, of the way it travelled**: the one exception
+// to D8's "no springs or overshoot", written down here and nowhere else.
+// Closing is the same in reverse, back into the tile. Under Reduce Motion it
+// fades. `app/components/popOut.ts` plays it; every expanding pop-out on the
+// site uses that and nothing else (the stream's card, the leaderboard's
+// scorecard). The timings are tokens in `app/globals.css` too
+// (`--gd-pop-open`, `--gd-pop-close`), held equal to these by test:branding.
 
-/** Quick, as X's is — and inside the 400ms every touch response keeps to (D8). */
-export const SHEET_OPEN_MS = 220
-export const SHEET_CLOSE_MS = 180
+/**
+ * Slower than X's (Ross, 24 Nov 2026: "too fast") — the wizard step's and the
+ * tee time lift's 340ms, inside the 400ms every touch response keeps to (D8).
+ */
+export const SHEET_OPEN_MS = 340
+export const SHEET_CLOSE_MS = 260
 
 /** The settle (D331): at most 2% past its place, of the way it travelled. */
 export const SHEET_SETTLE = 0.02
@@ -20,6 +27,13 @@ export const SETTLE_AT = 0.8
 
 /** How soft the shape is as it leaves the tile — sharp by the time it rests. */
 export const SHEET_BLUR_PX = 10
+
+/** The pop-out's names as the rest of the site reads them. */
+export const POP_OPEN_MS = SHEET_OPEN_MS
+export const POP_CLOSE_MS = SHEET_CLOSE_MS
+
+/** The putt curve as the Web Animations API takes it — `--gd-ease`, which a script cannot read. */
+export const PUTT_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
 type Box = { left: number; top: number; width: number; height: number }
 

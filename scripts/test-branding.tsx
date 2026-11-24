@@ -30,7 +30,7 @@ import {
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 import CountUp from '../app/components/CountUp'
-import { SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_SETTLE, SETTLE_AT, openKeyframes } from '../lib/sheetMotion'
+import { SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_SETTLE, SETTLE_AT, SHEET_BLUR_PX, openKeyframes } from '../lib/popOut'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1745,17 +1745,18 @@ section('One count-up, one celebration, and never on a board')
     '  …settling on the quiet tinted disc that is its Reduce Motion version')
 }
 
-section('The one settle (D331, amending D8): the card sheet opening, and nothing else')
+section('The pop-out (D331, D335): the one settle, every expanding pop-out alike')
 {
   // D8 says no springs and no overshoot. Ross allowed exactly one exception,
-  // on purpose (Streams v2, M12): the card sheet lands a hair past its place
-  // before it rests — at most 2% of the way it travelled, inside 400ms, on the
-  // putt curve, a plain fade under Reduce Motion. Held here so it cannot
-  // quietly become two.
+  // on purpose: a tile opening into a card (the pop-out, modelled on X's
+  // menus) springs a hair past its place as it sharpens — at most 2% of the
+  // way it travelled, inside 400ms, on the putt curve, a fade under Reduce
+  // Motion. Held here so it cannot quietly become two, and so every expanding
+  // pop-out moves alike.
   ok(SHEET_SETTLE > 0 && SHEET_SETTLE <= 0.02, `the settle is at most 2% (${SHEET_SETTLE * 100}%)`)
   ok(SHEET_OPEN_MS <= 400 && SHEET_CLOSE_MS <= 400, `inside the 400ms ceiling (${SHEET_OPEN_MS}ms, ${SHEET_CLOSE_MS}ms)`)
+  ok(SHEET_OPEN_MS >= 300, `  …and not rushed: Ross found 220ms too fast (${SHEET_OPEN_MS}ms)`)
   ok(SETTLE_AT > 0.5 && SETTLE_AT < 1, '  …past its place late in the move, then at rest')
-  // From a card high on the screen to a sheet at its foot: how far past it goes.
   const from = { left: 16, top: 200, width: 358, height: 180 }, to = { left: 0, top: 120, width: 390, height: 700 }
   const k = openKeyframes(from, to)
   const nums = (t: string) => (t.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
@@ -1764,15 +1765,19 @@ section('The one settle (D331, amending D8): the card sheet opening, and nothing
     `  …past its place by at most 2% of the travel (${ox}px, ${oy}px)`)
   ok(osx <= 1.02 && osy <= 1.02 && osx >= 1 && osy >= 1, `  …and at most 2% bigger (${osx}, ${osy})`)
   eq(String(k[k.length - 1].transform), 'translate(0px, 0px) scale(1, 1)', '  …and at rest in its place')
-  const sheet = read('app/components/feed/ItemSheet.tsx')
-  ok(/if \(reducedMotion\(\) \|\| !origin \|\| !el\.animate\) \{\s*el\.animate\?\.\(\[\{ opacity: 0 \}, \{ opacity: 1 \}\]/.test(sheet),
-    '  …and under Reduce Motion it is a plain fade')
-  // D334: X's pop-out (Ross, 24 Nov 2026) — a fifth of a second, soft to sharp, back into the tile on close.
-  ok(SHEET_OPEN_MS <= 250 && SHEET_CLOSE_MS <= 200, `  …quick, as the X menu Ross sent is (${SHEET_OPEN_MS}ms open, ${SHEET_CLOSE_MS}ms close)`)
   ok(/blur\(\d+px\)/.test(String(k[0].filter)) && String(k[k.length - 1].filter) === 'blur(0px)', '  …soft as it leaves the tile, sharp at rest')
-  ok(/closeKeyframes\(seen/.test(sheet), '  …and it goes back into the tile it came out of')
-  const settlers = uiFiles().filter(f => /openKeyframes|SHEET_SETTLE/.test(read(f)))
-  eq(settlers, ['app/components/feed/ItemSheet.tsx'], 'the card sheet is the only thing that settles')
+  // The stylesheet carries its timings as tokens, the same figures (D335).
+  const tok = (name: string) => (css.match(new RegExp(`--gd-pop-${name}:\\s*([\\d.]+)(ms|px|%)`)) ?? [])[1]
+  eq([Number(tok('open')), Number(tok('close')), Number(tok('blur')), Number(tok('settle'))], [SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_BLUR_PX, SHEET_SETTLE * 100],
+    'the stylesheet’s --gd-pop-* tokens are the same figures as lib/popOut.ts')
+  const play = read('app/components/popOut.ts')
+  ok(/reducedMotion\(\) \? null/.test(play) && /\{ opacity: 0 \}, \{ opacity: 1 \}/.test(play), '  …and under Reduce Motion it is a plain fade')
+  ok(/closeKeyframes\(onScreen\(origin/.test(play), '  …and it goes back into the tile it came out of')
+  const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|SHEET_SETTLE/.test(read(f)))
+  eq(settlers, ['app/components/popOut.ts'], 'the pop-out is played in one place')
+  const users = uiFiles().filter(f => /from ['"](\.\.?\/)+popOut['"]|from '@\/app\/components\/popOut'/.test(read(f))).sort()
+  eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],
+    'every expanding pop-out plays it — the stream’s card and the leaderboard’s scorecard')
 }
 
 section('No spaced capitals')
