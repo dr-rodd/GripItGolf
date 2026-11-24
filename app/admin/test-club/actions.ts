@@ -8,8 +8,9 @@ import { findAccount } from '../accounts'
 import { isTestClubId, wipeStore } from './store'
 import { previewWipe, runWipe, type WipeOutcome } from './wipe'
 import type { WipePreview } from '@/lib/testClub'
-import { readCharacters } from '@/lib/testClub'
+import { readCharacters, type Banter } from '@/lib/testClub'
 import charactersFile from '@/data/test-club/characters.json'
+import banterFile from '@/data/test-club/season-banter.json'
 import { runSeed, type SeedProgress } from './seed'
 
 /**
@@ -90,7 +91,7 @@ export async function seedAction(clubId: string): Promise<({ ok: true } & SeedPr
     // The deny-list is checked in the repo (test:test-club); here the file is read as committed.
     const cast = readCharacters(charactersFile, [])
     if (!cast.ok) return { ok: false, error: cast.error }
-    const r = await runSeed(db, club, cast.cast, Date.now() + 45_000)
+    const r = await runSeed(db, club, cast.cast, Date.now() + 45_000, (banterFile as { competitions: Record<string, Banter> }).competitions)
     revalidatePath('/admin/test-club')
     return { ok: true, ...r }
   } catch (e) {

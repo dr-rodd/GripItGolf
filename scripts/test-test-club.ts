@@ -19,7 +19,7 @@ import {
 } from '../lib/testClub'
 import { usernameIssue } from '../lib/account'
 import { LIST_FILTERS } from '../lib/clubhouse'
-import { seasonPlan, groupsOf } from '../lib/testClub'
+import { seasonPlan, groupsOf, banterIssue, dotPlan, type Banter } from '../lib/testClub'
 import { makeCard, holePoints, targetOver, seeded } from '../lib/testClubCards'
 import type { WipeRow } from '../lib/testClub'
 
@@ -412,11 +412,55 @@ function cardTests() {
   ok(/from: 'clubhouse'/.test(play), 'made from the Clubhouse, as the office makes them')
 }
 
+function banterTests() {
+  section('The season’s banter (D313)')
+  const cast = (readCharacters(JSON.parse(read('data/test-club/characters.json')), []) as { ok: true; cast: Character[] }).cast
+  const deny = readDenyList(read('data/test-club/deny-list.txt'))
+  const plan = seasonPlan(cast, '2026-11-24')
+  const file = JSON.parse(read('data/test-club/season-banter.json')) as { competitions: Record<string, Banter> }
+  eq(Object.keys(file.competitions).sort(), plan.map(p => p.key).sort(), 'banter for every competition of the season, and none else')
+  for (const p of plan) {
+    const b = file.competitions[p.key]
+    const why = banterIssue(b, cast, p.groups.flat())
+    ok(why === null, `${p.name}: every status by a player, every comment on a card that exists${why ? ` — ${why}` : ''}`)
+  }
+  const all = Object.values(file.competitions).flatMap(b => [...Object.values(b.statuses ?? {}), ...(b.comments ?? []).map(c => c.text)])
+  ok(all.every(t => deniedName(t, deny) === null), 'no real living person named in any line')
+  ok(all.length >= 80, `plenty of it (${all.length} lines)`)
+  const jedEighteen = file.competitions['season-03'].comments ?? []
+  ok(jedEighteen.some(c => c.on === 'jed' && c.by === 'cj' && /18/.test(c.text)), 'CJ calls out Jed’s 4 on 18')
+  ok(Object.values(file.competitions).every(b => (b.comments ?? []).filter(c => c.by === 'tom').every(t => (b.comments ?? []).some(r => r.on === t.on && r.by !== 'tom' && (b.comments ?? []).indexOf(r) > (b.comments ?? []).indexOf(t)))), 'Old Tom is always answered on the same card, after him')
+
+  section('Checking a competition’s banter')
+  const players = ['jed', 'cj']
+  ok(banterIssue({ statuses: { tom: 'x' } }, cast, players) !== null, 'a status for somebody who did not play is refused')
+  ok(banterIssue({ comments: [{ on: 'tom', by: 'cj', text: 'x' }] }, cast, players) !== null, 'a comment on a card that does not exist is refused')
+  ok(banterIssue({ comments: [{ on: 'jed', by: 'nobody', text: 'x' }] }, cast, players) !== null, 'a comment by somebody who is not a character is refused')
+  ok(banterIssue({ statuses: { jed: 'x'.repeat(141) } }, cast, players) !== null, 'a status over 140 characters is refused')
+  ok(banterIssue({ comments: [{ on: 'jed', by: 'cj', text: 'x'.repeat(281) }] }, cast, players) !== null, 'a comment over 280 characters is refused')
+
+  section('Dots')
+  const keys = plan[0].groups.flat()
+  const dots = dotPlan(cast, keys, plan[0].key)
+  ok(dots.every(d => d.by !== d.on), 'nobody dots their own card')
+  ok(dots.every(d => keys.includes(d.on)), 'only cards in the competition')
+  eq(dots.filter(d => d.by === 'jed').length, keys.filter(k => k !== 'jed').length, 'Jed (every card) dots every other card')
+  eq(dots.filter(d => d.by === 'don').length, 0, 'Don (low) dots nothing')
+  eq(JSON.stringify(dotPlan(cast, keys, plan[0].key)), JSON.stringify(dots), 'the same every time')
+
+  section('Posted through the feed’s own route')
+  const banter = read('app/admin/test-club/banter.ts')
+  for (const a of ['card.status', 'comment', 'dot']) ok(new RegExp(`action: '${a.replace('.', '\\.')}'`).test(banter), `${a} through /api/feed, as the character`)
+  ok(!/\.insert\(/.test(banter) && !/\.upsert\(/.test(banter), 'never writes a feed row itself — only dates a comment to the afternoon')
+  ok(/filter\('data->>text', 'eq'/.test(banter) && /from\('feed_dots'\)/.test(banter), 'a comment or dot already there is not posted twice')
+}
+
 async function main() {
   guardTests()
   castTests()
   seedWiringTests()
   cardTests()
+  banterTests()
   ruleTests()
   await wipeTests()
   wiringTests()

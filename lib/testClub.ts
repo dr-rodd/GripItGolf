@@ -351,3 +351,43 @@ export function seasonPlan(cast: readonly Character[], today: string): PlaySpec[
   })
   return out.sort((a, b) => a.day.localeCompare(b.day))
 }
+
+// ─── Statuses, comments and dots (D313) ───────────────────────────
+
+/** A competition's banter: statuses by the card's own player, comments by anybody on a card in it. */
+export interface Banter {
+  statuses?: Record<string, string>
+  comments?: { on: string; by: string; text: string }[]
+}
+
+/** The feed's own limits (lib/feed.ts STATUS_MAX, COMMENT_MAX) — repeated here only to check a file; the feed checks again. */
+export const BANTER_STATUS_MAX = 140
+export const BANTER_COMMENT_MAX = 280
+
+/** Why a competition's banter will not do, in a sentence — null when it will. `players` are the keys who played it. */
+export function banterIssue(b: Banter, cast: readonly Character[], players: readonly string[]): string | null {
+  const known = new Set(cast.map(c => c.key))
+  for (const [k, text] of Object.entries(b.statuses ?? {})) {
+    if (!players.includes(k)) return `A status for ${k}, who did not play.`
+    if (!text.trim() || [...text].length > BANTER_STATUS_MAX) return `${k}’s status is empty or over ${BANTER_STATUS_MAX} characters.`
+  }
+  for (const c of b.comments ?? []) {
+    if (!players.includes(c.on)) return `A comment on ${c.on}’s card, who did not play.`
+    if (!known.has(c.by)) return `A comment by ${c.by}, who is not a character.`
+    if (!c.text.trim() || [...c.text].length > BANTER_COMMENT_MAX) return `${c.by}’s comment on ${c.on} is empty or over ${BANTER_COMMENT_MAX} characters.`
+  }
+  return null
+}
+
+/** How many of a competition's other cards each comment rate puts a dot on. */
+const DOTS: Record<CommentRate, number> = { 'every card': 99, high: 3, mid: 1, low: 0 }
+
+/** Who dots whose card in a competition, by the characters' comment rates — never their own, the same every time. */
+export function dotPlan(cast: readonly Character[], players: readonly string[], seed: string): { by: string; on: string }[] {
+  const out: { by: string; on: string }[] = []
+  for (const c of cast) {
+    const others = seededOrder(players.filter(p => p !== c.key), `${seed}:dot:${c.key}`)
+    for (const on of others.slice(0, DOTS[c.commentRate])) out.push({ by: c.key, on })
+  }
+  return out
+}

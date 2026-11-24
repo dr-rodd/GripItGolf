@@ -11,7 +11,7 @@
 
 import type { createAdminClient } from '@/lib/supabase-admin'
 import {
-  DEFAULT_MEMBERSHIP, MEMBERSHIPS, TEST_LABELS, casualPlan, memberNumber, seasonPlan, testEmail, type Character,
+  DEFAULT_MEMBERSHIP, MEMBERSHIPS, TEST_LABELS, casualPlan, memberNumber, seasonPlan, testEmail, type Banter, type Character,
 } from '@/lib/testClub'
 import { storedRole } from '@/lib/clubMay'
 import { irishToday } from '@/lib/clubs'
@@ -21,6 +21,7 @@ import { saveLabel } from '@/app/api/club/labelsStore'
 import { POST as teeTimesRoute } from '@/app/api/club/tee-times/route'
 import { POST as awardsRoute } from '@/app/api/club/awards/route'
 import { alreadyPlayed, playCompetition } from './play'
+import { postBanter } from './banter'
 import { findAccount } from '../accounts'
 import { callAs, characterToken, testPassword } from './characterCalls'
 
@@ -31,7 +32,7 @@ export interface SeedProgress { done: boolean; lines: string[] }
 const missingCol = (e: { code?: string } | null) => !!e && (e.code === '42703' || e.code === 'PGRST204')
 
 /** Seeds what is missing, until done or the deadline; `lines` say what it did. */
-export async function runSeed(db: Db, club: { id: string; slug: string; name: string }, cast: readonly Character[], deadline: number): Promise<SeedProgress> {
+export async function runSeed(db: Db, club: { id: string; slug: string; name: string }, cast: readonly Character[], deadline: number, banter: Record<string, Banter> = {}): Promise<SeedProgress> {
   const lines: string[] = []
   const late = () => Date.now() > deadline
   if (!testPassword()) throw new Error('Set TEST_CLUB_PASSWORD in Vercel first — every character signs in with it.')
@@ -180,13 +181,25 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
     return { done: true, lines }
   }
   const today = irishToday(new Date())
-  for (const spec of seasonPlan(cast, today)) {
+  const season = seasonPlan(cast, today)
+  for (const spec of season) {
     if (late()) return { done: false, lines }
     if (await alreadyPlayed(db, club.id, spec)) continue
     const r = await playCompetition({ db, club: { id: club.id, slug: club.slug, homeCourseId }, cast, rowOf, cats, deadline }, spec)
     lines.push(...r.lines)
     if (!r.done) return { done: false, lines }
   }
+
+  // ── The banter: statuses, comments and dots in the feed (D313) ──
+  let posted = 0
+  for (const spec of season) {
+    if (late()) return { done: false, lines: posted ? [...lines, `${posted} statuses, comments and dots posted so far.`] : lines }
+    const r = await postBanter({ db, club, cast, rowOf, userOf, spec, banter: banter[spec.key], deadline })
+    posted += r.posted
+    lines.push(...r.lines)
+    if (!r.done) return { done: false, lines: posted ? [...lines, `${posted} statuses, comments and dots posted so far.`] : lines }
+  }
+  if (posted) lines.push(`${posted} statuses, comments and dots posted to the feed.`)
 
   // ── Golfer of the Year, the club's own rules at their defaults ──
   if (office) {
