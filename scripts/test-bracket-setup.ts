@@ -178,7 +178,7 @@ section('A match play event is a knockout from the moment it is made')
   const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('leftDeadlineNote') && !bracket.includes('aria-label="Dates each round is played by"'),
     'a round\'s play-by date sits under its name — no row of round chips across the top')
-  const page = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
+  const page = (read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx'))
   ok(page.includes("from('trips').select('bracket_setup, kind, settings_passcode_hash').eq('id', trip.id).maybeSingle()"),
     '  …read in their own fail-soft query, never the trip\'s select')
   ok(page.includes('drawDeadlines(parseBracketSetup(rawSetup)?.deadlines ?? [], drawnRounds)'),
@@ -253,7 +253,7 @@ section('Arranging a match: venue, tees, shots, contacts, a walkover — and the
   const bracket = read('app/golf/[root]/[tripCode]/matchplay/MatchplayBracket.tsx')
   ok(bracket.includes('pin={sheet.correcting && lock && !unlocked ? lock : null}'),
     'a result already in is changed only with the admin PIN')
-  const mpage = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
+  const mpage = (read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx'))
   ok(mpage.includes('const lock = isLocked(setupRow?.settings_passcode_hash ?? null)'),
     '  …and on a trip with a passcode too — trips on the events\' model (Ross, 11 Nov 2026)')
 }
@@ -417,7 +417,7 @@ section('When the draw happens — one screen, and a moment it goes live (Ross, 
     && planner.includes('buildsNow(value.timing)'),
     'creation and the organiser area are one draw screen, the draw built on it now or pre-made for its date')
   const hub = read('app/golf/[root]/[tripCode]/page.tsx')
-  const bracket = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
+  const bracket = (read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx'))
   ok(hub.includes('<DrawCountdown') && hub.includes('koView.view.matches.length === 0') && bracket.includes('<DrawCountdown'),
     'the home screen and the bracket count down to it while it is to come')
   const countdown = read('app/golf/[root]/[tripCode]/DrawCountdown.tsx')

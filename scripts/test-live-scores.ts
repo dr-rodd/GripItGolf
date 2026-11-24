@@ -409,7 +409,7 @@ section('A round is in play only while somebody is locked on a card')
     'lib/hubStanding.ts',
     'app/golf/[root]/[tripCode]/leaderboard/page.tsx',
     'app/golf/[root]/[tripCode]/scoring/page.tsx',
-    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx',
   ]) {
     // The leaderboard's reads live in its shared copy (boardCopy.ts).
     const src = [page, ...(page.endsWith('leaderboard/page.tsx') ? [page.replace('page.tsx', 'boardCopy.ts')] : [])]

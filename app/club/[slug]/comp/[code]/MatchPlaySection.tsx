@@ -12,15 +12,21 @@ import MyMatch, { type ClubMatchRow } from './MyMatch'
 import DrawView from './DrawView'
 import { MatchPlayMark } from '../../ClubBarContext'
 import type { MatchPlayPage } from './read'
+import EnsureMember from '@/app/components/EnsureMember'
+import { TripBaseProvider } from '@/app/golf/[root]/[tripCode]/TripBase'
+import { BracketContent, readBracketPage } from '@/app/golf/[root]/[tripCode]/matchplay/bracketPage'
 
 /**
  * A club match play's three sections (stage 3; Ross, 17 Nov 2026), in the
  * slots a stroke competition's Tee times, Scoring and Leaderboard hold:
- * **Field** — who has entered; **Matches** — your match, then the round in
- * play's matches; **Draw** — every round with its play-by date and results.
- * A match opens its own page (`/club/<slug>/comp/<code>/match/<id>`, D284) — arranging,
- * contacts, the card and a walkover — as a stroke competition's card opens
- * its own; "See the full bracket" opens the event's bracket.
+ * **Field** — who has entered; **Matches** — your match, then every round's
+ * matches with their play-by dates and results; **Bracket** — the event's
+ * own bracket (D336, Ross, 25 Nov 2026: "use the one from events"), in the
+ * Leaderboard's place, read and drawn by `bracketPage.tsx` exactly as an
+ * event's bracket tab is — swiping a round at a time, a match's card over it,
+ * scoring straight in for whoever may. A match opens its own page
+ * (`/club/<slug>/comp/<code>/match/<id>`, D284) — arranging, contacts, the
+ * card and a walkover — as a stroke competition's card opens its own.
  */
 export default async function MatchPlaySection({ page, section }: { page: MatchPlayPage; section: CompSection }) {
   const { mp, slug, code } = page
@@ -30,8 +36,8 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
   const base = compHome(slug, code)
   const pairsMode = mp.setup.format !== 'singles'
   const db = eventReader(code)
-  const [draw, field, pairRows] = await Promise.all([
-    mp.drawn ? readClubDraw(code) : Promise.resolve(null),
+  const [draw, field, pairRows, bracket] = await Promise.all([
+    mp.drawn && section !== 'board' ? readClubDraw(code) : Promise.resolve(null),
     section === 'tee'
       ? db.from('players').select('id, name').eq('is_composite', false).order('created_at').then(r => (r.data ?? []) as { id: string; name: string }[])
       : Promise.resolve([] as { id: string; name: string }[]),
@@ -42,6 +48,8 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
           db.from('team_members').select('team_id, player_id').eq('team_set', 'set-2'),
         ]).then(([t, m]) => ({ teams: (t.data ?? []) as { id: string }[], members: (m.data ?? []) as { team_id: string; player_id: string }[] }))
       : Promise.resolve(null),
+    // D336: the Bracket tab is the event's own bracket, its links inside the club.
+    section === 'board' ? readBracketPage(code, base) : Promise.resolve(null),
   ])
   const nameById = new Map(field.map(p => [p.id, p.name]))
   const pairs = pairRows ? pairRows.teams.map(t => pairRows.members.filter(m => m.team_id === t.id).map(m => nameById.get(m.player_id)).filter((n): n is string => !!n)).filter(p => p.length > 0) : null
@@ -53,7 +61,7 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
     winner: m.winner, result: m.result,
   })))
   const inPlay = draw?.rounds.find(r => r.played < r.total) ?? null
-  const title = section === 'tee' ? 'Field' : section === 'scoring' ? 'Matches' : 'Draw'
+  const title = section === 'tee' ? 'Field' : section === 'scoring' ? 'Matches' : 'Bracket'
 
   return (
     <CompShell page={page}>
@@ -63,6 +71,16 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
       </Link>
       <h1 className="t-h1 text-ink mt-2 break-words">{title}</h1>
       <p className="t-cap text-ink/65 mt-1">{mp.name} · {PHASE_WORDS[phase]}{draw ? ` · ${roundInPlayLine(draw.rounds, today)}` : ''}</p>
+      {section === 'board' && bracket && (
+        // D336: the event's bracket, read and drawn as an event's bracket tab draws it;
+        // its writes (a result recorded, a card opened to score) entered as the event's own.
+        <TripBaseProvider base={base}>
+          <EnsureMember tripCode={code.toUpperCase()} />
+          <div className="mt-6">
+            <BracketContent page={bracket} empty="club" />
+          </div>
+        </TripBaseProvider>
+      )}
 
       {section === 'tee' && pairs && (
         pairs.length === 0
@@ -94,18 +112,15 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
           )
       )}
 
-      {section !== 'tee' && !draw && (
+      {section === 'scoring' && !draw && (
         <p className="text-ink/80 text-[15px] leading-relaxed mt-6">The matches appear here once the draw is made.</p>
       )}
 
       {section === 'scoring' && draw && <MyMatch code={code} matches={rows} matchHref={`${base}/match`} />}
-      {section !== 'tee' && draw && (
+      {section === 'scoring' && draw && (
         <DrawView rows={rows} matchHref={`${base}/match`} today={today}
           rounds={draw.rounds.map(r => ({ roundNumber: r.roundNumber, roundName: r.roundName, deadline: r.deadline, played: r.played, total: r.total }))}
-          startRound={section === 'scoring' ? inPlay?.roundNumber ?? null : null} />
-      )}
-      {section === 'board' && draw && (
-        <Link href={`${base}/matchplay`} className="t-label text-club-deep inline-flex mt-6 press">See the full bracket</Link>
+          startRound={inPlay?.roundNumber ?? null} />
       )}
     </CompShell>
   )

@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { startTransition, useEffect, useRef, useState } from 'react'
 import {
-  IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconStream, IconTrophy, IconUsers,
+  IconBracket, IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconStream, IconTrophy, IconUsers,
 } from '@/app/components/icons'
 import { useStreamDot } from '@/app/components/feed/useStreamDot'
 import { barOf, compSectionHref, compsBack, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
@@ -154,8 +154,9 @@ export default function ClubTabBar({ slug }: { slug: string }) {
           // they wait behind Comps and slide out from there.
           <ul className="club-bar-kids">
             {SECTION_ORDER.map((s, i) => {
-              const Icon = SECTION_ICON[s]
               const code = comp?.code ?? shown
+              // D336: a match play's third tab is its bracket, with the bracket's own mark (the event's, IconBracket).
+              const Icon = s === 'board' && code && matchPlays.has(code) ? IconBracket : SECTION_ICON[s]
               return (
                 <li key={s} className="club-bar-kid" style={{ '--k': i + 1 } as React.CSSProperties}>
                   {code && (

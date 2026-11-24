@@ -55,7 +55,7 @@ import { runEntry, withOwner, type EntryStore, type EntryTrip } from '../app/api
 import { runDoor, runEventClub, runSetAdminPin, type ActionStore } from '../app/api/event/actions'
 import { notEligibleLine } from '../lib/clubMembership'
 import { compPhase, sectionLive, sectionWaitLine, shortWhen, showsTopThree, summaryLine, type CompFacts } from '../lib/compPhase'
-import { barOf, clubPathOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
+import { barOf, clubPathOf, clubSwitch, compHome, compSectionHref, compsBack, sectionOfView, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '../lib/clubBar'
 import { clubCompRoot, isTripRoot, tripHomeAt } from '../lib/tripPaths'
 import { bookingIssue, compBoard, compFormIssue, compPermissions, compTeeRules, planSheetChange, readCompForm, withdrawIssue, type CompForm, type SheetBooking } from '../lib/clubComp'
 import { runNewCompetition, type CompetitionStore } from '../app/api/club/competition'
@@ -3410,7 +3410,7 @@ function insideClubTests() {
   eq(barOf(`${C}/scoring/1`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, 'the scorecard lights Scoring')
   eq(barOf(`${C}/match/m-1`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, 'a match lights Scoring (Matches)')
   eq(barOf(`${C}/match/m-1/card`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, '…and its card')
-  eq(barOf(`${C}/matchplay`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'board' }, 'the bracket lights Leaderboard (Draw)')
+  eq(barOf(`${C}/matchplay`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'board' }, 'the bracket lights its tab (Bracket, D336)')
   eq(barOf(`${C}/organiser`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, 'Manage keeps the competition footer')
   eq(barOf(`${C}/organiser/bracket`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, '…its pages too')
   eq(barOf(`${C}/setup`, 'pints'), { set: 'comp', code: 'AB12CD', active: 'summary' }, '…and Trip Setup')
@@ -3427,13 +3427,26 @@ function insideClubTests() {
 
   // Every path the club mounts has its page there, drawn through the door.
   const play = 'app/club/[slug]/comp/[code]/(play)'
-  for (const p of ['scoring/[roundNumber]', 'match/[matchId]', 'match/[matchId]/card', 'matchplay', 'organiser', 'organiser/tags', 'organiser/days', 'organiser/sessions', 'organiser/bracket', 'setup', 'setup/sessions', 'teesheet/[roundId]/setup']) {
+  for (const p of ['scoring/[roundNumber]', 'match/[matchId]', 'match/[matchId]/card', 'organiser', 'organiser/tags', 'organiser/days', 'organiser/sessions', 'organiser/bracket', 'setup', 'setup/sessions', 'teesheet/[roundId]/setup']) {
     const src = read(`${play}/${p}/page.tsx`)
     ok(/inClub\(params/.test(src), `the club mounts ${p}, behind the competition's door`)
   }
   ok(/<EnsureMember/.test(read(`${play}/layout.tsx`)) && /TripBaseProvider base=\{compHome/.test(read(`${play}/layout.tsx`)),
     'the club\'s screens enter the phone in the event and link inside the club')
   ok(/if \(gate\.door\)/.test(read(`${play}/inClub.tsx`)), 'without the door, only the door')
+  {
+    // D336 (Ross, 25 Nov 2026): a club match play's third tab is the event's own bracket, in the Leaderboard's place.
+    const mps = read('app/club/[slug]/comp/[code]/MatchPlaySection.tsx')
+    ok(/section === 'board' \? readBracketPage\(code, base\)/.test(mps) && /<BracketContent page=\{bracket\} empty="club" \/>/.test(mps),
+      'a club match play’s Bracket tab is the event’s bracket, read and drawn by the one copy (bracketPage.tsx)')
+    const ev = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
+    ok(/readBracketPage\(tripCode, tripHome\)/.test(ev) && /<BracketContent page=\{page\} empty="event" \/>/.test(ev), '…the same copy the event’s own bracket draws')
+    ok(/<EnsureMember tripCode=/.test(mps) && /<TripBaseProvider base=\{base\}>/.test(mps), '…entered in the event, its links inside the club')
+    eq(MATCH_PLAY_SECTION_LABEL.board, 'Bracket', 'the tab is named Bracket')
+    ok(/s === 'board' && code && matchPlays\.has\(code\) \? IconBracket/.test(read('app/club/[slug]/ClubTabBar.tsx')), '…with the bracket’s own mark')
+    ok(/redirect\(compSectionHref\(slug, code, 'board'\)\)/.test(read(`${play}/matchplay/page.tsx`)), 'the old bracket address inside the club goes to the tab')
+    ok(!/DrawView/.test(mps.slice(mps.indexOf("section === 'board' && bracket"))) || /section === 'scoring' && draw && \(\s*<DrawView/.test(mps), 'the list of matches stays on Matches')
+  }
 
   // The event's own address of each sends a competition into the club.
   const ev = 'app/golf/[root]/[tripCode]'

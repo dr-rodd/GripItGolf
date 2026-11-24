@@ -372,7 +372,7 @@ section('No trip-wide score read goes round lib/scoreReads.ts')
 
   const screens = [
     'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts',
-    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx',
     'lib/hubStanding.ts',
   ]
   for (const s of screens) {

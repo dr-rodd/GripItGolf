@@ -819,7 +819,7 @@ section('A match play event ranks its tags by matches won')
     players: [], holes: [], rounds: [], resolved: [], hcpFor: new Map(), legacyTeamScoring: null,
     liveRoundIds: new Set(), livePlayerIds: new Set(), teams, memberships,
   }), [], '  …and handed no results, it draws no rows rather than a table of noughts')
-  const page = read('app/golf/[root]/[tripCode]/matchplay/page.tsx')
+  const page = (read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx'))
   ok(page.includes('<TagTally') && page.includes('boards.find(isMatchTally)'), 'it stands under the bracket — the event\'s leaderboard tab')
   const lbPage = read('app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts')
   ok(lbPage.includes("lb.competition === 'matchplay' || isMatchTally(lb)") && lbPage.includes('.filter(lb => !isMatchTally(lb))'),

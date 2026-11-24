@@ -354,7 +354,7 @@ section('Knockout and Matches never meet (D34)')
   for (const f of sessionFiles) ok(!read(f).includes('matchplay_matches'), `${f} never reads the bracket’s table`)
   const bracketFiles = [
     'lib/drawStore.ts', 'lib/matchplayStore.ts', 'app/golf/[root]/[tripCode]/knockout.ts',
-    'app/golf/[root]/[tripCode]/matchplay/page.tsx', 'app/api/match/dueDraws.ts',
+    'app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx', 'app/api/match/dueDraws.ts',
   ]
   for (const f of bracketFiles) ok(!read(f).includes('session_matches'), `${f} never reads a session’s matches`)
   const card = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchCardClient.tsx')
@@ -819,7 +819,7 @@ section('Viewers open a card in place, sitewide (Ross, 10 Nov 2026)')
     'the bracket: a match with a card opens it over the draw — no row to open one beneath')
   ok(bracket.includes('Record the result') && bracket.includes('Hold the match on the draw to change its result.'),
     '  …recording a result by hand inside it, a hold still changing a finished one')
-  ok(read(base + 'matchplay/page.tsx').includes('readMatchDetails(db, trip, view,'), '  …read on the server with the draw')
+  ok(read(base + 'matchplay/bracketPage.tsx').includes('readMatchDetails(db, trip, view,'), '  …read on the server with the draw')
 }
 
 section('Scoring: who goes into scoring, everybody else gets the scorecard (Ross, 10 Nov 2026)')

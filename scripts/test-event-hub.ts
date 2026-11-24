@@ -300,7 +300,7 @@ section('A player picks their own colour while the event has no sides')
   // fails the whole screen before migration 063 has run.
   const readers = [
     'app/golf/[root]/[tripCode]/knockout.ts',
-    'app/golf/[root]/[tripCode]/matchplay/page.tsx',
+    'app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx',
     'app/golf/[root]/[tripCode]/leaderboard/boardCopy.ts',
     'app/golf/[root]/[tripCode]/scoring/[roundNumber]/page.tsx',
   ]
@@ -315,7 +315,7 @@ section('A player picks their own colour while the event has no sides')
   }
 
   ok(read('app/golf/[root]/[tripCode]/knockout.ts').includes('playerColourOf(')
-     && read('app/golf/[root]/[tripCode]/matchplay/page.tsx').includes('playerColourOf('),
+     && read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx').includes('playerColourOf('),
     'the match card, the live board and the bracket colour a side from the one rule')
   const board = read('app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx')
   ok(board.includes('row.color ?? colourById.get(row.id)'),

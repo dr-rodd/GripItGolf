@@ -29,12 +29,13 @@ export const SECTION_LABEL: Record<CompSection, string> = {
 
 /**
  * A club match play's three, in the same slots and at the same addresses
- * (Ross, 17 Nov 2026): who is in, the matches being played, the draw.
+ * (Ross, 17 Nov 2026): who is in, the matches being played, and — in the
+ * Leaderboard's place — the bracket, the event's own (D336, Ross, 25 Nov 2026).
  */
 export const MATCH_PLAY_SECTION_LABEL: Record<CompSection, string> = {
   tee: 'Field',
   scoring: 'Matches',
-  board: 'Draw',
+  board: 'Bracket',
 }
 
 /** A competition's Summary address. */

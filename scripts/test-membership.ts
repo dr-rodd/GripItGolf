@@ -603,7 +603,7 @@ async function adminPinTests() {
   for (const f of ['app/dashboard/create/CreateTripForm.tsx', 'app/dashboard/create/CreateKnockoutForm.tsx', 'app/dashboard/create/CreateLeagueForm.tsx']) {
     ok(!/gig-owner/.test(read(f)), `${f} no longer marks the phone that made it`)
   }
-  ok(!/isEvent\([^)]*\)\s*&&\s*setupRow\?\.settings_passcode_hash/.test(read('app/golf/[root]/[tripCode]/matchplay/page.tsx')),
+  ok(!/isEvent\([^)]*\)\s*&&\s*setupRow\?\.settings_passcode_hash/.test((read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx'))),
     'a trip\'s bracket wears the padlock too, not only an event\'s')
   ok(/<AdminPinCard /.test(read('app/golf/[root]/[tripCode]/organiser/page.tsx')) && /<AdminPinCard /.test(read('app/run/[tripCode]/organiser/RunOrganiserClient.tsx')),
     'an event\'s and a challenge\'s organiser areas change their PIN the same way')

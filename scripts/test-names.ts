@@ -157,7 +157,7 @@ section('Every leaderboard reads the same rule')
   ok(!/lengthNeeded/.test(entrants), '  …the old cousin of the growth rule is gone')
   ok(entrants.includes('normalizeNickname(p.nickname) ?? firstName(p.name)'),
     'a nickname wins on a singles tile')
-  ok(read('app/golf/[root]/[tripCode]/matchplay/page.tsx').includes("select('id, nickname')"),
+  ok((read('app/golf/[root]/[tripCode]/matchplay/page.tsx') + read('app/golf/[root]/[tripCode]/matchplay/bracketPage.tsx')).includes("select('id, nickname')"),
     'the draw page fetches nicknames fail-soft')
   ok(read('lib/matchplayStore.ts').includes("select('id, nickname')"),
     'and so does the store behind the bracket')
