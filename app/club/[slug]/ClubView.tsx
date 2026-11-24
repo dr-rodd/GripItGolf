@@ -1,6 +1,6 @@
 'use client'
 
-import Feed from '@/app/components/feed/Feed'
+import Stream from '@/app/components/feed/Feed'
 import { bookedItems, byWeek, nextItems, plusDays } from '@/lib/clubCalendar'
 import { ItemRow, useMemberCalendar } from './calendarParts'
 import Link from 'next/link'
@@ -9,10 +9,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
-import HandicapIndexCard from '@/app/components/HandicapIndexCard'
-import YourDetailsCard from '@/app/components/YourDetailsCard'
-import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
-import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconUser } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconSettings, IconUser } from '@/app/components/icons'
+import Initials from '@/app/components/Initials'
 import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
@@ -62,7 +60,7 @@ const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Eve
  * hand-off, D123–D127). Everybody first sees the public face the server
  * drew; a phone signed in to a Green Dot account then asks whether it is on
  * this club's list, and if so the members area takes its place — Home ·
- * Comps · Tee times · Stats · Club. A section with nothing in it is not drawn,
+ * Comps · Stream · Tee times · Stats (D318). A section with nothing in it is not drawn,
  * never an empty heading; "Your next round" waits for booking (stage (d)).
  */
 export default function ClubView({ face }: { face: ClubFace }) {
@@ -96,7 +94,9 @@ export default function ClubView({ face }: { face: ClubFace }) {
   useLayoutEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('tab')
     // Board's place is Tee times now (Ross, 17 Nov 2026): an old ?tab=board link opens Comps, which carries the live leaderboard.
-    setTab(asked === 'board' ? 'comps' : asked === 'comps' || asked === 'tee' || asked === 'stats' || asked === 'club' ? asked : 'home')
+    // Streams v2 (D319): the Club tab went — an old ?tab=club opens the gear's page.
+    if (asked === 'club') { router.replace(`/club/${face.slug}/settings`); return }
+    setTab(asked === 'board' ? 'comps' : asked === 'comps' || asked === 'stream' || asked === 'tee' || asked === 'stats' ? asked : 'home')
     // D223: at any club the hint names. A home held for another club (a
     // switch between clubs) is never drawn under this one's face.
     if (hintClubs(readTierHint()).includes(face.slug)) {
@@ -106,7 +106,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
       setMembers(m => (m && m.slug === face.slug ? m : null))
     }
     arrived()
-  }, [setTab, setMembers, face.slug])
+  }, [setTab, setMembers, face.slug, router])
 
   // A signal lost on the way: what is on screen stays, with a way to try again.
   const [lost, setLost] = useState(false)
@@ -184,7 +184,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
       <div className="relative z-10">
         <TripHeader backTo={members ? `/club/${face.slug}` : '/'} />
         <div className="w-full max-w-md mx-auto px-4 pt-3 pb-10">
-          <ClubHeader face={face} members={!!members} switcher={switcher}
+          <ClubHeader face={face} members={!!members} switcher={switcher} who={members?.name}
             onPick={switcher ? slug => goToClub(router, slug, switcher.all) : undefined} />
           {/* D197: a phone hinted to this club sees the stand-in from the
               first paint (the head script's mark on <html>), never the
@@ -202,7 +202,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
           {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
           {members && tab === 'tee' && <ClubTeeTimes clubId={members.clubId} />}
           {members && tab === 'stats' && <Stats face={face} m={members} />}
-          {members && tab === 'club' && <ClubTabPage face={face} m={members} />}
+          {members && tab === 'stream' && <Stream club={{ slug: face.slug }} mePath={`/club/${face.slug}/settings`} />}
         </div>
       </div>
     </main>
@@ -259,9 +259,11 @@ function goToClub(router: ReturnType<typeof useRouter>, slug: string, all: strin
 }
 
 /** The frosted header: crest in the club's ring, the name, "Members", and the account button. */
-export function ClubHeader({ face, members, switcher = null, onPick }: {
+export function ClubHeader({ face, members, switcher = null, onPick, who }: {
   face: ClubFace
   members: boolean
+  /** The member's name, for the profile circle's initial (D319). */
+  who?: string
   /** D223, D280: an account on several clubs — the name opens a list of them to choose from. */
   switcher?: ClubSwitch | null
   onPick?: (slug: string) => void
@@ -314,11 +316,23 @@ export function ClubHeader({ face, members, switcher = null, onPick }: {
         ) : (
           <>{crest(face.crestUrl, false)}{words}</>
         )}
-        <Link href={members ? `/club/${face.slug}/me` : accountLink(`/club/${face.slug}`)}
-          aria-label={members ? 'Your page' : `${face.name} members: sign in`}
-          className="w-12 h-12 flex-shrink-0 rounded-full bg-surface border border-line flex items-center justify-center text-ink press">
-          <IconUser size={22} />
-        </Link>
+        {/* D319: the profile circle opens your page; the gear, the settings (what the Club tab held). */}
+        {members ? (
+          <span className="flex items-center gap-1 flex-shrink-0">
+            <Link href={`/club/${face.slug}/settings`} aria-label="Settings"
+              className="w-12 h-12 rounded-full flex items-center justify-center text-ink/80 press ch-focus">
+              <IconSettings size={22} />
+            </Link>
+            <Link href={`/club/${face.slug}/me`} aria-label="Your page" className="w-12 h-12 flex items-center justify-center press ch-focus rounded-full">
+              <Initials name={who ?? ''} />
+            </Link>
+          </span>
+        ) : (
+          <Link href={accountLink(`/club/${face.slug}`)} aria-label={`${face.name} members: sign in`}
+            className="w-12 h-12 flex-shrink-0 rounded-full bg-surface border border-line flex items-center justify-center text-ink press">
+            <IconUser size={22} />
+          </Link>
+        )}
       </header>
       {/* MO1, M1 (D280): the account's clubs, a list under the header — the one here ticked. */}
       {open && switcher && onPick && (
@@ -525,9 +539,6 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
           </ul>
         </section>
       )}
-
-      {/* D293: the feed, under Your bookings — asked after the page paints, never in Home's own answer (D305). */}
-      <Feed club={{ slug: face.slug }} mePath={`/club/${face.slug}/me`} />
 
       {/* Never from the copy (D194): Live now waits for the fresh answer. */}
       {!m.fromCopy && live.length > 0 && (
@@ -859,29 +870,6 @@ function Stats({ face, m }: { face: ClubFace; m: Members }) {
             footer={selfClaimedLine(season, face.name) ? <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p> : null} />
         </>
       )}
-    </section>
-  )
-}
-
-function ClubTabPage({ face, m }: { face: ClubFace; m: Members }) {
-  return (
-    <section className="mt-6">
-      <h1 className="t-h1 text-ink">Club</h1>
-      <p className="text-ink/80 text-[15px] mt-2">You’re on {face.name}’s list: {credentialLine(m.credentials ?? NOTHING_HELD, face.name)}.</p>
-      <HandicapIndexCard className="mt-6" />
-      <YourDetailsCard club={face.name} className="mt-4" />
-      <ClubEventTypesCard className="mt-4" />
-      <ListGroup className="mt-6">
-        {clubMay('open_clubhouse', { row: m.credentials ?? null }) && (
-          <ListRow href={`/clubhouse/${face.slug}`} label="The Clubhouse"
-            hint="The club’s list, its look and its season" />
-        )}
-        <ListRow href="/home?tab=events" label="Your events"
-          hint="Every event you’re in or run, and the players linked to you" />
-        <ListRow href={`/club/${face.slug}/me`} label="Your page" hint="Handicap, your details, what you see, username, password, sign out" />
-      </ListGroup>
-      <p className="t-cap text-ink/65 mt-4">Anybody else opening this address sees {face.name}’s public page.</p>
-      <LegalLinks className="mt-12" />
     </section>
   )
 }

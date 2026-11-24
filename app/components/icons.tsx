@@ -487,3 +487,17 @@ export const IconLinkOff = (p: IconProps) => (
     <path d="M3 3l18 18" />
   </Svg>
 )
+
+/**
+ * Stream (Streams v2): a dot and the lines it leads — the feed's own mark,
+ * drawn in the set's stroke. Not Tabler's: no Tabler icon reads as "a
+ * stream" without reading as a chat or a list.
+ */
+export const IconStream = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M4 7a2 2 0 1 0 4 0a2 2 0 1 0 -4 0" />
+    <path d="M11 7h9" />
+    <path d="M4 13h16" />
+    <path d="M4 18h11" />
+  </Svg>
+)

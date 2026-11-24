@@ -17,7 +17,7 @@ import { runSocial, type SocialStore } from './social'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
   mayView, mayViewChild, newestFirst, olderThan, orderComps, readAudience, readCursor, readStreamKey, readStreams,
-  streamKey, streamLabel,
+  STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel,
   type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type StreamRef, type Viewer,
 } from '@/lib/feed'
 
@@ -137,7 +137,7 @@ export interface FeedView {
   code: string | null
 }
 
-export interface StreamView { key: string; kind: StreamRef['kind']; label: string; empty: string }
+export interface StreamView { key: string; kind: StreamRef['kind']; label: string; empty: string; about: string }
 
 const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : null)
 
@@ -285,9 +285,9 @@ export async function runFeed(
   const a = await askerOf(input, store)
   if (isOutcome(a)) return a
   const action = str(input.action)
-  if (!(await store.ready())) return action === 'home' ? done({ ready: false }) : fail(503, FEED_NOT_READY)
+  if (!(await store.ready())) return action === 'home' ? done({ ready: false }) : action === 'badge' ? done({ count: 0 }) : fail(503, FEED_NOT_READY)
   // A junior gets nothing social (D304): no feed, no friends, nothing written.
-  if (a.junior) return action === 'home' ? done({ ready: true, junior: true }) : fail(403, 'The feed isn’t open to junior members.')
+  if (a.junior) return action === 'home' ? done({ ready: true, junior: true }) : action === 'badge' ? done({ count: 0 }) : fail(403, 'The feed isn’t open to junior members.')
   const friends = await runFriends(action, input, a, store, now)
   if (friends) return friends
   const cards = await runCards(action, input, a, store, now)
@@ -296,6 +296,11 @@ export async function runFeed(
   if (social) return social
 
   if (action === 'home') return home(input, a, store, now)
+  // The Stream tab's dot (D307, moved by D320): one count, nothing else read.
+  if (action === 'badge') {
+    const settings = await store.settings(a.user.id)
+    return done({ count: await store.commentsSince(a.user.id, settings.commentsSeenAt) })
+  }
   if (action === 'page') return page(input, a, store, now)
   if (action === 'oncourse') return onCourse(input, a, store, now)
   if (action === 'audience') {
@@ -308,8 +313,9 @@ export async function runFeed(
     const keys = Array.isArray(input.streams) ? input.streams : null
     if (!keys) return fail(400, 'Choose your streams.')
     const clubs = await store.myClubs(a.user.id)
-    const streams = readStreams(keys, clubs.map(c => c.id))
-    await store.saveSettings(a.user.id, { streams: streams.map(streamKey) })
+    const streams = readStreams([STREAMS_V2, ...keys], clubs.map(c => c.id))
+    if (streams.length === 0) return fail(400, 'Keep at least one stream.')
+    await store.saveSettings(a.user.id, { streams: keptStreams(streams) })
     return done({ streams: streams.map(streamKey) })
   }
   return fail(400, 'Unknown request.')
@@ -329,9 +335,9 @@ async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, 
   ])
   const streams = readStreams(settings.streams, clubs.map(c => c.id))
   const clubName = (id: string) => clubs.find(c => c.id === id)?.name ?? null
-  const view = (s: StreamRef): StreamView => ({ key: streamKey(s), kind: s.kind, label: streamLabel(s, { club: clubName }), empty: emptyLine(s.kind) })
-  // Every stream the member could add (D300): Friends, Comp, each of their clubs. Team waits for interclub teams.
-  const offered = [{ kind: 'comp' } as StreamRef, { kind: 'friends' } as StreamRef, ...clubs.map(c => ({ kind: 'club' as const, id: c.id }))]
+  const view = (s: StreamRef): StreamView => ({ key: streamKey(s), kind: s.kind, label: streamLabel(s, { club: clubName }), empty: emptyLine(s.kind), about: streamAbout(s.kind) })
+  // Every stream the member could keep (D321): their clubs', comp, match, friends.
+  const offered = offeredStreams(clubs.map(c => c.id))
   const here = str(input.club)
   return done({
     ready: true, junior: false,
@@ -350,7 +356,8 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
   const stream = readStreamKey(input.stream)
   if (!stream) return fail(400, 'Which stream?')
   const before = readCursor(input.before)
-  if (stream.kind === 'team') return done({ items: [], next: null })
+  // match.stream is vacant until interclub teams exist (D332).
+  if (stream.kind === 'match') return done({ items: [], next: null })
 
   if (stream.kind === 'friends') {
     const { viewer } = await viewerOf(a, store)
@@ -389,7 +396,7 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
  */
 async function onCourse(input: Record<string, unknown>, a: Asker, store: FeedStore, now: Date): Promise<FeedOutcome> {
   const stream = readStreamKey(input.stream)
-  if (!stream || stream.kind === 'team') return done({ players: [] })
+  if (!stream || stream.kind === 'match') return done({ players: [] })
   const all = store.shared ? await store.shared('live', () => store.liveNow()) : await store.liveNow()
   const { viewer } = await viewerOf(a, store)
   let tripId: string | null = null

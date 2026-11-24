@@ -1246,3 +1246,19 @@ html.keyboard-open .hide-with-keyboard { display: none; }
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
+
+/* ── Stream names (D321) ─────────────────────────────────────────
+   club•stream: the word, an emerald dot, "stream". The dot is a CSS circle
+   in the accent token, sized to the text it sits in (0.32em, on the
+   x-height), never the wordmark's artwork. Light and dark alike, the token
+   re-pointed under html.dark. */
+.stream-name { display: inline-flex; align-items: baseline; white-space: nowrap; }
+.stream-name-dot {
+  display: inline-block;
+  width: 0.32em;
+  height: 0.32em;
+  margin: 0 0.06em;
+  border-radius: 9999px;
+  background: var(--color-accent);
+  transform: translateY(-0.06em);
+}

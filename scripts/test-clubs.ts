@@ -916,8 +916,11 @@ function wiringTests() {
   ok(/clubId: pins\.clubId/.test(read('lib/entryClient.ts')), 'the club goes beside the row, never a column (Q3)')
   const view = read('app/club/[slug]/ClubView.tsx')
   ok(/<CodeBox \/>/.test(view) && /href="\/create"/.test(view), 'the club area’s Home has the code box and Make an event')
-  ok(/href=\{`\/clubhouse\/\$\{face\.slug\}`\}/.test(view) && /clubMay\('open_clubhouse'/.test(view) && /href="\/home\?tab=events"/.test(view),
-    'its Club tab holds the way into the Clubhouse (Clubhouse holders) and Your events')
+  {
+    const gear = read('app/club/[slug]/settings/ClubSettings.tsx')
+    ok(/href=\{`\/clubhouse\/\$\{slug\}`\}/.test(gear) && /clubMay\('open_clubhouse'/.test(gear) && /href="\/home\?tab=events"/.test(read('app/club/[slug]/me/YourPage.tsx')),
+      'the gear’s page holds the way into the Clubhouse (Clubhouse holders); your page, Your events (D319 — the Club tab went)')
+  }
   ok(/redirect\(`\/club\/\$\{slug\}`\)/.test(read('app/club/[slug]/list/page.tsx')) && !/redirect\(`\/clubhouse/.test(read('app/club/[slug]/list/page.tsx')),
     'the old list address no longer sends anybody into the Clubhouse (Ross, 17 Nov 2026) — the club\'s own page, whose Club tab offers it to those who hold it')
   ok(/window\.location\.replace\(state\.list \? `\/clubhouse\/\$\{state\.club\.slug\}\/members`/.test(read('app/account/club/ClubScreen.tsx')),
@@ -1784,9 +1787,12 @@ async function competitionBarTests() {
       'leaving a competition by Comps or Home is asked for outright, and made whole if it never lands (D280, M6)')
     ok(/data-keep-set/.test(bar) && /hasAttribute\('data-keep-set'\)/.test(ctx), '…the bar keeps its set until the address has left the competition')
     const view = read('app/club/[slug]/ClubView.tsx'), me = read('app/club/[slug]/me/YourPage.tsx')
-    ok(/href=\{members \? `\/club\/\$\{face\.slug\}\/me`/.test(view) && /HandicapIndexCard/.test(me) && /YourDetailsCard/.test(me) && /ClubEventTypesCard/.test(me) && /href="\/account"/.test(me),
-      'the account icon opens Your page in the club: handicap, details, what you see, account (D280, M2)')
-    ok(/clubMay\('open_clubhouse'/.test(view) && /label="Your page"/.test(view), 'the Club tab reaches Your page; the Clubhouse row only with Clubhouse (M5)')
+    const gear = read('app/club/[slug]/settings/ClubSettings.tsx')
+    ok(/href=\{`\/club\/\$\{face\.slug\}\/me`\}/.test(view) && /HandicapIndexCard/.test(me) && /YourDetailsCard/.test(me) && /href="\/account"/.test(me),
+      'the profile circle opens Your page in the club: handicap, details, account (D280, D319)')
+    ok(/href=\{`\/club\/\$\{face\.slug\}\/settings`\}/.test(view) && /ClubEventTypesCard/.test(gear) && /FeedSettings/.test(gear) && /StreamsCard/.test(gear),
+      'the gear opens Settings: what you see, your streams, who sees your cards (D319)')
+    ok(/clubMay\('open_clubhouse'/.test(gear) && !/clubMay\('open_clubhouse'/.test(view), 'the Clubhouse row only with Clubhouse, on the gear’s page (M5, D319)')
     ok(/BackButton href=\{back\}/.test(read('app/account/AccountScreen.tsx')) && /homeHref\(\)/.test(read('app/home/HomeScreen.tsx')),
       'back from /account and Home on /home go to a club member’s club, never /home (D280, M3–M4)')
   }
@@ -1817,6 +1823,15 @@ async function competitionBarTests() {
   ok(/club-bar-tray bg-club-tint/.test(bar), 'the tray in the club\'s tint (D188)')
   ok(/IconChevronLeft[^\n]*club-bar-icon-back/.test(bar), 'Comps wears a back chevron in a competition (D188)')
   ok(/key: 'tee', label: 'Tee times'/.test(bar) && !/label: 'Board'/.test(bar), 'Tee times holds Board\'s old place (Ross, 17 Nov 2026)')
+  ok(/\{ key: 'stream', label: 'Stream'[^\n]*\},\s*\{ key: 'tee'[^\n]*\},\s*\.\.\.\(STATS_READY \? \[\{ key: 'stats'/.test(bar) && !/label: 'Club'/.test(bar),
+    'the club footer is Home · Comps · Stream · Tee times · Stats — the Club tab gone (D318)')
+  ok(/key: 'home'[\s\S]*key: 'events'[\s\S]*key: 'stream'[\s\S]*key: 'board'[\s\S]*key: 'stats'/.test(read('app/home/HomeTabBar.tsx')) && !/label: 'Me'/.test(read('app/home/HomeTabBar.tsx')),
+    'the personal footer is Home · Events · Stream · Board · Stats — Me gone (D318)')
+  ok(/asked === 'club'\) \{ router\.replace\(`\/club\/\$\{face\.slug\}\/settings`\)/.test(read('app/club/[slug]/ClubView.tsx')) && /asked === 'me'\) \{ router\.replace\('\/home\/me'\)/.test(read('app/home/HomeScreen.tsx')),
+    'old ?tab=club and ?tab=me addresses go to their new places (D319)')
+  ok(!/<(Feed|Stream)\b/.test(read('app/club/[slug]/ClubView.tsx').slice(read('app/club/[slug]/ClubView.tsx').indexOf('function MembersHome'), read('app/club/[slug]/ClubView.tsx').indexOf('function CalendarRow')))
+    && !/<(Feed|Stream)\b/.test(read('app/home/HomeScreen.tsx').slice(read('app/home/HomeScreen.tsx').indexOf('function HomeTabPage'), read('app/home/HomeScreen.tsx').indexOf('function DateRow'))),
+    'Home does no feed work — the stream is its own tab (M3, D320)')
   ok(/Live now[\s\S]*Open the leaderboard/.test(read('app/club/[slug]/ClubView.tsx')), '…and Board\'s job, the competition in play, is on Comps')
   ok(!/\b(bg|text|border|ring)-(accent|emerald)/.test(bar), 'no emerald in the bar')
   const css = read('app/globals.css')
@@ -2869,7 +2884,7 @@ async function calendarTests() {
   ok(s.activity.some(a => a.action === 'event.link'), '…on the log too')
   const accountSrc = read('app/api/account/account.ts')
   ok(/input\.action === 'event-types'/.test(accountSrc) && /readMemberHidden\(input\.hidden\)/.test(accountSrc), '“From my clubs, show me” is kept on the account')
-  ok(read('app/club/[slug]/ClubView.tsx').includes('<ClubEventTypesCard') && read('app/home/HomeScreen.tsx').includes('<ClubEventTypesCard'), '…on the club’s Club tab and Me')
+  ok(read('app/club/[slug]/settings/ClubSettings.tsx').includes('<ClubEventTypesCard') && read('app/home/settings/SettingsPage.tsx').includes('<ClubEventTypesCard'), '…on the gear’s Settings, in the club and on /home (D319)')
   ok(read('next.config.ts').includes('/clubhouse/:slug/competitions'), 'the Clubhouse’s old Competitions address goes on to Events')
 }
 
@@ -3143,8 +3158,8 @@ async function teeTimesTests() {
     // No link or redirect into the Clubhouse from anywhere but the two places that ask the account first (Ross, 17 Nov 2026).
     const walkApp = (d: string): string[] => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? (['clubhouse', 'admin', 'api'].includes(e.name) && d === 'app' ? [] : walkApp(path.join(d, e.name))) : /\.tsx?$/.test(e.name) ? [path.join(d, e.name)] : [])
     const linking = walkApp('app').filter(f => /[`'"]\/clubhouse/.test(read(f).replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')))
-    eq(linking.sort(), ['app/account/club/ClubScreen.tsx', 'app/club/[slug]/ClubView.tsx'], 'only two places outside the Clubhouse mention it at all')
-    ok(/clubMay\('open_clubhouse', \{ row: m\.credentials[^}]*\}\) && \(\s*<ListRow href=\{`\/clubhouse\//.test(read('app/club/[slug]/ClubView.tsx')), '…the Club tab\'s link only for an account that holds Clubhouse')
+    eq(linking.sort(), ['app/account/club/ClubScreen.tsx', 'app/club/[slug]/settings/ClubSettings.tsx'], 'only two places outside the Clubhouse mention it at all')
+    ok(/credentials && clubMay\('open_clubhouse', \{ row: credentials \}\) && \(/.test(read('app/club/[slug]/settings/ClubSettings.tsx')), '…the gear page\'s link only for an account that holds Clubhouse (D319)')
     ok(/clubMay\('keep_list'/.test(read('app/account/club/ClubScreen.tsx')) && /state\.list \? `\/clubhouse/.test(read('app/account/club/ClubScreen.tsx')), '…and the list\'s way in only for one that may keep the list')
     ok(!read('app/account/clubs/ClubsScreen.tsx').includes("askClub('create'") && !read('app/account/clubs/ClubsScreen.tsx').includes('Set up the club'), 'members have no Set up your club')
     ok(/makeClub/.test(read('app/admin/clubs/actions.ts')) && /requireAdmin\(\)/.test(read('app/admin/clubs/actions.ts').slice(read('app/admin/clubs/actions.ts').indexOf('export async function makeClub'))) && /provisionClub/.test(read('app/admin/clubs/actions.ts')), 'clubs are set up from /admin, behind the admin session')

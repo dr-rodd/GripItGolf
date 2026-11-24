@@ -102,41 +102,59 @@ export function mayViewChild(child: Pick<ItemFacts, 'removed' | 'held'>, parent:
   return mayView(parent, viewer)
 }
 
-// ─── Streams (D294, D300) ───────────────────────────────────────
+// ─── Streams (D294, D300; Streams v2 — D318–D332) ───────────────
 
-export type StreamKind = 'friends' | 'club' | 'comp' | 'team'
+/**
+ * The four streams (D321): club.stream (the club's official posts — only in
+ * its own area), comp.stream (competitions, club match plays among them —
+ * D332), match.stream (head-to-head; vacant until a club lists interclub
+ * teams — D332) and friends.stream.
+ */
+export type StreamKind = 'club' | 'comp' | 'match' | 'friends'
 
-/** A stream as stored in a member's list: Friends, Comp, a club by id, a team by id. */
+/** A stream as stored in a member's list: a club's by id, the other three by name. */
 export type StreamRef =
   | { kind: 'friends' }
   | { kind: 'comp' }
+  | { kind: 'match' }
   | { kind: 'club'; id: string }
-  | { kind: 'team'; id: string }
 
 export function streamKey(s: StreamRef): string {
-  return s.kind === 'club' || s.kind === 'team' ? `${s.kind}:${s.id}` : s.kind
+  return s.kind === 'club' ? `club:${s.id}` : s.kind
 }
 
 export function readStreamKey(v: unknown): StreamRef | null {
-  if (v === 'friends' || v === 'comp') return { kind: v }
+  if (v === 'friends' || v === 'comp' || v === 'match') return { kind: v }
   if (typeof v !== 'string') return null
-  const m = /^(club|team):([0-9a-f-]{36})$/i.exec(v)
-  return m ? { kind: m[1] as 'club' | 'team', id: m[2].toLowerCase() } : null
+  // A Team stream (D300) is match.stream now (D332).
+  if (/^team:[0-9a-f-]{36}$/i.test(v)) return { kind: 'match' }
+  const m = /^club:([0-9a-f-]{36})$/i.exec(v)
+  return m ? { kind: 'club', id: m[1].toLowerCase() } : null
+}
+
+/** The word before the dot (D321). */
+export function streamWord(kind: StreamKind): string {
+  return kind
 }
 
 /** The most streams a member keeps. */
 export const MAX_STREAMS = 12
 
+/** The mark a list saved under Streams v2 starts with — so turning match.stream off sticks. */
+export const STREAMS_V2 = 'v2'
+
+/** A list as it is kept: the mark, then the keys. */
+export function keptStreams(list: readonly StreamRef[]): string[] {
+  return [STREAMS_V2, ...list.map(streamKey)]
+}
+
 /**
  * A member's stored list read back: only streams that still mean something
- * (a club they are still on, a team they are still on), each once. Nothing
- * stored — or before migration 102 — is the starting set (D300): Comp, Friends,
- * then their clubs.
+ * (a club they are still on), each once. Nothing stored — or before
+ * migration 102 — is the starting set: their clubs, comp, match, friends.
  */
-export function readStreams(stored: unknown, clubs: readonly string[], teams: readonly string[] = []): StreamRef[] {
-  const valid = (s: StreamRef) => s.kind === 'friends' || s.kind === 'comp'
-    || (s.kind === 'club' && clubs.includes(s.id))
-    || (s.kind === 'team' && teams.includes(s.id))
+export function readStreams(stored: unknown, clubs: readonly string[]): StreamRef[] {
+  const valid = (s: StreamRef) => s.kind !== 'club' || clubs.includes(s.id)
   if (Array.isArray(stored)) {
     const seen = new Set<string>()
     const out: StreamRef[] = []
@@ -147,26 +165,32 @@ export function readStreams(stored: unknown, clubs: readonly string[], teams: re
       out.push(s)
       if (out.length >= MAX_STREAMS) break
     }
+    // A list kept before Streams v2 (no STREAMS_V2 mark) gains match.stream, after comp (D332).
+    if (stored[0] !== STREAMS_V2 && !seen.has('match')) {
+      const at = out.findIndex(s => s.kind === 'comp')
+      out.splice(at >= 0 ? at + 1 : out.length, 0, { kind: 'match' })
+    }
     return out
   }
   return startingStreams(clubs)
 }
 
 export function startingStreams(clubs: readonly string[]): StreamRef[] {
-  return [{ kind: 'comp' }, { kind: 'friends' }, ...clubs.map(id => ({ kind: 'club' as const, id }))]
+  return [...clubs.map(id => ({ kind: 'club' as const, id })), { kind: 'comp' }, { kind: 'match' }, { kind: 'friends' }]
+}
+
+/** Every stream a member could keep, in the order they are offered (D321). */
+export function offeredStreams(clubs: readonly string[]): StreamRef[] {
+  return startingStreams(clubs)
 }
 
 /**
  * The pills in order (D295 as amended): a live Comp first, then the rest as
- * the member keeps them. A Club stream only inside that club's area (D294),
- * never on /home; a Comp stream only once there is a comp to show.
+ * the member keeps them. A club's stream only inside that club's area (D294),
+ * never on /home.
  */
-export function pillsFor(streams: readonly StreamRef[], o: { here: string | null; compLive: boolean; hasComps: boolean }): StreamRef[] {
-  const shown = streams.filter(s => {
-    if (s.kind === 'club') return s.id === o.here
-    if (s.kind === 'comp') return o.hasComps
-    return true
-  })
+export function pillsFor(streams: readonly StreamRef[], o: { here: string | null; compLive: boolean }): StreamRef[] {
+  const shown = streams.filter(s => (s.kind === 'club' ? s.id === o.here : true))
   if (!o.compLive) return shown
   const comp = shown.filter(s => s.kind === 'comp')
   return [...comp, ...shown.filter(s => s.kind !== 'comp')]
@@ -178,7 +202,7 @@ export function inStream(item: Pick<ItemFacts, 'authorId' | 'tripId' | 'clubId'>
     case 'friends': return !!item.authorId && (item.authorId === viewer.userId || viewer.friends.has(item.authorId))
     case 'club': return !!stream.id && item.clubId === stream.id
     case 'comp': return !!stream.id && item.tripId === stream.id
-    case 'team': return false // interclub panels: switched on with interclub teams
+    case 'match': return false // head-to-head: switched on with interclub teams (D332)
   }
 }
 
@@ -447,18 +471,23 @@ export function reportDestination(item: { clubId: string | null; kind: FeedKind 
 
 export function emptyLine(kind: StreamKind): string {
   switch (kind) {
-    case 'friends': return 'Your friends’ rounds land here.'
-    case 'club': return 'Signed cards from the club’s competitions land here.'
+    case 'friends': return 'Your friends’ rounds and statuses land here.'
+    case 'club': return 'The club’s notices and news land here.'
     case 'comp': return 'Cards and results land here as they come in.'
-    case 'team': return 'Your team’s cards land here.'
+    case 'match': return 'Interclub matches land here once your club lists its teams.'
+  }
+}
+
+/** What a stream is, in a line (the gear's list). */
+export function streamAbout(kind: StreamKind): string {
+  switch (kind) {
+    case 'friends': return 'Your friends’ cards, statuses and comments'
+    case 'club': return 'The club’s own posts — shown only in its area'
+    case 'comp': return 'Competitions and club match plays, one at a time'
+    case 'match': return 'Interclub matches you follow'
   }
 }
 
 export function streamLabel(s: StreamRef, names: { club?: (id: string) => string | null }): string {
-  switch (s.kind) {
-    case 'friends': return 'Friends'
-    case 'comp': return 'Comp'
-    case 'club': return names.club?.(s.id) ?? 'Club'
-    case 'team': return 'Team'
-  }
+  return s.kind === 'club' ? names.club?.(s.id) ?? 'club' : streamWord(s.kind)
 }

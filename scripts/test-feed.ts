@@ -9,8 +9,8 @@ import fs from 'fs'
 import {
   cardFacts, cardHighlights, defaultComp, effectiveAudience, inStream, mayView, mayViewChild, pillsFor, readStreams,
   searchTerm, shownComp, statusIssue, cleanText, counter, friendState, standingWith, pair, reportDestination, moveLine,
-  matchLine, contextLine, olderThan, newestFirst,
-  type Audience, type CompRef, type ItemFacts, type Viewer,
+  matchLine, contextLine, olderThan, newestFirst, STREAMS_V2, keptStreams, streamKey, streamWord,
+  type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
 import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
 import type { AuthUser } from '../lib/account'
@@ -71,17 +71,23 @@ function ruleTests() {
   ok(!inStream({ authorId: 'x', tripId: 't', clubId: 'c' }, { kind: 'club', id: 'd' }, viewer), '…never another club’s')
   ok(inStream({ authorId: 'x', tripId: 't', clubId: null }, { kind: 'comp', id: 't' }, viewer), 'an event’s item is in its Comp stream')
   ok(!inStream({ authorId: 'x', tripId: 'u', clubId: null }, { kind: 'comp', id: 't' }, viewer), '…never another event’s')
-  ok(!inStream({ authorId: 'f', tripId: 't', clubId: 'c' }, { kind: 'team', id: 'p' }, viewer), 'a Team stream holds nothing until interclub panels exist — so nobody off a team gets anything from one')
+  ok(!inStream({ authorId: 'f', tripId: 't', clubId: 'c' }, { kind: 'match', id: 'p' }, viewer), 'match.stream holds nothing until interclub teams exist (D332) — so nobody off a team gets anything from one')
 
-  section('The member’s streams (D300)')
-  eq(readStreams(null, ['c1', 'c2']).map(s => s.kind), ['comp', 'friends', 'club', 'club'], 'nothing stored is Comp, Friends, then their clubs')
-  eq(readStreams(['friends', 'club:00000000-0000-0000-0000-00000000000c', 'club:00000000-0000-0000-0000-00000000000d', 'friends', 'nonsense'], ['00000000-0000-0000-0000-00000000000c']).map(s => s.kind),
-    ['friends', 'club'], 'a club they have left goes, a stream kept twice is once, nonsense is dropped')
-  eq(readStreams([], ['c1']), [], 'a member may keep no streams at all')
+  section('The member’s streams (D300, D321)')
+  const C = '00000000-0000-0000-0000-00000000000c', D = '00000000-0000-0000-0000-00000000000d'
+  eq(readStreams(null, [C, D]).map(s => streamKey(s)), [`club:${C}`, `club:${D}`, 'comp', 'match', 'friends'], 'nothing stored is their clubs, then comp, match, friends')
+  eq(readStreams(['friends', `club:${C}`, `club:${D}`, 'friends', 'nonsense'], [C]).map(s => streamKey(s)),
+    ['friends', `club:${C}`, 'match'], 'a club they have left goes, a stream kept twice is once, nonsense is dropped — and a list kept before v2 gains match')
+  eq(readStreams(['comp', 'friends'], []).map(s => s.kind), ['comp', 'match', 'friends'], '…match.stream after comp')
+  eq(readStreams(['team:00000000-0000-0000-0000-000000000099'], []).map(s => s.kind), ['match'], 'a Team stream kept before is match.stream now (D332)')
+  eq(readStreams([STREAMS_V2, 'friends'], []).map(s => s.kind), ['friends'], 'a list saved under v2 keeps match off when the member turned it off')
+  eq(keptStreams([{ kind: 'friends' }, { kind: 'club', id: C }]), [STREAMS_V2, 'friends', `club:${C}`], 'kept with the v2 mark')
+  eq(readStreams([STREAMS_V2], []), [], 'nothing kept reads as nothing (the route refuses to save an empty list)')
   const all = readStreams(null, ['c1'])
-  eq(pillsFor(all, { here: null, compLive: false, hasComps: true }).map(s => s.kind), ['comp', 'friends'], 'a Club stream shows only inside that club’s area (D294)')
-  eq(pillsFor(all, { here: 'c1', compLive: false, hasComps: false }).map(s => s.kind), ['friends', 'club'], 'no Comp pill while there is no comp')
-  eq(pillsFor([{ kind: 'friends' }, { kind: 'comp' }], { here: null, compLive: true, hasComps: true }).map(s => s.kind), ['comp', 'friends'], 'a live comp leads (D295)')
+  eq(pillsFor(all, { here: null, compLive: false }).map(s => s.kind), ['comp', 'match', 'friends'], 'a club’s stream shows only inside that club’s area (D294)')
+  eq(pillsFor(all, { here: 'c1', compLive: false }).map(s => s.kind), ['club', 'comp', 'match', 'friends'], '…where it leads')
+  eq(pillsFor(all, { here: 'c1', compLive: true }).map(s => s.kind), ['comp', 'club', 'match', 'friends'], 'a live comp leads (D295)')
+  eq(['club', 'comp', 'match', 'friends'].map(k => streamWord(k as StreamKind)), ['club', 'comp', 'match', 'friends'], 'the four names’ words (D321)')
 
   section('The Comp picker (D300): the latest comp played, a pick kept until a newer one')
   const comp = (code: string, date: string, playing: boolean): CompRef => ({ tripId: code, code, name: code, date, endDate: null, playing, live: false, clubId: null, clubName: null })
@@ -298,8 +304,10 @@ async function routeTests() {
   const cComp = await ask('c', { action: 'page', stream: 'comp', comp: 'T1CODE' })
   eq((cComp.body as unknown as { items: { id: string }[] }).items.map(i => i.id), [xcomment.id, ycard.id], 'a club-mate watching the comp sees its cards and comments')
 
-  section('A Team stream (D294): nothing until interclub panels exist')
-  eq(((await ask('x', { action: 'page', stream: 'team:00000000-0000-0000-0000-000000000099' })).body as unknown as { items: unknown[] }).items, [], 'empty for everybody')
+  eq((await ask('x', { action: 'badge' })).status, 200, 'the Stream tab’s badge answers a count (D320)')
+
+  section('match.stream (D332): vacant until interclub teams exist')
+  eq(((await ask('x', { action: 'page', stream: 'match' })).body as unknown as { items: unknown[] }).items, [], 'empty for everybody')
 
   section('On the course (D302): live players in the strip, never as items')
   w.friends.push({ a: 'x', b: 'y', by: 'x', accepted: true })
@@ -322,7 +330,8 @@ async function routeTests() {
   eq(w.settings.get('x')?.audience, 'me', '…stored')
   eq((await ask('x', { action: 'audience', audience: 'close' })).status, 400, 'close friends is not built')
   await ask('x', { action: 'streams', streams: ['friends', `club:${C1}`, 'club:00000000-0000-0000-0000-0000000000ff'] })
-  eq(w.settings.get('x')?.streams, ['friends', `club:${C1}`], 'streams kept, a club they are not on dropped')
+  eq(w.settings.get('x')?.streams, [STREAMS_V2, 'friends', `club:${C1}`], 'streams kept, a club they are not on dropped')
+  eq((await ask('x', { action: 'streams', streams: ['nonsense'] })).status, 400, 'a member keeps at least one stream')
   const home = await ask('x', { action: 'home', club: 'pints' })
   eq((home.body as unknown as { streams: { key: string }[] }).streams.map(s => s.key), ['friends', `club:${C1}`], 'home answers the member’s streams')
   eq((home.body as unknown as { here: string }).here, C1, '…and which club’s area it is asked from')
@@ -505,11 +514,15 @@ function wiringTests() {
   ok(/trip\.competition === 'club'\) return/.test(read('app/api/feed/write.ts')), '…except a club competition’s, which wait for the co-sign')
   ok(/noteMatchResults\(changed\.map/.test(read('lib/matchplayStore.ts')), 'a knockout result recorded asks for its feed item')
 
-  section('Wiring: the feed on Home (D293, D295)')
+  section('Wiring: the Stream tab (D318, D320)')
   const club = read('app/club/[slug]/ClubView.tsx')
-  ok(club.indexOf('<Feed ') > club.indexOf('>Your bookings</h2>'), 'the club home draws the feed under Your bookings')
-  ok(/<Feed mePath=/.test(read('app/home/HomeScreen.tsx')), '/home draws it too')
-  for (const bar of ['app/home/HomeTabBar.tsx', 'app/club/[slug]/ClubTabBar.tsx', 'lib/clubBar.ts']) ok(!/feed/i.test(read(bar)), `${bar} knows nothing of the feed — no new tab, no dot on a footer`)
+  ok(/tab === 'stream' && <Stream /.test(club), 'the club area draws the stream on its Stream tab')
+  ok(/tab === 'stream' && <Stream /.test(read('app/home/HomeScreen.tsx')), '/home too')
+  for (const bar of ['app/home/HomeTabBar.tsx', 'app/club/[slug]/ClubTabBar.tsx']) ok(/useStreamDot\(/.test(read(bar)) && /key === 'stream' && dot/.test(read(bar)), `${bar}: the comment dot rides on the Stream tab (D320)`)
+  {
+    const dot = read('app/components/feed/useStreamDot.ts')
+    ok(/requestIdleCallback/.test(dot) && /setTimeout/.test(dot) && /askFeed<\{ count\?: number \}>\('badge'\)/.test(dot) && !/setInterval/.test(dot), '…asked once the page is idle after its paint, one count, never polled (M3)')
+  }
   const feedUi = read('app/components/feed/Feed.tsx')
   ok(/feed-streams/.test(feedUi) && /scroll-snap-type: x mandatory/.test(read('app/globals.css')), 'streams swipe on the browser’s own scroll snap — no library')
   ok(/reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and switch instantly under Reduce Motion')

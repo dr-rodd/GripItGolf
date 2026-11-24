@@ -6,12 +6,12 @@ import { askFeed } from '@/lib/feedClient'
 import { pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
 import { IconPlus } from '../icons'
-import { IconButton, LiveDot, buttonClass, cardClass } from '../ui'
+import { LiveDot, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { FeedItem, type FeedView } from './FeedItem'
-import StreamsSheet from './StreamsSheet'
 import { CommentsSheet, ItemActions } from './ItemActions'
+import { streamSeen } from './useStreamDot'
 
-type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string }
+type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string; about?: string }
 type Home = {
   ready: boolean; junior?: boolean
   streams?: StreamView[]; offered?: StreamView[]
@@ -52,7 +52,6 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
   const [active, setActive] = useState<string | null>(null)
   const [panels, setPanels] = useState<Record<string, Panel>>({})
   const [compPick, setCompPick] = useState<{ code: string; over: string | null } | null>(null)
-  const [sheet, setSheet] = useState(false)
   const [comments, setComments] = useState<{ cardId: string; title: string } | null>(null)
   const [now, setNow] = useState(() => new Date())
   const scroller = useRef<HTMLDivElement>(null)
@@ -76,7 +75,6 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
   const pills = useMemo(() => pillsFor(refs, {
     here: home?.here ?? null,
     compLive: comps.some(c => c.playing && c.live),
-    hasComps: comps.length > 0,
   }), [refs, home, comps])
   const label = (s: StreamRef) => home?.streams?.find(v => v.key === streamKey(s))
   const panelKey = useCallback((s: StreamRef) => (s.kind === 'comp' ? `comp:${comp?.code ?? ''}` : streamKey(s)), [comp])
@@ -189,7 +187,7 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
   useEffect(() => {
     if (!friendsShown || newComments === 0) return
     const t = window.setTimeout(() => {
-      void askFeed('seen').then(r => { if (r.ok) setHome(h => (h ? { ...h, newComments: 0 } : h)) })
+      void askFeed('seen').then(r => { if (r.ok) { setHome(h => (h ? { ...h, newComments: 0 } : h)); streamSeen() } })
     }, 1500)
     return () => window.clearTimeout(t)
   }, [friendsShown, newComments])
@@ -223,9 +221,9 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
             </button>
           )
         })}
-        <IconButton label="Add or remove streams" dense onClick={() => setSheet(true)} className="flex-shrink-0">
+        <Link href={mePath} aria-label="Choose your streams" className={`${iconButtonClass(true)} flex-shrink-0`}>
           <IconPlus size={20} />
-        </IconButton>
+        </Link>
       </div>
 
       {activeRef?.kind === 'comp' && comps.length > 1 && (
@@ -243,7 +241,7 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
       {pills.length === 0 ? (
         <div className={`${cardClass('flat')} px-4 py-6 mt-3 text-center`}>
           <p className="t-body text-ink/80">No streams yet.</p>
-          <button type="button" onClick={() => setSheet(true)} className={`${buttonClass('quiet', false)} mt-1`}>Add a stream</button>
+          <Link href={mePath} className={`${buttonClass('quiet', false)} mt-1`}>Choose your streams</Link>
         </div>
       ) : (
         <div ref={scroller} className="feed-streams relative mt-3 -mx-4 flex overflow-x-auto items-start"
@@ -271,10 +269,6 @@ export default function Feed({ club = null, mePath, onFindFriends }: { club?: { 
           onChanged={(count, latest) => patchItem(comments.cardId, { comments: count, latest })} />
       )}
 
-      {sheet && (
-        <StreamsSheet streams={home.streams ?? []} offered={home.offered ?? []} here={home.here ?? null}
-          onClose={() => setSheet(false)} onSaved={() => { setSheet(false); setPanels({}); void loadHome() }} />
-      )}
     </section>
   )
 }

@@ -8,13 +8,10 @@ import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
-import { IconChevronRight } from '@/app/components/icons'
+import { IconChevronRight, IconSettings } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
-import HandicapIndexCard from '@/app/components/HandicapIndexCard'
-import YourDetailsCard from '@/app/components/YourDetailsCard'
-import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
-import FeedSettings from '@/app/components/feed/FeedSettings'
-import Feed from '@/app/components/feed/Feed'
+import Stream from '@/app/components/feed/Feed'
+import Initials from '@/app/components/Initials'
 import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import type { MyEvent } from '@/lib/account'
@@ -66,6 +63,8 @@ export default function HomeScreen() {
 
   useEffect(() => {
     const asked = new URLSearchParams(window.location.search).get('tab')
+    // Streams v2 (D319): Me went — an old ?tab=me opens your page.
+    if (asked === 'me') { router.replace('/home/me'); return }
     if (asked && (HOME_TABS as readonly string[]).includes(asked)) setTab(asked as HomeTab)
     void load()
     router.prefetch('/create')
@@ -90,13 +89,13 @@ export default function HomeScreen() {
               className={`${buttonClass('secondary', false)} mt-4`}>Try again</button>
           </div>
         )}
-        {tab === 'home' && <HomeTabPage home={state.kind === 'ready' ? state.home : null} onMe={() => choose('me')} />}
+        {tab === 'home' && <HomeTabPage home={state.kind === 'ready' ? state.home : null} />}
+        {state.kind === 'ready' && tab === 'stream' && <Stream mePath="/home/settings" />}
         {state.kind === 'ready' && tab === 'events' && <EventsTab events={state.home.events} onChanged={load} />}
         {state.kind === 'ready' && tab === 'board' && <BoardTab events={state.home.events} />}
         {state.kind === 'ready' && tab === 'stats' && <StatsTab home={state.home} />}
-        {tab === 'me' && <MeTab home={state.kind === 'ready' ? state.home : null} />}
       </div>
-      <HomeTabBar active={tab} onChoose={choose} />
+      <HomeTabBar active={tab} onChoose={choose} signedIn={state.kind === 'ready'} />
     </main>
   )
 }
@@ -110,17 +109,28 @@ function useGroups(events: MyEvent[]) {
  * an event is the front page's — making an event, then Live now, Coming up
  * and Your season, each drawn only when it has something in it.
  */
-function HomeTabPage({ home, onMe }: { home: HomeData | null; onMe: () => void }) {
+function HomeTabPage({ home }: { home: HomeData | null }) {
   const now = new Date()
   const events = home?.events ?? []
   const g = useGroups(events)
   const coming = g.upcoming.slice(0, 5)
   return (
     <>
-      <h1 className="t-h1 text-ink mt-4">{irishGreeting(now)}{home?.username ? `, ${home.username}` : ''}</h1>
-      <p className="t-cap text-ink/65 mt-1">
-        {new Intl.DateTimeFormat('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }).format(now)}
-      </p>
+      <div className="flex items-start gap-2 mt-4">
+        <div className="flex-1 min-w-0">
+          <h1 className="t-h1 text-ink break-words">{irishGreeting(now)}{home?.username ? `, ${home.username}` : ''}</h1>
+          <p className="t-cap text-ink/65 mt-1">
+            {new Intl.DateTimeFormat('en-IE', { timeZone: 'Europe/Dublin', weekday: 'long', day: 'numeric', month: 'long' }).format(now)}
+          </p>
+        </div>
+        {/* D319: the gear opens Settings; the profile circle, your page. */}
+        <Link href="/home/settings" aria-label="Settings" className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center text-ink/80 press ch-focus">
+          <IconSettings size={22} />
+        </Link>
+        <Link href="/home/me" aria-label="Your page" className="w-12 h-12 flex-shrink-0 rounded-full flex items-center justify-center press ch-focus">
+          <Initials name={home?.username ?? ''} />
+        </Link>
+      </div>
 
       <CodeBox />
       <ButtonLink href="/create" variant="secondary" className="mt-3">Make an event</ButtonLink>
@@ -149,9 +159,6 @@ function HomeTabPage({ home, onMe }: { home: HomeData | null; onMe: () => void }
           </ul>
         </section>
       )}
-
-      {/* D293: the feed — /home has no Your bookings, so under Live now and Coming up. */}
-      {home && <Feed mePath="/home?tab=me" onFindFriends={onMe} />}
 
       {home && home.season.length > 0 && (
         <section className="mt-8">
@@ -228,28 +235,6 @@ function StatsTab({ home }: { home: HomeData }) {
           <SeasonSummary rows={home.season} courses={home.courses} index={home.indexTrend ?? []} />
         </>
       )}
-    </section>
-  )
-}
-
-/** Me: the account, joining a club by its code, help and privacy. */
-function MeTab({ home }: { home: HomeData | null }) {
-  return (
-    <section className="mt-6">
-      <h1 className="t-h1 text-ink">Me</h1>
-      {home?.username && <p className="text-ink/80 text-[15px] mt-2">Signed in as {home.username}.</p>}
-      {home && <HandicapIndexCard initial={home.handicapIndex} className="mt-6" />}
-      {home && (home.clubs.length > 0 || home.details?.gender || home.details?.birthDate) && <YourDetailsCard initial={home.details} className="mt-4" />}
-      {home && home.clubs.length > 0 && <ClubEventTypesCard className="mt-4" />}
-      {/* D296, D297: the feed's audience, your friends, Find friends. */}
-      {home && <FeedSettings className="mt-4" />}
-      <ListGroup className="mt-6">
-        {(home?.clubs ?? []).map(c => <ListRow key={c.slug} href={`/club/${c.slug}`} label={c.name} hint="Your club’s area" />)}
-        <ListRow href="/account" label="Your account" hint="Username, password, sign out, delete" />
-        <ListRow href="/account/clubs" label="Clubs" hint="Join your club with its code, or set one up" />
-        <ListRow href="/privacy" label="Privacy" hint="What Green Dot keeps, and for how long" />
-        <ListRow href="/terms" label="Terms of use" />
-      </ListGroup>
     </section>
   )
 }

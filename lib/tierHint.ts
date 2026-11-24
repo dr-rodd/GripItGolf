@@ -135,8 +135,8 @@ export function homeHref(): string {
   return h?.kind === 'club' ? `/club/${h.slug}` : '/'
 }
 
-/** Your page (D280): a club member's own page at their last club; anybody else's /home. */
+/** Your page (D280, D319): a club member's own page at their last club; anybody else's /home/me. */
 export function myPageHref(): string {
   const h = readTierHint()
-  return h?.kind === 'club' ? `/club/${h.slug}/me` : '/home'
+  return h?.kind === 'club' ? `/club/${h.slug}/me` : '/home/me'
 }

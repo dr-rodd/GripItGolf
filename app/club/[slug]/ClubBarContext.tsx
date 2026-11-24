@@ -6,7 +6,11 @@ import type { ClubEvent } from '@/lib/clubs'
 import type { Credentials } from '@/lib/clubMay'
 import type { SeasonRow } from '@/lib/cardSummary'
 
-export type ClubTab = 'home' | 'comps' | 'tee' | 'stats' | 'club'
+/**
+ * The club footer's tabs (Streams v2, D318): Home · Comps · Stream · Tee times
+ * · Stats. The Club tab went — what it held is the gear's page and your page.
+ */
+export type ClubTab = 'home' | 'comps' | 'stream' | 'tee' | 'stats'
 
 /** What the members home holds once the club has said this phone is on its list. */
 export interface ClubMembers {

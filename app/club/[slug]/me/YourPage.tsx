@@ -3,13 +3,15 @@
 import Link from 'next/link'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
-import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
-import FeedSettings from '@/app/components/feed/FeedSettings'
 import LegalLinks from '@/app/components/LegalLinks'
 import { IconChevronLeft } from '@/app/components/icons'
 import { ListGroup, ListRow } from '@/app/components/ui'
 
-/** Your page (D280): handicap, your details, what you see, the feed and your friends (D296, D297), and your account — back to the club. */
+/**
+ * Your page (D280; the profile circle — D319): handicap, your details, your
+ * events and your account — back to the club. What you see, your streams and
+ * friends are the gear's (Settings).
+ */
 export default function YourPage({ slug, club }: { slug: string; club: string }) {
   return (
     <section>
@@ -19,13 +21,11 @@ export default function YourPage({ slug, club }: { slug: string; club: string })
       <h1 className="t-h1 text-ink mt-2">Your page</h1>
       <HandicapIndexCard className="mt-6" />
       <YourDetailsCard club={club} className="mt-4" />
-      <ClubEventTypesCard className="mt-4" />
-      {/* D296, D297: the feed's audience, your friends, Find friends. */}
-      <FeedSettings className="mt-4" />
       <h2 className="t-h2 text-ink mt-8">Account</h2>
       <ListGroup className="mt-3">
         <ListRow href="/home?tab=events" label="Your events" hint="Every event you’re in or run, and the players linked to you" />
         <ListRow href="/account" label="Username, password, sign out" />
+        <ListRow href={`/club/${slug}/settings`} label="Settings" hint="What you see, your streams, who sees your cards, friends" />
       </ListGroup>
       <LegalLinks className="mt-12" />
     </section>

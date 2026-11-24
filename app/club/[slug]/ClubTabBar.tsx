@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { startTransition, useEffect, useRef, useState } from 'react'
 import {
-  IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconSettings, IconTrophy, IconUsers,
+  IconChartBar, IconChevronLeft, IconClipboardList, IconClock, IconHome, IconStream, IconTrophy, IconUsers,
 } from '@/app/components/icons'
+import { useStreamDot } from '@/app/components/feed/useStreamDot'
 import { barOf, compSectionHref, compsBack, MATCH_PLAY_SECTION_LABEL, SECTION_LABEL, SECTION_ORDER } from '@/lib/clubBar'
 import type { CompSection } from '@/lib/compPhase'
 import { useClubBar, type ClubTab } from './ClubBarContext'
@@ -67,6 +68,9 @@ export default function ClubTabBar({ slug }: { slug: string }) {
   useEffect(() => () => { if (leaving.current) clearTimeout(leaving.current) }, [])
   useEffect(() => { if (!comp && leaving.current) { clearTimeout(leaving.current); leaving.current = null } }, [comp])
 
+  // D320: the comment dot rides on the Stream tab, asked once the page is idle.
+  const dot = useStreamDot(!!members)
+
   // D291: every hook above this line, always. A footer that returned before
   // them rendered fewer hooks on a page with no bar (See all, Your page) than
   // on one with it, and React threw on the tap between them — the site's
@@ -78,12 +82,12 @@ export default function ClubTabBar({ slug }: { slug: string }) {
 
   const club = `/club/${slug}`
 
-  // Tee times holds Board's old place (Ross, 17 Nov 2026): the club's casual
-  // tee sheet; Board's job — the competition in play — is Comps' now.
+  // Streams v2 (D318): Stream holds the centre, then Tee times and Stats. The
+  // Club tab went — its contents are the gear's page and your page (D319).
   const own: { key: ClubTab; label: string; Icon: typeof IconHome; href?: string }[] = [
+    { key: 'stream', label: 'Stream', Icon: IconStream },
     { key: 'tee', label: 'Tee times', Icon: IconClock },
     ...(STATS_READY ? [{ key: 'stats' as const, label: 'Stats', Icon: IconChartBar }] : []),
-    { key: 'club', label: 'Club', Icon: IconSettings },
   ]
   const five = own.length === 3
 
@@ -134,14 +138,18 @@ export default function ClubTabBar({ slug }: { slug: string }) {
           </li>
           {own.map(({ key, label, Icon, href }) => (
             <li key={key} className="club-bar-own">
-              <Tab href={href ?? `${club}?tab=${key}`} onClick={clubTap(key, href)} lit={!comp && tab === key} label={label}>
-                <Icon size={22} />
+              <Tab href={href ?? `${club}?tab=${key}`} onClick={clubTap(key, href)} lit={!comp && tab === key} label={label}
+                aria={key === 'stream' && dot ? 'Stream — new comments on your cards' : undefined}>
+                <span className="relative">
+                  <Icon size={22} />
+                  {key === 'stream' && dot && <span aria-hidden="true" className="stream-dot absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-club-deep ring-2 ring-surface" />}
+                </span>
               </Tab>
             </li>
           ))}
         </ul>
         {five && (
-          // The competition's three, over Board, Stats and Club. Their strip
+          // The competition's three, over Stream, Tee times and Stats. Their strip
           // starts at Comps' right edge and clips, so at rest in the club set
           // they wait behind Comps and slide out from there.
           <ul className="club-bar-kids">
