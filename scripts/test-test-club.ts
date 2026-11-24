@@ -451,8 +451,10 @@ function banterTests() {
   section('Posted through the feed’s own route')
   const banter = read('app/admin/test-club/banter.ts')
   for (const a of ['card.status', 'comment', 'dot']) ok(new RegExp(`action: '${a.replace('.', '\\.')}'`).test(banter), `${a} through /api/feed, as the character`)
-  ok(!/\.insert\(/.test(banter) && !/\.upsert\(/.test(banter), 'never writes a feed row itself — only dates a comment to the afternoon')
+  ok(!/\.insert\(/.test(banter) && !/\.upsert\(/.test(banter), 'never writes a feed row itself — only dates a comment to the afternoon, and takes old ones away')
   ok(/filter\('data->>text', 'eq'/.test(banter) && /from\('feed_dots'\)/.test(banter), 'a comment or dot already there is not posted twice')
+  ok(/\.delete\(\)\.in\('id', gone\)/.test(banter) && banter.indexOf('.delete()') < banter.indexOf("action: 'card.status'"), 'a character’s comment the file no longer holds is taken away before the new ones go up')
+  ok(/in\('author_id', characterIds\)/.test(banter) && /in\('parent_id', cardIds\)/.test(banter), 'only characters’ comments, only on the season’s cards — a real friend’s are never touched (D314)')
 }
 
 async function main() {

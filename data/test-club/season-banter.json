@@ -1,415 +1,188 @@
 {
-  "note": "The test club's statuses and comments for the reseeded season (D313), by competition key (lib/testClub.ts seasonPlan). A status is the card's own player's, at most 140 characters; a comment is anybody's on a card in that competition, at most 280. Innuendo is fine (Ross, 24 Nov 2026); no slurs, nothing explicit. Results are never asserted — the cards are made on the day, so a line talks about the round, not the board.",
+  "note": "The test club's statuses and comments for the reseeded season (D313), by competition key (lib/testClub.ts seasonPlan). A status is the card's own player's, at most 140 characters; a comment is anybody's on a card in that competition, at most 280. Ross, 24 Nov 2026: strong language, crude innuendo and nasty banter are fine; graphic sex and slurs are not. Results are never asserted — the cards are made on the day, so a line talks about the round, not the board. Old Tom's and Pierce's remarks are always answered on the same card.",
   "competitions": {
     "season-01": {
       "statuses": {
-        "paddy": "Kept the hands quiet through impact all day. Lag is everything, people. LAG.",
-        "jed": "Medal play is the purest form of the game. The Greeks would have approved. Of my front nine, at least.",
-        "gob": "Course was rigged. Holes visibly smaller than regulation. I've measured mine.",
-        "elaine": "Birdies. Plural. Somebody get me a drink and a man who can count.",
-        "pierce": "Disappointed in the greenkeeping. Wrote a strongly worded letter. To myself. On club stationery I paid for."
+        "paddy": "Quiet hands, firm lead wrist, finish high and hold it. The finish is everything, boys. Gob, that one's for you. Fuck-all thanks expected.",
+        "jed": "Medal play: every shot counts, no gimmes. Which is why I called two of them gimmes. The rules are a living document.",
+        "gob": "Greens were rigged. Holes the size of a thimble. I've had bigger things in my mouth. I'm not saying what.",
+        "elaine": "Three birdies, a wink at the starter and a man on the 9th who wouldn't stop staring. Best round of my year, honestly.",
+        "pierce": "Greenkeeper didn't know who I was. I told him. He still didn't care. Fuck the lot of them, I'm leaving a review."
       },
       "comments": [
-        {
-          "on": "paddy",
-          "by": "gob",
-          "text": "Nobody asked about your lag, Paddy."
-        },
-        {
-          "on": "gob",
-          "by": "paddy",
-          "text": "Gob, your takeaway is so far inside you're practically hugging yourself. Feet together, half swings, two hundred balls. You're welcome."
-        },
-        {
-          "on": "gob",
-          "by": "michael",
-          "text": "He did measure it. Please don't ask him how."
-        },
-        {
-          "on": "jed",
-          "by": "cj",
-          "text": "The Greeks also didn't take a mulligan on the 4th, sir. I was standing right there."
-        },
-        {
-          "on": "jed",
-          "by": "elizabeth",
-          "text": "Such a lovely round, Mr President! Do you always play with the same security detail? Just curious how many of them there are. For the fourball."
-        },
-        {
-          "on": "elaine",
-          "by": "tom",
-          "text": "Ladies' tees moved forward again, I see. Easy to make birdies when you start halfway to the green."
-        },
-        {
-          "on": "elaine",
-          "by": "sloan",
-          "text": "Tom, her tees are forty yards shorter and her handicap is ten shots lower than yours. Run the numbers. Actually don't, it'll only upset you."
-        },
-        {
-          "on": "pierce",
-          "by": "elaine",
-          "text": "A letter to yourself is still the most anyone has ever read of your work, Pierce."
-        },
-        {
-          "on": "sloan",
-          "by": "pierce",
-          "text": "Not bad, Sloan. Not bad at all for a girl."
-        },
-        {
-          "on": "sloan",
-          "by": "sloan",
-          "text": "Pierce, check the board before you type. Then don't."
-        },
-        {
-          "on": "gob",
-          "by": "don",
-          "text": "He's not angry at the course. He's angry he brought an audience."
-        }
+        { "on": "paddy", "by": "gob", "text": "Nobody asked, Paddy. And I'll thank you to keep your shaft talk to yourself." },
+        { "on": "gob", "by": "paddy", "text": "Gob, you swing like you're being chased out of a brothel. Slow the fuck down, shallow the club and stop trying to impress people who've already left." },
+        { "on": "gob", "by": "michael", "text": "The greens weren't rigged, Gob. You were just shit. I love you. Go home." },
+        { "on": "jed", "by": "cj", "text": "Mr President, two gimmes on a six-footer in medal play is a felony. I counted them. I'm filing it." },
+        { "on": "jed", "by": "don", "text": "Rules are a living document, he says. Like my last marriage. Constantly amended, mostly in his favour." },
+        { "on": "elaine", "by": "pierce", "text": "Birdies, Elaine? Careful, that's how a woman gets noticed in this club. I'm told I'm quite a catch, if you're ever feeling adventurous." },
+        { "on": "elaine", "by": "elaine", "text": "Pierce, I'd rather get a birdie from a seagull than a compliment from you. Fuck off back to your grievances." },
+        { "on": "sloan", "by": "tom", "text": "A woman off the medal tees. Next they'll be in the bar after six." },
+        { "on": "sloan", "by": "sloan", "text": "Tom, I outdrove you by thirty yards and I'm cheaper to run. Have a lie-down." },
+        { "on": "pierce", "by": "sloan", "text": "Pierce shot 98. Eighty-two of those strokes were swearing at himself. I counted. Do you want the spreadsheet?" },
+        { "on": "pierce", "by": "don", "text": "Pierce, you've got the swing of a man trying to get out of a lift full of strangers." },
+        { "on": "don", "by": "elaine", "text": "Don, you were flirting with the beverage cart girl on the 14th. She's twenty-two. Her boyfriend has a pitching wedge. Be careful." },
+        { "on": "don", "by": "don", "text": "Elaine, the beverage cart and I have an understanding. It's the longest relationship I've had that doesn't end in lawyers." }
       ]
     },
     "season-seniors": {
       "statuses": {
-        "tom": "In my day you couldn't get a buggy round here. You walked, you suffered, you liked it. Today I suffered.",
-        "pierce": "Two-man field. One gentleman, one Tom. You do the maths."
+        "tom": "Seniors' day. Walked it, carried it, hated every bastard step. Pierce took a buggy and a nap. Disgrace to the game.",
+        "pierce": "Two-man field. One gentleman, one Tom. I won by being less of a dick than him, which at his age is a tight margin."
       },
       "comments": [
-        {
-          "on": "tom",
-          "by": "sloan",
-          "text": "Tom, that number would get a quiz show cancelled. Maybe the buggy wasn't the problem."
-        },
-        {
-          "on": "pierce",
-          "by": "cj",
-          "text": "Pierce, a field of two isn't a field. It's a date."
-        },
-        {
-          "on": "tom",
-          "by": "jed",
-          "text": "Fun fact: Old Tom Morris won the Open four times. Different Tom. Clearly."
-        },
-        {
-          "on": "pierce",
-          "by": "elaine",
-          "text": "Congratulations on beating a man who designed half the bunkers here and still can't get out of them."
-        }
+        { "on": "tom", "by": "sloan", "text": "Tom, that number would get a quiz show cancelled. Maybe it wasn't the buggy. Maybe it's the shit swing." },
+        { "on": "pierce", "by": "cj", "text": "Pierce, beating one man in a field of two isn't a win. It's a very sad date." },
+        { "on": "tom", "by": "jed", "text": "Fun fact: Old Tom Morris won the Open four times. Different Tom. Clearly. Hard watch, that. Hard." },
+        { "on": "pierce", "by": "elaine", "text": "Congratulations, Pierce. You beat a man with two replacement knees and no sense of humour. Frame it, you sad bastard." }
       ]
     },
     "season-02": {
       "statuses": {
-        "michael": "Played in front of my brother's ego all day. It played better than I did.",
-        "gob": "Illusionist's tip: if the ball isn't in the hole, it was never really there. Fourteen lost balls. Fourteen illusions.",
-        "paddy": "Swing felt long and loose. Too loose. Back to the range.",
-        "pierce": "Hot day for Pierce Hawthorne. Some of these young men could learn a thing or two from my tempo."
+        "michael": "Played behind my brother's ego all day. It was longer than my drive and about as accurate. Not a good day.",
+        "gob": "Fourteen lost balls. Not lost: relocated. Trick shot. Magic. Fuck you, Michael, it's magic.",
+        "paddy": "Swing felt long and loose. Too loose. Like a hotel mattress. Back to the range with my tail between my legs.",
+        "pierce": "Hot day for Pierce Hawthorne. Smooth tempo, big hitter, lovely follow-through. Ladies, you can find me in the bar.",
+        "jed": "Played the front nine in the spirit of Eisenhower and the back in the spirit of a man who's been told he can't have a drop.",
+        "sloan": "Level with the field, which makes me exactly average. I find that offensive.",
+        "don": "Four pints, two birdies, one wedding ring I still haven't found. Good day."
       },
       "comments": [
-        {
-          "on": "michael",
-          "by": "gob",
-          "text": "Rough day, Michael? Maybe stick to running the family business into the ground."
-        },
-        {
-          "on": "gob",
-          "by": "michael",
-          "text": "Gob, two of those fourteen balls were mine. You borrowed my balls on the 3rd. I'd like them back."
-        },
-        {
-          "on": "paddy",
-          "by": "jed",
-          "text": "Paddy, Hogan said the secret is in the dirt. You appear to have found all of it."
-        },
-        {
-          "on": "jed",
-          "by": "paddy",
-          "text": "Jed, your grip is so strong the club is filing a complaint. Turn the left hand back two knuckles, and stop talking at the top of the backswing."
-        },
-        {
-          "on": "pierce",
-          "by": "sloan",
-          "text": "Pierce scored well. Statistically, even a stopped clock makes the odd birdie."
-        },
-        {
-          "on": "sloan",
-          "by": "tom",
-          "text": "Lovely to see the ladies giving it a go on a Saturday. In my day Saturday was for golf."
-        },
-        {
-          "on": "sloan",
-          "by": "sloan",
-          "text": "It was golf, Tom. In your day the shafts were wooden and so was the sense of humour. Bring at least one of them up to date."
-        },
-        {
-          "on": "pierce",
-          "by": "don",
-          "text": "Best tempo in the club, Pierce. Shame about the man."
-        }
+        { "on": "michael", "by": "gob", "text": "Rough day, Mikey? Maybe stick to sitting in an office, pushing paper and being an unbearable prick about it." },
+        { "on": "gob", "by": "michael", "text": "Two of those fourteen balls were mine, Gob. You nicked them on the 3rd. I'd like them back. Preferably not from where you've been keeping them." },
+        { "on": "paddy", "by": "jed", "text": "Paddy, Hogan said the secret is in the dirt. You seem to have found all of it and then swung through it twice." },
+        { "on": "jed", "by": "paddy", "text": "Jed, your grip is so strong the club's calling a solicitor. Turn it back two knuckles. And stop talking at the top of the backswing, you tit." },
+        { "on": "pierce", "by": "sloan", "text": "Pierce scored well. Statistically even a stopped clock gets the time right. And a monkey with a laptop gets a haiku." },
+        { "on": "sloan", "by": "tom", "text": "Lovely to see the ladies out on a Saturday. In my day Saturday was for golf and the missus was in the kitchen." },
+        { "on": "sloan", "by": "sloan", "text": "Tom, in your day the shafts were hickory and, I'm told, so was yours. At least the clubs got an upgrade." },
+        { "on": "pierce", "by": "don", "text": "Best tempo in the club, Pierce. Shame it all goes to waste on your personality." },
+        { "on": "don", "by": "elaine", "text": "Don, a wedding ring in a bunker is the least of your marital hazards." }
       ]
     },
     "season-03": {
       "statuses": {
-        "jed": "President's Prize. A President, prized. Four on the last. Some would call it destiny.",
-        "cj": "Spent four hours watching my boss find balls that were demonstrably lost. Ask me about the 18th. Actually, don't.",
-        "don": "Played well. Drank well. Didn't have to go home until six.",
-        "gob": "Trick shot off the 7th tee. Ball's still in the air. Waiting on it.",
-        "tom": "Grand old competition, ruined by people photographing their sandwiches at the turn.",
-        "pierce": "Somebody dented my Bentley. If it was a golf ball, I want it found. Unlike Jed's."
+        "jed": "President's Prize. A President, prized. A four on the last, after what some would call a lost ball. I call it a spiritual re-tee.",
+        "cj": "Spent four hours watching my boss find balls that had demonstrably left the planet. Ask me about the 18th. Actually, don't. I'll scream.",
+        "don": "Played well. Drank better. Didn't have to go home until six. Fuck, it's been a good week.",
+        "gob": "Trick shot on the 7th tee. Ball's still in the air. Not lost. Merely pending.",
+        "tom": "Grand old competition. Spoiled by women in the bar, men in pastel jumpers and some fucking sandwich photographer.",
+        "pierce": "Someone dented my Bentley. If it was a golf ball I want it found. Unlike Jed's.",
+        "paddy": "Best ball-striking round of my year. Don't tell the putter. We're not speaking.",
+        "michael": "Shot a number that'll embarrass my descendants. Kept the ball in the same postcode as the hole. Barely.",
+        "elaine": "Played the President's Prize with the President. He explained a rule I've never heard of. I think he made it up on the 12th.",
+        "sloan": "Good round. Statistically I'm in the top quartile of players who don't talk to Pierce."
       },
       "comments": [
-        {
-          "on": "jed",
-          "by": "cj",
-          "text": "Sir, the ball went into the gorse on 18. I watched it go in. The gorse watched it go in. A four on that hole isn't destiny, it's a cover-up."
-        },
-        {
-          "on": "jed",
-          "by": "jed",
-          "text": "Rule 18.2: a ball is lost after three minutes of searching. I searched for two minutes and fifty-eight seconds. History will vindicate me."
-        },
-        {
-          "on": "jed",
-          "by": "elizabeth",
-          "text": "What a finish, Jed! Who carries your bag on the 18th — always the same agent, or does the rota change at night? I'd love to thank them personally."
-        },
-        {
-          "on": "jed",
-          "by": "paddy",
-          "text": "Played with you, Jed. Your drive on 18 went left of left. Your four went left of the rules."
-        },
-        {
-          "on": "jed",
-          "by": "don",
-          "text": "The second ball always plays better. Ask anyone who's been married."
-        },
-        {
-          "on": "gob",
-          "by": "michael",
-          "text": "For the record, the ball came down. In the car park. On Pierce's Bentley."
-        },
-        {
-          "on": "cj",
-          "by": "tom",
-          "text": "A lady secretary playing in the President's Prize. In my day they wouldn't let one past the door, never mind the 1st tee."
-        },
-        {
-          "on": "cj",
-          "by": "cj",
-          "text": "Tom, I've briefed the world's press with a root canal. Your opinion is a light breeze."
-        }
+        { "on": "jed", "by": "cj", "text": "Sir, the ball went into the gorse on 18. I watched it go in. The gorse watched it go in. A four isn't destiny, it's a cover-up with a scorecard." },
+        { "on": "jed", "by": "jed", "text": "Rule 18.2: a ball is lost after three minutes of search. I searched for two minutes and fifty-eight seconds. Check the footage. And the fucking rule. History will vindicate me." },
+        { "on": "jed", "by": "paddy", "text": "Jed's drive on 18 went left of left. His four went left of the rules. And the third ball, the one that mysteriously appeared in his pocket, went straight to jail." },
+        { "on": "jed", "by": "don", "text": "The second ball always plays better. Same with wives. Ask me how I know." },
+        { "on": "jed", "by": "elizabeth", "text": "What a finish, Jed! Who carries your bag on the 18th — always the same agent, or does the rota change at night? I'd love to thank them personally." },
+        { "on": "gob", "by": "michael", "text": "For the record, the ball did come down. In the car park. Through Pierce's sunroof. Gob, it's the best trick you've ever done." },
+        { "on": "pierce", "by": "gob", "text": "Pierce, it was me. I'm very sorry. I'm not. Send the bill to your wife, she'll want something to read." },
+        { "on": "pierce", "by": "elaine", "text": "Pierce, you drive a Bentley because nobody would ever sleep with you for the personality." },
+        { "on": "cj", "by": "tom", "text": "A woman secretary playing in the President's Prize. In my day they couldn't get past the door, never mind the 1st tee." },
+        { "on": "cj", "by": "cj", "text": "Tom, I've briefed the world's press through a root canal and a bad divorce. Your opinion is a light fucking breeze." },
+        { "on": "paddy", "by": "michael", "text": "Great round, Paddy. Honestly the best swing in the club, and I say that with only minor professional jealousy." },
+        { "on": "elaine", "by": "sloan", "text": "Elaine played the President's Prize with the President and didn't once ask for a drop. I'm very impressed. Mostly by the restraint." },
+        { "on": "don", "by": "pierce", "text": "Don, I admire a man who drinks his way round. Takes real commitment. I've been doing it for decades, with considerably more success." },
+        { "on": "don", "by": "sloan", "text": "Pierce, Don drinks to forget his marriage. You drink because you can't forget yours was a transaction." }
       ]
     },
     "season-ladies": {
       "statuses": {
-        "elaine": "Ladies' day. No men, no mansplaining, no Pierce. Best four hours of my month.",
-        "sloan": "Long game up on the month. Yes, I keep a spreadsheet. Yes, it has tabs.",
-        "elizabeth": "Lovely morning with the girls. So much to talk about!",
-        "cj": "Played like I brief the press on the budget. Lots of words, very little in the hole."
+        "elaine": "Ladies' day. No men, no mansplaining, no Pierce. Best four hours of my month. Two Proseccos and a lovely time on the 9th.",
+        "sloan": "Long game up on the month. Yes, I keep a spreadsheet. Yes, it has tabs. Yes, one of them is for men who've disappointed me.",
+        "elizabeth": "Lovely morning with the girls. So much to talk about! I'm a great listener. Especially when it's about work.",
+        "cj": "Played like I brief the press: all words, no follow-through. I need a drink and a man who can keep a secret."
       },
       "comments": [
-        {
-          "on": "elizabeth",
-          "by": "cj",
-          "text": "Elizabeth, you asked me nine questions about the West Wing floor plan between the 3rd and the 7th. Is everything alright at home?"
-        },
-        {
-          "on": "elizabeth",
-          "by": "elizabeth",
-          "text": "Only making conversation, CJ! Which door does the President usually use at 7am? For my diary."
-        },
-        {
-          "on": "elaine",
-          "by": "tom",
-          "text": "Ladies' day midweek. Sensible. Keeps the course clear for those of us who actually pay for it."
-        },
-        {
-          "on": "elaine",
-          "by": "sloan",
-          "text": "Tom, the women pay the same subscription and replace more divots. I have receipts and a pivot table."
-        },
-        {
-          "on": "elaine",
-          "by": "pierce",
-          "text": "Elaine, if you ever need a man to show you a proper short game, my door is always open."
-        },
-        {
-          "on": "elaine",
-          "by": "elaine",
-          "text": "Pierce, your door's always open because nobody has ever walked through it."
-        },
-        {
-          "on": "sloan",
-          "by": "paddy",
-          "text": "Lovely pace on the putts, Sloan. Now — that left wrist at the top. We need to talk."
-        }
+        { "on": "elizabeth", "by": "cj", "text": "Elizabeth, you asked me nine questions about the West Wing floor plan between the 3rd and the 7th. Is everything alright at home?" },
+        { "on": "elizabeth", "by": "elizabeth", "text": "Only making conversation, CJ! Which door does the President usually use at 7am? Just for my diary." },
+        { "on": "elaine", "by": "tom", "text": "Ladies' day midweek. Sensible. Keeps the course clear for those of us who actually pay for it." },
+        { "on": "elaine", "by": "sloan", "text": "Tom, the women pay the same subscription, replace more divots, and none of them has ever been banned from the clubhouse bar. I have receipts and a pivot table." },
+        { "on": "elaine", "by": "pierce", "text": "Elaine, if you ever want a man to show you a proper short game, my door's always open. As is my wallet." },
+        { "on": "elaine", "by": "elaine", "text": "Pierce, your door's always open because nobody has ever walked through it. Not even to sell you insurance." },
+        { "on": "sloan", "by": "paddy", "text": "Lovely pace on the putts, Sloan. Now, that left wrist at the top. We need to talk. In private. About your wrist." },
+        { "on": "cj", "by": "sloan", "text": "CJ's a four handicap in meetings and a twenty-four on the course. I find that deeply comforting." }
       ]
     },
     "season-04": {
       "statuses": {
-        "tom": "Captain's Prize, and the old boy shows them how it's done. Hickory spirit, steel shafts.",
-        "jed": "The Captain's Prize is named for the captain, who is not me — a constitutional anomaly I will be addressing.",
-        "gob": "Captain asked me not to do the dove thing on the 1st tee again. Did the dove thing on the 2nd.",
-        "paddy": "Bad day. Posted my swing video in the group chat for analysis. Nobody replied."
+        "tom": "Captain's Prize, and the old boy shows them how it's done. Hickory spirit in a steel body. Still got a lovely long swing, thank you.",
+        "jed": "The Captain's Prize is named for the Captain, who isn't me. A constitutional oversight I plan to correct. By amendment. Or lobbying.",
+        "gob": "Captain asked me not to do the dove thing on the 1st tee again. Did it on the 2nd. I don't take advice well. Or at all. Fuck him.",
+        "paddy": "Bad day. Posted my swing video in the group chat for analysis. Nobody replied. I've been dumped by better people than you lot.",
+        "pierce": "Played a solid round and was ignored at the prize-giving. I had a speech. A lovely one. About me.",
+        "michael": "Kept it in play, kept the peace and kept Gob away from the cutlery. A decent day.",
+        "don": "Never raced for the Captain's Prize. Raced for the 19th. Won by a distance.",
+        "sloan": "Even par on the back. Told a man his swing looked like a seizure. He thanked me. Men are strange."
       },
       "comments": [
-        {
-          "on": "tom",
-          "by": "sloan",
-          "text": "Decent card, Tom. My model says the last time you put one like that together, Truman was in office."
-        },
-        {
-          "on": "jed",
-          "by": "cj",
-          "text": "Sir, you have no jurisdiction over the club constitution. You have a 3 handicap that's out on parole."
-        },
-        {
-          "on": "gob",
-          "by": "michael",
-          "text": "The dove is fine, everyone. The captain is not. Sorry, captain."
-        },
-        {
-          "on": "paddy",
-          "by": "gob",
-          "text": "Paddy, I'd analyse your swing, but you'd only take it as an insult. Like I do."
-        },
-        {
-          "on": "paddy",
-          "by": "jed",
-          "text": "Watched the video, Paddy. Your hips fire before your shoulders. Also you filmed it vertically, which is a war crime."
-        },
-        {
-          "on": "michael",
-          "by": "pierce",
-          "text": "Michael, a word to the wise: you'll never get anywhere in this club by being reasonable."
-        },
-        {
-          "on": "michael",
-          "by": "michael",
-          "text": "Thanks, Pierce. Noted, and ignored."
-        },
-        {
-          "on": "don",
-          "by": "elizabeth",
-          "text": "Don, you strike me as a man who keeps secrets. Do you happen to know anyone in government?"
-        }
+        { "on": "tom", "by": "sloan", "text": "Decent card, Tom. My model says the last time you posted one like that, Truman was in office." },
+        { "on": "jed", "by": "cj", "text": "Sir, you have no jurisdiction over the club constitution. You have a 3 handicap on parole and the self-control of a toddler near a biscuit tin." },
+        { "on": "gob", "by": "michael", "text": "The dove is fine, everyone. The captain is not. Sorry, captain. Gob, your dick-measuring contest with the starter is over." },
+        { "on": "paddy", "by": "gob", "text": "Paddy, I'd analyse your swing, but you'd take it as an insult. Like I do. Fucking hell, I understand you now." },
+        { "on": "paddy", "by": "jed", "text": "Watched the video, Paddy. Your hips fire before your shoulders, like a man who doesn't want to hang about. Also you filmed it vertically, which is a war crime." },
+        { "on": "michael", "by": "pierce", "text": "Michael, a word to the wise: you'll never get anywhere in this club by being reasonable. Take it from a man who's been unreasonable his whole life." },
+        { "on": "michael", "by": "michael", "text": "Thanks, Pierce. Noted, and ignored. You're also the least reasonable man I've ever shared a car park with." },
+        { "on": "don", "by": "elizabeth", "text": "Don, you strike me as a man who keeps secrets. Do you happen to know anyone in government? Anyone at all? I'm only asking out of curiosity." },
+        { "on": "don", "by": "don", "text": "Elizabeth, I know everyone in advertising and half the fucking bartenders in Manhattan. If you want state secrets, ask a barman." },
+        { "on": "pierce", "by": "elaine", "text": "Pierce, the speech was about you. We all got that from the first line. The rest was just a lot of breathing." },
+        { "on": "sloan", "by": "pierce", "text": "Sloan, a woman with a swing like that should stick to marketing." },
+        { "on": "sloan", "by": "sloan", "text": "Pierce, I'm a financial journalist who shot even par. Please stick to whatever it is you do. Is it standing near things?" }
       ]
     },
     "season-05": {
       "statuses": {
-        "elaine": "Played with Jed and CJ. Jed explained the Rules of Golf to me eleven times. He's still explaining. I've gone home.",
-        "don": "Went round in the time it takes some men to find their ball. Then had a Scotch.",
-        "pierce": "Medal play is a test of character. I passed. The scorecard didn't.",
-        "michael": "Kept it in play. Kept the family out of it. A good day."
+        "elaine": "Played with Jed and CJ. Jed explained the Rules of Golf to me eleven times. I've gone home. Birdied the 14th. Left him on the 15th.",
+        "don": "Went round in the time it takes some men to find their ball. Then a Scotch. Then another. Then a lovely woman asked if I was alone.",
+        "pierce": "Medal play is a test of character. I passed. The scorecard did not. Fuck the scorecard.",
+        "michael": "Kept it in play. Kept the family out of it. A good day.",
+        "cj": "Bad day. The President won't stop quoting the Rules. I want to put a seven-iron somewhere the sun doesn't shine. Back soon.",
+        "jed": "A medal round of great integrity. I have the receipts. Mostly.",
+        "gob": "Birdie on the 12th. Did it with my eyes shut. Don't ask me how. I don't know. Neither did the ball."
       },
       "comments": [
-        {
-          "on": "elaine",
-          "by": "jed",
-          "text": "Elaine, in 1744 the Gentlemen Golfers of Leith wrote thirteen rules. Thirteen! I have memorised all of them, and invented four more."
-        },
-        {
-          "on": "elaine",
-          "by": "elaine",
-          "text": "And all four of yours are about you being given a gimme."
-        },
-        {
-          "on": "cj",
-          "by": "elizabeth",
-          "text": "Tough round today, CJ! Are you sleeping? Late nights in the Situation Room? How late, roughly? Which nights?"
-        },
-        {
-          "on": "cj",
-          "by": "cj",
-          "text": "Elizabeth, that's the fourth week running you've asked. I've started a file. On you."
-        },
-        {
-          "on": "pierce",
-          "by": "tom",
-          "text": "Pierce, you have the character of a man with a chequebook. Medal play wants a man with a putter."
-        },
-        {
-          "on": "pierce",
-          "by": "sloan",
-          "text": "The scorecard has a character too, Pierce. It's a crime scene."
-        },
-        {
-          "on": "gob",
-          "by": "paddy",
-          "text": "Gob, you're swaying off the ball like a man in a tight corridor. Stay centred. Turn, don't slide."
-        },
-        {
-          "on": "gob",
-          "by": "gob",
-          "text": "I sway because the crowd moves me, Paddy. Something you wouldn't know."
-        },
-        {
-          "on": "don",
-          "by": "michael",
-          "text": "Don, how are you always so calm out there?"
-        },
-        {
-          "on": "don",
-          "by": "don",
-          "text": "Because I'm not out there, Michael."
-        }
+        { "on": "elaine", "by": "jed", "text": "Elaine, in 1744 the Gentlemen Golfers of Leith wrote thirteen rules. Thirteen! I have memorised all thirteen and invented four more." },
+        { "on": "elaine", "by": "elaine", "text": "And all four of yours are about you getting a gimme, Jed. You absolute bellend." },
+        { "on": "cj", "by": "elizabeth", "text": "Tough round today, CJ! Are you sleeping? Late nights in the Situation Room? How late, roughly? Which nights?" },
+        { "on": "cj", "by": "cj", "text": "Elizabeth, that's the fourth week running you've asked. I've started a file. On you." },
+        { "on": "pierce", "by": "tom", "text": "Pierce, you have the character of a man with a chequebook. Medal play wants a man with a putter." },
+        { "on": "pierce", "by": "sloan", "text": "The scorecard has a character too, Pierce. It's a crime scene. There are bodies. Mostly yours." },
+        { "on": "gob", "by": "paddy", "text": "Gob, you're swaying off the ball like a man in a tight corridor. Stay centred. Turn, don't slide. I'm not saying it's a euphemism but it is." },
+        { "on": "gob", "by": "gob", "text": "I sway because the crowd moves me, Paddy. Something you wouldn't know. Have you ever met a crowd? Shite." },
+        { "on": "don", "by": "michael", "text": "Don, how are you always so calm out there?" },
+        { "on": "don", "by": "don", "text": "Because I'm not out there, Michael. I'm in the bar in my head. And she's very, very understanding." }
       ]
     },
     "season-06": {
       "statuses": {
-        "cj": "Points. Lots of them. If the President wishes to discuss it, he can make an appointment.",
-        "gob": "Retiring from golf. Back next Saturday.",
-        "tom": "Old Tom still has it. Where 'it' is the only working knee left in this group.",
-        "paddy": "Lost my swing. If found, please return. Answers to 'one plane'."
+        "cj": "Points. Lots of them. If the President would like to discuss, he can make an appointment through my office. After I've had a drink.",
+        "gob": "Retiring from golf. Back next Saturday. Fuck golf. Fuck the haters. See you at 8.",
+        "tom": "Old Tom still has it. Where 'it' is the only working knee left in this group. Shot my age. In yards. Over three days.",
+        "paddy": "Lost my swing. If found, please return. Answers to 'one plane'. Reward: a fuck of a lot of range balls.",
+        "michael": "Poor round. Good company. Gob said fuck eleven times on the 4th alone. Personal best.",
+        "pierce": "Not my best. But the day Pierce Hawthorne loses is the day the world ends. And it's not that day.",
+        "sloan": "Hit 14 greens, three-putted six of them. Statistically that's not my fault. Statistically it's the greenkeeper's.",
+        "elaine": "Decent round. Ignored three men on the course. Pierce, take the hint, it's a Titleist.",
+        "don": "Nobody told me there'd be golf. I thought it was a drinks reception. Same fucking result.",
+        "jed": "A round of immense dignity, spoiled only by the Rules of Golf, my own caddie and the wind. Particularly the wind."
       },
       "comments": [
-        {
-          "on": "cj",
-          "by": "jed",
-          "text": "CJ, an outstanding round. No President has ever been prouder of his staff."
-        },
-        {
-          "on": "cj",
-          "by": "cj",
-          "text": "Sir, please be proud quietly. There's a pool reporter in the bar."
-        },
-        {
-          "on": "gob",
-          "by": "michael",
-          "text": "He retires every week. Next Saturday he'll come back billed as 'the comeback'."
-        },
-        {
-          "on": "gob",
-          "by": "don",
-          "text": "Retiring is the first thing he's done all day with any conviction."
-        },
-        {
-          "on": "paddy",
-          "by": "gob",
-          "text": "Paddy lost his swing. I've been asked to find it. And — ta-da — it's in the bin."
-        },
-        {
-          "on": "tom",
-          "by": "sloan",
-          "text": "Good round, Tom. Funny how well it goes the week you don't complain about the ladies' tees."
-        },
-        {
-          "on": "tom",
-          "by": "tom",
-          "text": "I complained, Sloan. I simply complained quietly. Like a gentleman."
-        },
-        {
-          "on": "tom",
-          "by": "sloan",
-          "text": "Quietly, Tom. On a public feed. With your name on it."
-        },
-        {
-          "on": "pierce",
-          "by": "elaine",
-          "text": "Pierce, you shot a number. That's all I can say without a lawyer present."
-        },
-        {
-          "on": "cj",
-          "by": "elizabeth",
-          "text": "Congratulations CJ! Shall we celebrate? Your place? Bring your work laptop, I'd love to see what you're working on!"
-        }
+        { "on": "cj", "by": "jed", "text": "CJ, an outstanding round. No President has ever been prouder of his staff." },
+        { "on": "cj", "by": "cj", "text": "Sir, please be proud quietly. There's a pool reporter in the bar and you've got that look again." },
+        { "on": "gob", "by": "michael", "text": "He retires every week. Next Saturday he'll come back billed as 'the comeback'. With pyrotechnics." },
+        { "on": "gob", "by": "don", "text": "Retiring is the first thing he's done all day with any conviction." },
+        { "on": "paddy", "by": "gob", "text": "Paddy lost his swing. I've been asked to find it. And, ta-da, it's in the clubhouse. With the other lost causes." },
+        { "on": "tom", "by": "sloan", "text": "Good round, Tom. Funny how well it goes the week you don't complain about the ladies' tees." },
+        { "on": "tom", "by": "tom", "text": "I complained, Sloan. Quietly. Like a gentleman." },
+        { "on": "tom", "by": "sloan", "text": "Quietly, Tom. On a public feed. With your name on it. And a photo." },
+        { "on": "pierce", "by": "elaine", "text": "Pierce, you shot a number. That's all I can say without a lawyer present." },
+        { "on": "cj", "by": "elizabeth", "text": "Congratulations CJ! Shall we celebrate? Your place? Bring your work laptop, I'd love to see what you're working on!" },
+        { "on": "sloan", "by": "don", "text": "Sloan, you three-putted six greens and I still want to buy you a drink. Statistically that's flattering." },
+        { "on": "elaine", "by": "jed", "text": "Elaine, Pierce followed you round the 9th. I saw it. As a matter of conscience, I'd like it on the record." },
+        { "on": "don", "by": "elaine", "text": "Don, you're not at a drinks reception. You've been at the 19th since the 6th." }
       ]
     }
   }

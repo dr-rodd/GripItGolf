@@ -5,7 +5,9 @@
 // comment) are met the same way. Comments are dated the competition's
 // afternoon. Each one looks first: a status already saying it, a comment
 // already there from that author with those words, a dot already on — so
-// posting again changes nothing. Server only.
+// posting again changes nothing. **A character's comment on these cards that
+// the file no longer holds is taken away first**, so rewriting the file
+// leaves only its new lines, never both. Server only.
 
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { irishInstant } from '@/lib/irishTime'
@@ -44,6 +46,27 @@ export async function postBanter(o: {
   const { data: itemRows } = keys.length ? await db.from('feed_items').select('id, key, status').in('key', keys).is('removed_at', null) : { data: [] }
   const itemByKey = new Map(((itemRows ?? []) as { id: string; key: string; status: string | null }[]).map(i => [i.key, i]))
   const cardOf = (k: string) => { const p = playerOf(k); return p ? itemByKey.get(`card:${comp.roundId}:${p}`) ?? null : null }
+
+  // ── Lines a character left here that the file no longer holds are taken away ──
+  const wanted = new Map<string, Set<string>>()
+  for (const c of o.banter?.comments ?? []) {
+    const card = cardOf(c.on), author = o.userOf.get(c.by)
+    if (card && author) wanted.set(`${card.id}:${author}`, (wanted.get(`${card.id}:${author}`) ?? new Set()).add(c.text))
+  }
+  const cardIds = [...itemByKey.values()].map(i => i.id)
+  const characterIds = [...o.userOf.values()]
+  if (cardIds.length && characterIds.length) {
+    const { data: old } = await db.from('feed_items').select('id, parent_id, author_id, data').eq('kind', 'comment')
+      .in('parent_id', cardIds).in('author_id', characterIds).is('removed_at', null)
+    const gone = ((old ?? []) as { id: string; parent_id: string; author_id: string; data: { text?: string } | null }[])
+      .filter(c => !wanted.get(`${c.parent_id}:${c.author_id}`)?.has(String(c.data?.text ?? '')))
+      .map(c => c.id)
+    if (gone.length) {
+      const { error } = await db.from('feed_items').delete().in('id', gone)
+      if (error) lines.push(`${spec.name}: ${gone.length} old comments not removed — ${error.message}`)
+      else lines.push(`${spec.name}: ${gone.length} old comments replaced.`)
+    }
+  }
 
   // ── Statuses, by the card's own player ──
   for (const [k, text] of Object.entries(o.banter?.statuses ?? {})) {
