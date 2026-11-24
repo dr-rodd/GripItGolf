@@ -5,6 +5,7 @@
 // who may post for a club is lib/clubMay.ts's (`post_club_stream`).
 
 import { clubMay, credentialsOf } from '@/lib/clubMay'
+import { isClubEventType } from '@/lib/clubEvents'
 import {
   OWN_STATUS_MAX, cleanPost, cleanText, isMatchStream, mayView, ownStatusIssue, postIssue, readLink, talksOn,
 } from '@/lib/feed'
@@ -48,10 +49,12 @@ export async function runOwn(action: string, input: Record<string, unknown>, a: 
     const link = readLink(input.link)
     if ('issue' in link) return fail(400, link.issue)
     const title = cleanText(input.title, 80)
+    // A club event broadcast (D325): its type rides along, so a member who turned that type off does not see it.
+    const eventType = isClubEventType(input.eventType) ? input.eventType : null
     const name = (await store.names([me])).get(me)?.name ?? 'The club'
     const item = await store.insertOwn({
       kind: 'post', authorId: me, clubId, stream: null, text, link: link.link,
-      data: { name, club: club?.name ?? null, text, ...(title ? { title } : {}) }, at: now.toISOString(),
+      data: { name, club: club?.name ?? null, text, ...(title ? { title } : {}), ...(eventType ? { eventType } : {}) }, at: now.toISOString(),
     })
     return done({ id: item.id })
   }

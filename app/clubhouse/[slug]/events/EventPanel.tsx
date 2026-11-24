@@ -6,9 +6,12 @@ import { FIELD, FIELD_LABEL, Segmented, buttonClass, chipClass } from '@/app/com
 import { pickableLabels } from '@/lib/clubLabels'
 import { useLabels } from '../useLabels'
 import { askClub } from '@/lib/accountClient'
+import { askFeed } from '@/lib/feedClient'
+import { clubEventDates } from '@/lib/clubs'
+import StreamName from '@/app/components/feed/StreamName'
 import { NO_PLACES, onCourse, shortCourse, type ClubPlaces } from '@/lib/clubLocations'
 import {
-  CLUB_EVENT_TYPES, NOTE_NOTES_MAX, NOTE_PLACE_MAX, NOTE_TITLE_MAX, mayBeOffice, mayBlockSheet, noteIssue, readClubNote, typeLabel,
+  ANNOUNCE_TYPES, CLUB_EVENT_TYPES, NOTE_NOTES_MAX, NOTE_PLACE_MAX, NOTE_TITLE_MAX, announcement, mayAnnounce, mayBeOffice, mayBlockSheet, noteIssue, readClubNote, typeLabel,
   type ClubEventType, type ClubNote, type Visibility,
 } from '@/lib/clubEvents'
 
@@ -55,6 +58,8 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [sure, setSure] = useState(false)
+  // D325: broadcast it to club.stream — on to start with for a new event that is not golf, off when changing one.
+  const [announce, setAnnounce] = useState<boolean | null>(null)
 
   const office = mayBeOffice(type)
   const blockable = mayBlockSheet(type)
@@ -69,6 +74,7 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
     labelId,
   })
   const issue = noteIssue(draft)
+  const announcing = mayAnnounce(draft) && (announce ?? (!note && ANNOUNCE_TYPES.includes(type)))
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
@@ -80,8 +86,15 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
     if (issue) { setError(issue); return }
     setBusy(true); setError('')
     const r = await askClub('event.save', { clubId, id: note?.id, event: draft })
+    if (!r.ok) { setBusy(false); setError(r.error); return }
+    if (announcing) {
+      // The event is saved whatever happens here; a post that fails says so and the panel stays.
+      const where = roomPicked ? places.rooms.find(x => x.id === room)?.name ?? null : draft.place || null
+      const said = announcement(draft, clubEventDates(draft.startsOn, draft.endsOn ?? draft.startsOn), where)
+      const p = await askFeed('post.club', { clubId, title: said.title, text: said.text, eventType: type })
+      if (!p.ok) { setBusy(false); setError(`Saved — but could not post it to club.stream: ${p.error}`); onSaved(); return }
+    }
     setBusy(false)
-    if (!r.ok) { setError(r.error); return }
     onSaved()
     onClose()
   }
@@ -227,6 +240,20 @@ export default function EventPanel({ clubId, note, day, blocking, onClose, onSav
           </div>
         </div>
 
+        {mayAnnounce(draft) && (
+          <button type="button" role="checkbox" aria-checked={announcing} onClick={() => setAnnounce(!announcing)}
+            className="ch-hover ch-focus w-full flex items-start gap-3 text-left rounded-tile -mx-2 px-2 py-2 mt-4">
+            <span aria-hidden="true" className={`mt-0.5 inline-flex items-center justify-center w-6 h-6 flex-shrink-0 rounded-[6px] border ${announcing ? 'bg-accent-deep border-accent-deep text-white' : 'bg-surface border-line-strong'}`}>
+              {announcing && <IconCheck size={16} />}
+            </span>
+            <span>
+              <span className="t-label text-ink block">Post to <StreamName kind="club" /></span>
+              <span className="t-cap text-ink/65 block">
+                {announcing ? 'Members see it in the club’s stream when you save — its title, when and where, and your notes.' : 'Tell the members in the club’s stream when you save.'}
+              </span>
+            </span>
+          </button>
+        )}
         {error && <p role="alert" className="t-cap text-rust-deep mt-4">{error}</p>}
         <div className="flex flex-wrap gap-3 mt-6">
           <button type="submit" disabled={busy || !!issue} className={`${buttonClass('primary', false)} ch-focus`}>

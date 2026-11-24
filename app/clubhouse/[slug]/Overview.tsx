@@ -14,6 +14,8 @@ import { Pill, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { useShell } from './ShellContext'
 import { useSeason } from './useSeason'
 import OverviewSearch from './OverviewSearch'
+import { ClubPostComposer } from '@/app/components/feed/Composer'
+import StreamName from '@/app/components/feed/StreamName'
 
 /** At most this many rows a card before "and n more". */
 const CARD_ROWS = 8
@@ -40,6 +42,10 @@ export default function Overview() {
   const [period, setPeriodState] = useState<Period>('today')
   const [tee, setTee] = useState<TeeDay[] | null>(null)
   const keepsSheet = may('keep_tee_sheet'), keepsCalendar = may('keep_calendar'), keepsList = may('keep_list')
+  // D325: the club's word to its members, from the office as from the members app.
+  const posts = may('post_club_stream')
+  const [posting, setPosting] = useState(false)
+  const [posted, setPosted] = useState(false)
 
   useEffect(() => {
     try { if (window.localStorage.getItem(PERIOD_KEY) === 'week') setPeriodState('week') } catch { /* the default */ }
@@ -92,7 +98,14 @@ export default function Overview() {
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="t-h1 text-ink flex-1">Overview</h1>
         <p className="t-label text-ink/65">{longDay(today)}</p>
+        {posts && (
+          <button type="button" onClick={() => { setPosted(false); setPosting(true) }} className={`${buttonClass('secondary', false, true)} ch-focus`}>
+            Post to&nbsp;<StreamName kind="club" />
+          </button>
+        )}
       </div>
+      {posted && <p role="status" className="t-cap text-accent-deep mt-2">Posted — the members see it in <StreamName kind="club" />.</p>}
+      {posting && <ClubPostComposer clubId={club.id} onClose={() => setPosting(false)} onPosted={() => { setPosting(false); setPosted(true) }} />}
       <div className="mt-4"><OverviewSearch events={season.events} today={today} /></div>
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Segmented label="Show" value={period} onChange={setPeriod}

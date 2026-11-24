@@ -192,3 +192,25 @@ export function noteWhen(n: Pick<ClubNote, 'startsOn' | 'endsOn'>, today: string
   if ((n.endsOn ?? n.startsOn) < today) return 'past'
   return n.startsOn <= today ? 'now' : 'upcoming'
 }
+
+// ─── An event broadcast to club.stream (D325) ───────────────────
+
+/** The types whose "Post to club.stream" tick starts on for a new event (Ross: non-competition activity). */
+export const ANNOUNCE_TYPES: readonly ClubEventType[] = ['SOCIAL', 'BUSINESS', 'SPORT', 'MISC']
+
+/** Whether an event may be broadcast at all: never Office only — the members never see it (D234). */
+export function mayAnnounce(n: Pick<ClubNote, 'visibility'>): boolean {
+  return n.visibility !== 'office'
+}
+
+/**
+ * The post a club event makes in club.stream (D325): its title as the
+ * heading, then when and where on one line, then its notes. `dates` is the
+ * site's own date words (lib/clubs.ts `clubEventDates`), handed in so this
+ * file needs no other.
+ */
+export function announcement(n: Pick<ClubNote, 'title' | 'startTime' | 'endTime' | 'notes'>, dates: string, place: string | null): { title: string; text: string } {
+  const when = [dates, noteTimeLine(n)].filter(Boolean).join(', ')
+  const line = [when, place].filter(Boolean).join(' · ')
+  return { title: n.title, text: [line, (n.notes ?? '').trim()].filter(Boolean).join('\n\n') }
+}

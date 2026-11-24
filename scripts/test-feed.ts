@@ -13,6 +13,8 @@ import {
   type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
 import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
+import { announcement, mayAnnounce } from '../lib/clubEvents'
+import { clubMay } from '../lib/clubMay'
 import type { AuthUser } from '../lib/account'
 import { runSign, type SignStore, type Signature } from '../app/api/card/sign'
 import type { MemberRecord } from '../app/api/club/club'
@@ -706,6 +708,20 @@ function wiringTests() {
       'the sheet: the scorecard, the comments, a box above the keyboard; closed by a swipe down, a tap outside or the ✕ (D330, M11)')
     ok(/reducedMotion\(\)[^\n]*\n?[^\n]*opacity: 0/.test(sheet) && /openKeyframes\(from, to\)/.test(sheet), '…grown out of the card, a fade under Reduce Motion (M12)')
     ok(!/from ['"](framer-motion|motion|react-spring|gsap)/.test(sheet), '…with no animation library')
+  }
+
+  section('Wiring: club.stream from both apps (D325)')
+  {
+    const panel = read('app/clubhouse/[slug]/events/EventPanel.tsx'), ov = read('app/clubhouse/[slug]/Overview.tsx')
+    ok(/mayAnnounce\(draft\) && \(/.test(panel) && /askFeed\('post\.club', \{ clubId, title: said\.title, text: said\.text, eventType: type \}\)/.test(panel),
+      'a club event can be broadcast to club.stream when saved — never an Office only one')
+    ok(/may\('post_club_stream'\)/.test(ov) && /<ClubPostComposer clubId=\{club\.id\}/.test(ov), 'the Clubhouse posts from its Overview')
+    ok(/home\.canPost/.test(read('app/components/feed/Stream.tsx')), '…and Officers from club.stream itself')
+    eq(announcement({ title: 'AGM', startTime: '19:30', endTime: null, notes: 'Bring your card.' }, 'Fri 5 Dec', 'Clubhouse bar'),
+      { title: 'AGM', text: 'Fri 5 Dec, From 7:30 pm · Clubhouse bar\n\nBring your card.' }, 'an event’s post: when and where on a line, then its notes')
+    ok(!mayAnnounce({ visibility: 'office' }) && mayAnnounce({ visibility: 'members' }), 'an Office only event is never broadcast')
+    ok(clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: true, clubhouse: false } }) && clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: true } })
+      && !clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: false } }), 'Officers and Clubhouse holders post; a member does not')
   }
 
   section('Wiring: comments, the dot, reports (D301, D303, D307)')
