@@ -2026,7 +2026,8 @@ function teeEmbedTests() {
   walk(path.join(__dirname, '../app')); walk(path.join(__dirname, '../lib'))
   const bad = files.filter(f => /from\('tee_assignments'\)[^;]{0,400}[\s,'(]players\(/.test(fs.readFileSync(f, 'utf8')))
   eq(bad.map(f => path.relative(path.join(__dirname, '..'), f)), [], 'no tee_assignments read embeds players without naming the key')
-  const route = fs.readFileSync(path.join(__dirname, '../app/api/club/competition/route.ts'), 'utf8')
+  // The competition route's store lives in routeStore.ts (moved so the test club's reseed shares it).
+  const route = fs.readFileSync(path.join(__dirname, '../app/api/club/competition/routeStore.ts'), 'utf8')
   ok(route.includes('players!player_id(name, club_member_id)'), 'the competition read names player_id')
   eq([failWords('read'), failWords('change'), failWords('copy'), failWords(undefined)],
     ['Could not open the competition — try again.', 'Could not change the competition — try again.', 'Could not copy the competition — try again.', 'Could not make the competition — try again.'],
@@ -3307,7 +3308,7 @@ async function labelTests() {
   section('D288: wiring')
   ok(/labels\?: ClubLabel\[\]/.test(read('app/components/EntryRulesFields.tsx')) && ['CompPanel', 'PresetPanel', 'MatchPlayPanel'].every(p => /labels=\{labels\}/.test(read(`app/clubhouse/[slug]/events/${p}.tsx`))), 'a label is picked where who may enter is: New competition, Edit, a preset, a match play')
   ok(/setLabelId/.test(read('app/clubhouse/[slug]/events/EventPanel.tsx')), 'a club event carries a label')
-  ok(/freshEntry\(db, clubId, rules\)/.test(read('app/api/club/competition/route.ts')) && /freshEntry\(db, c\.clubId, ch\.entry\)/.test(read('app/api/club/competition/route.ts')), 'every competition write keeps the club’s label as it stands, never a copy a form carried')
+  ok(/freshEntry\(db, clubId, rules\)/.test(read('app/api/club/competition/routeStore.ts')) && /freshEntry\(db, c\.clubId, ch\.entry\)/.test(read('app/api/club/competition/routeStore.ts')), 'every competition write keeps the club’s label as it stands, never a copy a form carried')
   ok(/indexCache\(rules/.test(read('app/api/club/booking.ts')) && /loadIdx/.test(read('app/api/club/matchPlayEntry.ts')) && /index: memberIndex/.test(read('app/api/club/teeTimes.ts')) && /index: f\.myIndex/.test(read('app/api/club/teeTimes.ts')), 'booking, entering a match play, the tee sheet and the calendar judge the label’s band')
   ok(/className="label-wash"/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')), 'a competition’s page wears its label’s wash')
   // D292: the motif carries through the Comps tab and the rest of the members app.
