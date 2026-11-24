@@ -6,7 +6,7 @@ import {
   CATEGORY_CODE_MAX, CATEGORY_NAME_MAX, EVERY_DAY, WEEKDAYS, WEEKDAY_NAMES, ageDateLabel, categoryCodeFrom, categoryIssue,
   daysLine, normaliseCode, uniqueCode,
 } from '@/lib/clubMembership'
-import { IconSettings, IconX } from '@/app/components/icons'
+import { IconCheck, IconSettings, IconX } from '@/app/components/icons'
 import { FIELD, FIELD_LABEL, IconButton, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { useShell } from '../ShellContext'
 import { useCategories, type CountedCategory } from '../useCategories'
@@ -14,7 +14,7 @@ import { useCategories, type CountedCategory } from '../useCategories'
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 
-type Draft = { id?: string; name: string; code: string; codeTyped: boolean; days: number[] }
+type Draft = { id?: string; name: string; code: string; codeTyped: boolean; days: number[]; junior: boolean }
 
 /**
  * Memberships (stage (m), Ross, 17 Nov 2026): the club's categories — Full,
@@ -37,19 +37,21 @@ export default function Memberships() {
   if (!may('keep_list')) return <p className="text-ink/80 text-[15px]">Only someone with Clubhouse keeps the club’s memberships.</p>
 
   const list = categories ?? []
+  // The Junior tick once migration 102 is in (a stored membership carries it); a club with none yet may try.
+  const juniorReady = list.length === 0 || list.some(c => c.junior !== undefined)
   const others = list.filter(c => c.id !== draft?.id)
   const draftCode = draft ? (draft.codeTyped ? normaliseCode(draft.code) : uniqueCode(categoryCodeFrom(draft.name), others.map(c => c.code))) : ''
   const draftWhy = draft ? categoryIssue({ name: draft.name, code: draftCode, days: draft.days }, others) : null
 
   function open(c: CountedCategory | null) {
     setError(''); setNote(''); setDeleting(null)
-    setDraft(c ? { id: c.id, name: c.name, code: c.code, codeTyped: true, days: [...c.days] } : { name: '', code: '', codeTyped: false, days: [...EVERY_DAY] })
+    setDraft(c ? { id: c.id, name: c.name, code: c.code, codeTyped: true, days: [...c.days], junior: !!c.junior } : { name: '', code: '', codeTyped: false, days: [...EVERY_DAY], junior: false })
   }
 
   async function save() {
     if (!draft || draftWhy) return
     setBusy(true); setError('')
-    const r = await askClub('category.save', { clubId: club.id, id: draft.id, name: draft.name, code: draftCode, days: draft.days })
+    const r = await askClub('category.save', { clubId: club.id, id: draft.id, name: draft.name, code: draftCode, days: draft.days, ...(juniorReady ? { junior: draft.junior } : {}) })
     setBusy(false)
     if (!r.ok) { setError(r.error); return }
     set(r.categories ?? list)
@@ -122,6 +124,19 @@ export default function Memberships() {
                 </div>
                 <p className="t-cap text-ink/65 mt-2">{daysLine(draft.days)}</p>
               </fieldset>
+              {/* D304: a Junior membership keeps its people out of the feed and Find friends. */}
+              {juniorReady && (
+                <button type="button" role="checkbox" aria-checked={draft.junior} onClick={() => setDraft({ ...draft, junior: !draft.junior })}
+                  className="mt-4 w-full flex items-center gap-3 min-h-11 text-left press ch-focus">
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-[6px] border flex-shrink-0 ${draft.junior ? 'bg-accent-deep border-accent-deep text-white' : 'bg-surface border-line-strong'}`} aria-hidden="true">
+                    {draft.junior && <IconCheck size={16} />}
+                  </span>
+                  <span className="flex-1">
+                    <span className="block t-label text-ink">Junior membership</span>
+                    <span className="block t-cap text-ink/65">Its members are kept out of the feed and Find friends.</span>
+                  </span>
+                </button>
+              )}
               {(error || (draftWhy && draft.name.trim())) && <p role="alert" className="t-cap text-rust-deep mt-3">{error || draftWhy}</p>}
               <div className="flex flex-wrap gap-3 mt-5">
                 <button type="button" disabled={busy || !!draftWhy} onClick={() => void save()} className={`${buttonClass('primary', false)} ch-focus`}>
@@ -150,7 +165,7 @@ export default function Memberships() {
                 <li key={c.id} className="flex flex-wrap items-center gap-3 px-4 py-3 min-h-14">
                   <span className="flex-1 min-w-[12rem]">
                     <span className="block text-[17px] font-medium text-ink leading-snug">{c.name}</span>
-                    <span className="block t-cap text-ink/65 mt-0.5">{daysLine(c.days)} · {c.count === 1 ? '1 person' : `${c.count} people`}</span>
+                    <span className="block t-cap text-ink/65 mt-0.5">{daysLine(c.days)}{c.junior ? ' · Junior' : ''} · {c.count === 1 ? '1 person' : `${c.count} people`}</span>
                   </span>
                   <span className="t-code text-ink/80" aria-label={`Code ${c.code}`}>{c.code}</span>
                   {deleting === c.id ? (

@@ -132,6 +132,9 @@ export type World = {
   dots: { itemId: string; userId: string }[]
   comps: Map<string, CompRef[]>
   ready: boolean
+  /** Club list rows: a junior's membership marked, a row taken off, one with no account. */
+  rows: { rowId: string; userId: string | null; clubId: string; name: string; removed: boolean; junior: boolean }[]
+  profiles: Set<string>
 }
 
 export function world(): World {
@@ -146,6 +149,8 @@ export function world(): World {
     dots: [],
     comps: new Map(),
     ready: true,
+    rows: [],
+    profiles: new Set(),
   }
 }
 
@@ -175,6 +180,20 @@ export function standIn(w: World): FeedStore {
     async childrenOf(ids) { return w.items.filter(r => r.parentId && ids.includes(r.parentId) && !r.removedAt && !r.held) },
     async dotsOn(ids) { return w.dots.filter(d => ids.includes(d.itemId)) },
     async recentComps(u) { return w.comps.get(u) ?? [] },
+    async friendRows(u) { return w.friends.filter(f => f.a === u || f.b === u).map(f => ({ userA: f.a, userB: f.b, requestedBy: f.by, accepted: f.accepted })) },
+    async searchList(clubIds, term, limit) {
+      const clubName = (id: string) => [...w.clubs.values()].find(c => c.id === id)?.name ?? ''
+      return w.rows.filter(r => clubIds.includes(r.clubId) && r.userId && !r.removed && !r.junior && r.name.toLowerCase().includes(term.toLowerCase()))
+        .slice(0, limit).map(r => ({ rowId: r.rowId, userId: r.userId as string, name: r.name, clubId: r.clubId, clubName: clubName(r.clubId) }))
+    },
+    async listRow(id) { const r = w.rows.find(x => x.rowId === id); return r ? { userId: r.userId, clubId: r.clubId, removed: r.removed } : null },
+    async saveFriend(row) {
+      w.friends = w.friends.filter(f => !(f.a === row.userA && f.b === row.userB))
+      w.friends.push({ a: row.userA, b: row.userB, by: row.requestedBy, accepted: row.accepted })
+    },
+    async dropFriend(a, b) { w.friends = w.friends.filter(f => !(f.a === a && f.b === b)) },
+    async names(ids) { return new Map(ids.map(id => [id, { name: w.rows.find(r => r.userId === id)?.name ?? id, club: 'Pints GC' }])) },
+    async juniorProfile(u) { return w.profiles.has(u) },
     async commentsSince(u, since) {
       const mine = new Set(w.items.filter(r => r.authorId === u && r.kind === 'card').map(r => r.id))
       return w.items.filter(r => r.kind === 'comment' && r.parentId && mine.has(r.parentId) && r.authorId !== u && (!since || r.createdAt > since)).length
@@ -252,6 +271,44 @@ async function routeTests() {
   w.ready = true
 }
 
+async function friendTests() {
+  section('Friends (D297): found only in your own clubs’ lists, mutual, never a junior')
+  const w = world()
+  const s = standIn(w)
+  const C1 = '00000000-0000-0000-0000-0000000000c1'
+  const C2 = '00000000-0000-0000-0000-0000000000c2'
+  w.clubs.set('club-2', { id: C2, slug: 'other', name: 'Other GC', members: ['o'] })
+  w.users.set('tok-o', { id: 'o', isAnonymous: false, email: 'o@x.ie', emailConfirmed: true })
+  const R = (n: number) => `00000000-0000-0000-0000-${String(n).padStart(12, '0')}`
+  w.rows.push(
+    { rowId: R(1), userId: 'y', clubId: C1, name: 'Rosie Young', removed: false, junior: false },
+    { rowId: R(2), userId: 'j', clubId: C1, name: 'Rory Junior', removed: false, junior: true },
+    { rowId: R(3), userId: null, clubId: C1, name: 'Ronan Nolink', removed: false, junior: false },
+    { rowId: R(4), userId: 'o', clubId: C2, name: 'Roisin Other', removed: false, junior: false },
+    { rowId: R(5), userId: 'c', clubId: C1, name: 'Robbie Profile', removed: false, junior: false },
+    { rowId: R(6), userId: 'x', clubId: C1, name: 'Ross Me', removed: false, junior: false },
+  )
+  w.profiles.add('c')
+  const ask = (who: string, body: Record<string, unknown>) => runFeed({ ...body, token: `tok-${who}` }, s, NOW)
+  const names = async (q: string) => ((await ask('x', { action: 'search', q })).body as unknown as { results: { name: string }[] }).results.map(r => r.name)
+  eq(await names('R'), [], 'one character returns nothing')
+  eq(await names('Ro'), ['Rosie Young'], 'two characters: only a linked adult on my own club’s list — never a junior (by membership or profile), a row with no account, another club’s member, or me')
+  const hit = ((await ask('x', { action: 'search', q: 'rosie' })).body as unknown as { results: Record<string, unknown>[] }).results[0]
+  eq(Object.keys(hit).sort(), ['club', 'name', 'rowId', 'standing'], 'a result is a name and a club (and the row to ask by) — nothing else')
+  eq((await ask('x', { action: 'request', rowId: R(4) })).status, 404, 'another club’s member cannot be asked')
+  eq((await ask('x', { action: 'request', rowId: R(2) })).status, 404, 'a junior cannot be asked')
+  eq((await ask('x', { action: 'request', rowId: R(5) })).status, 404, '…nor a junior profile')
+  eq((await ask('x', { action: 'request', rowId: R(1) })).body, { ok: true, standing: 'asked' }, 'a request')
+  eq(((await ask('y', { action: 'friends' })).body as unknown as { incoming: { id: string }[] }).incoming.map(p => p.id), ['x'], 'Y sees it waiting')
+  eq((await runFeed({ action: 'friends', token: 'tok-j' }, s, NOW)).status, 403, 'a junior has no friends list (D304)')
+  eq((await ask('y', { action: 'respond', id: 'x', accept: true })).body, { ok: true, standing: 'friend' }, 'accepted')
+  eq(w.friends, [{ a: 'x', b: 'y', by: 'x', accepted: true }], 'one row a pair')
+  w.rows[0].removed = true
+  eq(((await ask('x', { action: 'friends' })).body as unknown as { friends: { id: string }[] }).friends.map(p => p.id), ['y'], 'a friendship survives leaving the club')
+  eq((await ask('y', { action: 'unfriend', id: 'x' })).body, { ok: true, standing: 'none' }, 'either removes it')
+  eq(w.friends, [], '…and it is gone')
+}
+
 // ─── Wiring ─────────────────────────────────────────────────────
 
 function wiringTests() {
@@ -268,6 +325,7 @@ function wiringTests() {
 async function main() {
   ruleTests()
   await routeTests()
+  await friendTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

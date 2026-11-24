@@ -4,11 +4,12 @@ import Link from 'next/link'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
+import FeedSettings from '@/app/components/feed/FeedSettings'
 import LegalLinks from '@/app/components/LegalLinks'
 import { IconChevronLeft } from '@/app/components/icons'
 import { ListGroup, ListRow } from '@/app/components/ui'
 
-/** Your page (D280): handicap, your details, what you see, and your account — back to the club. */
+/** Your page (D280): handicap, your details, what you see, the feed and your friends (D296, D297), and your account — back to the club. */
 export default function YourPage({ slug, club }: { slug: string; club: string }) {
   return (
     <section>
@@ -19,6 +20,8 @@ export default function YourPage({ slug, club }: { slug: string; club: string })
       <HandicapIndexCard className="mt-6" />
       <YourDetailsCard club={club} className="mt-4" />
       <ClubEventTypesCard className="mt-4" />
+      {/* D296, D297: the feed's audience, your friends, Find friends. */}
+      <FeedSettings className="mt-4" />
       <h2 className="t-h2 text-ink mt-8">Account</h2>
       <ListGroup className="mt-3">
         <ListRow href="/home?tab=events" label="Your events" hint="Every event you’re in or run, and the players linked to you" />

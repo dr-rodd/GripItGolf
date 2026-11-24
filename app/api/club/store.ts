@@ -355,9 +355,13 @@ function teeSpan(rules: ReturnType<typeof parseTeeRules>): { firstTee: string | 
 
 /** A club's memberships in their order (094 — none before it). */
 export async function readCategories(db: Db, clubId: string): Promise<Category[]> {
-  const { data, error } = await db.from('club_categories').select('id, name, code, days, position').eq('club_id', clubId).order('position').order('name')
-  if (error) return []
-  return ((data ?? []) as { id: string; name: string; code: string; days: number[] | null }[]).map(c => ({ id: c.id, name: c.name, code: c.code, days: cleanDays(c.days ?? []) }))
+  // The Junior tick (102) read where it is in, the rest as before it.
+  const ask = (junior: boolean) => db.from('club_categories').select(`id, name, code, days, position${junior ? ', junior' : ''}`).eq('club_id', clubId).order('position').order('name')
+  let res = await ask(true)
+  if (res.error) res = await ask(false)
+  if (res.error) return []
+  return ((res.data ?? []) as unknown as { id: string; name: string; code: string; days: number[] | null; junior?: boolean }[])
+    .map(c => ({ id: c.id, name: c.name, code: c.code, days: cleanDays(c.days ?? []), ...(c.junior !== undefined ? { junior: c.junior } : {}) }))
 }
 
 export function clubStore(db: Db): ClubStore {
@@ -780,10 +784,13 @@ export function clubStore(db: Db): ClubStore {
       return out
     },
     async saveCategory(clubId, c) {
-      const row = { club_id: clubId, name: c.name, code: c.code, days: c.days, position: c.position, updated_at: new Date().toISOString() }
-      const { data, error } = c.id
-        ? await db.from('club_categories').update(row).eq('id', c.id).eq('club_id', clubId).select('id').maybeSingle()
-        : await db.from('club_categories').insert(row).select('id').single()
+      const base = { club_id: clubId, name: c.name, code: c.code, days: c.days, position: c.position, updated_at: new Date().toISOString() }
+      const write = (row: Record<string, unknown>) => c.id
+        ? db.from('club_categories').update(row).eq('id', c.id).eq('club_id', clubId).select('id').maybeSingle()
+        : db.from('club_categories').insert(row).select('id').single()
+      // The Junior tick (102) written only once it can be kept.
+      let { data, error } = await write(c.junior === undefined ? base : { ...base, junior: c.junior })
+      if (error && c.junior !== undefined && isMissingColumn(error)) ({ data, error } = await write(base))
       if (error?.code === '23505') return 'clash'
       if (error) throw error
       return (data as { id: string } | null)?.id ?? 'clash'

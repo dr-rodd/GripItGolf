@@ -131,6 +131,8 @@ export interface Category {
   code: string
   /** The days it plays, 0 Monday … 6 Sunday. */
   days: number[]
+  /** A Junior membership (D230, migration 102): its people are out of the feed and Find friends (D304). Absent before 102. */
+  junior?: boolean
 }
 
 export const CATEGORY_NAME_MAX = 40

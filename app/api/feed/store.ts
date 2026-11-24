@@ -100,6 +100,27 @@ export async function tripsPlayedBy(db: Db, userId: string): Promise<Map<string,
   return out
 }
 
+/**
+ * How an account is named in the feed and to its friends: its name on a
+ * club's list (and that club), else its username, else nobody's name.
+ */
+export async function namesOf(db: Db, userIds: string[]): Promise<Map<string, { name: string; club: string | null }>> {
+  const out = new Map<string, { name: string; club: string | null }>()
+  if (userIds.length === 0) return out
+  const { data } = await db.from('club_members').select('user_id, name, clubs(name)').in('user_id', userIds).is('removed_at', null)
+  for (const r of (data ?? []) as unknown as { user_id: string; name: string; clubs: { name: string } | { name: string }[] | null }[]) {
+    if (out.has(r.user_id)) continue
+    const c = Array.isArray(r.clubs) ? r.clubs[0] : r.clubs
+    out.set(r.user_id, { name: r.name, club: c?.name ?? null })
+  }
+  const rest = userIds.filter(id => !out.has(id))
+  if (rest.length) {
+    const { data: u } = await db.from('account_usernames').select('user_id, username').in('user_id', rest)
+    for (const r of (u ?? []) as { user_id: string; username: string }[]) out.set(r.user_id, { name: r.username, club: null })
+  }
+  return out
+}
+
 export function feedStore(db: Db): FeedStore {
   return {
     async userFromToken(token) {
@@ -209,6 +230,50 @@ export function feedStore(db: Db): FeedStore {
         .is('removed_at', null).gt('created_at', from)
       return count ?? 0
     },
+    // ─── Friends (D297) ───
+    async friendRows(userId) {
+      const { data, error } = await db.from('friendships').select('user_a, user_b, requested_by, accepted')
+        .or(`user_a.eq.${userId},user_b.eq.${userId}`)
+      if (error) throw error
+      return ((data ?? []) as { user_a: string; user_b: string; requested_by: string; accepted: boolean }[])
+        .map(r => ({ userA: r.user_a, userB: r.user_b, requestedBy: r.requested_by, accepted: r.accepted }))
+    },
+    async searchList(clubIds, term, limit) {
+      // Linked rows only, never taken off, a Junior membership left out here
+      // as well as by the caller's check (D297).
+      const ask = (junior: boolean) => db.from('club_members')
+        .select(`id, user_id, name, club_id, clubs!inner(name, verified_at)${junior ? ', category:club_categories(junior)' : ''}`)
+        .in('club_id', clubIds).not('user_id', 'is', null).is('removed_at', null)
+        .ilike('name', `%${term}%`).order('name').limit(limit)
+      let res = await ask(true)
+      if (res.error) res = await ask(false)
+      if (res.error) throw res.error
+      type R = { id: string; user_id: string; name: string; club_id: string; clubs: { name: string; verified_at: string | null } | null; category?: { junior?: boolean } | { junior?: boolean }[] | null }
+      return ((res.data ?? []) as unknown as R[]).flatMap(r => {
+        const cat = Array.isArray(r.category) ? r.category[0] : r.category
+        if (cat?.junior || !r.clubs?.verified_at) return []
+        return [{ rowId: r.id, userId: r.user_id, name: r.name, clubId: r.club_id, clubName: r.clubs.name }]
+      })
+    },
+    async listRow(rowId) {
+      if (!/^[0-9a-f-]{36}$/i.test(rowId)) return null
+      const { data } = await db.from('club_members').select('user_id, club_id, removed_at').eq('id', rowId).maybeSingle()
+      const r = data as { user_id: string | null; club_id: string; removed_at: string | null } | null
+      return r ? { userId: r.user_id, clubId: r.club_id, removed: !!r.removed_at } : null
+    },
+    async saveFriend(row, at) {
+      const { error } = await db.from('friendships').upsert({
+        user_a: row.userA, user_b: row.userB, requested_by: row.requestedBy, accepted: row.accepted,
+        accepted_at: row.accepted ? at : null,
+      }, { onConflict: 'user_a,user_b' })
+      if (error) throw error
+    },
+    async dropFriend(userA, userB) {
+      const { error } = await db.from('friendships').delete().eq('user_a', userA).eq('user_b', userB)
+      if (error) throw error
+    },
+    names: userIds => namesOf(db, userIds),
+    juniorProfile: userId => juniorProfile(db, userId),
     shared<T>(key: string, read: () => Promise<T>): Promise<T> {
       return copies.look(key, read as () => Promise<unknown>) as Promise<T>
     },

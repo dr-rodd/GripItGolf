@@ -194,7 +194,7 @@ export interface ClubStore extends ClubhouseStore {
   categories?(clubId: string): Promise<Category[]>
   categoryCounts?(clubId: string): Promise<Map<string, number>>
   /** The category's id, or 'clash' when its name or code is another's. */
-  saveCategory?(clubId: string, c: { id?: string; name: string; code: string; days: number[]; position: number }): Promise<string>
+  saveCategory?(clubId: string, c: { id?: string; name: string; code: string; days: number[]; position: number; junior?: boolean }): Promise<string>
   deleteCategory?(clubId: string, id: string): Promise<void>
   accountDetails?(userId: string): Promise<{ gender: Gender | null; birthDate: string | null } | null>
   /** One value everywhere: the account's, copied onto every list row of theirs. */

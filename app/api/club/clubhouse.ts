@@ -291,9 +291,10 @@ export async function runClubhouse(
     const days = cleanDays(input.days)
     const why = categoryIssue({ name, code, days }, list.filter(c => c.id !== id))
     if (why) return fail(400, why)
-    const saved = await store.saveCategory(club.id, { id, name, code, days, position: before ? list.indexOf(before) : list.length })
+    const junior = typeof input.junior === 'boolean' ? input.junior : undefined
+    const saved = await store.saveCategory(club.id, { id, name, code, days, position: before ? list.indexOf(before) : list.length, ...(junior !== undefined ? { junior } : {}) })
     if (saved === 'clash') return fail(409, 'Another membership already uses that name or code.')
-    await logged([line(before ? 'category.update' : 'category.add', null, { [code]: [before ? `${before.name} · ${daysLine(before.days)}` : null, `${name} · ${daysLine(days)}`] })])
+    await logged([line(before ? 'category.update' : 'category.add', null, { [code]: [before ? `${before.name} · ${daysLine(before.days)}${before.junior ? ' · Junior' : ''}` : null, `${name} · ${daysLine(days)}${junior ? ' · Junior' : ''}`] })])
     const after = await store.categories(club.id)
     const counts = store.categoryCounts ? await store.categoryCounts(club.id).catch(() => new Map<string, number>()) : new Map<string, number>()
     return { status: 200, body: { ok: true, categories: after.map(c => ({ ...c, count: counts.get(c.id) ?? 0 })) } }
