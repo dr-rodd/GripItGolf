@@ -14,6 +14,8 @@ import {
 } from '../lib/feed'
 import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
 import type { AuthUser } from '../lib/account'
+import { runSign, type SignStore, type Signature } from '../app/api/card/sign'
+import type { MemberRecord } from '../app/api/club/club'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -135,6 +137,8 @@ export type World = {
   /** Club list rows: a junior's membership marked, a row taken off, one with no account. */
   rows: { rowId: string; userId: string | null; clubId: string; name: string; removed: boolean; junior: boolean }[]
   profiles: Set<string>
+  /** Card players: round → trip code, trip id, player → account. */
+  cards: Map<string, { code: string; tripId: string; accounts: Map<string, string> }>
 }
 
 export function world(): World {
@@ -151,6 +155,7 @@ export function world(): World {
     ready: true,
     rows: [],
     profiles: new Set(),
+    cards: new Map(),
   }
 }
 
@@ -194,6 +199,18 @@ export function standIn(w: World): FeedStore {
     async dropFriend(a, b) { w.friends = w.friends.filter(f => !(f.a === a && f.b === b)) },
     async names(ids) { return new Map(ids.map(id => [id, { name: w.rows.find(r => r.userId === id)?.name ?? id, club: 'Pints GC' }])) },
     async juniorProfile(u) { return w.profiles.has(u) },
+    async cardPlayers(code, roundId, playerIds) {
+      const c = w.cards.get(roundId)
+      if (!c || c.code !== code) return null
+      return { tripId: c.tripId, accounts: new Map([...c.accounts].filter(([p]) => playerIds.includes(p))), names: new Map(playerIds.map(p => [p, p.toUpperCase()])) }
+    },
+    async setCardStatus(o) {
+      const it = w.items.find(r => r.key === o.key && r.authorId === o.authorId)
+      if (it) { it.status = o.status; it.audience = o.audience; return }
+      w.items.push(itemRow({ key: o.key, kind: 'card', authorId: o.authorId, tripId: o.tripId, roundId: o.roundId, playerId: o.playerId, status: o.status, audience: o.audience, held: true }))
+    },
+    async ownItem(id, u) { const r = w.items.find(x => x.id === id && x.authorId === u && !x.removedAt); return r ? { id: r.id, kind: r.kind } : null },
+    async updateStatus(id, status) { const r = w.items.find(x => x.id === id); if (r) r.status = status },
     async commentsSince(u, since) {
       const mine = new Set(w.items.filter(r => r.authorId === u && r.kind === 'card').map(r => r.id))
       return w.items.filter(r => r.kind === 'comment' && r.parentId && mine.has(r.parentId) && r.authorId !== u && (!since || r.createdAt > since)).length
@@ -309,6 +326,72 @@ async function friendTests() {
   eq(w.friends, [], '…and it is gone')
 }
 
+async function statusTests() {
+  section('The status on the sign step (D299, D306)')
+  const w = world()
+  const s = standIn(w)
+  const R1 = '00000000-0000-0000-0000-0000000000a1'
+  const PX = '00000000-0000-0000-0000-0000000000b1', PY = '00000000-0000-0000-0000-0000000000b2', PG = '00000000-0000-0000-0000-0000000000b3'
+  w.cards.set(R1, { code: 'PINTS1', tripId: 'T1', accounts: new Map([[PX, 'x'], [PY, 'y']]) })
+  const ask = (who: string, body: Record<string, unknown>) => runFeed({ ...body, token: `tok-${who}` }, s, NOW)
+  eq((await ask('x', { action: 'card.mine', code: 'PINTS1', roundId: R1, playerIds: [PX, PY, PG] })).body, { ok: true, playerId: PX, name: PX.toUpperCase(), audience: 'wide' }, 'the sign step finds this account’s own player on the card')
+  eq((await ask('z', { action: 'card.mine', code: 'PINTS1', roundId: R1, playerIds: [PX] })).body, { ok: true, playerId: null }, '…and nothing for somebody not on it')
+  eq((await ask('y', { action: 'card.status', code: 'PINTS1', roundId: R1, playerId: PX, text: 'Mine now' })).status, 403, 'nobody leaves a status on another player’s card')
+  eq((await ask('x', { action: 'card.status', code: 'PINTS1', roundId: R1, playerId: PX, text: 'x'.repeat(141) })).status, 400, 'over 140 characters is refused')
+  eq((await ask('x', { action: 'card.status', code: 'PINTS1', roundId: R1, playerId: PX, text: 'Two birdies on the back', audience: 'me' })).status, 200, 'a status with its card’s own audience')
+  const held = w.items.find(r => r.key === `card:${R1}:${PX}`)
+  eq([held?.held, held?.status, held?.audience], [true, 'Two birdies on the back', 'me'], 'typed before the card is in the feed, it is held — shown to nobody')
+  w.items.push(itemRow({ kind: 'card', authorId: 'x', tripId: 'T1', data: { name: 'X' } }))
+  const mine = w.items[w.items.length - 1]
+  eq((await ask('x', { action: 'status.edit', itemId: mine.id, text: '  Changed  ' })).body, { ok: true, status: 'Changed' }, 'its owner edits the status afterwards')
+  eq((await ask('x', { action: 'status.edit', itemId: mine.id, text: '' })).body, { ok: true, status: null }, '…or deletes it')
+  eq((await ask('y', { action: 'status.edit', itemId: mine.id, text: 'Hijack' })).status, 404, 'nobody else can')
+}
+
+async function coSignTests() {
+  section('A club card is in the feed only once its marker co-signs (D302)')
+  const user = (id: string): AuthUser => ({ id, isAnonymous: false, email: `${id}@x.ie`, emailConfirmed: true })
+  const row = (id: string, userId: string, name: string): MemberRecord => ({ id, clubId: 'C', name, memberNumber: null, guiNumber: null, email: null, role: 'member', userId, removedAt: null, onBoards: true })
+  const rows = [row('r-ann', 'ann', 'Ann'), row('r-mark', 'mark', 'Mark')]
+  const sigs: Signature[] = []
+  const fed: { playerId: string; marker: string | null }[] = []
+  const holes = Array.from({ length: 18 }, (_, i) => ({ id: `h${i + 1}`, hole_number: i + 1, par: 4, stroke_index: i + 1 }))
+  const store: SignStore = {
+    async userFromToken(t) { return t === 'tok-ann' ? user('ann') : t === 'tok-mark' ? user('mark') : null },
+    async competition() { return { tripId: 'T', code: 'COMP01', clubId: 'C', roundId: 'R', date: '2026-11-24', rules: null as never, publicHash: null } },
+    async myRow(_c, u) { return rows.find(r => r.userId === u) ?? null },
+    async rowsByIds(_c, ids) { return rows.filter(r => ids.includes(r.id)) },
+    async players() { return [{ id: 'p-ann', clubMemberId: 'r-ann', name: 'Ann', gender: 'F' }, { id: 'p-mark', clubMemberId: 'r-mark', name: 'Mark', gender: 'M' }] },
+    async bookings() { return [{ playerId: 'p-ann', slot: 0, bookedBy: null }, { playerId: 'p-mark', slot: 0, bookedBy: null }] },
+    async liveCard() { return { id: 'L', roundId: 'R', status: 'active', playerIds: ['p-ann'] } },
+    async signatures() { return sigs.filter(x => true) },
+    async holes() { return holes },
+    async playingHcps() { return new Map([['p-ann', 10]]) },
+    async liveScores() { return holes.map(h => ({ player_id: 'p-ann', hole_number: h.hole_number, gross_score: 4, stableford_points: 2 })) },
+    async upsertScores() {},
+    async markCommitted() {},
+    async insertSignatures(list) {
+      for (const n of list) sigs.push({ id: `s-${n.player_id}`, playerId: n.player_id, liveRoundId: n.live_round_id, finalisedBy: n.finalised_by, finalisedAt: n.finalised_at, approvedBy: n.approved_by, approvedAt: n.approved_at, markerMemberId: n.marker_member_id, markedBy: n.marked_by, markedAt: n.marked_at, markedAs: n.marked_as })
+      return 'ok'
+    },
+    async updateSignature(id, patch) {
+      const x = sigs.find(g => g.id === id)!
+      if ('approved_at' in patch) { x.approvedAt = patch.approved_at; x.approvedBy = patch.approved_by }
+      if ('marked_at' in patch) { x.markedAt = patch.marked_at; x.markedBy = patch.marked_by; x.markedAs = patch.marked_as as 'marker' }
+    },
+    async finaliseCard() {},
+    async reopenCard() {},
+    async deleteScores() {},
+    async card() { return holes.map(h => ({ number: h.hole_number, par: 4, gross: 4, noReturn: false, points: 2 })) },
+    async signedOff(o) { fed.push({ playerId: o.playerId, marker: o.marker }) },
+  }
+  const fin = await runSign({ token: 'tok-ann', action: 'finalise', code: 'COMP01', liveRoundId: 'L', markers: { 'p-ann': { memberId: 'r-mark' } } }, store, NOW)
+  eq(fin.status, 200, 'Ann finalises her card, Mark chosen to mark it')
+  eq(fed, [], 'a finalised card without the marker’s co-sign produces no item')
+  await runSign({ token: 'tok-mark', action: 'mark', code: 'COMP01', playerId: 'p-ann' }, store, NOW)
+  eq(fed, [{ playerId: 'p-ann', marker: 'Mark' }], 'Mark co-signs: the card goes in, “co-signed by Mark”')
+}
+
 // ─── Wiring ─────────────────────────────────────────────────────
 
 function wiringTests() {
@@ -320,12 +403,23 @@ function wiringTests() {
   ok(/UNDO/.test(sql), 'the migration carries its undo')
   const files = ['app/api/feed/feed.ts', 'app/api/feed/store.ts']
   ok(files.every(f => !/['"]use client['"]/.test(read(f))), 'the feed is decided on the server')
+  const flow = read('app/scoring/LiveScoringFlow.tsx')
+  ok(/<CardStatus /.test(flow) && flow.indexOf('<CardStatus ') > flow.indexOf('<MarkerPicker ') - 400 && flow.indexOf('<CardStatus ') < flow.indexOf('handleCommit()}'), 'the status sits on the sign step, by the Commit / Sign the cards button (D306)')
+  ok((flow.match(/<CardStatus /g) ?? []).length === 1 && flow.indexOf('<CardStatus ') > flow.indexOf('// ─── Commit'), '…drawn once, never in score entry')
+  ok(/sendStatus\(\)\s*\n\s*summariseCard\(tripCode, roundId\)\s*\n\s*onBack\(\)/.test(flow) && /if \(!signed\.ok\) throw new Error\(signed\.error\)\s*\n\s*sendStatus\(\)/.test(flow), 'the status is sent only after the card is signed, and never waited for')
+  ok(!/@\/lib\/account/.test(read('app/scoring/CardStatus.tsx')), 'the sign step asks through the phone’s own sign-in, never the account code')
+  ok(/afterWrite: read => feedAfterSummaries/.test(read('app/api/stats/store.ts')), 'a round’s signed cards follow its card summaries')
+  ok(/trip\.competition === 'club'\) return/.test(read('app/api/feed/write.ts')), '…except a club competition’s, which wait for the co-sign')
+  ok(/noteMatchResults\(changed\.map/.test(read('lib/matchplayStore.ts')), 'a knockout result recorded asks for its feed item')
+
 }
 
 async function main() {
   ruleTests()
   await routeTests()
   await friendTests()
+  await statusTests()
+  await coSignTests()
   wiringTests()
   console.log(`\n${'─'.repeat(56)}`)
   if (failed > 0) {

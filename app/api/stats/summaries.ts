@@ -32,6 +32,8 @@ export interface SummaryDeps {
    * fed by certified rounds only, so it is summed up at Certify and not before.
    */
   held?(roundId: string): Promise<boolean>
+  /** The feed's signed cards (D302), from the same holes — never in the way of the summary. */
+  afterWrite?(read: RoundRead): Promise<void>
 }
 
 export type SummaryOutcome = { written: number } | { missing: true }
@@ -50,5 +52,6 @@ export async function writeRoundSummaries(tripCode: string, roundId: string, dep
   })
   if (rows.length) await deps.upsert(rows)
   await deps.removeOthers(read.roundId, rows.map(r => r.player_id))
+  if (deps.afterWrite) await deps.afterWrite(read).catch(e => console.error('feed after summary failed:', e))
   return { written: rows.length }
 }

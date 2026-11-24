@@ -6,6 +6,7 @@
 // than reimplementing any bracket logic.
 
 import { supabase } from '@/lib/supabase'
+import { noteMatchResults } from './entryClient'
 import type { Reads } from './eventReader'
 import {
   generateBracket, bracketToRows, rowsInInsertOrder, sortPlayersBySeed,
@@ -351,6 +352,7 @@ export async function persistSettled(
   if (error) {
     throw new MatchplayError('Could not save the results from the cards. Please try again.')
   }
+  noteMatchResults([...changed.keys()])
   return matches
 }
 
@@ -374,5 +376,7 @@ export async function persistWinner(
   if (error) {
     throw new MatchplayError('Could not save that result. Please try again.')
   }
+  // D302: the result into the feed — the server reads it back from the bracket.
+  noteMatchResults(changed.map(r => r.id))
   return matches
 }

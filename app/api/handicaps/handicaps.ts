@@ -27,6 +27,8 @@ export interface HandicapStore {
     source: IndexSource
     roundId?: string | null
   }): Promise<void>
+  /** D302: an account's index came down — a handicap cut into the feed, never in the way. */
+  cut?(userId: string, now: number): Promise<void>
 }
 
 /**
@@ -51,6 +53,10 @@ export async function setIndex(
     memberId: isAccount ? null : owner.memberId,
     oldIndex: old, newIndex: value, by, source, roundId,
   })
+  // A cut, the member's own or the club's — never the bookkeeping of linking a row.
+  if (isAccount && store.cut && old !== null && value !== null && value < old && source !== 'link' && source !== 'unlink') {
+    await store.cut(owner.userId, value).catch(e => console.error('feed handicap cut failed:', e))
+  }
   return { old, now: value, changed: true }
 }
 

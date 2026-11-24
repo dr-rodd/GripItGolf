@@ -72,6 +72,8 @@ export interface CertifyStore {
   dropSummaries(roundId: string): Promise<void>
   /** Stage 5: a club match play qualifying from this competition makes its field and draw — never in the way of certifying. */
   afterCertified?(code: string): Promise<void>
+  /** D302: reopened — the win taken out of the feed again. */
+  afterReopened?(code: string): Promise<void>
 }
 
 export interface StatePlayer {
@@ -198,6 +200,7 @@ export async function runCertify(
       await store.setCertified(comp.roundId, null)
       await store.logCertification(comp.roundId, 'reopen', user.id, at)
       await store.dropSummaries(comp.roundId).catch(e => console.error('summary drop on reopen failed:', e))
+      if (store.afterReopened) await store.afterReopened(comp.code).catch(e => console.error('feed on reopen failed:', e))
     } catch (e) {
       console.error('reopen failed:', e)
       return fail(503, 'Could not reopen the competition — try again.')

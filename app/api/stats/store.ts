@@ -7,6 +7,7 @@
 import { createAdminClient } from '@/lib/supabase-admin'
 import type { SummaryDeps } from './summaries'
 import { readRoundForSummary } from './read'
+import { feedAfterSummaries } from '../feed/write'
 export { retagSummaries } from './retag'
 
 type Db = ReturnType<typeof createAdminClient>
@@ -29,6 +30,8 @@ export function summaryDeps(db: Db = createAdminClient()): SummaryDeps {
       if (error && !notThere(error)) throw error
     },
     held: roundId => heldRound(db, roundId),
+    // D302: the round's signed cards into the feed (a club competition's are its signing's).
+    afterWrite: read => feedAfterSummaries(db, read.roundId, read.stats),
     async removeOthers(roundId, keep) {
       let q = db.from('card_summaries').delete().eq('round_id', roundId)
       if (keep.length) q = q.not('player_id', 'in', `(${keep.join(',')})`)

@@ -18,8 +18,9 @@ import { scoreOutbox, refusal } from "./outbox"
 import { unsentLine, unsentDetail, UNSENT_SHOW_DELAY_MS } from "@/lib/scoreOutbox"
 import { useAfterDelay } from "@/app/components/useAfterDelay"
 import { IconSignalWeak } from "@/app/components/icons"
-import { recoverEvents, signCompetitionCard, summariseCard, type MarkerAsk } from "@/lib/entryClient"
+import { postCardStatus, recoverEvents, signCompetitionCard, summariseCard, type MarkerAsk } from "@/lib/entryClient"
 import MarkerPicker from "./MarkerPicker"
+import CardStatus, { type StatusDraft } from "./CardStatus"
 import { why } from "@/lib/writeFailure"
 import { CHROME } from "./scoringHeaderMetrics"
 import type { ActiveLiveRound } from "./activeLiveRound"
@@ -517,6 +518,8 @@ export default function LiveScoringFlow({
   const [saving, setSaving] = useState(false)
   /** A club competition's markers, one a player on this card (stage (d3)). */
   const [markers, setMarkers] = useState<Record<string, MarkerAsk>>({})
+  // D299: the signer's own status for the feed — sent once the card is signed, never in the way of it.
+  const [cardStatus, setCardStatus] = useState<StatusDraft | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [closeConfirm, setCloseConfirm] = useState(false)
   const [selectedSummaryPlayerId, setSelectedSummaryPlayerId] = useState("")
@@ -966,6 +969,14 @@ export default function LiveScoringFlow({
     setEditingPlayerId(null)
   }
 
+  /** D299: the status and this card's audience into the feed — only when there is something to say. */
+  function sendStatus() {
+    if (!tripCode || !roundId || !cardStatus) return
+    const text = cardStatus.text.trim()
+    if (!text && !cardStatus.chosen) return
+    postCardStatus(tripCode, roundId, { playerId: cardStatus.playerId, text, audience: cardStatus.chosen ? cardStatus.audience : null })
+  }
+
   async function handleCommit(retried = false) {
     if (!roundId || courseHoles.length === 0 || !liveRound) return
     setSaving(true)
@@ -1009,6 +1020,7 @@ export default function LiveScoringFlow({
         if (unmarked) throw new Error(`Choose who marks ${unmarked.player.name}’s card.`)
         const signed = await signCompetitionCard(tripCode, { liveRoundId: liveRound.id, markers })
         if (!signed.ok) throw new Error(signed.error)
+        sendStatus()
         outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
         onBack()
         return
@@ -1103,6 +1115,7 @@ export default function LiveScoringFlow({
       outbox.discardRound(roundId, playerSetups.map(ps => ps.player.id))
       // The signed card summed up for the players' own stats (stage (f)) —
       // asked and not waited for; the nightly job fills anything missed.
+      sendStatus()
       summariseCard(tripCode, roundId)
       onBack()
     } catch (e: any) {
@@ -2027,6 +2040,12 @@ export default function LiveScoringFlow({
         {competition && tripCode && (
           <MarkerPicker code={tripCode} players={playerSetups.map(ps => ({ id: ps.player.id, name: ps.player.name }))}
             markers={markers} onChange={setMarkers} />
+        )}
+
+        {/* D299, D306: the status, after the last score only — score entry is untouched. */}
+        {tripCode && roundId && (
+          <CardStatus tripCode={tripCode} roundId={roundId} playerIds={playerSetups.map(ps => ps.player.id)}
+            value={cardStatus} onChange={setCardStatus} />
         )}
 
         {error && <p className="text-rust-deep text-base text-center">{error}</p>}

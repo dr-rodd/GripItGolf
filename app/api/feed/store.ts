@@ -273,6 +273,43 @@ export function feedStore(db: Db): FeedStore {
       if (error) throw error
     },
     names: userIds => namesOf(db, userIds),
+    // ─── The sign step (D299) ───
+    async cardPlayers(code, roundId, playerIds) {
+      if (!/^[A-Z0-9]{4,12}$/.test(code) || !/^[0-9a-f-]{36}$/i.test(roundId) || playerIds.length === 0) return null
+      const [trip, round] = await Promise.all([
+        db.from('trips').select('id').eq('trip_code', code).maybeSingle(),
+        db.from('rounds').select('trip_id').eq('id', roundId).maybeSingle(),
+      ])
+      const tripId = (trip.data as { id: string } | null)?.id
+      if (!tripId || (round.data as { trip_id: string } | null)?.trip_id !== tripId) return null
+      const { data: players } = await db.from('players').select('id, name').in('id', playerIds).eq('trip_id', tripId)
+      const ps = (players ?? []) as { id: string; name: string }[]
+      const { accountsOfPlayers } = await import('./write')
+      return { tripId, accounts: await accountsOfPlayers(db, ps.map(p => p.id)), names: new Map(ps.map(p => [p.id, p.name])) }
+    },
+    async setCardStatus(o) {
+      const patch = { status: o.status, audience: o.audience, edited_at: o.at }
+      const update = () => db.from('feed_items').update(patch).eq('key', o.key).eq('author_id', o.authorId).select('id')
+      const first = await update()
+      if (first.error) throw first.error
+      if ((first.data ?? []).length) return
+      // No card yet (a club card waiting on its marker): kept held until it arrives.
+      const ins = await db.from('feed_items').insert({
+        key: o.key, kind: 'card', author_id: o.authorId, trip_id: o.tripId, round_id: o.roundId, player_id: o.playerId,
+        status: o.status, audience: o.audience, held: true, data: {},
+      })
+      if (ins.error?.code === '23505') { const again = await update(); if (again.error) throw again.error; return }
+      if (ins.error) throw ins.error
+    },
+    async ownItem(itemId, userId) {
+      if (!/^[0-9a-f-]{36}$/i.test(itemId)) return null
+      const { data } = await db.from('feed_items').select('id, kind').eq('id', itemId).eq('author_id', userId).is('removed_at', null).maybeSingle()
+      return (data as { id: string; kind: string } | null) ?? null
+    },
+    async updateStatus(itemId, status, at) {
+      const { error } = await db.from('feed_items').update({ status, edited_at: at }).eq('id', itemId)
+      if (error) throw error
+    },
     juniorProfile: userId => juniorProfile(db, userId),
     shared<T>(key: string, read: () => Promise<T>): Promise<T> {
       return copies.look(key, read as () => Promise<unknown>) as Promise<T>

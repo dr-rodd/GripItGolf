@@ -1,5 +1,6 @@
 import type { createAdminClient } from '@/lib/supabase-admin'
 import type { HandicapStore } from './handicaps'
+import { writeCut } from '../feed/write'
 
 // The handicap index's service-role store (D179, migration 089). A read fails
 // soft — before 089 there is no table, and nobody has an index; a write
@@ -11,6 +12,7 @@ const num = (v: unknown): number | null => (v === null || v === undefined ? null
 
 export function handicapStore(db: Db): HandicapStore {
   return {
+    cut: (userId, now) => writeCut(db, userId, now, new Date()),
     async accountIndex(userId) {
       const { data, error } = await db.from('account_handicaps').select('handicap_index').eq('user_id', userId).maybeSingle()
       return error || !data ? null : num((data as { handicap_index: unknown }).handicap_index)

@@ -93,6 +93,8 @@ export interface SignStore {
   card(roundId: string, playerId: string): Promise<CardHole[]>
   /** Stage (d4): whether the round is certified, and who is No return — `ready: false` before 091. */
   roundLock?(roundId: string): Promise<{ ready: boolean; certifiedAt: string | null; noReturns: string[] }>
+  /** D302: a card both signed — into the feed, never in the way. */
+  signedOff?(o: { tripId: string; code: string; roundId: string; playerId: string; authorId: string | null; name: string; marker: string | null; holes: CardHole[] }): Promise<void>
 }
 
 /** Who marks a player's card: another player in the competition, or a row of the list. */
@@ -283,11 +285,20 @@ export async function runSign(
   const marker = sig.markerMemberId ? rowById.get(sig.markerMemberId) ?? null : null
   const iMark = !!marker && marker.id === me.id
 
+  // D302: the card is in the feed once both signatures are — the player's and the marker's.
+  const intoFeed = async (markerName: string | null) => {
+    if (!store.signedOff) return
+    const holes = await store.card(comp.roundId, playerId).catch(() => [] as CardHole[])
+    await store.signedOff({ tripId: comp.tripId, code: comp.code, roundId: comp.roundId, playerId, authorId: accountOf(playerId), name, marker: markerName, holes })
+      .catch(e => console.error('feed on sign-off failed:', e))
+  }
+
   try {
     if (input.action === 'approve') {
       if (!mine) return fail(403, `Only ${name} approves their own card, on their own account.`)
       if (sig.approvedAt) return { status: 200, body: { ok: true } }
       await store.updateSignature(sig.id, { approved_by: user.id, approved_at: at })
+      if (sig.markedAt) await intoFeed(marker?.name ?? null)
       return { status: 200, body: { ok: true } }
     }
     if (input.action === 'mark') {
@@ -295,6 +306,7 @@ export async function runSign(
       if (!iMark && !admin) return fail(403, `${marker?.name ?? 'The chosen marker'} marks this card, or the club’s admins.`)
       if (sig.markedAt) return { status: 200, body: { ok: true } }
       await store.updateSignature(sig.id, { marked_by: user.id, marked_at: at, marked_as: iMark ? 'marker' : 'admin' })
+      if (sig.approvedAt) await intoFeed(iMark ? marker?.name ?? me.name : me.name)
       return { status: 200, body: { ok: true } }
     }
     if (input.action === 'marker') {
@@ -307,6 +319,7 @@ export async function runSign(
         marker_member_id: m.row.id,
         ...(marking ? { marked_by: user.id, marked_at: at, marked_as: 'marker' } : {}),
       })
+      if (marking && sig.approvedAt) await intoFeed(m.row.name)
       return { status: 200, body: { ok: true } }
     }
     if (input.action === 'send_back') {

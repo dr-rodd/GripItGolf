@@ -4,6 +4,7 @@ import { why } from '@/lib/writeFailure'
 import { asRow, rowCols, withTicks, type RowRow } from '../club/store'
 import { summaryDeps } from '../stats/store'
 import { writeRoundSummaries } from '../stats/summaries'
+import { dropWins, writeWins } from '../feed/write'
 import { signStore } from './store'
 import type { CertifyStore } from './certify'
 import { readRoundLock } from './signatures'
@@ -81,12 +82,17 @@ export function certifyStore(db: Db): CertifyStore {
     async writeSummaries(code, roundId) {
       await writeRoundSummaries(code, roundId, summaryDeps(db), new Date())
     },
+    async afterReopened(code) {
+      await dropWins(db, code)
+    },
     async dropSummaries(roundId) {
       const { error } = await db.from('card_summaries').delete().eq('round_id', roundId)
       if (error && !['42P01', 'PGRST205'].includes(error.code ?? '')) throw error
     },
     // Stage 5: a club match play qualifying from this competition makes its field and draw.
     async afterCertified(code) {
+      // D302: the final places on the cards, and the winner's win, in the feed.
+      await writeWins(db, code)
       const now = new Date()
       await afterQualifierCertified(db, code, now, async tripId => {
         const { data } = await db.from('trips').select('id, leaderboards, formats, team_scoring, bracket_setup').eq('id', tripId).maybeSingle()

@@ -12,6 +12,7 @@
 import { isAccount, type AuthUser } from '@/lib/account'
 import { FEED_NOT_READY, done, fail, str, type FeedOutcome } from './outcome'
 import { runFriends, type FriendsStore } from './friends'
+import { runCards, type CardsStore } from './cards'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
   mayView, mayViewChild, newestFirst, olderThan, orderComps, readAudience, readCursor, readStreamKey, readStreams,
@@ -63,7 +64,7 @@ export interface Bundle {
 
 export interface StreamQuery { authors?: string[]; clubId?: string; tripId?: string; before: Cursor | null; limit: number }
 
-export interface FeedStore extends FriendsStore {
+export interface FeedStore extends FriendsStore, CardsStore {
   userFromToken(token: string): Promise<AuthUser | null>
   /** Whether migration 102 is in. */
   ready(): Promise<boolean>
@@ -280,6 +281,8 @@ export async function runFeed(
   if (a.junior) return action === 'home' ? done({ ready: true, junior: true }) : fail(403, 'The feed isn’t open to junior members.')
   const friends = await runFriends(action, input, a, store, now)
   if (friends) return friends
+  const cards = await runCards(action, input, a, store, now)
+  if (cards) return cards
 
   if (action === 'home') return home(input, a, store, now)
   if (action === 'page') return page(input, a, store, now)

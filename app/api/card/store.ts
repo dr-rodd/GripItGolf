@@ -4,6 +4,7 @@ import type { SavedScore } from '@/lib/liveScores'
 import { bookingStore } from '../club/bookingStore'
 import type { CardHole, SignStore } from './sign'
 import { readRoundLock, readSignatures } from './signatures'
+import { writeSignedCard } from '../feed/write'
 
 // A club competition's signatures on the service role (stage (d3)). Every
 // read of `card_signatures` fails soft to null — before migration 090 the
@@ -15,6 +16,7 @@ export function signStore(db: Db): SignStore {
   const b = bookingStore(db)
   return {
     userFromToken: t => b.userFromToken(t),
+    signedOff: o => writeSignedCard(db, o),
     competition: code => b.competition(code),
     myRow: (clubId, userId) => b.myRow(clubId, userId),
     rowsByIds: (clubId, ids) => b.rowsByIds(clubId, ids),

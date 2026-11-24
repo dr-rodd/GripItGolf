@@ -510,6 +510,38 @@ export function summariseCard(tripCode: string | null | undefined, roundId: stri
   void ask('/api/stats/card', { code: tripCode.trim().toUpperCase(), roundId }).catch(() => null)
 }
 
+// ─── The feed (D300, D302) ─────────────────────────────────────
+
+/**
+ * Knockout results just recorded on this phone, for the feed: only the
+ * matches are named — the server reads each result back from the bracket
+ * itself (D305). Asked and not waited for; never in the way of the result.
+ */
+export function noteMatchResults(matchIds: readonly string[]): void {
+  if (!inBrowser() || matchIds.length === 0) return
+  void ask('/api/feed/match', { matchIds: [...new Set(matchIds)].slice(0, 20) }).catch(() => null)
+}
+
+/**
+ * The sign step's status (D299): whether this phone's Green Dot account is
+ * one of the players on the card, and its audience — nothing for a phone
+ * that is no member's, a junior's, or before migration 102.
+ */
+export async function feedCardFor(code: string, roundId: string, playerIds: readonly string[]): Promise<{ playerId: string; name: string; audience: 'wide' | 'me' } | null> {
+  if (!inBrowser() || !code || !roundId || playerIds.length === 0) return null
+  const session = await phoneSession()
+  if (!session?.account) return null
+  const r = await ask('/api/feed', { action: 'card.mine', code: code.trim().toUpperCase(), roundId, playerIds })
+  if (r?.status !== 200 || typeof r.body.playerId !== 'string') return null
+  return { playerId: r.body.playerId, name: typeof r.body.name === 'string' ? r.body.name : '', audience: r.body.audience === 'me' ? 'me' : 'wide' }
+}
+
+/** The status and the card's audience, sent once the card is signed — never in the way of it. */
+export function postCardStatus(code: string, roundId: string, o: { playerId: string; text: string; audience: 'wide' | 'me' | null }): void {
+  if (!inBrowser() || !code || !roundId) return
+  void ask('/api/feed', { action: 'card.status', code: code.trim().toUpperCase(), roundId, ...o }).catch(() => null)
+}
+
 // ─── Forgot PIN (D67) ──────────────────────────────────────────
 
 /**

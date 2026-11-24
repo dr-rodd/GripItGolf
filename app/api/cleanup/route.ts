@@ -7,6 +7,8 @@ import { ACTIVITY_KEEP_MONTHS } from "@/lib/clubhouse"
 import { readAllRows } from "@/lib/allRows"
 import { runDueDraws } from "@/app/api/match/dueDraws"
 import { fillSummaries } from "@/app/api/stats/store"
+import { tidyFeed } from "@/app/api/feed/write"
+import { FEED_KEEP_DAYS, HELD_KEEP_HOURS, REPORT_KEEP_DAYS } from "@/lib/feed"
 import {
   cardsToClose, deadScoreKeys, activityKey,
   type LiveCard, type CardLock, type ScoreActivity,
@@ -287,6 +289,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
+  // ── 4d. The feed (D305, 102) ──
+  // Items past FEED_KEEP_DAYS (their comments and dots with them), a status
+  // held for a card that never came, and reports resolved long ago. Its own
+  // try: before 102 there is nothing to tidy.
+  let feed: { items: number; held: number; reports: number } | 'not ready' | null = null
+  if (!dryRun) {
+    try {
+      feed = (await tidyFeed(supabaseAdmin, new Date(), { keepDays: FEED_KEEP_DAYS, heldHours: HELD_KEEP_HOURS, reportDays: REPORT_KEEP_DAYS })) ?? 'not ready'
+    } catch (e) {
+      console.error("feed tidy failed:", e)
+    }
+  }
+
   // ── 5. Anonymous phones nobody will miss ──
   // The rule is migration 069's, lightened by 081: `anonymous_phones_to_
   // forget()`. Weekly, on Sunday (UTC), not nightly — a free-tier database
@@ -326,6 +341,7 @@ export async function GET(req: NextRequest) {
     staleActivity,
     staleResets,
     cardSummaries,
+    feed,
     anonymousPhones,
     closedEmpty,
     closedAbandoned,
