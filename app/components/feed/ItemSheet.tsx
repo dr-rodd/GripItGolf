@@ -157,6 +157,7 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     onPatch({
       comments: next.length,
       latest: next.length ? { name: next[next.length - 1].name, text: next[next.length - 1].text } : null,
+      recent: next.slice(-4).map(c => ({ id: c.id, name: c.name, text: c.text, mine: c.mine, at: c.at })),
       commentLine: lead ? {
         count: `${next.length} comment${next.length === 1 ? '' : 's'}`,
         who: `${lead.mine ? 'You' : lead.name}${names.length > 1 ? ` and ${names.length - 1} other${names.length === 2 ? '' : 's'}` : ''}`,

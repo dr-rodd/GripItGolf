@@ -174,6 +174,9 @@ export interface FeedStore extends FriendsStore, CardsStore, SocialStore {
 
 // ─── Answers ────────────────────────────────────────────────────
 
+/** How many of an item's comments are drawn under it in the stream; the rest are its sheet's (D342). */
+export const RECENT_COMMENTS = 4
+
 /** An item as a phone draws it — only what this viewer may see. */
 export interface FeedView {
   id: string
@@ -192,6 +195,8 @@ export interface FeedView {
   dotted: boolean
   comments: number
   latest: { name: string; text: string } | null
+  /** The latest four comments, oldest first, drawn under the item as a chat's replies (D342). */
+  recent: { id: string; name: string; text: string; mine: boolean; at: string }[]
   /** "2 comments · John and 1 other" (D329). */
   commentLine: { count: string; who: string } | null
   /** Why a card is in friends.stream when it is not a friend's: "Dave commented" (D327). */
@@ -344,6 +349,9 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
       dots: dots.length, dotted: dots.some(d => d.userId === viewer.userId),
       comments: comments.length,
       latest: comments[0] ? { name: str(comments[0].data.name) || 'A member', text: str(comments[0].data.text) } : null,
+      recent: comments.slice(0, RECENT_COMMENTS).reverse().map(c => ({
+        id: c.id, name: str(c.data.name) || 'A member', text: str(c.data.text), mine: !!c.authorId && c.authorId === viewer.userId, at: c.createdAt,
+      })),
       commentLine: commentLine(comments.map(c => ({ authorId: c.authorId, name: str(c.data.name) || 'A member' })), viewer),
       why: whyName ? `${whyName} commented` : null,
       highlights: highlights.map(h => str(h.data.line)).filter(Boolean),
@@ -366,7 +374,7 @@ function blank(r: ItemRow, viewer: Viewer): FeedView {
     id: r.id, kind: r.kind, at: r.createdAt, name: str(d.name) || 'A member', line,
     status: r.kind === 'card' || r.kind === 'status' ? r.status : null,
     gross: num(d.gross), points: num(d.points), holes: num(d.holes), place: num(d.place),
-    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, commentLine: null, why: null,
+    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, recent: [], commentLine: null, why: null,
     text: r.kind === 'post' ? str(d.text) || null : null, link: r.kind === 'post' ? r.link ?? null : null,
     talk: talksOn(r.kind),
     mine, audience: null, parentId: null, on: null, canDelete: false, canReport: !mine,

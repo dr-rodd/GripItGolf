@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { askFeed } from '@/lib/feedClient'
 import { OWN_STATUS_MAX, POST_MAX, counter } from '@/lib/feed'
 import { FIELD, FIELD_LABEL, buttonClass, chipClass } from '../ui'
@@ -95,5 +95,61 @@ export function ClubPostComposer({ clubId, onPosted, onClose }: {
         {busy ? 'Posting…' : 'Post'}
       </button>
     </Sheet>
+  )
+}
+
+/**
+ * The box at the top of a stream (D342, Ross, 25 Nov 2026: "if user has
+ * right to, there should be a text box to post in the stream"): a chat's
+ * message field — one line growing to five as it is typed, Send beside it,
+ * the count only once it is near the limit. `onSend` posts and answers an
+ * error, or null when it went. `extra` sits beside Send: club.stream's way
+ * to the full composer, for a heading or a link.
+ */
+export function InlineComposer({ placeholder, max, label, onSend, extra }: {
+  placeholder: string
+  max: number
+  label: string
+  onSend: (text: string) => Promise<string | null>
+  extra?: React.ReactNode
+}) {
+  const [text, setText] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const box = useRef<HTMLTextAreaElement>(null)
+  const length = [...text].length
+  const over = length > max
+  const grow = () => {
+    const el = box.current
+    if (!el) return
+    el.style.height = 'auto'
+    el.style.height = `${Math.min(el.scrollHeight, 132)}px`
+  }
+  async function send(e?: React.FormEvent) {
+    e?.preventDefault()
+    if (busy || !text.trim() || over) return
+    setBusy(true); setError('')
+    const err = await onSend(text.trim())
+    setBusy(false)
+    if (err) { setError(err); return }
+    setText('')
+    requestAnimationFrame(grow)
+  }
+  return (
+    <form onSubmit={send} className="mb-5">
+      <div className="flex items-end gap-2 rounded-[24px] bg-surface border border-line shadow-raised pl-4 pr-1.5 py-1.5">
+        <label className="sr-only" htmlFor={`compose-${label}`}>{label}</label>
+        <textarea id={`compose-${label}`} ref={box} value={text} rows={1} placeholder={placeholder}
+          onChange={e => { setText(e.target.value); grow() }}
+          className="flex-1 min-w-0 resize-none bg-transparent py-2 text-[16px] leading-snug text-ink placeholder:text-ink/50 focus:outline-none" />
+        {extra}
+        <button type="submit" disabled={busy || !text.trim() || over}
+          className="min-h-10 px-3 rounded-[18px] t-label text-accent-deep press ch-focus disabled:text-disabled-fg">
+          {busy ? 'Sending…' : 'Send'}
+        </button>
+      </div>
+      {length > max * 0.8 && <p className={`t-cap mt-1 px-4 text-right ${over ? 'text-rust-deep' : 'text-ink/65'}`}>{counter(text, max)}</p>}
+      {error && <p role="alert" className="t-cap text-rust-deep mt-1 px-4">{error}</p>}
+    </form>
   )
 }

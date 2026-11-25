@@ -2,7 +2,8 @@
 
 import { ago, ordinal } from '@/lib/feed'
 import { IconLink } from '../icons'
-import { cardClass } from '../ui'
+import Initials from '../Initials'
+import { SC_SF } from '../scorecardStyle'
 import { DotButton, MoreMenu } from './ItemActions'
 
 /** An item as the server hands it to this viewer (app/api/feed/feed.ts `FeedView`). */
@@ -22,6 +23,8 @@ export interface FeedView {
   dotted: boolean
   comments: number
   latest: { name: string; text: string } | null
+  /** The latest four comments, oldest first (D342). */
+  recent: { id: string; name: string; text: string; mine: boolean; at: string }[]
   /** "2 comments · John and 1 other" (D329). */
   commentLine: { count: string; who: string } | null
   /** Why a card is in friends.stream when it is not a friend's own (D327). */
@@ -45,155 +48,162 @@ function hostOf(link: string): string {
   try { return new URL(link).hostname.replace(/^www\./, '') } catch { return link }
 }
 
+/** A chat bubble's shape (D342): rounded, opaque; yours in the emerald wash, everybody else's white. */
+const bubble = (mine: boolean) =>
+  `rounded-[22px] px-4 py-2.5 ${mine ? 'bg-accent-tint text-ink' : 'bg-surface text-ink border border-line'}`
+
 /**
- * One item of a stream (D302, D325–D329). **One item per card** (D329): its
- * comments are grouped on it — a comment row, "2 comments · John and 1
- * other", never items of their own — and a tap anywhere on it that is not a
- * control opens its sheet (D330). A signed card: the name, the context line,
- * the status, a hairline, gross and points in Bespoke Serif, the place (gold
- * only for 1st). A status: the name and what they said. A club post: the
- * club's word, its paragraphs and its link. Anything else — a leaderboard
- * move, a result, a cut — one line on a flat card. Never an animated number (D9).
+ * One item of a stream, laid out like a group chat (D342, Ross, 25 Nov 2026:
+ * "Instagram chat format is the design inspiration"): everybody else's on
+ * the left at about seven tenths of the width, under their initial and
+ * name; **yours on the right**, no initial. A signed card is a **square**
+ * (`CardSquare`) — the event and course, the points and the strokes large in
+ * the scorecard's own bold serif (`SC_SF`), the place and the first
+ * highlight — with its status as a caption bubble beneath, as a shared post
+ * carries its caption. A status or a club post is a **chat bubble**. A
+ * leaderboard move or a cut is a line across the middle, as a chat says
+ * the time. Under each, the dot, when, the ⋯, and **the latest four
+ * comments** as small replies; "View all" — or a tap on any of them —
+ * springs the item's sheet out of where it was tapped (the pop-out, D330).
+ * Never an animated number (D9).
  */
 export function FeedItem({ item, now, onOpen, onPatch, onGone, arriving = false }: {
   item: FeedView
   now: Date
-  /** Opens the item's sheet, from where it sits (D330). */
+  /** Opens the item's sheet, out of the element tapped (D330). */
   onOpen?: (el: HTMLElement) => void
   onPatch: (p: Partial<FeedView>) => void
   onGone: () => void
   /** New since the stream was last read: it fades in at the top (M13). */
   arriving?: boolean
 }) {
+  const opens = !!onOpen && item.talk
   const open = (e: React.MouseEvent<HTMLElement>) => {
-    if (!onOpen || (e.target as HTMLElement).closest('button, a')) return
-    onOpen(e.currentTarget)
+    if (!opens || (e.target as HTMLElement).closest('button, a')) return
+    onOpen!(e.currentTarget)
   }
   const keyOpen = (e: React.KeyboardEvent<HTMLElement>) => {
-    if (!onOpen || e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
+    if (!opens || e.target !== e.currentTarget || (e.key !== 'Enter' && e.key !== ' ')) return
     e.preventDefault()
-    onOpen(e.currentTarget)
+    onOpen!(e.currentTarget)
   }
-  const opens = !!onOpen && item.talk
-  const shell = (variant: 'raised' | 'flat', pad: string, children: React.ReactNode) => (
-    <article data-item-id={item.id}
-      className={`${cardClass(variant, opens)} ${pad} ${opens ? 'cursor-pointer' : ''} ${arriving ? 'stream-arrive' : ''}`}
-      onClick={opens ? open : undefined} onKeyDown={opens ? keyOpen : undefined}
-      tabIndex={opens ? 0 : undefined} role={opens ? 'button' : undefined}
-      aria-label={opens ? `${item.name}${item.kind === 'card' ? '’s card' : ''} — open it, with its comments` : undefined}>
-      {children}
-    </article>
-  )
-  const talkRow = item.talk && (
-    <div className="flex items-center gap-2 mt-3 pt-1 min-w-0">
-      <DotButton item={item} onPatch={onPatch} />
-      <span className="t-label text-bark min-w-0 truncate">
-        {item.commentLine ? <>{item.commentLine.count} · {item.commentLine.who}</> : 'Comment'}
-      </span>
-      <MoreMenu item={item} onPatch={onPatch} onGone={onGone} className="ml-auto -mr-2" />
-    </div>
-  )
-  const head = (
-    <>
-      {item.why && <p className="t-cap text-ink/65 mb-1">{item.why}</p>}
-      <div className="flex items-baseline gap-2">
-        <h3 className="flex-1 min-w-0 t-card text-ink break-words">{item.name}</h3>
-        <time dateTime={item.at} className="t-cap text-ink/65 flex-shrink-0">{ago(item.at, now)}</time>
-      </div>
-    </>
-  )
+  const tappable = (label: string) => opens
+    ? { onClick: open, onKeyDown: keyOpen, role: 'button' as const, tabIndex: 0, 'aria-label': label, 'data-pop-origin': '' }
+    : {}
 
-  if (item.kind === 'post') {
-    return shell('raised', 'px-4 py-4', (
-      <>
-        {head}
-        {item.line && <p className="t-label text-ink/65 mt-0.5 break-words">{item.line}</p>}
-        {item.text && (
-          <div className="mt-2 space-y-2">
-            {item.text.split(/\n{2,}/).map((para, i) => <p key={i} className="t-body text-ink break-words whitespace-pre-line">{para}</p>)}
-          </div>
-        )}
-        {item.link && (
-          <a href={item.link} target="_blank" rel="noopener noreferrer"
-            className="mt-3 inline-flex items-center gap-1.5 min-h-11 t-label text-accent-deep press ch-focus rounded-tile break-all">
-            <IconLink size={16} className="flex-shrink-0" /> {hostOf(item.link)}
-          </a>
-        )}
-        {talkRow}
-      </>
-    ))
-  }
-
-  if (item.kind === 'status') {
-    return shell('raised', 'px-4 py-4', (
-      <>
-        {head}
-        {item.status && <p className="t-body text-ink mt-1.5 break-words">{item.status}</p>}
-        {talkRow}
-      </>
-    ))
-  }
-
-  if (item.kind !== 'card') {
-    // A result can be talked about (D329); a move or a cut is one line.
-    if (item.talk) {
-      return shell('flat', 'px-4 py-3', (
-        <>
-          <div className="flex items-baseline gap-2">
-            <p className="flex-1 min-w-0 t-label text-ink break-words">{item.line}</p>
-            <time dateTime={item.at} className="t-cap text-ink/65 flex-shrink-0">{ago(item.at, now)}</time>
-          </div>
-          {talkRow}
-        </>
-      ))
-    }
+  // A leaderboard move, a cut: one line across the middle, as a chat says the time.
+  if (!item.talk) {
     return (
-      <article data-item-id={item.id} className={`${cardClass('flat')} pl-4 pr-2 py-1.5 flex items-center gap-2 min-h-12 ${arriving ? 'stream-arrive' : ''}`}>
-        <p className="flex-1 min-w-0 t-label text-ink break-words py-1.5">{item.line}</p>
-        <time dateTime={item.at} className="t-cap text-ink/65 flex-shrink-0">{ago(item.at, now)}</time>
-        <MoreMenu item={item} onPatch={onPatch} onGone={onGone} />
+      <article data-item-id={item.id} className={`flex items-center justify-center gap-1 py-1 ${arriving ? 'stream-arrive' : ''}`}>
+        <p className="t-cap text-ink/65 text-center break-words min-w-0">
+          {item.line} · <time dateTime={item.at}>{ago(item.at, now)}</time>
+        </p>
+        <MoreMenu item={item} onPatch={onPatch} onGone={onGone} className="!w-9 !h-9 -my-2" />
       </article>
     )
   }
 
-  return shell('raised', 'px-4 py-4', (
-    <>
-      {head}
-      {item.line && <p className="t-label text-ink/65 mt-0.5 break-words">{item.line}</p>}
-      {item.status && <p className="t-body text-ink mt-2 break-words">{item.status}</p>}
-      <CardFigures item={item} />
-      {item.highlights.length > 0 && (
-        <ul className="mt-2 space-y-0.5">
-          {item.highlights.map(h => (
-            <li key={h} className="t-cap text-accent-deep font-semibold flex items-center gap-1.5">
-              <span aria-hidden="true" className="w-1.5 h-1.5 rounded-full bg-accent-deep flex-shrink-0" />{h}
-            </li>
-          ))}
-        </ul>
-      )}
-      {talkRow}
-    </>
-  ))
+  const mine = item.mine
+  const isCard = item.kind === 'card'
+  return (
+    <article data-item-id={item.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
+      {/* Their initial beside the bubble, under their name's line. */}
+      {!mine && <span className="flex-shrink-0 mt-5"><Initials name={item.name} size={28} /></span>}
+      <div className={`flex flex-col min-w-0 ${mine ? 'items-end' : 'items-start'} ${isCard ? 'w-[72%]' : 'max-w-[72%]'}`}>
+        {!mine && <p className="t-cap text-ink/65 px-3 mb-1 truncate max-w-full">{item.name}</p>}
+        {item.why && <p className="t-cap text-ink/65 px-3 mb-1">{item.why}</p>}
+
+        {isCard ? (
+          <>
+            <div {...tappable(`${item.name}’s card — open it, with its comments`)} className={`w-full ${opens ? 'cursor-pointer press ch-focus rounded-[22px]' : ''}`}>
+              <CardSquare item={item} />
+            </div>
+            {item.status && <p className={`${bubble(mine)} mt-1 text-[15px] leading-snug break-words max-w-full`}>{item.status}</p>}
+          </>
+        ) : (
+          <div {...tappable(`${item.name}’s ${item.kind === 'post' ? 'post' : 'status'} — open it, with its comments`)}
+            className={`${bubble(mine)} max-w-full ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
+            {item.kind === 'post' && item.line && <p className="t-label text-ink break-words">{item.line}</p>}
+            {item.kind === 'post' && item.text && (
+              <div className={`${item.line ? 'mt-1 ' : ''}space-y-2`}>
+                {item.text.split(/\n{2,}/).map((para, i) => <p key={i} className="text-[16px] leading-snug break-words whitespace-pre-line">{para}</p>)}
+              </div>
+            )}
+            {item.kind === 'post' && item.link && (
+              <a href={item.link} target="_blank" rel="noopener noreferrer"
+                className="mt-1 inline-flex items-center gap-1.5 min-h-11 t-label text-accent-deep press ch-focus rounded-tile break-all">
+                <IconLink size={16} className="flex-shrink-0" /> {hostOf(item.link)}
+              </a>
+            )}
+            {item.kind === 'status' && item.status && <p className="text-[16px] leading-snug break-words">{item.status}</p>}
+            {item.kind === 'match_result' && <p className="text-[16px] leading-snug break-words">{item.line}</p>}
+          </div>
+        )}
+
+        {/* The dot, when, the ⋯ — small, under the bubble, as a chat's reactions hang. */}
+        <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
+          <DotButton item={item} onPatch={onPatch} />
+          <time dateTime={item.at} className="t-cap text-ink/65 px-1">{ago(item.at, now)}</time>
+          <MoreMenu item={item} onPatch={onPatch} onGone={onGone} className="!w-9 !h-9" />
+        </div>
+
+        {/* The latest four comments as small replies; all of them in the sheet (D342). */}
+        {item.recent.length > 0 && (
+          <div {...tappable(`${item.commentLine?.count ?? 'Comments'} — open them all`)}
+            className={`flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'} max-w-full ${opens ? 'cursor-pointer rounded-[18px] ch-focus' : ''}`}>
+            {item.comments > item.recent.length && (
+              <p className="t-label text-accent-deep px-3 min-h-8 flex items-center">View all {item.comments} comments</p>
+            )}
+            {item.recent.map(c => (
+              <p key={c.id} className={`rounded-[18px] px-3 py-1.5 text-[14px] leading-snug break-words max-w-full ${c.mine ? 'bg-accent-tint' : 'bg-surface border border-line'}`}>
+                <span className="font-semibold">{c.mine ? 'You' : c.name}</span> {c.text}
+              </p>
+            ))}
+          </div>
+        )}
+        {item.recent.length === 0 && opens && (
+          <button type="button" onClick={e => onOpen!(e.currentTarget)} className="t-label text-accent-deep px-3 min-h-9 press ch-focus rounded-tile">Comment</button>
+        )}
+      </div>
+    </article>
+  )
 }
 
-/** Gross and points in Bespoke Serif, and the place — gold only for 1st, gold being for winning. */
-export function CardFigures({ item }: { item: Pick<FeedView, 'gross' | 'points' | 'place'> }) {
-  const scores = [
-    item.gross != null ? { v: item.gross, l: 'gross' } : null,
-    item.points != null ? { v: item.points, l: 'pts' } : null,
-  ].filter(Boolean) as { v: number; l: string }[]
-  if (scores.length === 0 && !item.place) return null
+/**
+ * A signed card as a square (D342, Ross: "scorecards should be roughly
+ * square, with clear points / strokes total… the old trip typeface for the
+ * totals"): the event and course at the top; the points large, the strokes
+ * under them, both in the scorecard's own bold serif (`SC_SF`, the trip
+ * card's totals); the holes, the place (gold only for 1st, gold being for
+ * winning) and the first highlight at the foot.
+ */
+export function CardSquare({ item }: { item: Pick<FeedView, 'line' | 'gross' | 'points' | 'place' | 'holes' | 'highlights'> }) {
+  const lead = item.points != null ? { v: item.points, l: 'points' } : item.gross != null ? { v: item.gross, l: 'strokes' } : null
+  const second = item.points != null && item.gross != null ? { v: item.gross, l: 'strokes' } : null
   return (
-    <div className="flex items-baseline gap-4 mt-3 pt-3 border-t border-line">
-      {scores.map(s => (
-        <span key={s.l} className="inline-flex items-baseline gap-1">
-          <span className="t-data font-serif text-ink text-[20px]">{s.v}</span>
-          <span className="t-cap text-ink/65">{s.l}</span>
-        </span>
-      ))}
-      {item.place && (
-        <span className={`ml-auto t-label ${item.place === 1 ? 'text-gold-deep' : 'text-ink/80'}`}>{ordinal(item.place)}</span>
-      )}
+    <div className="aspect-square w-full rounded-[22px] bg-surface border border-line shadow-raised p-4 flex flex-col overflow-hidden">
+      {item.line && <p className="t-cap text-ink/65 line-clamp-2 break-words">{item.line}</p>}
+      <div className="flex-1 flex flex-col items-center justify-center text-center">
+        {lead ? (
+          <>
+            <span className="font-bold text-ink leading-none text-[56px] tabular-nums" style={SC_SF}>{lead.v}</span>
+            <span className="t-label text-ink/65 mt-1">{lead.l}</span>
+            {second && (
+              <span className="mt-3 inline-flex items-baseline gap-1.5">
+                <span className="font-bold text-ink leading-none text-[26px] tabular-nums" style={SC_SF}>{second.v}</span>
+                <span className="t-cap text-ink/65">{second.l}</span>
+              </span>
+            )}
+          </>
+        ) : <span className="t-cap text-ink/65">No total yet</span>}
+      </div>
+      <div className="flex items-baseline gap-2 min-w-0">
+        {item.highlights[0] && <span className="t-cap text-accent-deep font-semibold truncate min-w-0">{item.highlights[0]}</span>}
+        {!item.highlights[0] && item.holes != null && item.holes < 18 && <span className="t-cap text-ink/65">{item.holes} holes</span>}
+        {item.place && (
+          <span className={`ml-auto t-label flex-shrink-0 ${item.place === 1 ? 'text-gold-deep' : 'text-ink/80'}`}>{ordinal(item.place)}</span>
+        )}
+      </div>
     </div>
   )
 }

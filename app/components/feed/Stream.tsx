@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { askFeed } from '@/lib/feedClient'
-import { compMenu, pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
+import { OWN_STATUS_MAX, POST_MAX, compMenu, pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
 import { IconCheck, IconSettings } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
@@ -11,7 +11,7 @@ import { popClose, popOpen } from '../popOut'
 import { FeedItem, type FeedView } from './FeedItem'
 import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
-import { ClubPostComposer, StatusComposer } from './Composer'
+import { ClubPostComposer, InlineComposer, StatusComposer } from './Composer'
 import { streamSeen } from './useStreamDot'
 
 type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string; about?: string }
@@ -379,11 +379,25 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
             return (
               <div key={key} id={`stream-${key}`} role="tabpanel" aria-label={`${p.kind} stream`}
                 ref={el => { panelRefs.current[key] = el }} className="feed-stream relative w-full flex-shrink-0 px-4 pb-1">
+                {/* D342: the box to post in this stream, at its head, for whoever may. */}
                 {p.kind === 'friends' && home.v2 && (
-                  <ComposeButton onClick={() => setComposer('status')} label="Post a status" hint="What’s happening?" />
+                  <InlineComposer label="friends" placeholder="Message your friends…" max={OWN_STATUS_MAX}
+                    onSend={async text => {
+                      const r = await askFeed<{ id: string }>('status.post', { text, stream: 'friends' })
+                      if (!r.ok) return r.error
+                      void load(p)
+                      return null
+                    }} />
                 )}
-                {p.kind === 'club' && home.v2 && home.canPost && (
-                  <ComposeButton onClick={() => setComposer('post')} label="Post to the club" hint="A notice, the newsletter, news" />
+                {p.kind === 'club' && home.v2 && home.canPost && home.here && (
+                  <InlineComposer label="club" placeholder="Post to the club…" max={POST_MAX}
+                    onSend={async text => {
+                      const r = await askFeed<{ id: string }>('post.club', { clubId: home.here, title: '', text, link: '' })
+                      if (!r.ok) return r.error
+                      void load(p)
+                      return null
+                    }}
+                    extra={<button type="button" onClick={() => setComposer('post')} className="min-h-10 px-2 rounded-[18px] t-cap text-ink/65 press ch-focus">Heading or link</button>} />
                 )}
                 <StreamPanel stream={p} panel={panel} now={now} empty={view?.empty ?? ''}
                   comp={p.kind === 'comp' ? comp : null} settingsPath={settingsPath}
@@ -408,18 +422,6 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
           onPosted={() => { setComposer(null); const c = pills.find(p => p.kind === 'club'); if (c) void load(c) }} />
       )}
     </section>
-  )
-}
-
-/** A field-shaped button that opens a composer — the stream's own "what's happening?". */
-function ComposeButton({ onClick, label, hint }: { onClick: () => void; label: string; hint: string }) {
-  return (
-    <button type="button" onClick={onClick} aria-label={label}
-      className={`${cardClass('raised', true)} w-full mb-3 px-4 min-h-12 flex items-center gap-3 text-left`}>
-      <span aria-hidden="true" className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
-      <span className="t-body text-ink/65 flex-1 min-w-0 truncate">{hint}</span>
-      <span aria-hidden="true" className="t-label text-accent-deep flex-shrink-0">Post</span>
-    </button>
   )
 }
 
@@ -480,7 +482,7 @@ function StreamPanel({ stream, panel, now, empty, comp, settingsPath, onMore, on
     )
   }
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {panel.players && panel.players.length > 0 && (
         <div className={`${cardClass()} px-4 py-3 flex items-center gap-2`}>
           <LiveDot />
