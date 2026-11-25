@@ -17,9 +17,9 @@ import {
   clubEventDates, clubEventHref, clubEventLive, groupClubEvents, irishToday, COMPS_DAYS_AHEAD, COMPS_RESULTS,
   type ClubEvent,
 } from '@/lib/clubs'
-import { clubMay, credentialLine, type Credentials } from '@/lib/clubMay'
+import { credentialLine, type Credentials } from '@/lib/clubMay'
 import { reducedMotion } from '@/lib/motion'
-import { seasonOf, selfClaimedLine, type SeasonRow } from '@/lib/cardSummary'
+import { seasonOf, selfClaimedLine } from '@/lib/cardSummary'
 import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
