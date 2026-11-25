@@ -410,7 +410,7 @@ export function ChoiceChips<T extends string>({
  * the answers will not fit.
  */
 export function Segmented<T extends string>({
-  options, value, onChange, label, className = '',
+  options, value, onChange, label, className = '', dense = false,
 }: {
   options: readonly { value: T; label: React.ReactNode }[]
   /** Null when nothing has been chosen yet — every answer sits in the track. */
@@ -419,6 +419,8 @@ export function Segmented<T extends string>({
   /** What is being chosen, read out. */
   label: string
   className?: string
+  /** Four answers on a phone (Comps): less padding a side, so they all fit without a scroll. */
+  dense?: boolean
 }) {
   return (
     <div
@@ -434,7 +436,7 @@ export function Segmented<T extends string>({
             type="button"
             aria-pressed={on}
             onClick={() => onChange(o.value)}
-            className={`flex-1 min-w-max min-h-11 px-4 rounded-tile t-label whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 ease-out ${
+            className={`flex-1 min-w-max min-h-11 ${dense ? 'px-2' : 'px-4'} rounded-tile t-label whitespace-nowrap transition-[color,background-color,box-shadow] duration-150 ease-out ${
               on ? 'bg-surface text-ink shadow-raised' : 'text-ink/65 hover:text-ink'
             }`}
           >

@@ -944,8 +944,14 @@ function wiringTests() {
   section('MO3: Comps length and speed (D282)')
   {
     const view = read('app/club/[slug]/ClubView.tsx')
-    ok(/g\.upcoming\.filter\(e => soon\(e\.startDate\)\)/.test(view) && /href=\{`\/club\/\$\{slug\}\/comps`\}/.test(view) && /results: past\.slice\(0, resultsShown\)/.test(view),
+    ok(/g\.upcoming\.filter\(e => soon\(e\.startDate\)\)/.test(view) && /href=\{`\/club\/\$\{slug\}\/comps`\}/.test(view) && /results: pastPlain\.slice\(0, resultsShown\)/.test(view),
       'Comps’ Upcoming is the next two weeks with See all; Results ten at a time')
+    ok(/value: 'matchplay' as const, label: 'Match play'/.test(view) && /view === 'matchplay' && <MatchPlayTab/.test(view),
+      'Comps has a Match play menu beside Results (D344)')
+    ok(/upcoming: plain\(\[\.\.\.g\.now/.test(view) && /mine: plain\(/.test(view) && /!isMatchPlay\(e\)\), got\.notes/.test(view),
+      '…and no match play is in Upcoming, Entries, Results or See all — an ongoing one you are out of is not listed there (D344)')
+    ok(/section\('Yours'/.test(view) && /section\('Open for entry'/.test(view) && /section\('Ongoing'/.test(view) && /`Results \$\{year\}`/.test(view),
+      '…in sections: yours, open for entry, ongoing that you are not in, then results by year')
     ok(/input\.whole !== true/.test(read('app/api/club/club.ts')) && /whole: true/.test(view), 'the home carries the next two weeks; the whole season only when asked')
     const frame = read('app/club/[slug]/comp/[code]/(frame)/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
     ok(/<TripHeader backTo/.test(frame) && /<Art face=\{clubFace\}/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/(frame)/loading.tsx')),
@@ -3331,7 +3337,7 @@ async function labelTests() {
     const view = read('app/club/[slug]/ClubView.tsx')
     ok(/accent=\{e\.colour\}/.test(view), 'a competition row wears its label down its left edge')
     ok(/ListRow label=\{n\.title\} onClick=\{onOpen\} accent=\{n\.colour\}/.test(view), 'a club event row wears its label down its left edge')
-    ok(/accent=\{colours\?\.get\(x\.code\)\}/.test(view), 'a match play row wears its competition’s label')
+    ok(/<ListRow key=\{e\.code\} href=\{matchHref\(x, slug\)\} label=\{e\.name\} accent=\{e\.colour\}/.test(view), 'a match play row wears its competition’s label')
     ok((view.match(/style=\{labelEdge\(/g) ?? []).length >= 4, 'Comps’ featured and Live now cards, Home’s Live now and next match wear the edge')
     ok(/accent\?: string \| null/.test(read('app/components/ui.tsx')), 'ListRow takes an accent')
     ok(/colour: colourFor\(\{ labelId: n\.labelId/.test(read('app/api/club/club.ts')), 'the members’ club events carry their label colour from the server')
