@@ -450,7 +450,52 @@
     [
       "don",
       "jed"
+    ],
+    [
+      "jed",
+      "paddy"
+    ],
+    [
+      "pierce",
+      "michael"
+    ],
+    [
+      "elaine",
+      "tom"
     ]
+  ],
+  "groups": [
+    {
+      "key": "grp-westwing",
+      "name": "The West Wing",
+      "by": "jed",
+      "members": [
+        "cj",
+        "elizabeth",
+        "don",
+        "paddy"
+      ]
+    },
+    {
+      "key": "grp-sunday",
+      "name": "Sunday morning",
+      "by": "elaine",
+      "members": [
+        "sloan",
+        "don",
+        "tom"
+      ]
+    },
+    {
+      "key": "grp-bar",
+      "name": "The 19th",
+      "by": "pierce",
+      "members": [
+        "gob",
+        "tom",
+        "michael"
+      ]
+    }
   ],
   "posts": [
     {
@@ -530,7 +575,8 @@
           "by": "cj",
           "text": "Sir."
         }
-      ]
+      ],
+      "group": "grp-westwing"
     },
     {
       "key": "wk-1124-jed",
@@ -551,7 +597,8 @@
           "by": "paddy",
           "text": "Your takeaway is shut and you're coming over the top. I watched from the car park. Range, Thursday, 6 o'clock. Bring a bucket."
         }
-      ]
+      ],
+      "group": "grp-westwing"
     },
     {
       "key": "wk-1125-elaine",
@@ -568,7 +615,8 @@
           "by": "sloan",
           "text": "You missed 9 putts inside six feet on Monday. The putter is a sunk cost. So were the putts."
         }
-      ]
+      ],
+      "group": "grp-sunday"
     },
     {
       "key": "wk-1126-pierce",
@@ -585,7 +633,8 @@
           "by": "gob",
           "text": "Pierce, buddy, I stayed. I was under the table, but I stayed."
         }
-      ]
+      ],
+      "group": "grp-bar"
     },
     {
       "key": "wk-1127-gob",
@@ -602,7 +651,8 @@
           "by": "gob",
           "text": "Ignore the invoice. That's how they get you, Michael."
         }
-      ]
+      ],
+      "group": "grp-bar"
     },
     {
       "key": "wk-1129-tom",
@@ -619,7 +669,8 @@
           "by": "elaine",
           "text": "Write to the committee. Use crayon, it's what they read."
         }
-      ]
+      ],
+      "group": "grp-sunday"
     }
   ],
   "results": [

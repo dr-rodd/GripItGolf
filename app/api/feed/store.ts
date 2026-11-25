@@ -44,6 +44,15 @@ let readyOnce = false
 /** Whether 104 is in (Streams v2) — once yes, never asked again by this server. */
 let v2Once = false
 
+/** Whether 105 is in (stream groups) — once yes, never asked again by this server. */
+let groupsOnce = false
+export async function groupsReady(db: Db): Promise<boolean> {
+  if (groupsOnce) return true
+  const { error } = await db.from('stream_groups').select('id', { head: true, count: 'exact' }).limit(1)
+  if (!error) groupsOnce = true
+  return !error
+}
+
 export async function feedV2(db: Db): Promise<boolean> {
   if (v2Once) return true
   const { error } = await db.from('feed_items').select('bumped_at', { head: true, count: 'exact' }).limit(1)
@@ -203,8 +212,20 @@ export function feedStore(db: Db): FeedStore {
     async items(q: StreamQuery) {
       // D329: items standing on their own, by their latest activity — before 104, when each was made.
       const v2 = await feedV2(db)
-      if (q.stream && !v2) return []
+      if ((q.stream || q.group) && !v2) return []
       const at = v2 ? 'bumped_at' : 'created_at'
+      // D343: a group's page is two reads — what was posted in it, and its members' cards and results — merged.
+      if (q.group) {
+        const { group, ...rest } = q
+        const [posted, theirs] = await Promise.all([
+          this.items({ ...rest, stream: group.stream }),
+          this.items({ ...rest, authors: group.authors, kinds: ['card', 'match_result'] }),
+        ])
+        const byId = new Map([...posted, ...theirs].map(r => [r.id, r]))
+        return [...byId.values()]
+          .sort((x, y) => (y.bumpedAt ?? y.createdAt).localeCompare(x.bumpedAt ?? x.createdAt) || y.id.localeCompare(x.id))
+          .slice(0, q.limit)
+      }
       let r = db.from('feed_items').select(v2 ? ITEM_COLS_V2 : ITEM_COLS)
         .is('parent_id', null).is('removed_at', null).eq('held', false)
       if (q.authors) r = r.in('author_id', q.authors.length ? q.authors : ['00000000-0000-0000-0000-000000000000'])
@@ -230,6 +251,69 @@ export function feedStore(db: Db): FeedStore {
         .map(c => ({ parentId: c.parent_id, authorId: c.author_id, createdAt: c.created_at }))
     },
     v2: () => feedV2(db),
+    // ─── Stream groups (D343, 105) ───
+    groupsReady: () => groupsReady(db),
+    async groupsOf(userId) {
+      if (!(await groupsReady(db))) return []
+      const { data, error } = await db.from('stream_group_members').select('admin, group:stream_groups(id, name, created_by, created_at)').eq('user_id', userId)
+      if (error) return []
+      const rows = ((data ?? []) as unknown as { admin: boolean; group: { id: string; name: string; created_by: string | null; created_at: string } | null }[]).filter(r => r.group)
+      if (rows.length === 0) return []
+      const { data: all } = await db.from('stream_group_members').select('group_id').in('group_id', rows.map(r => r.group!.id))
+      const count = new Map<string, number>()
+      for (const m of (all ?? []) as { group_id: string }[]) count.set(m.group_id, (count.get(m.group_id) ?? 0) + 1)
+      return rows.map(r => ({ id: r.group!.id, name: r.group!.name, createdBy: r.group!.created_by, createdAt: r.group!.created_at, admin: r.admin, members: count.get(r.group!.id) ?? 1 }))
+        .sort((x, y) => x.name.localeCompare(y.name))
+    },
+    async group(groupId) {
+      const { data } = await db.from('stream_groups').select('id, name, created_by, created_at').eq('id', groupId).maybeSingle()
+      const g = data as { id: string; name: string; created_by: string | null; created_at: string } | null
+      return g ? { id: g.id, name: g.name, createdBy: g.created_by, createdAt: g.created_at } : null
+    },
+    async groupMembers(groupId) {
+      if (!(await groupsReady(db))) return []
+      const { data, error } = await db.from('stream_group_members').select('user_id, admin, added_by, joined_at').eq('group_id', groupId)
+      if (error) throw error
+      return ((data ?? []) as { user_id: string; admin: boolean; added_by: string | null; joined_at: string }[])
+        .map(m => ({ userId: m.user_id, admin: m.admin, addedBy: m.added_by, joinedAt: m.joined_at }))
+    },
+    async groupmates(userId) {
+      if (!(await groupsReady(db))) return []
+      const { data: mine } = await db.from('stream_group_members').select('group_id').eq('user_id', userId)
+      const ids = ((mine ?? []) as { group_id: string }[]).map(r => r.group_id)
+      if (ids.length === 0) return []
+      const { data } = await db.from('stream_group_members').select('user_id').in('group_id', ids)
+      return [...new Set(((data ?? []) as { user_id: string }[]).map(r => r.user_id))]
+    },
+    async makeGroup(name, by, at) {
+      const { data, error } = await db.from('stream_groups').insert({ name, created_by: by, created_at: at }).select('id').single()
+      if (error) throw error
+      return (data as { id: string }).id
+    },
+    async addGroupMembers(groupId, rows, at) {
+      if (rows.length === 0) return
+      const { error } = await db.from('stream_group_members').upsert(
+        rows.map(r => ({ group_id: groupId, user_id: r.userId, admin: r.admin, added_by: r.addedBy, joined_at: at })),
+        { onConflict: 'group_id,user_id', ignoreDuplicates: true })
+      if (error) throw error
+    },
+    async removeGroupMember(groupId, userId) {
+      const { error } = await db.from('stream_group_members').delete().eq('group_id', groupId).eq('user_id', userId)
+      if (error) throw error
+    },
+    async setGroupAdmin(groupId, userId, admin) {
+      const { error } = await db.from('stream_group_members').update({ admin }).eq('group_id', groupId).eq('user_id', userId)
+      if (error) throw error
+    },
+    async renameGroup(groupId, name) {
+      const { error } = await db.from('stream_groups').update({ name }).eq('id', groupId)
+      if (error) throw error
+    },
+    async deleteGroup(groupId) {
+      await db.from('feed_items').delete().eq('stream', `group:${groupId}`)
+      const { error } = await db.from('stream_groups').delete().eq('id', groupId)
+      if (error) throw error
+    },
     async follows(userId) {
       const { data, error } = await db.from('feed_follows').select('stream').eq('user_id', userId)
       if (error) return []

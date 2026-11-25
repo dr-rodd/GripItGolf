@@ -5,13 +5,14 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { askFeed } from '@/lib/feedClient'
 import { OWN_STATUS_MAX, POST_MAX, compMenu, pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { IconCheck, IconSettings } from '../icons'
+import { IconCheck, IconPlus, IconSettings, IconUsers } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { popClose, popOpen } from '../popOut'
 import { FeedItem, type FeedView } from './FeedItem'
 import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
 import { ClubPostComposer, InlineComposer, StatusComposer } from './Composer'
+import { GroupSettingsSheet, NewGroupSheet } from './GroupSheet'
 import { streamSeen } from './useStreamDot'
 
 type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string; about?: string }
@@ -24,6 +25,9 @@ type Home = {
   comps?: CompRef[]
   newComments?: number
   today?: string
+  /** D343: the member's stream groups, and whether groups can be made yet (105). */
+  groupsReady?: boolean
+  groups?: { id: string; name: string; admin: boolean; members: number }[]
 }
 type Panel = { items: FeedView[]; next: unknown; loading: boolean; error: string; players: { name: string; thru: number }[] | null; arriving: Set<string> }
 
@@ -67,6 +71,8 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const [sheet, setSheet] = useState<{ id: string; origin: HTMLElement | null } | null>(null)
   const [composer, setComposer] = useState<'status' | 'post' | null>(null)
+  // D343: making a group, or a group's settings.
+  const [groupSheet, setGroupSheet] = useState<{ kind: 'new' } | { kind: 'settings'; id: string } | null>(null)
   const [now, setNow] = useState(() => new Date())
   const [pull, setPull] = useState(0)
   const scroller = useRef<HTMLDivElement>(null)
@@ -119,7 +125,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     const blankPanel: Panel = { items: [], next: null, players: null, loading: true, error: '', arriving: new Set() }
     setPanels(p => ({ ...p, [key]: { ...(p[key] ?? blankPanel), loading: true, error: '' } }))
     const body = { stream: streamKey(s), ...(s.kind === 'comp' ? { comp: comp?.code } : {}), ...(s.kind === 'match' ? { match } : {}) }
-    const strips = s.kind === 'comp' || s.kind === 'friends'
+    const strips = s.kind === 'comp' || s.kind === 'friends' || s.kind === 'group'
     const [page, strip] = await Promise.all([
       askFeed<{ items: FeedView[]; next: unknown }>('page', { ...body, before }),
       more || !strips ? Promise.resolve(null) : askFeed<{ players: { name: string; thru: number }[] }>('oncourse', body),
@@ -236,16 +242,16 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     }])))
   }, [])
 
-  // D307, D320: the dot on the Stream tab clears once the member has looked at friends.stream.
+  // D307, D320, D343: the dot on the Stream tab clears once the member has looked at a stream.
   const newComments = home?.newComments ?? 0
-  const friendsShown = active === 'friends' && !!panels.friends && !panels.friends.loading
+  const streamShown = !!activePanelKey && !!panels[activePanelKey] && !panels[activePanelKey].loading
   useEffect(() => {
-    if (!friendsShown || newComments === 0) return
+    if (!streamShown || newComments === 0) return
     const t = window.setTimeout(() => {
       void askFeed('seen').then(r => { if (r.ok) { setHome(h => (h ? { ...h, newComments: 0 } : h)); streamSeen() } })
     }, 1500)
     return () => window.clearTimeout(t)
-  }, [friendsShown, newComments])
+  }, [streamShown, newComments])
 
   const sheetItem = sheet ? Object.values(panels).flatMap(p => p.items).find(i => i.id === sheet.id) ?? null : null
 
@@ -282,8 +288,15 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   }
   const label = (s: StreamRef) => home.streams?.find(v => v.key === streamKey(s))
   const chooser = activeRef?.kind === 'comp' ? comps.length > 0 : activeRef?.kind === 'match' ? follows.length > 1 : false
-  // The title opens the menu whenever there is anything to choose: another stream, or a choice inside this one.
-  const hasMenu = pills.length > 1 || chooser
+  // The title opens the menu whenever there is anything to choose: another stream, a choice inside this one, or a group to make.
+  const hasMenu = pills.length > 1 || chooser || !!home.groupsReady
+  const group = activeRef?.kind === 'group' ? (home.groups ?? []).find(g => g.id === activeRef.id) ?? null : null
+  const titleOf = (s: StreamRef) => (s.kind === 'group' ? label(s)?.label ?? 'Group' : <StreamName kind={s.kind} />)
+  // A group made or left: the streams asked again, a new group opened on.
+  const afterGroups = async (open?: string) => {
+    if (open) { setActive(`group:${open}`); remember(`${STREAM_KEY}:${where}`, `group:${open}`) }
+    await loadHome()
+  }
   const shortDate = (d: string) => new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))
 
   return (
@@ -301,12 +314,19 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
         {/* D339, D340: the stream's name is the page's title, on its opaque box; the title is the control. */}
         <PageTitle
           menu={hasMenu ? { open: !!menu, label: 'Choose what the stream shows', onToggle: el => setMenu(m => m ?? el) } : undefined}
-          action={<Link href={settingsPath} aria-label="Choose your streams" className={iconButtonClass(true)}><IconSettings size={20} /></Link>}
+          action={<>
+            {group && (
+              <button type="button" onClick={() => setGroupSheet({ kind: 'settings', id: group.id })} aria-label={`${group.name}: who’s in it${group.admin ? ', and its settings' : ''}`}
+                className={iconButtonClass(true)}><IconUsers size={20} /></button>
+            )}
+            <Link href={settingsPath} aria-label="Choose your streams" className={iconButtonClass(true)}><IconSettings size={20} /></Link>
+          </>}
           sub={activeRef?.kind === 'comp' && comp
             ? <span className="flex items-center gap-1.5 min-w-0">{comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span></span>
-            : activeRef?.kind === 'club' ? label(activeRef)?.label : undefined}>
+            : activeRef?.kind === 'club' ? label(activeRef)?.label
+            : group ? `Group · ${group.members} ${group.members === 1 ? 'person' : 'people'}` : undefined}>
           <span id="stream-title" className="inline-flex items-center gap-2">
-            {activeRef ? <StreamName kind={activeRef.kind} /> : 'Stream'}
+            {activeRef ? titleOf(activeRef) : 'Stream'}
           </span>
         </PageTitle>
         {menu && (
@@ -323,13 +343,19 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
                           onClick={() => go(key)}
                           className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
                           {live && <LiveDot />}
-                          <span className="flex-1 min-w-0 t-card text-ink truncate"><StreamName kind={p.kind} /></span>
-                          {p.kind === 'friends' && newComments > 0 && <span className="w-2 h-2 rounded-full bg-accent-deep" role="img" aria-label="new comments" />}
+                          <span className="flex-1 min-w-0 t-card text-ink truncate">{titleOf(p)}</span>
+                          {p.kind === 'group' && <span className="t-cap text-ink/65 flex-shrink-0">Group</span>}
                           {key === active && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
                         </button>
                       )
                     })}
                   </div>
+                )}
+                {home.groupsReady && (
+                  <button type="button" role="menuitem" onClick={() => setGroupSheet({ kind: 'new' })}
+                    className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus t-label text-accent-deep">
+                    <IconPlus size={18} /> New group
+                  </button>
                 )}
                 {activeRef?.kind === 'comp' && home.today && comps.length > 0 && compMenu(comps, home.today).map(h => (
                   <div key={h.key} role="group" aria-label={h.label} className={pills.length > 1 ? 'border-t border-line mt-1' : ''}>
@@ -379,11 +405,11 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
             return (
               <div key={key} id={`stream-${key}`} role="tabpanel" aria-label={`${p.kind} stream`}
                 ref={el => { panelRefs.current[key] = el }} className="feed-stream relative w-full flex-shrink-0 px-4 pb-1">
-                {/* D342: the box to post in this stream, at its head, for whoever may. */}
-                {p.kind === 'friends' && home.v2 && (
-                  <InlineComposer label="friends" placeholder="Message your friends…" max={OWN_STATUS_MAX}
+                {/* D342, D343: the box to post in this stream, at its head, for whoever may — every member of a group. */}
+                {p.kind === 'group' && home.v2 && (
+                  <InlineComposer label={`group-${p.id}`} placeholder={`Message ${label(p)?.label ?? 'the group'}…`} max={OWN_STATUS_MAX}
                     onSend={async text => {
-                      const r = await askFeed<{ id: string }>('status.post', { text, stream: 'friends' })
+                      const r = await askFeed<{ id: string }>('status.post', { text, stream: streamKey(p) })
                       if (!r.ok) return r.error
                       void load(p)
                       return null
@@ -412,6 +438,13 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
       {sheet && sheetItem && (
         <ItemSheet key={sheet.id} item={sheetItem} origin={sheet.origin} onClose={() => setSheet(null)}
           onPatch={p => patchItem(sheetItem.id, p)} onGone={() => patchItem(sheetItem.id, null)} />
+      )}
+      {groupSheet?.kind === 'new' && (
+        <NewGroupSheet onClose={() => setGroupSheet(null)} onMade={id => { setGroupSheet(null); void afterGroups(id) }} />
+      )}
+      {groupSheet?.kind === 'settings' && (
+        <GroupSettingsSheet groupId={groupSheet.id} onClose={() => setGroupSheet(null)}
+          onChanged={() => void loadHome()} onLeft={() => { setGroupSheet(null); void afterGroups() }} />
       )}
       {composer === 'status' && (
         <StatusComposer follows={follows} onClose={() => setComposer(null)}

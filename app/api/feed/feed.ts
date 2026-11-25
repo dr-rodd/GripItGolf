@@ -16,10 +16,11 @@ import { runFriends, type FriendsStore } from './friends'
 import { runCards, type CardsStore } from './cards'
 import { runSocial, type SocialStore } from './social'
 import { runOwn } from './own'
+import { runGroups, type GroupsStore } from './groups'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
-  commentLine, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
-  STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel,
+  commentLine, isGroupStream, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
+  STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel, withGroups,
   type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type StreamRef, type Viewer,
 } from '@/lib/feed'
 
@@ -80,6 +81,8 @@ export interface StreamQuery {
   tripId?: string
   /** A match stream's key (D326). */
   stream?: string
+  /** A stream group (D343): what was posted in it, or signed and won by these members. */
+  group?: { stream: string; authors: string[] }
   /** Only these kinds (club.stream: posts). */
   kinds?: FeedKind[]
   /** Never these kinds. */
@@ -118,7 +121,7 @@ export interface OwnWrite {
   at: string
 }
 
-export interface FeedStore extends FriendsStore, CardsStore, SocialStore {
+export interface FeedStore extends FriendsStore, CardsStore, SocialStore, GroupsStore {
   userFromToken(token: string): Promise<AuthUser | null>
   /** Whether migration 102 is in. */
   ready(): Promise<boolean>
@@ -241,7 +244,10 @@ export function isOutcome(v: unknown): v is FeedOutcome {
 }
 
 export async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: string | null } = {}): Promise<{ viewer: Viewer; clubs: ClubRef[] }> {
-  const [friends, clubs, follows] = await Promise.all([store.friendIds(asker.user.id), store.myClubs(asker.user.id), store.follows(asker.user.id)])
+  const [friends, clubs, follows, groups, mates] = await Promise.all([
+    store.friendIds(asker.user.id), store.myClubs(asker.user.id), store.follows(asker.user.id),
+    store.groupsOf(asker.user.id).catch(() => []), store.groupmates(asker.user.id).catch(() => []),
+  ])
   return {
     clubs,
     viewer: {
@@ -249,6 +255,8 @@ export async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: str
       friends: new Set(friends), clubs: new Set(clubs.map(c => c.id)),
       events: new Set(o.tripId ? [o.tripId] : []),
       follows: new Set(follows),
+      groups: new Set(groups.map(g => g.id)),
+      groupmates: new Set(mates.filter(id => id !== asker.user.id)),
     },
   }
 }
@@ -318,7 +326,7 @@ export interface ViewExtras {
  * see, in its stream, one item a card with its comments grouped on it
  * (D329) — the counts and the line worked out from what they may see too.
  */
-export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef['kind']; id?: string | null }, extras: ViewExtras = {}): { items: FeedView[]; next: Cursor | null } {
+export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef['kind']; id?: string | null; members?: ReadonlySet<string> }, extras: ViewExtras = {}): { items: FeedView[]; next: Cursor | null } {
   const facts = (r: ItemRow) => factsOf(r, b.audiences, b.juniors)
   const kids = new Map<string, ItemRow[]>()
   for (const c of b.children) {
@@ -332,7 +340,7 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
     if (r.parentId) continue
     const f = facts(r)
     const friendsIn = (b.pulledBy.get(r.id) ?? []).filter(id => id !== viewer.userId && viewer.friends.has(id))
-    if (!mayView(f, viewer) || !inStream({ ...f, kind: r.kind, stream: r.stream ?? null }, stream, viewer, { pulled: friendsIn.length > 0 })) continue
+    if (!mayView(f, viewer) || !inStream({ ...f, kind: r.kind, stream: r.stream ?? null }, stream, viewer, { pulled: friendsIn.length > 0, members: stream.members })) continue
     if (r.kind === 'post' && typeof r.data.eventType === 'string' && extras.hiddenTypes?.has(r.data.eventType)) continue
     const children = (kids.get(r.id) ?? []).filter(c => mayViewChild(facts(c), f, viewer))
     const comments = children.filter(c => c.kind === 'comment').sort(newestFirst)
@@ -414,6 +422,8 @@ export async function runFeed(
   if (social) return social
   const own = await runOwn(action, input, a, store, now)
   if (own) return own
+  const groups = await runGroups(action, input, a, store, now)
+  if (groups) return groups
 
   if (action === 'home') return home(input, a, store, now)
   // The Stream tab's dot (D307, moved by D320): one count, nothing else read.
@@ -448,14 +458,21 @@ export async function runFeed(
  */
 async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, now: Date): Promise<FeedOutcome> {
   const today = irishDay(now)
-  const [settings, clubs, follows, v2] = await Promise.all([store.settings(a.user.id), store.myClubs(a.user.id), store.follows(a.user.id), store.v2()])
+  const [settings, clubs, follows, v2, groupsReady] = await Promise.all([store.settings(a.user.id), store.myClubs(a.user.id), store.follows(a.user.id), store.v2(), store.groupsReady()])
+  const groups = groupsReady ? await store.groupsOf(a.user.id) : []
   const [comps, newComments] = await Promise.all([
     store.recentComps(a.user.id, clubs.map(c => c.id), sinceDay(today), today),
     store.commentsSince(a.user.id, settings.commentsSeenAt),
   ])
-  const streams = readStreams(settings.streams, clubs.map(c => c.id))
+  // D343: the member's groups after their kept streams, always — never stored, never switched off.
+  const streams = withGroups(readStreams(settings.streams, clubs.map(c => c.id)), groups.map(g => g.id))
   const clubName = (id: string) => clubs.find(c => c.id === id)?.name ?? null
-  const view = (s: StreamRef): StreamView => ({ key: streamKey(s), kind: s.kind, label: streamLabel(s, { club: clubName }), empty: emptyLine(s.kind), about: streamAbout(s.kind) })
+  const groupName = (id: string) => groups.find(g => g.id === id)?.name ?? 'Group'
+  const view = (s: StreamRef): StreamView => ({
+    key: streamKey(s), kind: s.kind,
+    label: s.kind === 'group' ? groupName(s.id) : streamLabel(s, { club: clubName }),
+    empty: emptyLine(s.kind), about: streamAbout(s.kind),
+  })
   // Every stream the member could keep (D321): their clubs', comp, match, friends.
   const offered = offeredStreams(clubs.map(c => c.id))
   const here = clubs.find(c => c.slug === str(input.club))?.id ?? null
@@ -471,6 +488,9 @@ async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, 
     // D326, D332: the match streams followed — none until interclub teams exist.
     follows: follows.map(key => ({ key, label: 'Match' })),
     comps: orderComps(comps).filter(c => (c.date ?? '') <= today),
+    // D343: the member's stream groups, and whether they can be made yet (105).
+    groupsReady,
+    groups: groups.map(g => ({ id: g.id, name: g.name, admin: g.admin, members: g.members })),
     newComments,
     today,
   })
@@ -496,6 +516,15 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
     const friends = [...viewer.friends]
     const b = await readBundle(store, { authors: [a.user.id, ...friends], notKinds: ['post'], pullFrom: friends, before, limit: FEED_READ })
     return done(viewBundle(b, viewer, { kind: 'friends' }))
+  }
+
+  if (stream.kind === 'group') {
+    // D343: a group's posts and its members' signed cards — for its members only.
+    const { viewer } = await viewerOf(a, store)
+    if (!viewer.groups?.has(stream.id)) return fail(403, 'That group is for its members.')
+    const members = (await store.groupMembers(stream.id)).map(m => m.userId)
+    const b = await readBundle(store, { group: { stream: streamKey(stream), authors: members }, before, limit: FEED_READ })
+    return done(viewBundle(b, viewer, { kind: 'group', id: stream.id, members: new Set(members) }))
   }
 
   if (stream.kind === 'match') {
@@ -557,8 +586,11 @@ async function onCourse(input: Record<string, unknown>, a: Asker, store: FeedSto
     if (!tripId) return done({ players: [] })
   }
   if (stream.kind === 'club' && !viewer.clubs.has(stream.id)) return done({ players: [] })
+  if (stream.kind === 'group' && !viewer.groups?.has(stream.id)) return done({ players: [] })
+  const members = stream.kind === 'group' ? new Set((await store.groupMembers(stream.id)).map(m => m.userId)) : null
   const here = all.filter(p => !!p.userId && (
-    stream.kind === 'friends' ? viewer.friends.has(p.userId!)
+    members ? members.has(p.userId!)
+      : stream.kind === 'friends' ? viewer.friends.has(p.userId!)
       : stream.kind === 'club' ? p.clubId === stream.id
       : p.tripId === tripId))
   const users = [...new Set(here.map(p => p.userId as string))]

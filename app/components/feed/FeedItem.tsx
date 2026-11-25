@@ -161,9 +161,6 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, arriving = false 
             ))}
           </div>
         )}
-        {item.recent.length === 0 && opens && (
-          <button type="button" onClick={e => onOpen!(e.currentTarget)} className="t-label text-accent-deep px-3 min-h-9 press ch-focus rounded-tile">Comment</button>
-        )}
       </div>
     </article>
   )

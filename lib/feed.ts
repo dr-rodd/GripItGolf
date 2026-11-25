@@ -83,6 +83,10 @@ export interface Viewer {
   events: ReadonlySet<string>
   /** Match streams the viewer follows, as 'match:<id>' (D326) — none until interclub teams exist. */
   follows?: ReadonlySet<string>
+  /** The stream groups the viewer is in (D343), by id. */
+  groups?: ReadonlySet<string>
+  /** Everybody who shares a group with the viewer (D343) — their signed cards reach the group. */
+  groupmates?: ReadonlySet<string>
 }
 
 /**
@@ -104,7 +108,11 @@ export function mayView(item: ItemFacts, viewer: Viewer): boolean {
   if (item.audience === 'me') return false
   // A status in a match stream: its followers only (D326).
   if (isMatchStream(item.stream)) return !!viewer.follows?.has(item.stream as string)
+  // A post in a stream group: its members only (D343).
+  if (isGroupStream(item.stream)) return !!viewer.groups?.has(groupIdOf(item.stream as string))
   if (item.authorId && viewer.friends.has(item.authorId)) return true
+  // A groupmate's card reaches the groups they share (D343), where its own audience allows.
+  if (item.authorId && viewer.groupmates?.has(item.authorId)) return true
   if (item.clubId && viewer.clubs.has(item.clubId)) return true
   if (item.tripId && viewer.events.has(item.tripId)) return true
   return false
@@ -119,12 +127,15 @@ export function mayViewChild(child: Pick<ItemFacts, 'removed' | 'held'>, parent:
 // ─── Streams (D294, D300; Streams v2 — D318–D332) ───────────────
 
 /**
- * The four streams (D321): club.stream (the club's official posts — only in
+ * The streams (D321, D343): club.stream (the club's official posts — only in
  * its own area), comp.stream (competitions, club match plays among them —
  * D332), match.stream (head-to-head; vacant until a club lists interclub
- * teams — D332) and friends.stream.
+ * teams — D332) and **stream groups** — a group a member made and added
+ * friends to, each its own stream (D343, Ross, 25 Nov 2026), in
+ * friends.stream's place. 'friends' is still read for what was posted
+ * there, never offered.
  */
-export type StreamKind = 'club' | 'comp' | 'match' | 'friends'
+export type StreamKind = 'club' | 'comp' | 'match' | 'friends' | 'group'
 
 /** A stream as stored in a member's list: a club's by id, the other three by name. */
 export type StreamRef =
@@ -132,9 +143,10 @@ export type StreamRef =
   | { kind: 'comp' }
   | { kind: 'match' }
   | { kind: 'club'; id: string }
+  | { kind: 'group'; id: string }
 
 export function streamKey(s: StreamRef): string {
-  return s.kind === 'club' ? `club:${s.id}` : s.kind
+  return s.kind === 'club' ? `club:${s.id}` : s.kind === 'group' ? `group:${s.id}` : s.kind
 }
 
 export function readStreamKey(v: unknown): StreamRef | null {
@@ -142,6 +154,8 @@ export function readStreamKey(v: unknown): StreamRef | null {
   if (typeof v !== 'string') return null
   // A Team stream (D300) is match.stream now (D332).
   if (/^team:[0-9a-f-]{36}$/i.test(v)) return { kind: 'match' }
+  const g = /^group:([0-9a-f-]{36})$/i.exec(v)
+  if (g) return { kind: 'group', id: g[1].toLowerCase() }
   const m = /^club:([0-9a-f-]{36})$/i.exec(v)
   return m ? { kind: 'club', id: m[1].toLowerCase() } : null
 }
@@ -168,7 +182,8 @@ export function keptStreams(list: readonly StreamRef[]): string[] {
  * migration 102 — is the starting set: their clubs, comp, match, friends.
  */
 export function readStreams(stored: unknown, clubs: readonly string[]): StreamRef[] {
-  const valid = (s: StreamRef) => s.kind !== 'club' || clubs.includes(s.id)
+  // friends.stream is no longer kept (D343) and a member's groups are never stored — `withGroups` adds them.
+  const valid = (s: StreamRef) => s.kind !== 'friends' && s.kind !== 'group' && (s.kind !== 'club' || clubs.includes(s.id))
   if (Array.isArray(stored)) {
     const seen = new Set<string>()
     const out: StreamRef[] = []
@@ -190,7 +205,12 @@ export function readStreams(stored: unknown, clubs: readonly string[]): StreamRe
 }
 
 export function startingStreams(clubs: readonly string[]): StreamRef[] {
-  return [...clubs.map(id => ({ kind: 'club' as const, id })), { kind: 'comp' }, { kind: 'match' }, { kind: 'friends' }]
+  return [...clubs.map(id => ({ kind: 'club' as const, id })), { kind: 'comp' }, { kind: 'match' }]
+}
+
+/** A member's streams with their groups after them (D343): every group they are in, always shown. */
+export function withGroups(streams: readonly StreamRef[], groupIds: readonly string[]): StreamRef[] {
+  return [...streams, ...groupIds.map(id => ({ kind: 'group' as const, id }))]
 }
 
 /** Every stream a member could keep, in the order they are offered (D321). */
@@ -215,6 +235,57 @@ export function isMatchStream(v: unknown): boolean {
   return typeof v === 'string' && /^match:[0-9a-f-]{36}$/i.test(v)
 }
 
+/** A stream group's key, 'group:<id>' (D343). */
+export function isGroupStream(v: unknown): boolean {
+  return typeof v === 'string' && /^group:[0-9a-f-]{36}$/i.test(v)
+}
+export function groupIdOf(key: string): string {
+  return key.slice('group:'.length).toLowerCase()
+}
+
+// ─── Stream groups (D343) ───────────────────────────────────────
+
+/** A group's name, at most this long. */
+export const GROUP_NAME_MAX = 40
+/** The most people in one group. */
+export const GROUP_MAX_MEMBERS = 50
+/** The most groups one member is in. */
+export const GROUPS_MAX = 20
+
+export function groupNameIssue(name: string): string | null {
+  const t = name.trim()
+  if (!t) return 'Give the group a name.'
+  if ([...t].length > GROUP_NAME_MAX) return `Keep the name to ${GROUP_NAME_MAX} characters.`
+  return null
+}
+
+export interface GroupMember { userId: string; admin: boolean; joinedAt: string }
+
+/**
+ * Somebody leaving a group (D343): they go; if nobody is left the group goes
+ * with them; if nobody left is an admin, the longest-standing member becomes
+ * one — a group is never left with nobody to run it.
+ */
+export function leavePlan(members: readonly GroupMember[], leaving: string): { deleteGroup: boolean; promote: string | null } {
+  const rest = members.filter(m => m.userId !== leaving)
+  if (rest.length === 0) return { deleteGroup: true, promote: null }
+  if (rest.some(m => m.admin)) return { deleteGroup: false, promote: null }
+  const first = [...rest].sort((a, b) => a.joinedAt.localeCompare(b.joinedAt) || a.userId.localeCompare(b.userId))[0]
+  return { deleteGroup: false, promote: first.userId }
+}
+
+/**
+ * Whom an admin may add (D343, Ross: "add friends to the group"): their own
+ * accepted friends, not already in, never past the group's size.
+ */
+export function addIssue(o: { adderFriends: ReadonlySet<string>; members: readonly string[]; adding: readonly string[] }): string | null {
+  if (o.adding.length === 0) return 'Choose somebody to add.'
+  if (o.adding.some(id => !o.adderFriends.has(id))) return 'You can add your friends only.'
+  if (o.adding.some(id => o.members.includes(id))) return 'Somebody chosen is in the group already.'
+  if (o.members.length + o.adding.length > GROUP_MAX_MEMBERS) return `A group holds ${GROUP_MAX_MEMBERS} people at most.`
+  return null
+}
+
 /**
  * Which stream an item belongs in (D321–D328). `pulled` is a card a friend
  * commented on (D327): it belongs in friends.stream too — the caller has
@@ -225,12 +296,14 @@ export function isMatchStream(v: unknown): boolean {
  * - club: the club's own posts only (D325) — its cards are comp.stream's.
  * - comp: one competition's cards and results — never a status or a post.
  * - match: statuses posted to that match stream (D326).
+ * - group: what its members posted in it, and their signed cards and
+ *   results (`o.members`, D343) — never a club post, never another stream's.
  */
 export function inStream(
   item: Pick<ItemFacts, 'authorId' | 'tripId' | 'clubId'> & { kind?: FeedKind; stream?: string | null },
   stream: { kind: StreamKind; id?: string | null },
   viewer: Pick<Viewer, 'userId' | 'friends'>,
-  o: { pulled?: boolean } = {},
+  o: { pulled?: boolean; members?: ReadonlySet<string> } = {},
 ): boolean {
   const kind = item.kind ?? 'card'
   switch (stream.kind) {
@@ -240,6 +313,10 @@ export function inStream(
     case 'club': return kind === 'post' && !!stream.id && item.clubId === stream.id
     case 'comp': return kind !== 'post' && kind !== 'status' && !!stream.id && item.tripId === stream.id
     case 'match': return !!stream.id && item.stream === `match:${stream.id}`
+    case 'group':
+      if (!stream.id) return false
+      if (kind === 'status') return item.stream === `group:${stream.id}`
+      return (kind === 'card' || kind === 'match_result') && !!item.authorId && !!o.members?.has(item.authorId)
   }
 }
 
@@ -616,6 +693,7 @@ export function emptyLine(kind: StreamKind): string {
     case 'club': return 'The club’s notices and news land here.'
     case 'comp': return 'Cards and results land here as they come in.'
     case 'match': return 'Interclub matches land here once your club lists its teams.'
+    case 'group': return 'Nothing here yet — post to get it going. Members’ signed cards land here too.'
   }
 }
 
@@ -626,6 +704,7 @@ export function streamAbout(kind: StreamKind): string {
     case 'club': return 'The club’s own posts — shown only in its area'
     case 'comp': return 'Competitions and club match plays, one at a time'
     case 'match': return 'Interclub matches you follow'
+    case 'group': return 'A group you’re in: its posts and its members’ cards'
   }
 }
 

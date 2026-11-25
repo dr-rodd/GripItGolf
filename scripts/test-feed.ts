@@ -10,6 +10,7 @@ import {
   cardFacts, cardHighlights, defaultComp, effectiveAudience, inStream, mayView, mayViewChild, pillsFor, readStreams,
   searchTerm, shownComp, statusIssue, cleanText, counter, friendState, standingWith, pair, reportDestination, moveLine,
   matchLine, contextLine, olderThan, newestFirst, commentLine, compMenu, STREAMS_V2, keptStreams, streamKey, streamWord,
+  withGroups, readStreamKey, leavePlan, addIssue, groupNameIssue,
   type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
 import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
@@ -82,18 +83,21 @@ function ruleTests() {
 
   section('The member’s streams (D300, D321)')
   const C = '00000000-0000-0000-0000-00000000000c', D = '00000000-0000-0000-0000-00000000000d'
-  eq(readStreams(null, [C, D]).map(s => streamKey(s)), [`club:${C}`, `club:${D}`, 'comp', 'match', 'friends'], 'nothing stored is their clubs, then comp, match, friends')
-  eq(readStreams(['friends', `club:${C}`, `club:${D}`, 'friends', 'nonsense'], [C]).map(s => streamKey(s)),
-    ['friends', `club:${C}`, 'match'], 'a club they have left goes, a stream kept twice is once, nonsense is dropped — and a list kept before v2 gains match')
-  eq(readStreams(['comp', 'friends'], []).map(s => s.kind), ['comp', 'match', 'friends'], '…match.stream after comp')
+  eq(readStreams(null, [C, D]).map(s => streamKey(s)), [`club:${C}`, `club:${D}`, 'comp', 'match'], 'nothing stored is their clubs, then comp and match — friends.stream is no longer offered (D343)')
+  eq(readStreams(['friends', `club:${C}`, `club:${D}`, `club:${C}`, 'nonsense'], [C]).map(s => streamKey(s)),
+    [`club:${C}`, 'match'], 'a club they have left goes, a stream kept twice is once, nonsense and friends.stream are dropped — and a list kept before v2 gains match')
+  eq(readStreams(['comp', 'friends'], []).map(s => s.kind), ['comp', 'match'], '…match.stream after comp')
   eq(readStreams(['team:00000000-0000-0000-0000-000000000099'], []).map(s => s.kind), ['match'], 'a Team stream kept before is match.stream now (D332)')
-  eq(readStreams([STREAMS_V2, 'friends'], []).map(s => s.kind), ['friends'], 'a list saved under v2 keeps match off when the member turned it off')
-  eq(keptStreams([{ kind: 'friends' }, { kind: 'club', id: C }]), [STREAMS_V2, 'friends', `club:${C}`], 'kept with the v2 mark')
+  eq(readStreams([STREAMS_V2, 'comp'], []).map(s => s.kind), ['comp'], 'a list saved under v2 keeps match off when the member turned it off')
+  eq(keptStreams([{ kind: 'comp' }, { kind: 'club', id: C }]), [STREAMS_V2, 'comp', `club:${C}`], 'kept with the v2 mark')
+  eq(readStreams([STREAMS_V2, 'comp', `group:${C}`], []).map(s => s.kind), ['comp'], 'a group is never kept in the list — the member’s groups are added as they stand (D343)')
+  eq(withGroups(readStreams([STREAMS_V2, 'comp'], []), [C, D]).map(streamKey), ['comp', `group:${C}`, `group:${D}`], '…after their streams, every group they are in')
+  eq(readStreamKey(`group:${C.toUpperCase()}`), { kind: 'group', id: C }, 'a group stream’s key reads back')
   eq(readStreams([STREAMS_V2], []), [], 'nothing kept reads as nothing (the route refuses to save an empty list)')
   const all = readStreams(null, ['c1'])
-  eq(pillsFor(all, { here: null, compLive: false }).map(s => s.kind), ['comp', 'match', 'friends'], 'a club’s stream shows only inside that club’s area (D294)')
-  eq(pillsFor(all, { here: 'c1', compLive: false }).map(s => s.kind), ['club', 'comp', 'match', 'friends'], '…where it leads')
-  eq(pillsFor(all, { here: 'c1', compLive: true }).map(s => s.kind), ['comp', 'club', 'match', 'friends'], 'a live comp leads (D295)')
+  eq(pillsFor(all, { here: null, compLive: false }).map(s => s.kind), ['comp', 'match'], 'a club’s stream shows only inside that club’s area (D294)')
+  eq(pillsFor(all, { here: 'c1', compLive: false }).map(s => s.kind), ['club', 'comp', 'match'], '…where it leads')
+  eq(pillsFor(all, { here: 'c1', compLive: true }).map(s => s.kind), ['comp', 'club', 'match'], 'a live comp leads (D295)')
   eq(['club', 'comp', 'match', 'friends'].map(k => streamWord(k as StreamKind)), ['club', 'comp', 'match', 'friends'], 'the four names’ words (D321)')
 
   section('The Comp picker (D300): the latest comp played, a pick kept until a newer one')
@@ -164,6 +168,10 @@ export type World = {
   /** Match streams that exist to be followed — none on the live site until interclub teams (D332). */
   followable: Set<string>
   hidden: Map<string, string[]>
+  /** Stream groups (D343). */
+  groupsReady: boolean
+  groups: { id: string; name: string; createdBy: string | null; createdAt: string }[]
+  groupMembers: { groupId: string; userId: string; admin: boolean; addedBy: string | null; joinedAt: string }[]
 }
 
 export function world(): World {
@@ -188,6 +196,9 @@ export function world(): World {
     follows: [],
     followable: new Set(),
     hidden: new Map(),
+    groupsReady: true,
+    groups: [],
+    groupMembers: [],
   }
 }
 
@@ -210,6 +221,7 @@ export function standIn(w: World): FeedStore {
     async items(q) {
       const c = q.before
       return w.items.filter(r => !r.removedAt && !r.held && !r.parentId)
+        .filter(r => !q.group || r.stream === q.group.stream || (!!r.authorId && q.group.authors.includes(r.authorId) && (r.kind === 'card' || r.kind === 'match_result')))
         .filter(r => !q.authors || (!!r.authorId && q.authors.includes(r.authorId)))
         .filter(r => !q.clubId || r.clubId === q.clubId)
         .filter(r => !q.tripId || r.tripId === q.tripId)
@@ -224,6 +236,35 @@ export function standIn(w: World): FeedStore {
         .sort(newestFirst).slice(0, limit).map(r => ({ parentId: r.parentId as string, authorId: r.authorId as string, createdAt: r.createdAt }))
     },
     async v2() { return w.v2 },
+    async groupsReady() { return w.groupsReady },
+    async groupsOf(u) {
+      return w.groupMembers.filter(m => m.userId === u).map(m => {
+        const g = w.groups.find(x => x.id === m.groupId)!
+        return { ...g, admin: m.admin, members: w.groupMembers.filter(x => x.groupId === g.id).length }
+      })
+    },
+    async group(id) { return w.groups.find(g => g.id === id) ?? null },
+    async groupMembers(id) { return w.groupMembers.filter(m => m.groupId === id).map(({ userId, admin, addedBy, joinedAt }) => ({ userId, admin, addedBy, joinedAt })) },
+    async groupmates(u) {
+      const mine = new Set(w.groupMembers.filter(m => m.userId === u).map(m => m.groupId))
+      return [...new Set(w.groupMembers.filter(m => mine.has(m.groupId)).map(m => m.userId))]
+    },
+    async makeGroup(name, by, at) {
+      const id = `00000000-0000-0000-0000-${String(w.groups.length + 1).padStart(12, 'a')}`
+      w.groups.push({ id, name, createdBy: by, createdAt: at })
+      return id
+    },
+    async addGroupMembers(id, rows, at) {
+      for (const r of rows) if (!w.groupMembers.some(m => m.groupId === id && m.userId === r.userId)) w.groupMembers.push({ groupId: id, userId: r.userId, admin: r.admin, addedBy: r.addedBy, joinedAt: at })
+    },
+    async removeGroupMember(id, u) { w.groupMembers = w.groupMembers.filter(m => !(m.groupId === id && m.userId === u)) },
+    async setGroupAdmin(id, u, admin) { const m = w.groupMembers.find(x => x.groupId === id && x.userId === u); if (m) m.admin = admin },
+    async renameGroup(id, name) { const g = w.groups.find(x => x.id === id); if (g) g.name = name },
+    async deleteGroup(id) {
+      w.groups = w.groups.filter(g => g.id !== id)
+      w.groupMembers = w.groupMembers.filter(m => m.groupId !== id)
+      w.items = w.items.filter(r => r.stream !== `group:${id}`)
+    },
     async follows(u) { return w.follows.filter(f => f.userId === u).map(f => f.stream) },
     async followable(stream) { return w.followable.has(stream) },
     async setFollow(u, stream, on) {
@@ -386,15 +427,55 @@ async function routeTests() {
   w.settings.delete('y')
   w.friends = []
 
+  section('Stream groups (D343): made, run by admins, posted in, read by its members only')
+  {
+    eq(groupNameIssue('  '), 'Give the group a name.', 'a group needs a name')
+    ok(!!groupNameIssue('x'.repeat(41)) && !groupNameIssue('Sunday four'), '…of 40 characters at most')
+    eq(addIssue({ adderFriends: new Set(['y']), members: ['x'], adding: ['z'] }), 'You can add your friends only.', 'an admin adds their own friends only')
+    eq(addIssue({ adderFriends: new Set(['y']), members: ['x', 'y'], adding: ['y'] }), 'Somebody chosen is in the group already.', '…nobody twice')
+    const m = (userId: string, admin: boolean, joinedAt: string) => ({ userId, admin, joinedAt })
+    eq(leavePlan([m('x', true, '1'), m('y', false, '2'), m('z', false, '3')], 'x'), { deleteGroup: false, promote: 'y' }, 'the last admin leaving hands it to the longest-standing member')
+    eq(leavePlan([m('x', true, '1'), m('y', true, '2')], 'x'), { deleteGroup: false, promote: null }, '…not while another admin stays')
+    eq(leavePlan([m('x', true, '1')], 'x'), { deleteGroup: true, promote: null }, 'the last one out takes the group with them')
+
+    w.friends = [{ a: 'x', b: 'y', by: 'x', accepted: true }, { a: 'x', b: 'z', by: 'x', accepted: true }]
+    eq((await ask('x', { action: 'group.create', name: 'Sunday four', members: ['y', 'c'] })).status, 400, 'a group is made with friends only')
+    const made = await ask('x', { action: 'group.create', name: 'Sunday four', members: ['y'] })
+    const gid = (made.body as unknown as { id: string }).id
+    eq(made.status, 200, 'X makes a group with Y')
+    eq(w.groupMembers.filter(g => g.groupId === gid).map(g => [g.userId, g.admin]), [['x', true], ['y', false]], '…X its admin, Y a member')
+    eq((await ask('y', { action: 'group.add', groupId: gid, userIds: ['z'] })).status, 403, 'only an admin adds people')
+    eq((await ask('x', { action: 'group.add', groupId: gid, userIds: ['z'] })).status, 200, 'X adds Z, a friend')
+    eq((await ask('x', { action: 'group.admin', groupId: gid, userId: 'y', on: true })).status, 200, 'an admin makes another admin (Ross)')
+    eq((await ask('y', { action: 'group.remove', groupId: gid, userId: 'z' })).status, 200, '…who may take people out')
+    eq((await ask('c', { action: 'group.read', groupId: gid })).status, 403, 'somebody outside reads nothing of it')
+
+    const post = await ask('y', { action: 'status.post', text: 'Eight o’clock?', stream: `group:${gid}` })
+    eq(post.status, 200, 'a member posts in the group')
+    eq((await ask('c', { action: 'status.post', text: 'Hi', stream: `group:${gid}` })).status, 403, 'an outsider cannot')
+    const pageOf = async (who: string) => (await ask(who, { action: 'page', stream: `group:${gid}` }))
+    const xs = ((await pageOf('x')).body as unknown as { items: { status: string | null }[] }).items
+    ok(xs.some(i => i.status === 'Eight o’clock?'), 'its members read what was posted')
+    eq((await pageOf('c')).status, 403, '…and nobody else')
+    const home2 = (await ask('x', { action: 'home' })).body as unknown as { streams: { key: string; label: string }[] }
+    ok(home2.streams.some(st => st.key === `group:${gid}` && st.label === 'Sunday four'), 'the group is one of X’s streams, by its name')
+    eq((await ask('x', { action: 'group.leave', groupId: gid })).status, 200, 'X leaves')
+    eq(w.groupMembers.filter(g => g.groupId === gid).map(g => [g.userId, g.admin]), [['y', true]], '…Y, already an admin, runs it')
+    w.groupsReady = false
+    eq((await ask('x', { action: 'group.create', name: 'Later' })).status, 503, 'before 105 nobody can make one')
+    w.groupsReady = true
+    w.friends = []
+  }
+
   section('Settings')
   eq((await ask('x', { action: 'audience', audience: 'me' })).status, 200, 'a member keeps their cards to themselves')
   eq(w.settings.get('x')?.audience, 'me', '…stored')
   eq((await ask('x', { action: 'audience', audience: 'close' })).status, 400, 'close friends is not built')
-  await ask('x', { action: 'streams', streams: ['friends', `club:${C1}`, 'club:00000000-0000-0000-0000-0000000000ff'] })
-  eq(w.settings.get('x')?.streams, [STREAMS_V2, 'friends', `club:${C1}`], 'streams kept, a club they are not on dropped')
+  await ask('x', { action: 'streams', streams: ['comp', `club:${C1}`, 'club:00000000-0000-0000-0000-0000000000ff'] })
+  eq(w.settings.get('x')?.streams, [STREAMS_V2, 'comp', `club:${C1}`], 'streams kept, a club they are not on dropped')
   eq((await ask('x', { action: 'streams', streams: ['nonsense'] })).status, 400, 'a member keeps at least one stream')
   const home = await ask('x', { action: 'home', club: 'pints' })
-  eq((home.body as unknown as { streams: { key: string }[] }).streams.map(s => s.key), ['friends', `club:${C1}`], 'home answers the member’s streams')
+  eq((home.body as unknown as { streams: { key: string }[] }).streams.map(s => s.key), ['comp', `club:${C1}`], 'home answers the member’s streams')
   eq((home.body as unknown as { here: string }).here, C1, '…and which club’s area it is asked from')
   w.ready = false
   eq((await ask('x', { action: 'home' })).body, { ok: true, ready: false }, 'before migration 102 the feed simply does not show')
@@ -701,8 +782,9 @@ function wiringTests() {
   ok(/reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and switch instantly under Reduce Motion')
   ok(/gd\.feed\.stream\.v1/.test(feedUi), 'the last stream chosen is remembered on the phone')
   ok(!/setInterval/.test(feedUi), 'the stream is never polled — read on show and on coming back')
-  ok(/<StreamName kind=\{activeRef\.kind\} \/>/.test(feedUi) && /compMenu\(comps, home\.today\)/.test(feedUi) && /role="menu"/.test(feedUi),
-    'the stream on show is named at the top, a chevron opening comp.stream’s menu of headings and comps (D321, D323)')
+  ok(/titleOf\(activeRef\)/.test(feedUi) && /<StreamName kind=\{s\.kind\} \/>/.test(feedUi) && /compMenu\(comps, home\.today\)/.test(feedUi) && /role="menu"/.test(feedUi),
+    'the stream on show is named at the top — a group by its own name — its chevron opening the menu of streams, groups and comps (D321, D323, D343)')
+  ok(/NewGroupSheet/.test(feedUi) && /GroupSettingsSheet/.test(feedUi) && /stream: streamKey\(p\)/.test(feedUi), '…New group in it, a group’s settings beside the title, and the box to post in a group (D343)')
   ok(/touchstart/.test(feedUi) && /PULL_AT/.test(feedUi) && /stream-arrive/.test(read('app/components/feed/FeedItem.tsx')) && /\.stream-arrive/.test(read('app/globals.css')),
     'pull to refresh, and what is new fades in at the top (M13)')
   {

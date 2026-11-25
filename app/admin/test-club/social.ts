@@ -1,5 +1,5 @@
-// A week's Streams v2 talk (D333): characters made friends, the club's
-// notices in club.stream, statuses on their own in friends.stream, and talk
+// A week's Streams v2 talk (D333, D343): characters made friends and put in
+// stream groups, the club's notices in club.stream, statuses posted in a group, and talk
 // under a club match play's result in comp.stream — every one through the
 // feed's own route as the character, exactly as a phone does it, so the
 // rules (who may post for the club, who may see what) are met the same way.
@@ -9,7 +9,7 @@
 
 import type { createAdminClient } from '@/lib/supabase-admin'
 import { irishInstant } from '@/lib/irishTime'
-import { testEmail, type Character, type WeekOwn, type WeekPost, type WeekResult, type WeekTalk } from '@/lib/testClub'
+import { testEmail, type Character, type WeekGroup, type WeekOwn, type WeekPost, type WeekResult, type WeekTalk } from '@/lib/testClub'
 import { POST as feedRoute } from '@/app/api/feed/route'
 import { callAs, characterToken } from './characterCalls'
 import { notAfterNow, rebump, stampItems } from './stamp'
@@ -52,6 +52,39 @@ export async function befriend(o: Ctx, pairs: readonly [string, string][]): Prom
     else lines.push(`${nameOf(o, b)} did not accept ${nameOf(o, a)} — ${String(r.body.error ?? r.status)}`)
   }
   return { made, lines }
+}
+
+/**
+ * A week's stream groups (D343), made as the character who makes each — the
+ * route's own rules (friends only, admins) met as on a phone. One of the
+ * same name already made by them is used, and anybody missing from it added.
+ * Answers each group's id by its key.
+ */
+export async function makeGroups(o: Ctx, groups: readonly WeekGroup[]): Promise<{ ids: Map<string, string>; lines: string[] }> {
+  const ids = new Map<string, string>()
+  const lines: string[] = []
+  for (const g of groups) {
+    const maker = o.userOf.get(g.by)
+    if (!maker) continue
+    const members = g.members.map(k => o.userOf.get(k)).filter((x): x is string => !!x)
+    const { data: there } = await o.db.from('stream_groups').select('id').eq('name', g.name).eq('created_by', maker).limit(1)
+    let id = ((there ?? []) as { id: string }[])[0]?.id ?? null
+    if (!id) {
+      const r = await ask(o, g.by, { action: 'group.create', name: g.name, members })
+      if (r.status !== 200) { lines.push(`${g.name}: not made — ${String(r.body.error ?? r.status)}`); continue }
+      id = String(r.body.id ?? '')
+    } else {
+      const { data: inIt } = await o.db.from('stream_group_members').select('user_id').eq('group_id', id)
+      const have = new Set(((inIt ?? []) as { user_id: string }[]).map(m => m.user_id))
+      const missing = members.filter(m => !have.has(m))
+      if (missing.length) {
+        const r = await ask(o, g.by, { action: 'group.add', groupId: id, userIds: missing })
+        if (r.status !== 200) lines.push(`${g.name}: ${missing.length} not added — ${String(r.body.error ?? r.status)}`)
+      }
+    }
+    ids.set(g.key, id)
+  }
+  return { ids, lines }
 }
 
 /** When something was said: its day and time, Irish, never still to come. */
@@ -100,17 +133,18 @@ export async function postNotice(o: Ctx, p: WeekPost): Promise<{ posted: number;
   return { posted: posted + t.posted, lines: t.lines }
 }
 
-/** A status on its own in friends.stream (D328), and the talk under it. */
-export async function postOwn(o: Ctx, s: WeekOwn): Promise<{ posted: number; lines: string[] }> {
+/** A status on its own in one of the week's groups (D328, D343), and the talk under it. */
+export async function postOwn(o: Ctx, s: WeekOwn, groupId: string | null): Promise<{ posted: number; lines: string[] }> {
   const author = o.userOf.get(s.by)
   if (!author) return { posted: 0, lines: [] }
+  if (!groupId) return { posted: 0, lines: [`${nameOf(o, s.by)}’s status: its group, ${s.group}, was not made.`] }
   const at = momentOf(s.day, s.time, '19:00')
   const { data: there } = await o.db.from('feed_items').select('id').eq('kind', 'status').eq('author_id', author)
     .eq('status', s.text).is('removed_at', null).limit(1)
   let id = ((there ?? []) as { id: string }[])[0]?.id ?? null
   let posted = 0
   if (!id) {
-    const r = await ask(o, s.by, { action: 'status.post', text: s.text, stream: 'friends' })
+    const r = await ask(o, s.by, { action: 'status.post', text: s.text, stream: `group:${groupId}` })
     if (r.status !== 200) return { posted: 0, lines: [`${nameOf(o, s.by)}’s status: not posted — ${String(r.body.error ?? r.status)}`] }
     id = String(r.body.id ?? '')
     posted++

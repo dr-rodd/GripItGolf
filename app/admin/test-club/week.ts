@@ -20,7 +20,7 @@ import { bookCasual } from './casual'
 import { postBanter } from './banter'
 import { playCompetition } from './play'
 import { readRoster } from './roster'
-import { befriend, postNotice, postOwn, talkOnResult } from './social'
+import { befriend, makeGroups, postNotice, postOwn, talkOnResult } from './social'
 
 type Db = ReturnType<typeof createAdminClient>
 
@@ -90,6 +90,10 @@ export async function loadWeek(o: {
     if (f.made) lines.push(`${f.made} friendships made.`)
     if (f.lines.length === 0) await record('friends')
   }
+  // D343: the week's stream groups, made each load (finding the ones already made) so statuses have somewhere to go.
+  const made = await makeGroups(ctx, week.groups ?? [])
+  lines.push(...made.lines)
+  for (const g of week.groups ?? []) if (made.ids.has(g.key) && !isDone(`group:${g.key}`)) { lines.push(`The ${g.name} group made.`); await record(`group:${g.key}`) }
   for (const p of week.posts ?? []) {
     if (late()) return { done: false, lines }
     const id = `post:${p.key}`
@@ -103,7 +107,7 @@ export async function loadWeek(o: {
     if (late()) return { done: false, lines }
     const id = `own:${s.key}`
     if (s.day > today || isDone(id)) continue
-    const r = await postOwn(ctx, s)
+    const r = await postOwn(ctx, s, made.ids.get(s.group) ?? null)
     lines.push(...r.lines)
     if (r.posted) lines.push(`A status by ${cast.find(c => c.key === s.by)?.name ?? s.by}: ${r.posted} posted.`)
     if (r.lines.length === 0) await record(id)

@@ -573,8 +573,14 @@ function weekTests() {
   section('Steps, hashes and status')
   const w = (readWeek(base, cast) as { ok: true; week: import('../lib/testClub').WeekFile }).week
   const steps = weekSteps(w)
-  eq(steps.length, 4 * 2 + 3 + 1 + (w.posts?.length ?? 0) + (w.own?.length ?? 0) + (w.results?.length ?? 0),
-    'a competition and its banter each, each casual time, the friendships, and each notice, status and talk under a result (D333)')
+  eq(steps.length, 4 * 2 + 3 + 1 + (w.groups?.length ?? 0) + (w.posts?.length ?? 0) + (w.own?.length ?? 0) + (w.results?.length ?? 0),
+    'a competition and its banter each, each casual time, the friendships, each group, and each notice, status and talk under a result (D333, D343)')
+  {
+    const noFriend = JSON.parse(JSON.stringify(base)); noFriend.groups = [{ key: 'grp-x', name: 'X', by: 'jed', members: ['tom'] }]
+    ok(!readWeek(noFriend, cast).ok, 'a group is made with friends of its maker only (D343)')
+    const wrongGroup = JSON.parse(JSON.stringify(base)); if (wrongGroup.own?.[0]) wrongGroup.own[0].group = 'grp-nowhere'
+    ok(!wrongGroup.own?.[0] || !readWeek(wrongGroup, cast).ok, 'a status goes in a group its author is in')
+  }
   ok((w.posts?.length ?? 0) > 0 && (w.own?.length ?? 0) > 0 && (w.results?.length ?? 0) > 0 && (w.friends?.length ?? 0) > 0, 'this week uses every new piece')
 
   section('Streams v2 in a week file (D333)')

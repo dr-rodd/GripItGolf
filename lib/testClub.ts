@@ -459,7 +459,9 @@ export interface WeekFile {
   friends?: [string, string][]
   /** A notice from the club in club.stream, by an Officer or Clubhouse character (D325). */
   posts?: WeekPost[]
-  /** A status on its own in friends.stream, and the talk under it (D328). */
+  /** Stream groups (D343): made by a character, with friends of theirs in them — in friends.stream's place. */
+  groups?: WeekGroup[]
+  /** A status on its own, posted in one of the week's groups, and the talk under it (D328, D343). */
   own?: WeekOwn[]
   /** Talk under a club match play's result, in comp.stream (D332) — found by its winner. */
   results?: WeekResult[]
@@ -467,7 +469,9 @@ export interface WeekFile {
 
 export interface WeekTalk { by: string; text: string }
 export interface WeekPost { key: string; by: string; day: string; time?: string; title?: string; text: string; link?: string; comments?: WeekTalk[] }
-export interface WeekOwn { key: string; by: string; day: string; time?: string; text: string; comments?: WeekTalk[] }
+export interface WeekOwn { key: string; by: string; day: string; time?: string; text: string; comments?: WeekTalk[]; /** The week's group it is posted in (D343). */ group: string }
+/** A stream group (D343): `by` makes it and is its admin; `members` are friends of theirs. */
+export interface WeekGroup { key: string; name: string; by: string; members: string[] }
 /** `winner` names the result; left out, the club's latest result — so a line need not know who won. */
 export interface WeekResult { key: string; winner?: string; comments: WeekTalk[] }
 
@@ -587,6 +591,20 @@ export function readWeek(raw: unknown, cast: readonly Character[]): { ok: true; 
     if (typeof comments === 'string') return { ok: false, error: comments }
     posts.push({ key, by, day, text, ...(p.time ? { time: String(p.time) } : {}), ...(p.title ? { title: String(p.title).slice(0, 80) } : {}), ...(p.link ? { link: String(p.link) } : {}), ...(comments.length ? { comments } : {}) })
   }
+  const groups: WeekGroup[] = []
+  const friendOf = (a: string, b: string) => friends.some(([x, y]) => (x === a && y === b) || (x === b && y === a))
+  for (const g of Array.isArray(r.groups) ? r.groups as Record<string, unknown>[] : []) {
+    const key = String(g.key ?? ''), name = String(g.name ?? '').trim(), by = String(g.by ?? '')
+    const members = Array.isArray(g.members) ? [...new Set((g.members as unknown[]).map(String))].filter(m => m !== by) : []
+    if (!KEY.test(key) || keys.has(key)) return { ok: false, error: `A group’s key, ${key || 'none'}, is missing or used twice.` }
+    keys.add(key)
+    if (!name || [...name].length > 40) return { ok: false, error: `${key}: a name of 1 to 40 characters.` }
+    for (const k of [by, ...members]) { const bad = notCharacter(k); if (bad) return { ok: false, error: `${key}: ${bad}` } }
+    const notFriend = members.find(m => !friendOf(by, m))
+    if (notFriend) return { ok: false, error: `${key}: ${notFriend} is not a friend of ${by} — a group is made with friends (D343).` }
+    groups.push({ key, name, by, members })
+  }
+  const inGroup = (gk: string, who: string) => { const g = groups.find(x => x.key === gk); return !!g && (g.by === who || g.members.includes(who)) }
   const own: WeekOwn[] = []
   for (const o of Array.isArray(r.own) ? r.own as Record<string, unknown>[] : []) {
     const key = String(o.key ?? ''), by = String(o.by ?? ''), day = String(o.day ?? ''), text = String(o.text ?? '').trim()
@@ -599,7 +617,11 @@ export function readWeek(raw: unknown, cast: readonly Character[]): { ok: true; 
     if (!text || [...text].length > OWN_STATUS_LIMIT) return { ok: false, error: `${key}: a status of 1 to ${OWN_STATUS_LIMIT} characters.` }
     const comments = talk(key, o.comments)
     if (typeof comments === 'string') return { ok: false, error: comments }
-    own.push({ key, by, day, text, ...(o.time ? { time: String(o.time) } : {}), ...(comments.length ? { comments } : {}) })
+    const group = String(o.group ?? '')
+    if (!inGroup(group, by)) return { ok: false, error: `${key}: posted in ${group || 'no group'}, which ${by} is not in (D343).` }
+    const outside = comments.find(c => !inGroup(group, c.by))
+    if (outside) return { ok: false, error: `${key}: ${outside.by} comments but is not in ${group}.` }
+    own.push({ key, by, day, text, group, ...(o.time ? { time: String(o.time) } : {}), ...(comments.length ? { comments } : {}) })
   }
   const results: WeekResult[] = []
   for (const x of Array.isArray(r.results) ? r.results as Record<string, unknown>[] : []) {
@@ -617,7 +639,7 @@ export function readWeek(raw: unknown, cast: readonly Character[]): { ok: true; 
     ok: true,
     week: {
       week: monday, title: String(r.title ?? '').trim() || `Week of ${monday}`, competitions: out, casual: cas,
-      ...(friends.length ? { friends } : {}), ...(posts.length ? { posts } : {}), ...(own.length ? { own } : {}), ...(results.length ? { results } : {}),
+      ...(friends.length ? { friends } : {}), ...(groups.length ? { groups } : {}), ...(posts.length ? { posts } : {}), ...(own.length ? { own } : {}), ...(results.length ? { results } : {}),
     },
   }
 }
@@ -639,6 +661,7 @@ export function weekSteps(w: WeekFile): WeekStep[] {
     ]),
     ...w.casual.map(c => ({ id: `casual:${c.day}@${c.time}:${c.who.join('+')}`, label: `${c.who.join(', ')} booked on ${c.day}`, hash: hash(c), from: null })),
     ...(w.friends?.length ? [{ id: 'friends', label: `${w.friends.length} friendships`, hash: hash(w.friends), from: null }] : []),
+    ...(w.groups ?? []).map(g => ({ id: `group:${g.key}`, label: `The ${g.name} group`, hash: hash(g), from: null })),
     ...(w.posts ?? []).map(p => ({ id: `post:${p.key}`, label: `${p.title ?? 'A notice'} in club.stream`, hash: hash(p), from: p.day })),
     ...(w.own ?? []).map(o => ({ id: `own:${o.key}`, label: `A status by ${o.by}`, hash: hash(o), from: o.day })),
     ...(w.results ?? []).map(x => ({ id: `result:${x.key}`, label: x.winner ? `Talk under ${x.winner}’s result` : 'Talk under the latest match play result', hash: hash(x), from: null })),
