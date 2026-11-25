@@ -195,7 +195,7 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
       <div ref={backdrop} className="absolute inset-0 bg-ink/50" onClick={close} />
       <div className="absolute inset-x-0 top-0 flex items-center justify-center p-3 pointer-events-none"
         style={{ bottom: keyboard, paddingTop: 'max(env(safe-area-inset-top), 12px)', paddingBottom: keyboard ? 8 : 'max(env(safe-area-inset-bottom), 12px)' }}>
-        <div ref={panel} className={`${SC_CARD} pointer-events-auto relative w-full max-w-lg max-h-full flex flex-col overflow-hidden`}
+        <div ref={panel} className={`${SC_CARD} pointer-events-auto relative w-full max-w-lg max-h-full ${isCard ? 'h-full' : ''} flex flex-col overflow-hidden`}
           style={{ transformOrigin: 'top left' }}>
           {handle}
 

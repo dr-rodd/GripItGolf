@@ -163,7 +163,7 @@ pills and toggles fully round. Tokens: `rounded-card`, `-button`, `-field`,
 `--gd-ease` = `cubic-bezier(0.16, 1, 0.3, 1)`, the **putt curve**: quick off
 the face, a long settle, no overshoot. `ease-out` for fades and colour. No
 springs, no bounce, no elastic — with one named exception, the **pop-out**
-(`--gd-pop-open` 340ms, `--gd-pop-close` 260ms, `--gd-pop-blur` 10px,
+(`--gd-pop-open` 720ms on a real spring, `--gd-pop-close` 280ms, `--gd-pop-blur` 10px,
 `--gd-pop-settle` 2%; §6 and §8). Every timing is in §6.
 
 ---
@@ -316,7 +316,7 @@ and the named rules below say what replaces each.
 | Progress fill | A step completes | 340ms colour | putt | Instant |
 | Sheet up (`sheet-up`) | A sheet opens | 280ms | ease-out | Instant |
 | Scoring card slide | Next / previous player | 260ms | ease-out | Instant |
-| **Pop-out** (D335) | A tile opening into a card over the page: the stream's card (`ItemSheet`), the leaderboard's scorecard pop-up (`ScorecardSheet`) — **every expanding pop-out, through `app/components/popOut.ts` and nothing else** | 340ms open: out of the tile it was tapped from, soft and blurred (10px), half seen, springing at most 2% past its place as it sharpens, then resting. 260ms close: back into the tile where it is still on screen, softening, else a fade and a slight shrink. The backdrop fades with it. The tile is the one handed in, else the last thing tapped (`watchTaps`, one listener for the site) | putt (`--gd-pop-open`, `--gd-pop-close`) | A fade in 150ms, and out |
+| **Pop-out** (D335, D337) | A tile opening into a card over the page: the stream's card (`ItemSheet`), the leaderboard's scorecard pop-up (`ScorecardSheet`) — **every expanding pop-out, through `app/components/popOut.ts` and nothing else** | Open on **a damped spring** (a swing of six tenths of a second, damping 0.8 — Apple's kind, as X's menus use), 720ms to rest: out of the tile it was tapped from from a standstill, soft and blurred (10px), half seen; gliding in, most of the way there by 300ms; the blur clearing late (sharp by 440ms) so it sharpens as it lands; drifting about 1.5% past its place (at most 2%) and easing to rest. 280ms close: back into the tile where it is still on screen, softening, else a fade and a slight shrink. The backdrop fades with it. The tile is the one handed in, else the last thing tapped (`watchTaps`, one listener for the site) | the spring, sampled a frame apart and played linearly (`--gd-pop-open`); putt to close (`--gd-pop-close`) | A fade in 150ms, and out |
 | Place swell | Tapping a place in the draw's bracket, or Seeded | 340ms: the place grows into a card of names on top, over the page dimmed (`bg-ink/40`); the seed list into the whole screen. Back into the place on a tap outside, Escape or ✕ — the words fade in the second half of the way out and are gone in the first half of the way back, and the box melts into the place as it lands (`lib/swell.ts`) | putt | Simply there, and gone |
 | Seed drag | Dragging a seed by its handle | Follows the finger, floating; the rows it passes slide aside in 200ms, and on letting go it settles into the gap in 200ms | putt | Follows the finger; the rest move and it drops at once |
 | Tee time lift | Releasing a tee sheet + | 340ms scroll to the top, under the header; the time raised to `shadow-floating` | putt | At once |
@@ -373,7 +373,7 @@ Each is pinned by name in `test:branding`, so it cannot become a precedent.
 | A label's wash (D288) | No gradients | One flat tint of the label's colour at the head of its own page; the gradient is only the mask that fades it into the paper | `.label-wash` in `globals.css` |
 | Tee swatches | No grey; palette only | A blue tee is blue — data, not brand | `scorecardStyle.ts` |
 | Terms disclaimer in capitals | No uppercase | The legal form | `app/terms/page.tsx` |
-| The pop-out's settle (D331, D335) | No springs or overshoot | Ross chose it (X's menus, 24 Nov 2026): a tile opening into a card springs a hair past its place as it sharpens — at most 2% of the way it travelled, inside 340ms. Only the pop-out; every other motion still stops dead | `lib/popOut.ts`, played only by `app/components/popOut.ts` |
+| The pop-out's spring (D331, D335, D337) | No springs or overshoot; nothing over 400ms | Ross chose it (X's menus, 24–25 Nov 2026): a tile opening into a card opens on a real spring, drifting a hair past its place as it sharpens — at most 2% of the way it travelled — and resting at 720ms. It is most of the way there by 300ms, so it still answers the touch; the rest is the spring settling, which the putt curve could not do without reading as a snap. Only the pop-out; every other motion still stops dead | `lib/popOut.ts`, played only by `app/components/popOut.ts` |
 | The dot bloom (600ms) | 400ms ceiling | The one celebration, once per card signed or run logged; never in score entry or on a board | `app/components/DotBloom.tsx`, its own `<style>` |
 | The style lab | Three fonts; the token values | Ross tries other faces and looks on his own phone. Behind `html[data-…]` attributes no player's phone carries, so the house rules hold for everyone else | `app/style-lab.css` (generated), `lib/styleLab.ts` |
 

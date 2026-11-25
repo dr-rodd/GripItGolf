@@ -197,13 +197,16 @@
   /* The putt curve: cubic-bezier(0.16, 1, 0.3, 1). */
   --gd-ease: cubic-bezier(0.16, 1, 0.3, 1);
 
-  /* The pop-out (D335): a tile opening into a card over the page — out of
-     the tile soft and blurred, springing at most 2% past its place as it
-     sharpens, then resting; back into the tile on close. Played in script
-     (app/components/popOut.ts) on the putt curve; these are its timings, held
-     equal to lib/popOut.ts by test:branding. Every expanding pop-out uses it. */
-  --gd-pop-open: 340ms;
-  --gd-pop-close: 260ms;
+  /* The pop-out (D335, D337): a tile opening into a card over the page — out
+     of the tile soft and blurred on a real spring (a swing of six tenths of a second, damping
+     0.8), gliding in and drifting at most 2% past its place as it sharpens,
+     then resting; back into the tile on the putt curve on close. Played in
+     script (app/components/popOut.ts); these are its timings, held equal to
+     lib/popOut.ts by test:branding. Every expanding pop-out uses it. The
+     opening's length is a named exception to the 400ms ceiling: the card is
+     most of the way there by 300ms, the rest is the spring coming to rest. */
+  --gd-pop-open: 720ms;
+  --gd-pop-close: 280ms;
   --gd-pop-blur: 10px;
   --gd-pop-settle: 2%;
 

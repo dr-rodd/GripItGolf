@@ -30,7 +30,7 @@ import {
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 import CountUp from '../app/components/CountUp'
-import { SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_SETTLE, SETTLE_AT, SHEET_BLUR_PX, openKeyframes } from '../lib/popOut'
+import { POP_OPEN_MS, POP_CLOSE_MS, POP_SETTLE, POP_BLUR_PX, POP_SHARP_MS, openKeyframes, springAt, springOvershoot } from '../lib/popOut'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1636,7 +1636,9 @@ section('Motion is calm, and can be switched off')
       .map(m => (m[2] === 'ms' ? Number(m[1]) : Number(m[1]) * 1000))
 
   const loops = [...css.matchAll(/animation:[^;]*\binfinite\b[^;]*;/g)].map(m => m[0])
-  const oneShot = loops.reduce((acc, l) => acc.replace(l, ''), css)
+  // One named exception (D337): the pop-out's opening is a spring, most of
+  // the way there by 300ms and then settling — held in its own section below.
+  const oneShot = loops.reduce((acc, l) => acc.replace(l, ''), css).replace(/--gd-pop-open:\s*\d+ms;/, '')
 
   const durations = durationsIn(oneShot)
   ok(durations.length > 0, 'the stylesheet defines durations')
@@ -1745,35 +1747,43 @@ section('One count-up, one celebration, and never on a board')
     '  …settling on the quiet tinted disc that is its Reduce Motion version')
 }
 
-section('The pop-out (D331, D335): the one settle, every expanding pop-out alike')
+section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out alike')
 {
   // D8 says no springs and no overshoot. Ross allowed exactly one exception,
   // on purpose: a tile opening into a card (the pop-out, modelled on X's
-  // menus) springs a hair past its place as it sharpens — at most 2% of the
-  // way it travelled, inside 400ms, on the putt curve, a fade under Reduce
-  // Motion. Held here so it cannot quietly become two, and so every expanding
-  // pop-out moves alike.
-  ok(SHEET_SETTLE > 0 && SHEET_SETTLE <= 0.02, `the settle is at most 2% (${SHEET_SETTLE * 100}%)`)
-  ok(SHEET_OPEN_MS <= 400 && SHEET_CLOSE_MS <= 400, `inside the 400ms ceiling (${SHEET_OPEN_MS}ms, ${SHEET_CLOSE_MS}ms)`)
-  ok(SHEET_OPEN_MS >= 300, `  …and not rushed: Ross found 220ms too fast (${SHEET_OPEN_MS}ms)`)
-  ok(SETTLE_AT > 0.5 && SETTLE_AT < 1, '  …past its place late in the move, then at rest')
+  // menus) opens on a real spring that drifts a hair past its place as it
+  // sharpens — at most 2% of the way it travelled, a fade under Reduce
+  // Motion. Held here so it cannot quietly become two, and so every
+  // expanding pop-out moves alike. Its length is a named exception to the
+  // 400ms ceiling (D337: "still too quick") — the move is most of the way
+  // there by 300ms, the rest is the spring settling.
+  ok(springOvershoot() > 0 && springOvershoot() <= POP_SETTLE && POP_SETTLE <= 0.02,
+    `the spring goes at most 2% past its place (${(springOvershoot() * 100).toFixed(1)}%)`)
+  ok(springAt(0) === 0 && springAt(40) < 0.1, '  …starting gently from the tile, never with a jump')
+  ok(springAt(300) > 0.85, `  …most of the way there by 300ms, so it still answers the touch (${springAt(300).toFixed(2)})`)
+  ok(POP_OPEN_MS >= 600 && POP_OPEN_MS <= 800, `  …at rest inside 800ms (${POP_OPEN_MS}ms)`)
+  ok(POP_CLOSE_MS <= 400, `closing is a response, inside the 400ms ceiling (${POP_CLOSE_MS}ms)`)
+  ok(POP_SHARP_MS > 300 && POP_SHARP_MS < POP_OPEN_MS, '  …and the blur clears late, so it sharpens as it lands')
   const from = { left: 16, top: 200, width: 358, height: 180 }, to = { left: 0, top: 120, width: 390, height: 700 }
   const k = openKeyframes(from, to)
   const nums = (t: string) => (t.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number)
-  const [ox, oy, osx, osy] = nums(String(k[1].transform))
-  ok(Math.abs(ox) <= Math.abs(from.left - to.left) * 0.02 + 0.001 && Math.abs(oy) <= Math.abs(from.top - to.top) * 0.02 + 0.001,
-    `  …past its place by at most 2% of the travel (${ox}px, ${oy}px)`)
-  ok(osx <= 1.02 && osy <= 1.02 && osx >= 1 && osy >= 1, `  …and at most 2% bigger (${osx}, ${osy})`)
+  const past = k.map(f => nums(String(f.transform)))
+  ok(past.every(([x, y]) => Math.abs(Math.min(0, x)) <= Math.abs(from.left - to.left) * 0.02 + 0.001 && Math.abs(Math.min(0, y)) <= Math.abs(from.top - to.top) * 0.02 + 0.001),
+    '  …past its place by at most 2% of the travel, in every frame')
+  ok(past.every(([, , a, b]) => a <= 1 + 0.02 * (1 - from.width / to.width) + 0.001 && b <= 1 + 0.02 * (1 - from.height / to.height) + 0.001),
+    '  …and at most 2% of the growth bigger')
+  ok(k.every((f, i) => i === 0 || Number(f.offset) > Number(k[i - 1].offset)) && k.length >= POP_OPEN_MS / 20, '  …sampled about a frame apart')
   eq(String(k[k.length - 1].transform), 'translate(0px, 0px) scale(1, 1)', '  …and at rest in its place')
   ok(/blur\(\d+px\)/.test(String(k[0].filter)) && String(k[k.length - 1].filter) === 'blur(0px)', '  …soft as it leaves the tile, sharp at rest')
   // The stylesheet carries its timings as tokens, the same figures (D335).
   const tok = (name: string) => (css.match(new RegExp(`--gd-pop-${name}:\\s*([\\d.]+)(ms|px|%)`)) ?? [])[1]
-  eq([Number(tok('open')), Number(tok('close')), Number(tok('blur')), Number(tok('settle'))], [SHEET_OPEN_MS, SHEET_CLOSE_MS, SHEET_BLUR_PX, SHEET_SETTLE * 100],
+  eq([Number(tok('open')), Number(tok('close')), Number(tok('blur')), Number(tok('settle'))], [POP_OPEN_MS, POP_CLOSE_MS, POP_BLUR_PX, POP_SETTLE * 100],
     'the stylesheet’s --gd-pop-* tokens are the same figures as lib/popOut.ts')
   const play = read('app/components/popOut.ts')
   ok(/reducedMotion\(\) \? null/.test(play) && /\{ opacity: 0 \}, \{ opacity: 1 \}/.test(play), '  …and under Reduce Motion it is a plain fade')
   ok(/closeKeyframes\(onScreen\(origin/.test(play), '  …and it goes back into the tile it came out of')
-  const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|SHEET_SETTLE/.test(read(f)))
+  ok(/openKeyframes\(from, to\), \{ duration: POP_OPEN_MS, easing: 'linear' \}/.test(play), '  …the spring played as sampled, never through a second curve')
+  const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|springAt|POP_SETTLE/.test(read(f)))
   eq(settlers, ['app/components/popOut.ts'], 'the pop-out is played in one place')
   const users = uiFiles().filter(f => /from ['"](\.\.?\/)+popOut['"]|from '@\/app\/components\/popOut'/.test(read(f))).sort()
   eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],

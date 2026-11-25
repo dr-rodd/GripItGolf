@@ -10,7 +10,7 @@
 // card mounts). Neither on screen: it fades and scales a touch instead.
 
 import { reducedMotion } from '@/lib/motion'
-import { POP_CLOSE_MS, POP_OPEN_MS, PUTT_EASING, closeKeyframes, openKeyframes } from '@/lib/popOut'
+import { POP_CLOSE_MS, POP_FADE_MS, POP_OPEN_MS, PUTT_EASING, closeKeyframes, openKeyframes } from '@/lib/popOut'
 
 let lastTap: { el: Element; at: number } | null = null
 let watching = false
@@ -38,14 +38,14 @@ function onScreen(el: Element | null): DOMRect | null {
   return r.width && r.height && r.bottom > 0 && r.top < window.innerHeight ? r : null
 }
 
-/** The card opening: out of its tile, soft to sharp, the one settle; a fade under Reduce Motion. */
+/** The card opening: out of its tile on the spring, soft to sharp, the one settle; a fade under Reduce Motion. */
 export function popOpen(card: HTMLElement | null, origin?: Element | null, backdrop?: HTMLElement | null): void {
   if (!card?.animate) return
   // Measured at rest: an opening already running (a second call, React's
   // development double run) would hand back the shrunken card as its place.
   card.getAnimations?.().forEach(a => a.cancel())
   backdrop?.getAnimations?.().forEach(a => a.cancel())
-  backdrop?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: POP_OPEN_MS, easing: 'ease-out' })
+  backdrop?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: POP_FADE_MS, easing: 'ease-out' })
   const from = reducedMotion() ? null : onScreen(origin ?? null)
   const to = card.getBoundingClientRect()
   if (!from || !to.width || !to.height) {
@@ -53,7 +53,8 @@ export function popOpen(card: HTMLElement | null, origin?: Element | null, backd
     return
   }
   card.style.transformOrigin = 'top left'
-  card.animate(openKeyframes(from, to), { duration: POP_OPEN_MS, easing: PUTT_EASING })
+  // The spring is in the keyframes, sampled a frame apart, so they play linearly (D337).
+  card.animate(openKeyframes(from, to), { duration: POP_OPEN_MS, easing: 'linear' })
 }
 
 /** The card closing: back into its tile where it is still on screen; a fade under Reduce Motion. Resolves when done. */
