@@ -7,7 +7,7 @@ import LegalLinks from '@/app/components/LegalLinks'
 import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import { IconChevronLeft } from '@/app/components/icons'
-import { ListGroup, ListRow, buttonClass } from '@/app/components/ui'
+import { ListGroup, ListRow, PageTitle, buttonClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import { forgetTier } from '@/lib/tierHint'
 
@@ -38,10 +38,7 @@ export default function MePage() {
     <main className="min-h-dvh paper">
       <TripHeader backTo="/home" />
       <div className="w-full max-w-md mx-auto px-4 pt-1 pb-10" aria-busy={!home && !error}>
-        <Link href="/home" className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
-          <IconChevronLeft size={16} /> Home
-        </Link>
-        <h1 className="t-h1 text-ink mt-2">Your page</h1>
+        <PageTitle back={{ href: '/home', label: 'Home' }} className="mt-5">Your page</PageTitle>
         {error && (
           <div className="mt-4">
             <p className="t-cap text-rust-deep" role="alert">{error}</p>

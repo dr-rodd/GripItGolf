@@ -99,7 +99,7 @@ function Swatch({ label, g, s, name }: { label: string; g: { page: string; card:
         <span className="block w-8 h-8 rounded-full" style={{ border: `2px solid ${s.club}`, background: card }} aria-hidden="true" />
         <p className="text-[13px] font-semibold mt-2" style={{ color: s.deep }}>Members</p>
         <p className="text-[13px] truncate" style={{ color: ink }}>{name}</p>
-        <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-[13px] font-semibold" style={{ background: s.club, color: s.on }}>Club</span>
+        <span className="inline-block mt-2 px-2 py-0.5 rounded-tag text-[13px] font-semibold" style={{ background: s.club, color: s.on }}>Club</span>
       </div>
     </div>
   )

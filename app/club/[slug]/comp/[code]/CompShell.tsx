@@ -4,7 +4,7 @@ import { courseLabel } from '@/lib/courseDirectory'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { compHome } from '@/lib/clubBar'
 import { IconChevronLeft } from '@/app/components/icons'
-import { LiveDot } from '@/app/components/ui'
+import { LiveDot, PageTitle } from '@/app/components/ui'
 import { NoBar } from '../../ClubBarContext'
 import CompDoor from './CompDoor'
 import CompAhead from './CompAhead'
@@ -46,12 +46,8 @@ export function PhaseLine({ phase, className = '' }: { phase: OpenCompPage['phas
 export function SectionTitle({ page }: { page: OpenCompPage }) {
   return (
     <>
-      <Link href={compHome(page.slug, page.code)} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press">
-        <IconChevronLeft size={16} /> Summary
-      </Link>
-      <h1 className="t-h1 text-ink mt-2 break-words">{page.comp.name}</h1>
-      <p className="t-cap text-ink/65 mt-1">{dayAndCourse(page)}</p>
-      <PhaseLine phase={page.phase} className="mt-1" />
+      <PageTitle back={{ href: compHome(page.slug, page.code), label: 'Summary' }} className="mt-5"
+        sub={<>{dayAndCourse(page)}<PhaseLine phase={page.phase} className="mt-1" /></>}>{page.comp.name}</PageTitle>
     </>
   )
 }

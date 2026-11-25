@@ -128,7 +128,7 @@ export default function SessionMatchList({
             </div>
             <div className="w-[84px] flex flex-col items-center justify-center gap-1 px-1">
               {status && status.tone !== 'none' ? (
-                <span className="min-w-[56px] px-2.5 py-1 rounded-full text-center font-serif text-[15px] font-semibold leading-none text-ink"
+                <span className="min-w-[56px] px-2.5 py-1 rounded-tag text-center font-serif text-[15px] font-semibold leading-none text-ink"
                   style={pill}>
                   {status.main}
                 </span>

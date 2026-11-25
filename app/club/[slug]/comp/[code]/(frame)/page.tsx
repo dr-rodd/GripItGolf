@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { redirect } from 'next/navigation'
 import { showsTopThree, summaryLine } from '@/lib/compPhase'
 import { compSectionHref, sectionOfView } from '@/lib/clubBar'
-import { cardClass } from '@/app/components/ui'
+import { PageTitle, cardClass } from '@/app/components/ui'
 import CompShell, { PhaseLine, dayAndCourse } from '../CompShell'
 import CompManage from '../CompManage'
 import CompSummaryAction from '../CompSummaryAction'
@@ -45,8 +45,7 @@ export default async function CompetitionSummary({ params, searchParams }: {
 
   return (
     <CompShell page={page}>
-      <h1 className="t-h1 text-ink mt-6 break-words">{comp.name}</h1>
-      <p className="t-cap text-ink/65 mt-1">{dayAndCourse(page, [board.format])}</p>
+      <PageTitle className="mt-6" sub={dayAndCourse(page, [board.format])}>{comp.name}</PageTitle>
 
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <PhaseLine phase={phase} />

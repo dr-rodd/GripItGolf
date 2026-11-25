@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { cardClass } from '@/app/components/ui'
+import { PageTitle, cardClass } from '@/app/components/ui'
 import { PHASE_WORDS, type CompSection } from '@/lib/compPhase'
 import { irishToday } from '@/lib/clubs'
 import { compHome } from '@/lib/clubBar'
@@ -66,11 +66,8 @@ export default async function MatchPlaySection({ page, section }: { page: MatchP
   return (
     <CompShell page={page}>
       <MatchPlayMark code={code} />
-      <Link href={compHome(slug, code)} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press">
-        <IconChevronLeft size={16} /> Summary
-      </Link>
-      <h1 className="t-h1 text-ink mt-2 break-words">{title}</h1>
-      <p className="t-cap text-ink/65 mt-1">{mp.name} · {PHASE_WORDS[phase]}{draw ? ` · ${roundInPlayLine(draw.rounds, today)}` : ''}</p>
+      <PageTitle back={{ href: compHome(slug, code), label: 'Summary' }} className="mt-5"
+        sub={<>{mp.name} · {PHASE_WORDS[phase]}{draw ? ` · ${roundInPlayLine(draw.rounds, today)}` : ''}</>}>{title}</PageTitle>
       {section === 'board' && bracket && (
         // D336: the event's bracket, read and drawn as an event's bracket tab draws it;
         // its writes (a result recorded, a card opened to score) entered as the event's own.

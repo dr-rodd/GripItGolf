@@ -1,4 +1,4 @@
-import { cardClass } from '@/app/components/ui'
+import { PageTitle, cardClass } from '@/app/components/ui'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { clubEventDates, irishToday } from '@/lib/clubs'
 import { formatLine } from '@/lib/clubhouse'
@@ -34,11 +34,9 @@ export default async function MatchPlaySummary({ page }: { page: MatchPlayPage }
   return (
     <CompShell page={page}>
       <MatchPlayMark code={mp.code} />
-      <h1 className="t-h1 text-ink mt-6 break-words">{mp.name}</h1>
-      <p className="t-cap text-ink/65 mt-1">
-        {[formatLine({ scoring: 'stableford', allowance: mp.allowance, matchPlay: { format: mp.setup.format } }),
-          mp.endDate ? `Final by ${clubEventDates(mp.endDate, mp.endDate)}` : null].filter(Boolean).join(' · ')}
-      </p>
+      <PageTitle className="mt-6"
+        sub={[formatLine({ scoring: 'stableford', allowance: mp.allowance, matchPlay: { format: mp.setup.format } }),
+          mp.endDate ? `Final by ${clubEventDates(mp.endDate, mp.endDate)}` : null].filter(Boolean).join(' · ')}>{mp.name}</PageTitle>
 
       <section className={`${cardClass('floating')} p-4 mt-6`}>
         <p className="text-[13px] font-semibold text-club-deep">{PHASE_WORDS[phase]}</p>

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconPlus, IconX } from '@/app/components/icons'
-import { FIELD, buttonClass, cardClass, chipClass } from '@/app/components/ui'
+import { FIELD, PageTitle, buttonClass, cardClass, chipClass } from '@/app/components/ui'
 import { askBooking, peekKept, type BookingAnswer } from '@/lib/accountClient'
 import { notEligibleLine } from '@/lib/clubMembership'
 import { enterEvent } from '@/lib/entryClient'
@@ -70,8 +70,7 @@ export default function CompTeeSheet({ code, slots, sun, bookingOpen, waitLine }
 
   return (
     <section className="mt-6">
-      <h1 className="t-h1 text-ink">Tee sheet</h1>
-      {me?.entry && <p className="t-label text-ink mt-2">Open to: {me.entry}</p>}
+      <PageTitle sub={me?.entry ? <>Open to: {me.entry}</> : undefined}>Tee sheet</PageTitle>
       {refused && me?.myRefusal && (
         <div role="status" className={`${cardClass('flat')} bg-club-tint p-4 mt-4`}>
           <p className="text-ink text-[15px] leading-snug">{notEligibleLine(me.myRefusal)}</p>

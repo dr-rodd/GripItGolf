@@ -7,7 +7,7 @@ import FeedSettings from '@/app/components/feed/FeedSettings'
 import StreamsCard from '@/app/components/feed/StreamsCard'
 import LegalLinks from '@/app/components/LegalLinks'
 import { IconChevronLeft } from '@/app/components/icons'
-import { ListGroup, ListRow } from '@/app/components/ui'
+import { ListGroup, ListRow, PageTitle } from '@/app/components/ui'
 import { readClubHome } from '@/lib/clubHomeCopy'
 import { clubMay, credentialLine, type Credentials } from '@/lib/clubMay'
 import { useClubBar } from '../ClubBarContext'
@@ -30,11 +30,8 @@ export default function ClubSettings({ slug, club }: { slug: string; club: strin
 
   return (
     <section>
-      <Link href={`/club/${slug}`} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
-        <IconChevronLeft size={16} /> {club}
-      </Link>
-      <h1 className="t-h1 text-ink mt-2">Settings</h1>
-      {credentials && <p className="text-ink/80 text-[15px] mt-2">You’re on {club}’s list: {credentialLine(credentials, club)}.</p>}
+      <PageTitle back={{ href: `/club/${slug}`, label: club }} className="mt-5"
+        sub={credentials ? <>You’re on {club}’s list: {credentialLine(credentials, club)}.</> : undefined}>Settings</PageTitle>
 
       <h2 className="t-h2 text-ink mt-8">What you see</h2>
       <ClubEventTypesCard className="mt-3" />

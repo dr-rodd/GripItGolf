@@ -11,7 +11,7 @@ import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
 import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconSettings, IconUser } from '@/app/components/icons'
 import Initials from '@/app/components/Initials'
-import { ButtonLink, LiveDot, ListGroup, ListRow, Segmented, buttonClass, cardClass } from '@/app/components/ui'
+import { ButtonLink, LiveDot, ListGroup, ListRow, PageTitle, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import {
   clubEventDates, clubEventHref, clubEventLive, groupClubEvents, irishToday, COMPS_DAYS_AHEAD, COMPS_RESULTS,
@@ -426,7 +426,7 @@ function boardHref(e: ClubEvent, slug: string): string {
 
 /** D125, D278: the one pill in the club's colour — an outside event's code. Club competitions wear none. */
 function CodePill({ code }: { code: string }) {
-  return <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[13px] font-semibold leading-none whitespace-nowrap bg-club-tint text-club-deep t-code">{code}</span>
+  return <span className="inline-flex items-center px-2.5 py-1 rounded-tag text-[13px] font-semibold leading-none whitespace-nowrap bg-club-tint text-club-deep t-code">{code}</span>
 }
 
 function useGroups(events: ClubEvent[]) {
@@ -692,8 +692,12 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
   return (
     <>
       <div className="h-6" aria-hidden="true" />
-      <h1 className="t-h1 text-ink">Competitions</h1>
-      <p className="text-ink/65 text-sm mt-1">The club’s events — tap one to open it.</p>
+      <PageTitle sub="The club’s events — tap one to open it."
+        below={<Segmented className="mt-3" label="Which competitions" value={view} onChange={setView}
+          options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' },
+            // Stage 3 (D266): your match play matches, apart from the competitions you entered.
+            ...((m.matches ?? []).length ? [{ value: 'matches' as const, label: 'Matches' }] : []),
+            { value: 'results', label: 'Results' }]} />}>Competitions</PageTitle>
       {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
         <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`} style={labelEdge(liveHere.colour)}>
@@ -702,11 +706,6 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
           <p className="t-label text-club-deep mt-2">Open the leaderboard</p>
         </Link>
       )}
-      <Segmented className="mt-4" label="Which competitions" value={view} onChange={setView}
-        options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'My entries' },
-          // Stage 3 (D266): your match play matches, apart from the competitions you entered.
-          ...((m.matches ?? []).length ? [{ value: 'matches' as const, label: 'Matches' }] : []),
-          { value: 'results', label: 'Results' }]} />
       {view === 'matches' && <MatchList matches={m.matches ?? []} slug={slug} colours={new Map(m.events.map(e => [e.code, e.colour]))} />}
       {/* Stage 6 (P14): Golfer of the Year, this member's line, at the head of Results. */}
       {view === 'results' && !m.fromCopy && <AwardsCard clubId={m.clubId} slug={slug} />}
@@ -795,11 +794,8 @@ export function SeasonList({ slug, club }: { slug: string; club: string }) {
   const items = got && g ? calendarItems([...g.now, ...g.upcoming], got.notes, today) : []
   return (
     <section>
-      <Link href={`/club/${slug}?tab=comps`} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
-        <IconChevronLeft size={16} /> Comps
-      </Link>
-      <h1 className="t-h1 text-ink mt-2">The season</h1>
-      <p className="text-ink/65 text-sm mt-1">Everything coming up at {club}.</p>
+      <PageTitle back={{ href: `/club/${slug}?tab=comps`, label: 'Comps' }} className="mt-5"
+        sub={<>Everything coming up at {club}.</>}>The season</PageTitle>
       {lost && (
         <div role="alert" className="mt-4">
           <p className="t-cap text-ink/80">Could not reach Green Dot — try again.</p>
@@ -861,10 +857,8 @@ function Stats({ face, m }: { face: ClubFace; m: Members }) {
   const season = seasonOf(m.season)
   return (
     <section className="mt-6">
-      <h1 className="t-h1 text-ink">Your season</h1>
-      {m.season.length === 0 ? (
-        <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
-      ) : (
+      <PageTitle sub={m.season.length === 0 ? NO_SEASON : undefined}>Your season</PageTitle>
+      {m.season.length === 0 ? null : (
         <>
           <SeasonSummary rows={m.season} courses={m.courses} index={m.indexTrend ?? []}
             footer={selfClaimedLine(season, face.name) ? <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p> : null} />

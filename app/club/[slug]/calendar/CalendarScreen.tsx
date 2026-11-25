@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { IconChevronLeft, IconChevronRight, IconList } from '@/app/components/icons'
-import { Segmented, buttonClass, cardClass } from '@/app/components/ui'
+import { PageTitle, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { irishToday } from '@/lib/clubs'
 import { describeTime } from '@/lib/itinerary'
 import { lanesOf } from '@/lib/clubDay'
@@ -64,8 +64,8 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
 
   return (
     <section className="mt-2">
-      <div className="flex items-center gap-2">
-        <h1 className="t-h1 text-ink flex-1 min-w-0 truncate">Calendar</h1>
+      {/* D339: the title, the view switch and the arrows in one opaque box. */}
+      <PageTitle action={<>
         {day !== today && (
           <button type="button" onClick={() => setDay(today)} className={`${buttonClass('quiet', false, true)} ch-focus`}>Today</button>
         )}
@@ -74,18 +74,19 @@ export default function CalendarScreen({ clubId, slug }: { clubId: string; slug:
           className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
           <IconList size={22} />
         </Link>
-      </div>
-      <Segmented className="mt-3" label="Show" value={view} onChange={setView}
-        options={CAL_VIEWS.map(v => ({ value: v, label: VIEW_WORD[v] }))} />
-      <div className="flex items-center gap-2 mt-2">
-        <button type="button" onClick={() => setDay(stepView(view, day, -1))} aria-label={`Previous ${view}`} className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
-          <IconChevronLeft size={22} />
-        </button>
-        <p className="t-card text-ink flex-1 text-center">{title}</p>
-        <button type="button" onClick={() => setDay(stepView(view, day, 1))} aria-label={`Next ${view}`} className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
-          <IconChevronRight size={22} />
-        </button>
-      </div>
+      </>} below={<>
+        <Segmented className="mt-3" label="Show" value={view} onChange={setView}
+          options={CAL_VIEWS.map(v => ({ value: v, label: VIEW_WORD[v] }))} />
+        <div className="flex items-center gap-2 mt-2 -mb-1">
+          <button type="button" onClick={() => setDay(stepView(view, day, -1))} aria-label={`Previous ${view}`} className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
+            <IconChevronLeft size={22} />
+          </button>
+          <p className="t-card text-ink flex-1 text-center">{title}</p>
+          <button type="button" onClick={() => setDay(stepView(view, day, 1))} aria-label={`Next ${view}`} className="w-11 h-11 rounded-full inline-flex items-center justify-center text-ink press ch-focus">
+            <IconChevronRight size={22} />
+          </button>
+        </div>
+      </>}>Calendar</PageTitle>
 
       {error && (
         <div className={`${cardClass()} p-4 mt-4`}>

@@ -12,7 +12,7 @@
  */
 
 import Link from 'next/link'
-import { IconChevronRight } from './icons'
+import { IconChevronDown, IconChevronLeft, IconChevronRight } from './icons'
 
 // ─── Surfaces ──────────────────────────────────────────────────
 //
@@ -87,6 +87,56 @@ export function SectionHeader({
         {hint && <p className="t-cap text-ink/65 mt-1">{hint}</p>}
       </div>
       {action && <div className="flex-shrink-0">{action}</div>}
+    </div>
+  )
+}
+
+/**
+ * A page's title, the one way every page but a home screen's greeting is
+ * headed (D339, Ross, 25 Nov 2026: "unify page titles… prioritise
+ * viewability of titles and interactive components"). An opaque raised
+ * box, so a club's art behind the page never runs through the words: the
+ * way back (`back`) small at its head, the title as a `t-h1`, at most one
+ * action on the right, and a line or two under it (`sub`).
+ *
+ * `menu` makes the title itself the control — a page that switches what
+ * it shows (the Stream's streams): the whole title a button, a chevron
+ * after it saying so, opening a menu over the page (the pop-out).
+ */
+export function PageTitle({
+  children, sub, back, action, menu, below, className = '',
+}: {
+  children: React.ReactNode
+  sub?: React.ReactNode
+  /** The page's own controls that belong with its title — a view switch, a day's arrows — inside the box. */
+  below?: React.ReactNode
+  back?: { href: string; label: React.ReactNode }
+  action?: React.ReactNode
+  menu?: { open: boolean; onToggle: (el: HTMLElement) => void; label: string }
+  className?: string
+}) {
+  return (
+    <div className={`${cardClass('raised')} px-4 ${back ? 'pt-1' : 'pt-3'} pb-3 ${className}`.trim()}>
+      {back && (
+        <Link href={back.href} className="t-cap text-ink/65 inline-flex items-center gap-1 min-h-10 press ch-focus">
+          <IconChevronLeft size={16} /> {back.label}
+        </Link>
+      )}
+      <div className="flex items-center gap-3">
+        <h1 className="t-h1 text-ink flex-1 min-w-0 break-words">
+          {menu ? (
+            <button type="button" aria-haspopup="menu" aria-expanded={menu.open} aria-label={menu.label}
+              onClick={e => menu.onToggle(e.currentTarget)}
+              className="inline-flex items-center gap-2 max-w-full text-left press ch-focus rounded-tile">
+              <span className="min-w-0 break-words">{children}</span>
+              <IconChevronDown size={24} className={`flex-shrink-0 text-ink/65 transition-transform duration-150 ease-out ${menu.open ? 'rotate-180' : ''}`} />
+            </button>
+          ) : children}
+        </h1>
+        {action && <div className="flex-shrink-0 flex items-center gap-1">{action}</div>}
+      </div>
+      {sub && <div className="t-cap text-ink/65 mt-1">{sub}</div>}
+      {below}
     </div>
   )
 }
@@ -274,11 +324,12 @@ export function IconButton({
 // ─── Choosing ──────────────────────────────────────────────────
 
 /**
- * A chip: 44px tall, fully round. Chosen is the deep emerald with white
- * words; not chosen is a raised white chip.
+ * A chip: 44px tall, a rounded rectangle (a tile's corners — never the
+ * fully round pill, Ross, 25 Nov 2026). Chosen is the deep emerald with
+ * white words; not chosen is a raised white chip.
  */
 export const chipClass = (selected: boolean, compact = false) =>
-  `inline-flex items-center justify-center gap-1.5 min-h-11 ${compact ? 'px-2' : 'px-4'} rounded-full t-label tabular-nums press whitespace-nowrap ` +
+  `inline-flex items-center justify-center gap-1.5 min-h-11 ${compact ? 'px-2' : 'px-4'} rounded-tile t-label tabular-nums press whitespace-nowrap ` +
   'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ' +
   (selected
     ? 'bg-accent-deep text-white border border-accent-deep'
@@ -299,8 +350,7 @@ export const chipClass = (selected: boolean, compact = false) =>
 export const optionClass = (selected: boolean, shape: 'card' | 'row' | 'tile' | 'compact' = 'card') =>
   shape === 'compact'
     // A tile at a chip's height — the tees on the card start sheet (D72).
-    // Square-cornered like the card around it, never a pill: a chip stays
-    // fully round elsewhere. Chosen is the chip's deep emerald with white
+    // Square-cornered like the card around it, never a pill. Chosen is the chip's deep emerald with white
     // words, because it sits inside a card already wearing the wash.
     ? 'inline-flex items-center gap-2 min-h-11 rounded-tile px-[14px] text-[15px] font-semibold leading-tight press border ' +
       'disabled:bg-disabled-bg disabled:text-disabled-fg disabled:border-transparent disabled:shadow-none disabled:cursor-not-allowed ' +
@@ -399,7 +449,8 @@ export function Segmented<T extends string>({
 // ─── Status ────────────────────────────────────────────────────
 
 /**
- * A status pill: 13px, sentence case, no letter-spacing. Won is the emerald
+ * A status tag: 13px, sentence case, no letter-spacing, a rounded
+ * rectangle (`rounded-tag`, 6px — never the fully round pill). Won is the emerald
  * tint with deep-emerald words, lost the rust equivalent, anything else a
  * bark wash. Never black text on a coloured pill — it reads as a warning.
  */
@@ -421,7 +472,7 @@ export function Pill({
 
   return (
     <span
-      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[13px] font-semibold leading-none whitespace-nowrap ${look} ${className}`.trim()}
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-tag text-[13px] font-semibold leading-none whitespace-nowrap ${look} ${className}`.trim()}
     >
       {live && <span className="w-1.5 h-1.5 rounded-full bg-accent dot-live" aria-hidden="true" />}
       {children}

@@ -1767,7 +1767,7 @@ async function competitionD4Tests() {
   ok(/certifiedRounds\(db, \[roundId\]\)/.test(read('app/admin/live/actions.ts')), '/admin never voids a card on a certified round')
   const page = read('app/club/[slug]/comp/[code]/read.ts') + read('app/club/[slug]/comp/[code]/section.tsx')
   ok(/certifiedAt: sheet\.certifiedAt/.test(page) && /\.\.\.sheet\.noReturns/.test(page), 'the page\'s phase reads the certification and counts No returns as accounted for')
-  ok(/phase === 'certified' && <h1 className="t-h1 text-ink mt-6">Results<\/h1>/.test(page) && /No return: /.test(page), 'certified, the board is the Results; No returns listed under it')
+  ok(/phase === 'certified' && <PageTitle className="mt-6">Results<\/PageTitle>/.test(page) && /No return: /.test(page), 'certified, the board is the Results; No returns listed under it')
   ok(/<CompAdmin code=\{code\} \/>/.test(page), 'the Scoring section carries the admins\' Results card')
   ok(/round_no_returns/.test(read('app/api/club/store.ts')) && /certifiedAt: certifiedOf\.get/.test(read('app/api/club/store.ts')), 'Comps rows read Awaiting sign-off and Certified')
 }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { EmptyState, FIELD, FIELD_LABEL, ListGroup, ListRow, Pill, buttonClass } from '@/app/components/ui'
+import { EmptyState, FIELD, FIELD_LABEL, ListGroup, ListRow, PageTitle, Pill, buttonClass } from '@/app/components/ui'
 import { MAX_PASSCODE } from '@/lib/passcode'
 import { claimCodeIssue, type MyEvent } from '@/lib/account'
 import { claimEvent, unlinkPlayer } from '@/lib/accountClient'
@@ -49,7 +49,7 @@ export default function EventsTab({ events, onChanged }: { events: MyEvent[]; on
 
   return (
     <section className="mt-6">
-      <h1 className="t-h1 text-ink">Events</h1>
+      <PageTitle>Events</PageTitle>
       {events.length === 0 ? (
         <EmptyState className="mt-6"
           message="Events you make, or join on a phone signed in to your Green Dot account, show here." />

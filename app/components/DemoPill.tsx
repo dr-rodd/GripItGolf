@@ -5,7 +5,7 @@
  */
 export default function DemoPill({ className = '' }: { className?: string }) {
   return (
-    <span className={`inline-flex items-center align-middle rounded-full bg-tint text-bark t-label px-2 py-0.5 leading-none whitespace-nowrap ${className}`}>
+    <span className={`inline-flex items-center align-middle rounded-tag bg-tint text-bark t-label px-2 py-0.5 leading-none whitespace-nowrap ${className}`}>
       Demo
     </span>
   )

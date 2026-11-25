@@ -147,7 +147,7 @@ export default function GolfIrelandTour({ open, onClose, name = 'Pat Murphy', cl
       {/* ── The preview's own bar ── */}
       <div className="flex items-center justify-between gap-3 px-4 pt-[max(env(safe-area-inset-top),8px)] h-14 border-b border-line flex-shrink-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="rounded-full bg-accent-tint text-accent-deep t-label px-2.5 py-1">Preview</span>
+          <span className="rounded-tag bg-accent-tint text-accent-deep t-label px-2.5 py-1">Preview</span>
           <span className="t-cap text-ink/65 tabular-nums truncate">Step {step} of {STEPS.length}</span>
         </div>
         <button type="button" onClick={close} className="t-label text-ink/65 hover:text-ink px-2 py-2">

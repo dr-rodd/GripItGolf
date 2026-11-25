@@ -41,7 +41,7 @@ export default function LabIndicator() {
         onClick={() => setOpen(o => !o)}
         className="flex items-center h-11 px-1"
       >
-        <span className="inline-flex items-center h-8 px-3 rounded-full bg-ink text-cream text-[13px] font-semibold leading-none whitespace-nowrap">
+        <span className="inline-flex items-center h-8 px-3 rounded-tag bg-ink text-cream text-[13px] font-semibold leading-none whitespace-nowrap">
           Lab · {count}
         </span>
       </button>

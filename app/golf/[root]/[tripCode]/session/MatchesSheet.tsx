@@ -411,7 +411,7 @@ export default function MatchesSheet({
                   <p className="t-label flex items-center gap-1.5">
                     {m.live && !m.result && <LiveDot />}
                     {winner
-                      ? <span className="px-2 py-0.5 rounded-full" style={{ background: winner.fill, color: winner.on }}>{lineOf(m)}</span>
+                      ? <span className="px-2 py-0.5 rounded-tag" style={{ background: winner.fill, color: winner.on }}>{lineOf(m)}</span>
                       : <span className={m.live ? 'text-accent-deep' : 'text-ink/65'}>{lineOf(m)}</span>}
                   </p>
                   <Link href={`${tripHome}/session/${roundId}/match/${slot}/card`} className="t-label text-accent-deep">

@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { IconChevronLeft } from '@/app/components/icons'
-import { cardClass } from '@/app/components/ui'
+import { PageTitle, cardClass } from '@/app/components/ui'
 import { askAwards, type AwardAnswer } from '@/lib/accountClient'
 import { clubEventDates } from '@/lib/clubs'
 import { myStandingLine } from '@/lib/clubAward'
@@ -39,8 +39,7 @@ export default function AwardStanding({ clubId, id, slug, year }: { clubId: stri
       {!a && !error && <div aria-hidden="true" className="skeleton h-48 rounded-card mt-6" />}
       {a?.award && (
         <>
-          <h1 className="t-h1 text-ink mt-2 break-words">{a.award.name}</h1>
-          <p className="t-cap text-ink/65 mt-1">{a.award.year}{a.award.rules.bestOf ? ` · best ${a.award.rules.bestOf} results` : ''}</p>
+          <PageTitle className="mt-2" sub={<>{a.award.year}{a.award.rules.bestOf ? ` · best ${a.award.rules.bestOf} results` : ''}</>}>{a.award.name}</PageTitle>
           {mine && <p className="text-[15px] font-semibold text-club-deep mt-4">{mine}</p>}
           {rows.length === 0 && <p className="text-ink/80 text-[15px] mt-6">Nobody has points yet — they arrive as each competition is certified and each match play round is decided.</p>}
           {rows.length > 0 && (

@@ -5,7 +5,7 @@ import HandicapIndexCard from '@/app/components/HandicapIndexCard'
 import YourDetailsCard from '@/app/components/YourDetailsCard'
 import LegalLinks from '@/app/components/LegalLinks'
 import { IconChevronLeft } from '@/app/components/icons'
-import { ListGroup, ListRow } from '@/app/components/ui'
+import { ListGroup, ListRow, PageTitle } from '@/app/components/ui'
 
 /**
  * Your page (D280; the profile circle — D319): handicap, your details, your
@@ -15,10 +15,7 @@ import { ListGroup, ListRow } from '@/app/components/ui'
 export default function YourPage({ slug, club }: { slug: string; club: string }) {
   return (
     <section>
-      <Link href={`/club/${slug}`} className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
-        <IconChevronLeft size={16} /> {club}
-      </Link>
-      <h1 className="t-h1 text-ink mt-2">Your page</h1>
+      <PageTitle back={{ href: `/club/${slug}`, label: club }} className="mt-5">Your page</PageTitle>
       <HandicapIndexCard className="mt-6" />
       <YourDetailsCard club={club} className="mt-4" />
       <h2 className="t-h2 text-ink mt-8">Account</h2>

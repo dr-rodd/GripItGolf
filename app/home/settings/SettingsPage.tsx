@@ -7,6 +7,7 @@ import ClubEventTypesCard from '@/app/components/ClubEventTypesCard'
 import FeedSettings from '@/app/components/feed/FeedSettings'
 import StreamsCard from '@/app/components/feed/StreamsCard'
 import { IconChevronLeft } from '@/app/components/icons'
+import { PageTitle } from '@/app/components/ui'
 
 /**
  * Settings on /home (D319): what you see from your clubs, your streams, who
@@ -18,10 +19,7 @@ export default function SettingsPage() {
     <main className="min-h-dvh paper">
       <TripHeader backTo="/home" />
       <div className="w-full max-w-md mx-auto px-4 pt-1 pb-10">
-        <Link href="/home" className="t-cap text-ink/65 inline-flex items-center gap-1 mt-5 press ch-focus">
-          <IconChevronLeft size={16} /> Home
-        </Link>
-        <h1 className="t-h1 text-ink mt-2">Settings</h1>
+        <PageTitle back={{ href: '/home', label: 'Home' }} className="mt-5">Settings</PageTitle>
         <ClubEventTypesCard className="mt-6" />
         <h2 className="t-h2 text-ink mt-8">Streams</h2>
         <StreamsCard className="mt-3" />

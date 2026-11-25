@@ -81,7 +81,7 @@ export function NextMatchCard({ tripCode, view, live = null, today }: {
               </p>
               {live ? (
                 <p className="flex items-center t-cap mt-1">
-                  <span className="px-2 py-0.5 rounded-full font-semibold text-ink" style={standingStyle(live, view)}>
+                  <span className="px-2 py-0.5 rounded-tag font-semibold text-ink" style={standingStyle(live, view)}>
                     {myStanding(live, view.entrantId)}
                   </span>
                 </p>
@@ -381,7 +381,7 @@ function LiveBoard({ tripCode, view, live, scoring }: { tripCode: string; view: 
                       </span>
                       <span className="block t-cap text-ink/65 truncate">{l.roundName} · {thru}</span>
                     </span>
-                    <span className="flex-shrink-0 px-2.5 py-1 rounded-full t-cap font-semibold max-w-[45%] truncate text-ink" style={standingStyle(l, view)}>
+                    <span className="flex-shrink-0 px-2.5 py-1 rounded-tag t-cap font-semibold max-w-[45%] truncate text-ink" style={standingStyle(l, view)}>
                       {standing}
                     </span>
                   </>

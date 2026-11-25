@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { ButtonLink } from '@/app/components/ui'
+import { ButtonLink, PageTitle } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
 import { askBooking, askMatchPlay, readAccount } from '@/lib/accountClient'
 
@@ -33,7 +33,7 @@ export default function CompDoor({ code, clubName, here, matchPlay = false }: {
 
   return (
     <section className="mt-6" aria-busy={state === 'checking'}>
-      <h1 className="t-h1 text-ink">Members’ competition</h1>
+      <PageTitle>Members’ competition</PageTitle>
       {state === 'out' && (
         <>
           <p className="text-ink/80 text-[15px] leading-relaxed mt-2">This competition is for {clubName}’s members. Sign in with the account on the club’s list.</p>

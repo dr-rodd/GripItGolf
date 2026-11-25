@@ -27,9 +27,9 @@ export default function LeaderboardLoading() {
       >
         {/* The board tabs */}
         <div className="flex gap-2 mb-6">
-          <div className="skeleton h-9 w-28 rounded-full" />
-          <div className="skeleton h-9 w-24 rounded-full" />
-          <div className="skeleton h-9 w-20 rounded-full" />
+          <div className="skeleton h-9 w-28 rounded-tile" />
+          <div className="skeleton h-9 w-24 rounded-tile" />
+          <div className="skeleton h-9 w-20 rounded-tile" />
         </div>
 
         {/* The rows */}

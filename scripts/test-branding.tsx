@@ -1432,7 +1432,7 @@ section('Status pills follow the spec')
   const loss = renderToStaticMarkup(React.createElement(Pill, { tone: 'loss', children: 'Lost' }))
   const neutral = renderToStaticMarkup(React.createElement(Pill, { children: 'Thru 11' }))
 
-  ok(win.includes('rounded-full'), 'a pill is round')
+  ok(win.includes('rounded-tag') && !win.includes('rounded-full'), 'a pill is a rounded rectangle, never fully round (Ross, 25 Nov 2026)')
   ok(/text-\[13px\] font-semibold/.test(win), 'at 13px, semibold')
   ok(!/uppercase|tracking-/.test(win + loss + neutral), 'in sentence case, with no letter-spacing')
   // A tint behind, the deep shade of the same hue on it — never black
@@ -1507,7 +1507,7 @@ section('The parts kit')
   ok(/text-rust-deep/.test(f) && f.indexOf('Give it a name') > f.indexOf('<input'), '  …with its error right under it, in rust')
 
   // Chip, segmented, toggle
-  ok(/min-h-11/.test(chipClass(false)) && /rounded-full/.test(chipClass(false)), 'a chip is 44px and fully round')
+  ok(/min-h-11/.test(chipClass(false)) && /rounded-tile/.test(chipClass(false)) && !/rounded-full/.test(chipClass(false)), 'a chip is 44px and a rounded rectangle')
   ok(chipClass(true).includes('bg-accent-deep text-white'), '  …chosen is deep emerald, white words')
   ok(chipClass(false).includes('shadow-raised'), '  …not chosen is a raised chip')
   const seg = renderToStaticMarkup(React.createElement(Segmented, {
@@ -1637,7 +1637,7 @@ section('Motion is calm, and can be switched off')
 
   const loops = [...css.matchAll(/animation:[^;]*\binfinite\b[^;]*;/g)].map(m => m[0])
   // One named exception (D337): the pop-out's opening is a spring, most of
-  // the way there by 300ms and then settling — held in its own section below.
+  // the way there by 350ms and then settling — held in its own section below.
   const oneShot = loops.reduce((acc, l) => acc.replace(l, ''), css).replace(/--gd-pop-open:\s*\d+ms;/, '')
 
   const durations = durationsIn(oneShot)
@@ -1756,12 +1756,12 @@ section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out
   // Motion. Held here so it cannot quietly become two, and so every
   // expanding pop-out moves alike. Its length is a named exception to the
   // 400ms ceiling (D337: "still too quick") — the move is most of the way
-  // there by 300ms, the rest is the spring settling.
+  // there by 350ms, the rest is the spring settling.
   ok(springOvershoot() > 0 && springOvershoot() <= POP_SETTLE && POP_SETTLE <= 0.02,
     `the spring goes at most 2% past its place (${(springOvershoot() * 100).toFixed(1)}%)`)
   ok(springAt(0) === 0 && springAt(40) < 0.1, '  …starting gently from the tile, never with a jump')
-  ok(springAt(300) > 0.85, `  …most of the way there by 300ms, so it still answers the touch (${springAt(300).toFixed(2)})`)
-  ok(POP_OPEN_MS >= 600 && POP_OPEN_MS <= 800, `  …at rest inside 800ms (${POP_OPEN_MS}ms)`)
+  ok(springAt(350) > 0.85, `  …most of the way there by 350ms, so it still answers the touch (${springAt(350).toFixed(2)})`)
+  ok(POP_OPEN_MS >= 600 && POP_OPEN_MS <= 900, `  …at rest inside 900ms (${POP_OPEN_MS}ms)`)
   ok(POP_CLOSE_MS <= 400, `closing is a response, inside the 400ms ceiling (${POP_CLOSE_MS}ms)`)
   ok(POP_SHARP_MS > 300 && POP_SHARP_MS < POP_OPEN_MS, '  …and the blur clears late, so it sharpens as it lands')
   const from = { left: 16, top: 200, width: 358, height: 180 }, to = { left: 0, top: 120, width: 390, height: 700 }
@@ -2860,7 +2860,7 @@ section('The card start sheet wears the parts kit (D72)')
   const compact = optionClass(true, 'compact')
   ok(compact.includes('rounded-tile') && compact.includes('min-h-11') && compact.includes('bg-accent-deep') && !compact.includes('rounded-full'),
     'the compact tile is square-cornered at chip height, deep emerald when chosen')
-  ok(chipClass(false).includes('rounded-full'), '  …and a chip stays fully round')
+  ok(!chipClass(false).includes('rounded-full'), '  …and a chip is never the fully round pill either')
 }
 
 section('The Clubhouse: hover, focus and its two moves, on purpose (stage (k1), D202)')

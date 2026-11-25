@@ -12,7 +12,7 @@ import { IconChevronRight, IconSettings } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
 import Stream from '@/app/components/feed/Stream'
 import Initials from '@/app/components/Initials'
-import { ButtonLink, ListGroup, ListRow, LiveDot, buttonClass, cardClass } from '@/app/components/ui'
+import { ButtonLink, ListGroup, ListRow, LiveDot, PageTitle, buttonClass, cardClass } from '@/app/components/ui'
 import { homeData, type HomeData } from '@/lib/accountClient'
 import type { MyEvent } from '@/lib/account'
 import { clubEventDates, groupClubEvents, irishToday } from '@/lib/clubs'
@@ -208,7 +208,7 @@ function BoardTab({ events }: { events: MyEvent[] }) {
   if (!e) {
     return (
       <section className="mt-6">
-        <h1 className="t-h1 text-ink">Board</h1>
+        <PageTitle>Board</PageTitle>
         <p className="text-ink/65 text-[15px] leading-relaxed mt-2">Your events’ leaderboards open here once you’re in one.</p>
       </section>
     )
@@ -227,7 +227,7 @@ function BoardTab({ events }: { events: MyEvent[] }) {
 function StatsTab({ home }: { home: HomeData }) {
   return (
     <section className="mt-6">
-      <h1 className="t-h1 text-ink">Your season</h1>
+      <PageTitle>Your season</PageTitle>
       {home.season.length === 0 ? (
         <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
       ) : (

@@ -25,18 +25,19 @@
 /**
  * The spring, as Apple describes one (and X's menus use): its **response** —
  * how long one swing takes, so the larger the slower — and its **damping**,
- * 1 being no overshoot at all. 0.6s and 0.8: a gentle start, most of the way
- * there by 300ms, furthest past its place (about 1.5%) near 500ms.
+ * 1 being no overshoot at all. 0.7s and 0.8 (Ross, 25 Nov 2026: "slightly
+ * slower" than 0.6): a gentle start, most of the way there by 350ms,
+ * furthest past its place (about 1.5%) near 580ms.
  */
-export const SPRING_RESPONSE_S = 0.6
+export const SPRING_RESPONSE_S = 0.7
 export const SPRING_DAMPING = 0.8
 
 /** The whole opening: by then the spring is within a fraction of a pixel of rest. */
-export const POP_OPEN_MS = 720
+export const POP_OPEN_MS = 840
 /** Closing, on the putt curve: back into the tile, out of the way. */
 export const POP_CLOSE_MS = 280
 /** The backdrop darkening as the card comes out — a fade, not part of the spring. */
-export const POP_FADE_MS = 340
+export const POP_FADE_MS = 380
 
 /** The settle's ceiling (D331): at most 2% past its place, of the way it travelled. */
 export const POP_SETTLE = 0.02
@@ -44,9 +45,9 @@ export const POP_SETTLE = 0.02
 /** How soft the shape is as it leaves the tile. */
 export const POP_BLUR_PX = 10
 /** When it is sharp: late, so it sharpens as it lands (D337). */
-export const POP_SHARP_MS = 440
+export const POP_SHARP_MS = 520
 /** When it is fully seen: it leaves the tile half seen. */
-export const POP_SEEN_MS = 200
+export const POP_SEEN_MS = 230
 
 /** How often the spring is sampled into a keyframe — about one a frame. */
 export const POP_STEP_MS = 16
