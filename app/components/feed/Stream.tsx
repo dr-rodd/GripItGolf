@@ -5,8 +5,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { askFeed } from '@/lib/feedClient'
 import { compMenu, pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { IconCheck, IconChevronDown, IconSettings } from '../icons'
-import { LiveDot, buttonClass, cardClass, iconButtonClass } from '../ui'
+import { IconCheck, IconSettings } from '../icons'
+import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
+import { popClose, popOpen } from '../popOut'
 import { FeedItem, type FeedView } from './FeedItem'
 import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
@@ -39,18 +40,16 @@ function remember(key: string, v: unknown) {
   try { window.localStorage.setItem(key, JSON.stringify(v)) } catch { /* a convenience only */ }
 }
 
-/** A pill: a stream to switch to (D295) — chosen in the emerald wash, never the answer's solid emerald. */
-const pillClass = (on: boolean) =>
-  `inline-flex items-center gap-1.5 flex-shrink-0 min-h-11 px-3.5 rounded-full border text-[15px] font-semibold leading-tight press ch-focus ${
-    on ? 'bg-accent-tint border-accent-deep text-accent-deep' : 'bg-surface border-line text-ink/80 hover:border-line-strong'}`
-
 /**
  * The Stream tab (Streams v2, D318–D331). The stream on show is named at the
  * top — club•stream, comp•stream, match•stream, friends•stream (D321) — with
- * a chevron where there is a choice inside it: comp.stream's competitions by
- * heading (D323), match.stream's followed matches (D326). The member's
- * streams as pills, and a sideways swipe between them (D295, the browser's
- * own scroll snap; instant under Reduce Motion). Pull down to read again;
+ * the page's title on its opaque box (D339). **No pills** (D340, Ross, 25 Nov
+ * 2026): the title is the control — its chevron says so, and a tap springs
+ * a menu out of it (the pop-out) listing the member's streams, then the
+ * choices inside the one on show: comp.stream's competitions by heading
+ * (D323), match.stream's followed matches (D326). A sideways swipe still
+ * moves between streams (D295, the browser's own scroll snap; instant under
+ * Reduce Motion). Pull down to read again;
  * what is new fades in at the top; skeletons while it loads (M13). Tapping
  * an item opens its sheet (D330). Asked when the tab opens and when the
  * phone comes back to it — never polled, nothing on Home (M3).
@@ -65,7 +64,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const [panels, setPanels] = useState<Record<string, Panel>>({})
   const [compPick, setCompPick] = useState<{ code: string; over: string | null } | null>(null)
   const [matchPick, setMatchPick] = useState<string | null>(null)
-  const [menu, setMenu] = useState(false)
+  const [menu, setMenu] = useState<HTMLElement | null>(null)
   const [sheet, setSheet] = useState<{ id: string; origin: HTMLElement | null } | null>(null)
   const [composer, setComposer] = useState<'status' | 'post' | null>(null)
   const [now, setNow] = useState(() => new Date())
@@ -176,7 +175,6 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     const el = scroller.current
     if (i < 0 || !el) return
     setActive(key)
-    setMenu(false)
     remember(`${STREAM_KEY}:${where}`, key)
     el.scrollTo({ left: i * el.clientWidth, behavior: reducedMotion() ? 'auto' : 'smooth' })
   }
@@ -187,7 +185,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     const settle = () => {
       const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
       const key = pills[i] ? streamKey(pills[i]) : null
-      if (key && key !== active) { setActive(key); setMenu(false); remember(`${STREAM_KEY}:${where}`, key) }
+      if (key && key !== active) { setActive(key); setMenu(null); remember(`${STREAM_KEY}:${where}`, key) }
     }
     const onScroll = () => { window.clearTimeout(t); t = window.setTimeout(settle, 120) }
     el.addEventListener('scroll', onScroll, { passive: true })
@@ -208,7 +206,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     if (!el) return
     let start: number | null = null
     let dist = 0
-    const down = (e: TouchEvent) => { start = window.scrollY <= 0 && !(e.target as HTMLElement).closest('.feed-pills') ? e.touches[0].clientY : null; dist = 0 }
+    const down = (e: TouchEvent) => { start = window.scrollY <= 0 && !(e.target as HTMLElement).closest('[role="menu"]') ? e.touches[0].clientY : null; dist = 0 }
     const move = (e: TouchEvent) => {
       if (start === null) return
       dist = Math.max(0, e.touches[0].clientY - start)
@@ -254,7 +252,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   if (homeError && !home) {
     return (
       <section className="mt-6">
-        <h1 className="t-h1 text-ink">Stream</h1>
+        <PageTitle>Stream</PageTitle>
         <p role="alert" className="t-cap text-rust-deep mt-3">{homeError}</p>
         <button type="button" onClick={() => void loadHome()} className={`${buttonClass('secondary', false)} mt-3`}>Try again</button>
       </section>
@@ -263,8 +261,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   if (!home) {
     return (
       <section className="mt-6" aria-busy="true">
-        <div className="skeleton h-8 w-44 rounded-tile" />
-        <div className="skeleton h-11 mt-4 rounded-full" />
+        <div className="skeleton h-[60px] rounded-card" />
         <div className="space-y-3 mt-4"><div className="skeleton h-40 rounded-card" /><div className="skeleton h-40 rounded-card" /></div>
       </section>
     )
@@ -272,8 +269,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   if (!home.ready || home.junior) {
     return (
       <section className="mt-6">
-        <h1 className="t-h1 text-ink">Stream</h1>
-        <p className="t-body text-ink/80 mt-2">{home.junior ? 'The stream isn’t open to junior members.' : 'The stream isn’t set up yet.'}</p>
+        <PageTitle sub={home.junior ? 'The stream isn’t open to junior members.' : 'The stream isn’t set up yet.'}>Stream</PageTitle>
       </section>
     )
   }
@@ -283,10 +279,12 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     const pick = { code: c.code, over: def?.code ?? null }
     setCompPick(pick)
     remember(COMP_KEY, pick)
-    setMenu(false)
   }
   const label = (s: StreamRef) => home.streams?.find(v => v.key === streamKey(s))
   const chooser = activeRef?.kind === 'comp' ? comps.length > 0 : activeRef?.kind === 'match' ? follows.length > 1 : false
+  // The title opens the menu whenever there is anything to choose: another stream, or a choice inside this one.
+  const hasMenu = pills.length > 1 || chooser
+  const shortDate = (d: string) => new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))
 
   return (
     <section ref={section} className="mt-4 relative" aria-labelledby="stream-title">
@@ -299,81 +297,76 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
         )}
       </div>
 
-      <div className="relative">
-        <div className="flex items-center gap-1">
-          <h1 id="stream-title" className="t-h2 text-ink min-w-0">
+      <div className="relative z-30">
+        {/* D339, D340: the stream's name is the page's title, on its opaque box; the title is the control. */}
+        <PageTitle
+          menu={hasMenu ? { open: !!menu, label: 'Choose what the stream shows', onToggle: el => setMenu(m => m ?? el) } : undefined}
+          action={<Link href={settingsPath} aria-label="Choose your streams" className={iconButtonClass(true)}><IconSettings size={20} /></Link>}
+          sub={activeRef?.kind === 'comp' && comp
+            ? <span className="flex items-center gap-1.5 min-w-0">{comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span></span>
+            : activeRef?.kind === 'club' ? label(activeRef)?.label : undefined}>
+          <span id="stream-title" className="inline-flex items-center gap-2">
             {activeRef ? <StreamName kind={activeRef.kind} /> : 'Stream'}
-          </h1>
-          {chooser && (
-            <button type="button" onClick={() => setMenu(m => !m)} aria-haspopup="menu" aria-expanded={menu}
-              aria-label={activeRef?.kind === 'comp' ? 'Choose a competition' : 'Choose a match'}
-              className="w-11 h-11 rounded-full flex items-center justify-center text-ink/80 press ch-focus">
-              <IconChevronDown size={22} className={`transition-transform duration-200 ${menu ? 'rotate-180' : ''}`} />
-            </button>
-          )}
-          <Link href={settingsPath} aria-label="Choose your streams" className={`${iconButtonClass(true)} ml-auto flex-shrink-0`}>
-            <IconSettings size={20} />
-          </Link>
-        </div>
-        {activeRef?.kind === 'comp' && comp && (
-          <p className="t-cap text-ink/65 flex items-center gap-1.5 min-w-0">
-            {comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span>
-          </p>
-        )}
-        {activeRef?.kind === 'club' && <p className="t-cap text-ink/65">{label(activeRef)?.label}</p>}
-        {menu && activeRef?.kind === 'comp' && home.today && (
-          <StreamMenu onClose={() => setMenu(false)} label="Competitions">
-            {compMenu(comps, home.today).map(h => (
-              <div key={h.key} role="group" aria-label={h.label}>
-                <p className="t-label text-ink/65 px-3 pt-3 pb-1">{h.label}</p>
-                {h.comps.map(c => (
-                  <button key={c.code} type="button" role="menuitemradio" aria-checked={c.code === comp?.code} onClick={() => pickComp(c)}
-                    className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
-                    {c.live && <LiveDot />}
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-[16px] text-ink truncate">{c.name}</span>
-                      <span className="block t-cap text-ink/65 truncate">{[c.clubName, c.date && new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${c.date}T12:00:00Z`))].filter(Boolean).join(' · ')}</span>
-                    </span>
-                    {c.code === comp?.code && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
-                  </button>
+          </span>
+        </PageTitle>
+        {menu && (
+          <StreamMenu origin={menu} onClose={() => setMenu(null)} label="What the stream shows">
+              <>
+                {pills.length > 1 && (
+                  <div role="group" aria-label="Streams">
+                    <p className="t-label text-ink/65 px-3 pt-3 pb-1">Streams</p>
+                    {pills.map(p => {
+                      const key = streamKey(p)
+                      const live = p.kind === 'comp' && comps.some(c => c.playing && c.live)
+                      return (
+                        <button key={key} type="button" role="menuitemradio" aria-checked={key === active}
+                          onClick={() => go(key)}
+                          className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
+                          {live && <LiveDot />}
+                          <span className="flex-1 min-w-0 t-card text-ink truncate"><StreamName kind={p.kind} /></span>
+                          {p.kind === 'friends' && newComments > 0 && <span className="w-2 h-2 rounded-full bg-accent-deep" role="img" aria-label="new comments" />}
+                          {key === active && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+                {activeRef?.kind === 'comp' && home.today && comps.length > 0 && compMenu(comps, home.today).map(h => (
+                  <div key={h.key} role="group" aria-label={h.label} className={pills.length > 1 ? 'border-t border-line mt-1' : ''}>
+                    <p className="t-label text-ink/65 px-3 pt-3 pb-1">{h.label}</p>
+                    {h.comps.map(c => (
+                      <button key={c.code} type="button" role="menuitemradio" aria-checked={c.code === comp?.code} onClick={() => pickComp(c)}
+                        className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
+                        {c.live && <LiveDot />}
+                        <span className="flex-1 min-w-0">
+                          <span className="block text-[16px] text-ink truncate">{c.name}</span>
+                          <span className="block t-cap text-ink/65 truncate">{[c.clubName, c.date && shortDate(c.date)].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        {c.code === comp?.code && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
                 ))}
-              </div>
-            ))}
-          </StreamMenu>
-        )}
-        {menu && activeRef?.kind === 'match' && (
-          <StreamMenu onClose={() => setMenu(false)} label="Matches">
-            {follows.map(f => (
-              <button key={f.key} type="button" role="menuitemradio" aria-checked={f.key === match}
-                onClick={() => { setMatchPick(f.key); remember(MATCH_KEY, f.key); setMenu(false) }}
-                className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
-                <span className="flex-1 min-w-0 text-[16px] text-ink truncate">{f.label}</span>
-                {f.key === match && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
-              </button>
-            ))}
+                {activeRef?.kind === 'match' && follows.length > 1 && (
+                  <div role="group" aria-label="Matches" className={pills.length > 1 ? 'border-t border-line mt-1' : ''}>
+                    <p className="t-label text-ink/65 px-3 pt-3 pb-1">Matches</p>
+                    {follows.map(f => (
+                      <button key={f.key} type="button" role="menuitemradio" aria-checked={f.key === match}
+                        onClick={() => { setMatchPick(f.key); remember(MATCH_KEY, f.key) }}
+                        className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
+                        <span className="flex-1 min-w-0 text-[16px] text-ink truncate">{f.label}</span>
+                        {f.key === match && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
           </StreamMenu>
         )}
       </div>
 
-      {pills.length > 1 && (
-        <div className="mt-3 -mx-4 px-4 flex items-center gap-2 overflow-x-auto feed-pills" role="tablist" aria-label="Streams">
-          {pills.map(p => {
-            const key = streamKey(p)
-            const on = key === active
-            const live = p.kind === 'comp' && comps.some(c => c.playing && c.live)
-            return (
-              <button key={key} type="button" role="tab" aria-selected={on} aria-controls={`stream-${key}`} onClick={() => go(key)} className={pillClass(on)}>
-                {live && <LiveDot />}
-                <StreamName kind={p.kind} />
-                {p.kind === 'friends' && newComments > 0 && <span className="w-1.5 h-1.5 rounded-full bg-accent-deep" aria-label="new comments" role="img" />}
-              </button>
-            )
-          })}
-        </div>
-      )}
-
       {pills.length === 0 ? (
-        <div className={`${cardClass('flat')} px-4 py-6 mt-3 text-center`}>
+        <div className={`${cardClass()} px-4 py-6 mt-3 text-center`}>
           <p className="t-body text-ink/80">No streams on.</p>
           <Link href={settingsPath} className={`${buttonClass('quiet', false)} mt-1`}>Choose your streams</Link>
         </div>
@@ -422,7 +415,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
 function ComposeButton({ onClick, label, hint }: { onClick: () => void; label: string; hint: string }) {
   return (
     <button type="button" onClick={onClick} aria-label={label}
-      className={`${cardClass('flat', true)} w-full mb-3 px-4 min-h-12 flex items-center gap-3 text-left`}>
+      className={`${cardClass('raised', true)} w-full mb-3 px-4 min-h-12 flex items-center gap-3 text-left`}>
       <span aria-hidden="true" className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
       <span className="t-body text-ink/65 flex-1 min-w-0 truncate">{hint}</span>
       <span aria-hidden="true" className="t-label text-accent-deep flex-shrink-0">Post</span>
@@ -431,23 +424,38 @@ function ComposeButton({ onClick, label, hint }: { onClick: () => void; label: s
 }
 
 /**
- * The chevron's menu (D323): a drop-down under the stream's name, the way a
- * social app lists what it can show — headings, then the choices, the one
- * shown ticked. Outside the swipe frame, so nothing clips it. Escape or a tap
- * elsewhere closes it.
+ * The title's menu (D323, D340): under the stream's name, the way a social
+ * app lists what it can show — headings, then the choices, the one shown
+ * ticked. It springs out of the title and back into it (the pop-out,
+ * `app/components/popOut.ts`). Outside the swipe frame, so nothing clips
+ * it. Escape or a tap elsewhere closes it.
  */
-function StreamMenu({ label, onClose, children }: { label: string; onClose: () => void; children: React.ReactNode }) {
+function StreamMenu({ label, origin, onClose, children }: {
+  label: string
+  origin: HTMLElement
+  onClose: () => void
+  children: React.ReactNode
+}) {
   const box = useRef<HTMLDivElement>(null)
+  const closing = useRef(false)
+  const close = useCallback(() => {
+    if (closing.current) return
+    closing.current = true
+    void popClose(box.current, origin).then(onClose)
+  }, [origin, onClose])
+  useLayoutEffect(() => { popOpen(box.current, origin) }, [origin])
   useEffect(() => {
-    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node) && !(e.target as HTMLElement).closest('[aria-haspopup="menu"]')) onClose() }
-    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    // A tap on the title too: it closes the menu it opened (the title only ever opens one).
+    const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) close() }
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') close() }
     document.addEventListener('pointerdown', away)
     document.addEventListener('keydown', esc)
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
-  }, [onClose])
+  }, [close, origin])
   return (
-    <div ref={box} role="menu" aria-label={label}
-      className={`${cardClass('floating')} paper menu-drop absolute left-0 right-0 top-full mt-1 z-30 p-1 max-h-[60vh] overflow-y-auto`}>
+    // A choice made closes it, back into the title.
+    <div ref={box} role="menu" aria-label={label} onClick={e => { if ((e.target as HTMLElement).closest('[role^="menuitem"]')) close() }}
+      className={`${cardClass('floating')} bg-surface absolute left-0 right-0 top-full mt-2 z-30 p-1 max-h-[60vh] overflow-y-auto`}>
       {children}
     </div>
   )
@@ -460,7 +468,7 @@ function StreamPanel({ stream, panel, now, empty, comp, settingsPath, onMore, on
   onOpen: (id: string, el: HTMLElement) => void
 }) {
   if (stream.kind === 'comp' && !comp) {
-    return <div className={`${cardClass('flat')} px-4 py-6 text-center`}><p className="t-body text-ink/80">No competitions in the last month.</p></div>
+    return <div className={`${cardClass()} px-4 py-6 text-center`}><p className="t-body text-ink/80">No competitions in the last month.</p></div>
   }
   if (!panel || (panel.loading && panel.items.length === 0)) {
     return (
@@ -474,7 +482,7 @@ function StreamPanel({ stream, panel, now, empty, comp, settingsPath, onMore, on
   return (
     <div className="space-y-3">
       {panel.players && panel.players.length > 0 && (
-        <div className={`${cardClass('flat')} px-4 py-3 flex items-center gap-2`}>
+        <div className={`${cardClass()} px-4 py-3 flex items-center gap-2`}>
           <LiveDot />
           <p className="t-label text-ink min-w-0">
             <span className="sr-only">On the course: </span>
@@ -483,13 +491,13 @@ function StreamPanel({ stream, panel, now, empty, comp, settingsPath, onMore, on
         </div>
       )}
       {panel.error && (
-        <div className={`${cardClass('flat')} px-4 py-3`}>
+        <div className={`${cardClass()} px-4 py-3`}>
           <p role="alert" className="t-cap text-rust-deep">{panel.error}</p>
           <button type="button" onClick={onRetry} className={buttonClass('quiet', false, true)}>Try again</button>
         </div>
       )}
       {!panel.error && panel.items.length === 0 && (
-        <div className={`${cardClass('flat')} px-4 py-6 text-center`}>
+        <div className={`${cardClass()} px-4 py-6 text-center`}>
           <p className="t-body text-ink/80">{empty}</p>
           {stream.kind === 'friends' && <Link href={settingsPath} className={`${buttonClass('quiet', false)} mt-1`}>Find friends</Link>}
         </div>

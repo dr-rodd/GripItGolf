@@ -128,8 +128,16 @@ const MARK: Record<CalItem['kind'], string> = {
   golf: 'bg-line-strong',
 }
 
-function MonthView({ day, today, range, items, onDay: open }: {
+/**
+ * The month grid — the Calendar's own, and the tee times' day picker's (Ross,
+ * 25 Nov 2026), which hands it `chosen` (the day on show, ringed), `open`
+ * (only the days with a tee sheet may be picked) and its own `hint`.
+ */
+export function MonthView({ day, today, range, items, onDay: open, chosen = null, mayOpen, hint = 'Tap a day to see it hour by hour.' }: {
   day: string; today: string; range: { from: string; to: string }; items: CalItem[]; onDay: (d: string) => void
+  chosen?: string | null
+  mayOpen?: (d: string) => boolean
+  hint?: string
 }) {
   const days = daysFrom(range.from, range.to)
   const month = day.slice(0, 7)
@@ -146,11 +154,12 @@ function MonthView({ day, today, range, items, onDay: open }: {
           const booked = here.some(i => i.status?.tone === 'booked')
           const out = d.slice(0, 7) !== month
           const isToday = d === today
+          const may = mayOpen ? mayOpen(d) : true
           return (
-            <button key={d} type="button" onClick={() => open(d)}
-              aria-label={`${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}${here.length ? `, ${here.length} on` : ''}${booked ? ', you’re booked' : ''}`}
-              className={`ch-focus press rounded-tile min-h-14 flex flex-col items-center pt-1.5 pb-1 gap-1 ${out ? 'opacity-50' : ''} ${booked ? 'bg-club-tint' : ''}`}>
-              <span className={`t-data text-[15px] w-7 h-7 leading-7 rounded-full ${isToday ? 'bg-club text-on-club' : booked ? 'text-club-deep font-semibold' : 'text-ink'}`}>
+            <button key={d} type="button" onClick={() => open(d)} disabled={!may} aria-current={isToday ? 'date' : undefined} aria-pressed={chosen ? d === chosen : undefined}
+              aria-label={`${isToday ? 'Today, ' : ''}${fmt(d, { weekday: 'long', day: 'numeric', month: 'long' })}${here.length ? `, ${here.length} on` : ''}${booked ? ', you’re booked' : ''}`}
+              className={`ch-focus press rounded-tile min-h-14 flex flex-col items-center pt-1.5 pb-1 gap-1 disabled:cursor-default ${out || !may ? 'opacity-40' : ''} ${booked ? 'bg-club-tint' : ''} ${d === chosen ? 'ring-2 ring-inset ring-club-deep' : ''}`}>
+              <span className={`t-data text-[15px] w-7 h-7 leading-7 rounded-full ${isToday ? 'bg-club text-on-club font-semibold' : booked ? 'text-club-deep font-semibold' : 'text-ink'}`}>
                 {Number(d.slice(8))}
               </span>
               <span className="flex gap-1 h-1.5">
@@ -164,7 +173,7 @@ function MonthView({ day, today, range, items, onDay: open }: {
         <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${MARK.comp}`} />Competition</span>
         <span className="inline-flex items-center gap-1.5"><span className={`w-2 h-2 rounded-full ${MARK.event}`} />Club event</span>
       </p>
-      <p className="t-cap text-ink/65 mt-1">Tap a day to see it hour by hour.</p>
+      <p className="t-cap text-ink/65 mt-1">{hint}</p>
     </div>
   )
 }

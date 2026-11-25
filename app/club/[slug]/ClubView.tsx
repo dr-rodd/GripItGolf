@@ -9,7 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
 import CodeBox from '@/app/components/CodeBox'
-import { IconCheck, IconChevronDown, IconChevronLeft, IconChevronRight, IconSettings, IconUser } from '@/app/components/icons'
+import { IconCheck, IconChevronDown, IconChevronRight, IconSettings, IconUser } from '@/app/components/icons'
 import Initials from '@/app/components/Initials'
 import { ButtonLink, LiveDot, ListGroup, ListRow, PageTitle, Segmented, buttonClass, cardClass } from '@/app/components/ui'
 import { accountLink } from '@/lib/account'
@@ -557,13 +557,18 @@ function MembersHome({ face, m }: { face: ClubFace; m: Members }) {
         </section>
       )}
 
-      {/* D286: the Calendar — the next few things on, then the whole calendar on its own page. */}
-      {(upNext ? upNext.length > 0 : calendar.length > 0) && (
+      {/* D286: the Calendar — the next few things on, then the whole calendar on its own page.
+          Always drawn (Ross, 25 Nov 2026: Home lost its way to the Calendar whenever
+          nothing was coming up), saying so when the next four weeks are empty. */}
+      {(
         <section className="mt-6">
           {/* D287: the title is the way in, its chevron saying so. */}
           <Link href={`/club/${face.slug}/calendar`} className="block press ch-focus rounded-tile">
             <h2 className="t-h2 text-ink flex items-center justify-between">Calendar <IconChevronRight size={20} className="text-ink/50" /></h2>
           </Link>
+          {(upNext ? upNext.length === 0 : calendar.length === 0) && (
+            <p className="t-cap text-ink/65 mt-2">Nothing on in the next four weeks — open the calendar for the whole season.</p>
+          )}
           <ul className="mt-3 space-y-2">
             {upNext
               ? upNext.map(i => <ItemRow key={i.key} i={i} onNote={x => x.note && setOpened(x.note)} />)

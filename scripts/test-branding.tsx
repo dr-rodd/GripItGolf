@@ -1786,8 +1786,12 @@ section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out
   const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|springAt|POP_SETTLE/.test(read(f)))
   eq(settlers, ['app/components/popOut.ts'], 'the pop-out is played in one place')
   const users = uiFiles().filter(f => /from ['"](\.\.?\/)+popOut['"]|from '@\/app\/components\/popOut'/.test(read(f))).sort()
-  eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],
-    'every expanding pop-out plays it — the stream’s card and the leaderboard’s scorecard')
+  eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/components/feed/Stream.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],
+    'every expanding pop-out plays it — the stream’s card and menu, the leaderboard’s scorecard')
+  // The club area is outside this floor (test:clubs holds it), so its one pop-out is named here.
+  const teeTimes = read('app/club/[slug]/ClubTeeTimes.tsx')
+  ok(/from '@\/app\/components\/popOut'/.test(teeTimes) && /popOpen\(panel\.current, origin, backdrop\.current\)/.test(teeTimes),
+    '  …and the tee times’ day picker springs out of its day box the same way (D341)')
 }
 
 section('No spaced capitals')

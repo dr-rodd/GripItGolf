@@ -1255,9 +1255,7 @@ html.keyboard-open .hide-with-keyboard { display: none; }
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
-.feed-streams::-webkit-scrollbar,
-.feed-pills::-webkit-scrollbar { display: none; }
-.feed-pills { scrollbar-width: none; -ms-overflow-style: none; }
+.feed-streams::-webkit-scrollbar { display: none; }
 .feed-stream {
   scroll-snap-align: start;
   scroll-snap-stop: always;
