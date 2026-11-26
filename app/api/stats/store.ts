@@ -26,7 +26,13 @@ export function summaryDeps(db: Db = createAdminClient()): SummaryDeps {
       return (club as { verified_at?: string | null } | null)?.verified_at ? clubId : null
     },
     async upsert(rows) {
-      const { error } = await db.from('card_summaries').upsert(rows, { onConflict: 'round_id,player_id' })
+      let { error } = await db.from('card_summaries').upsert(rows, { onConflict: 'round_id,player_id' })
+      // Before migration 107 there is no `sg` column: the rest written, and
+      // marked as the older rules so the backfill fills `sg` once it lands.
+      if (error && notThere(error)) {
+        const older = rows.map(({ sg: _sg, ...r }) => ({ ...r, rules_version: 1 }))
+        ;({ error } = await db.from('card_summaries').upsert(older, { onConflict: 'round_id,player_id' }))
+      }
       if (error && !notThere(error)) throw error
     },
     held: roundId => heldRound(db, roundId),

@@ -134,7 +134,7 @@ function wiringTests() {
   ok(/from\('account_players'\)[\s\S]{0,300}from\('card_summaries'\)/.test(read('app/api/stats/season.ts')), 'a member reads only their own players’ rows')
   ok(/readSeason\(db/.test(read('app/api/club/store.ts')) && /readSeason\(db/.test(read('app/api/account/store.ts')),
     '  …one reader for the club area and the personal page (D143)')
-  ok(/<StatsTab home=/.test(read('app/home/HomeScreen.tsx')), 'the personal page’s Stats tab reads it (stage (g))')
+  ok(/<CareerStats \/>/.test(read('app/home/HomeScreen.tsx')), 'the personal page’s Stats tab reads it — the career stats page (stage (g), Ross 26 Nov 2026)')
   ok(/a short summary of each signed card/.test(read('app/privacy/page.tsx')), 'the privacy notice says a summary is kept')
 }
 

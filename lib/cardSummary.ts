@@ -18,9 +18,14 @@
 // Pure: `app/api/stats/summaries.ts` reads, calls this, and writes.
 
 import type { HoleStat } from './holeStats'
+import { cardGained, roundPlaces, type CardSg } from './careerStats'
 
-/** Bumped when a rule here changes, so the backfill rewrites every row once. */
-export const CARD_SUMMARY_RULES = 1
+/**
+ * Bumped when a rule here changes, so the backfill rewrites every row once.
+ * 2: strokes gained against a handicap and scratch, and the place in the
+ * round (`sg`, migration 107 — lib/careerStats.ts).
+ */
+export const CARD_SUMMARY_RULES = 2
 
 export type CardOrigin = 'club' | 'self_claimed'
 
@@ -52,6 +57,13 @@ export interface CardSummary {
   club_id: string | null
   rules_version: number
   written_at: string
+  /**
+   * Strokes gained and the place in the round (lib/careerStats.ts, migration
+   * 107). Unlike everything above it, the place and the driving split read
+   * the rest of the round — which is why the writer sums up a whole round at
+   * a time, every time any card in it changes.
+   */
+  sg: CardSg
 }
 
 export interface RoundFacts {
@@ -119,7 +131,18 @@ export function summariseRound(stats: readonly HoleStat[], facts: RoundFacts): C
       club_id: facts.clubId,
       rules_version: CARD_SUMMARY_RULES,
       written_at: facts.now.toISOString(),
+      sg: { place: null, tied: false, field: 0, handicap: null, scratch: null },
     })
+  }
+  const places = roundPlaces(out.map(r => ({ playerId: r.player_id, holes: r.holes, points: r.points })))
+  const finished = stats.filter(s => !s.live && s.roundId === facts.roundId)
+  for (const r of out) {
+    const p = places.get(r.player_id)
+    r.sg = {
+      place: p?.place ?? null, tied: p?.tied ?? false, field: p?.field ?? 0,
+      handicap: cardGained(finished, r.player_id, 'handicap'),
+      scratch: cardGained(finished, r.player_id, 'scratch'),
+    }
   }
   return out.sort((a, b) => a.player_id.localeCompare(b.player_id))
 }

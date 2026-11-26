@@ -24,7 +24,8 @@ import { tripBase } from '@/lib/tripPaths'
 import { irishGreeting } from '@/lib/irishTime'
 import { PHASE_WORDS } from '@/lib/compPhase'
 import { enteredWithLine, type MyClubMatch } from '@/lib/clubMatchPlay'
-import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
+import { SeasonTiles } from '@/app/components/Season'
+import CareerStats from '@/app/components/stats/CareerStats'
 import { askClub, readAccount } from '@/lib/accountClient'
 import { hintClubs, readTierHint, rememberTier, storedAccountSession } from '@/lib/tierHint'
 import { CLUB_MEMBER_ATTR, forgetClubHome, keepClubHome, notClubMember, readClubHome } from '@/lib/clubHomeCopy'
@@ -201,7 +202,7 @@ export default function ClubView({ face }: { face: ClubFace }) {
           {members && tab === 'home' && <MembersHome face={face} m={members} />}
           {members && tab === 'comps' && <Comps m={members} slug={face.slug} />}
           {members && tab === 'tee' && <ClubTeeTimes clubId={members.clubId} />}
-          {members && tab === 'stats' && <Stats face={face} m={members} />}
+          {members && tab === 'stats' && <Stats />}
           {members && tab === 'stream' && <Stream club={{ slug: face.slug }} settingsPath={`/club/${face.slug}/settings`} />}
         </div>
       </div>
@@ -928,18 +929,7 @@ function NoteListRow({ n, onOpen }: { n: ClubNote; onOpen: () => void }) {
   )
 }
 
-/** Stage (f): your own rounds this year, from the signed cards' summaries. */
-function Stats({ face, m }: { face: ClubFace; m: Members }) {
-  const season = seasonOf(m.season)
-  return (
-    <section className="mt-6">
-      <PageTitle sub={m.season.length === 0 ? NO_SEASON : undefined}>Your season</PageTitle>
-      {m.season.length === 0 ? null : (
-        <>
-          <SeasonSummary rows={m.season} courses={m.courses} index={m.indexTrend ?? []}
-            footer={selfClaimedLine(season, face.name) ? <p className="t-cap text-ink/65 mt-2">{selfClaimedLine(season, face.name)}</p> : null} />
-        </>
-      )}
-    </section>
-  )
+/** The Stats tab: the golfer's career stats, the same page as Home's (app/components/stats/CareerStats.tsx). */
+function Stats() {
+  return <CareerStats />
 }

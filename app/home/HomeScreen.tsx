@@ -7,7 +7,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import TripHeader from '@/app/components/TripHeader'
 import LegalLinks from '@/app/components/LegalLinks'
-import { NO_SEASON, SeasonSummary, SeasonTiles } from '@/app/components/Season'
+import { SeasonTiles } from '@/app/components/Season'
+import CareerStats from '@/app/components/stats/CareerStats'
 import { IconChevronRight, IconSettings } from '@/app/components/icons'
 import CodeBox from '@/app/components/CodeBox'
 import Stream from '@/app/components/feed/Stream'
@@ -93,7 +94,7 @@ export default function HomeScreen() {
         {state.kind === 'ready' && tab === 'stream' && <Stream settingsPath="/home/settings" />}
         {state.kind === 'ready' && tab === 'events' && <EventsTab events={state.home.events} onChanged={load} />}
         {state.kind === 'ready' && tab === 'board' && <BoardTab events={state.home.events} />}
-        {state.kind === 'ready' && tab === 'stats' && <StatsTab home={state.home} />}
+        {state.kind === 'ready' && tab === 'stats' && <StatsTab />}
       </div>
       <HomeTabBar active={tab} onChoose={choose} signedIn={state.kind === 'ready'} />
     </main>
@@ -223,18 +224,7 @@ function BoardTab({ events }: { events: MyEvent[] }) {
   )
 }
 
-/** The headline (D143): this year's signed rounds. */
-function StatsTab({ home }: { home: HomeData }) {
-  return (
-    <section className="mt-6">
-      <PageTitle>Your season</PageTitle>
-      {home.season.length === 0 ? (
-        <p className="text-ink/65 text-[15px] leading-relaxed mt-2">{NO_SEASON}</p>
-      ) : (
-        <>
-          <SeasonSummary rows={home.season} courses={home.courses} index={home.indexTrend ?? []} />
-        </>
-      )}
-    </section>
-  )
+/** The Stats tab: the golfer's career stats, the one page (app/components/stats/CareerStats.tsx). */
+function StatsTab() {
+  return <CareerStats />
 }

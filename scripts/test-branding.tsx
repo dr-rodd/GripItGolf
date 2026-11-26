@@ -417,7 +417,8 @@ section('Names and numbers on a board ask for the serif by name')
     'a round\'s podium')
   has('app/golf/[root]/[tripCode]/StatsPanel.tsx', /font-serif text-3xl t-num/, 'the hub\'s stats headline')
   has('app/golf/[root]/[tripCode]/stats/StatsClient.tsx', /<tbody className="font-serif">/, 'the stats tables')
-  ok((read('app/golf/[root]/[tripCode]/stats/charts.tsx').match(/h-auto font-serif/g) ?? []).length === 3,
+  ok((read('app/golf/[root]/[tripCode]/stats/charts.tsx').match(/h-auto font-serif/g) ?? []).length === 2
+    && /h-auto font-serif/.test(read('app/components/stats/PentagonChart.tsx')),
     '  …and all three charts')
 
   // `font-serif` is a Tailwind utility, in a layer; the t-* scale classes
@@ -1796,7 +1797,7 @@ section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out
   const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|springAt|POP_SETTLE/.test(read(f)))
   eq(settlers, ['app/components/popOut.ts'], 'the pop-out is played in one place')
   const users = uiFiles().filter(f => /from ['"](\.\.?\/)+popOut['"]|from '@\/app\/components\/popOut'/.test(read(f))).sort()
-  eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/components/feed/Stream.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],
+  eq(users, ['app/components/PopOutWatch.tsx', 'app/components/feed/ItemSheet.tsx', 'app/components/feed/Stream.tsx', 'app/components/stats/RoundCardSheet.tsx', 'app/golf/[root]/[tripCode]/leaderboard/TripLeaderboardClient.tsx'],
     'every expanding pop-out plays it — the stream’s card and menu, the leaderboard’s scorecard')
   // The club area is outside this floor (test:clubs holds it), so its one pop-out is named here.
   const teeTimes = read('app/club/[slug]/ClubTeeTimes.tsx')

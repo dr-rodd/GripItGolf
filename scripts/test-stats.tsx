@@ -1273,7 +1273,8 @@ section('The lab reads the derivation and does none of its own')
   const charts2 = code('app/golf/[root]/[tripCode]/stats/charts.tsx')
   ok(/Skill profile/i.test(client) && !/shape of your game/i.test(client),
     'the hero is the Skill Profile, by name')
-  ok(/const R_FLOOR = \d/.test(charts2) && /R_FLOOR \+ \(R - R_FLOOR\)/.test(charts2),
+  const pentagon = code('app/components/stats/PentagonChart.tsx')
+  ok(/PentagonChart/.test(charts2) && /const R_FLOOR = \d/.test(pentagon) && /R_FLOOR \+ \(R - R_FLOOR\)/.test(pentagon),
     'the pentagon\'s scale floors on a ring, not the centre — no V shapes')
   ok(/ticks\.map/.test(charts2) && /PAD_L - 5/.test(charts2),
     'the round bars carry a printed y axis')

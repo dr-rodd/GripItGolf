@@ -816,30 +816,19 @@ export type LongGameGained = {
 type FairwayPool = { toGreenHit: number[]; toGreenMiss: number[]; hits: number; cards: number }
 
 /**
- * Tee-to-green gained, split into driving accuracy and approach.
- *
- * The algebra: add and subtract the field's average from where the drive
- * finished, and tee-to-green gained falls into two brackets — the value of
- * where the ball landed (driving), and everything after it (approach). The
- * driving bracket simplifies to a bet on the hole's own penalty:
- * `(hit − field hit rate) × (avg to-green from a miss − from the fairway)`.
- * Hitting a fairway everybody hits earns almost nothing; hitting one nobody
- * hits earns nearly the whole penalty. Approach is defined as the remainder,
- * which is what makes `driving + approach = toGreen` exact rather than
- * approximate — and a par 3's whole to-green is approach, which matches the
- * golf: the tee shot on a par 3 *is* the approach.
- *
- * `poolSource` is who the penalties and hit rates are learned from —
- * normally the same rows, but a per-round slice hands the full trip in so
- * one round's chart does not relearn the course from six cards. Pools are
- * per course hole across rounds; a course played twice is one set of
- * eighteen holes with twice the evidence.
+ * The driving half of the long game, alone: each tee shot's bet on its
+ * hole's penalty for missing, `(hit − field hit rate) × penalty`, summed per
+ * player — the one copy `longGameGained` and a golfer's career figures
+ * (lib/careerStats.ts) both read. Pools are learned from `poolSource`, per
+ * course hole with the par as the wider fallback, self-excluded; a hole
+ * whose pools are too thin pays nothing rather than a made-up credit. An NR
+ * feeds the pools (its miss makes the penalty honest) but pays no bet: its
+ * to-green is assumed.
  */
-export function longGameGained(
+export function drivingBets(
   stats: readonly HoleStat[],
   poolSource: readonly HoleStat[] = stats,
-): Map<string, LongGameGained> {
-  // The pools: per course hole, and per par as the wider fallback.
+): Map<string, { driving: number; holes: number }> {
   const pools = new Map<string, FairwayPool>()
   const pool = (key: string) => {
     let p = pools.get(key)
@@ -857,28 +846,11 @@ export function longGameGained(
   }
 
   const avg = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / xs.length
-
-  // The tee-to-green half is the one `gainedOnField` already reports — the
-  // same figure, never a second derivation of it.
-  const gained = gainedOnField(stats)
-
-  const out = new Map<string, LongGameGained>()
-  for (const [playerId, g] of gained) {
-    out.set(playerId, {
-      playerId, driving: 0, approach: 0,
-      toGreen: g.toGreen, holes: g.holes, drivingHoles: 0,
-    })
-  }
+  const out = new Map<string, { driving: number; holes: number }>()
 
   for (const s of stats) {
     if (!s.fairwayCounted || s.fairway == null || s.strokesToGreen == null) continue
-    // An NR feeds the pools above — its miss makes the penalty honest — but
-    // pays no bet of its own: its toGreen is assumed, and the hole is not in
-    // `gainedOnField`'s toGreen, so a bet here would break the exactness of
-    // driving + approach = tee-to-green.
     if (s.noReturn) continue
-    const mine = out.get(s.playerId)
-    if (!mine) continue
 
     // The hole's own pool if both sides carry enough cards without this one;
     // the par pool behind it; nothing behind that.
@@ -905,8 +877,50 @@ export function longGameGained(
     const penalty = missAvg - hitAvg
     const fieldHitRate = (chosen.hits - hit) / (chosen.cards - 1)
 
-    mine.driving += (hit - fieldHitRate) * penalty
-    mine.drivingHoles += 1
+    let b = out.get(s.playerId)
+    if (!b) { b = { driving: 0, holes: 0 }; out.set(s.playerId, b) }
+    b.driving += (hit - fieldHitRate) * penalty
+    b.holes += 1
+  }
+  return out
+}
+
+/**
+ * Tee-to-green gained, split into driving accuracy and approach.
+ *
+ * The algebra: add and subtract the field's average from where the drive
+ * finished, and tee-to-green gained falls into two brackets — the value of
+ * where the ball landed (driving), and everything after it (approach). The
+ * driving bracket simplifies to a bet on the hole's own penalty:
+ * `(hit − field hit rate) × (avg to-green from a miss − from the fairway)`.
+ * Hitting a fairway everybody hits earns almost nothing; hitting one nobody
+ * hits earns nearly the whole penalty. Approach is defined as the remainder,
+ * which is what makes `driving + approach = toGreen` exact rather than
+ * approximate — and a par 3's whole to-green is approach, which matches the
+ * golf: the tee shot on a par 3 *is* the approach.
+ *
+ * `poolSource` is who the penalties and hit rates are learned from —
+ * normally the same rows, but a per-round slice hands the full trip in so
+ * one round's chart does not relearn the course from six cards. Pools are
+ * per course hole across rounds; a course played twice is one set of
+ * eighteen holes with twice the evidence.
+ */
+export function longGameGained(
+  stats: readonly HoleStat[],
+  poolSource: readonly HoleStat[] = stats,
+): Map<string, LongGameGained> {
+  // The tee-to-green half is the one `gainedOnField` already reports — the
+  // same figure, never a second derivation of it.
+  const gained = gainedOnField(stats)
+  const bets = drivingBets(stats, poolSource)
+
+  const out = new Map<string, LongGameGained>()
+  for (const [playerId, g] of gained) {
+    const b = bets.get(playerId)
+    out.set(playerId, {
+      playerId, driving: b?.driving ?? 0, approach: 0,
+      toGreen: g.toGreen, holes: g.holes, drivingHoles: b?.holes ?? 0,
+    })
   }
 
   for (const g of out.values()) g.approach = g.toGreen - g.driving
