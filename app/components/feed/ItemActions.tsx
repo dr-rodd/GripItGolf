@@ -1,32 +1,114 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
-import { OWN_STATUS_MAX, REPORT_REASON_MAX, STATUS_MAX, counter } from '@/lib/feed'
+import { OWN_STATUS_MAX, REACTIONS, REPORT_REASON_MAX, STATUS_MAX, counter, withReaction, type Reaction, type ReactionCount } from '@/lib/feed'
+import { reducedMotion } from '@/lib/motion'
+import { PUTT_EASING } from '@/lib/popOut'
 import { IconDots, IconX } from '../icons'
 import { FIELD, buttonClass } from '../ui'
 import type { FeedView, ThreadComment } from './FeedItem'
 
 
-/** The one-tap dot (D301): a dot, filled once you have given it, and the count in the emerald. */
-export function DotButton({ item, onPatch }: { item: FeedView; onPatch: (p: Partial<FeedView>) => void }) {
-  const [busy, setBusy] = useState(false)
-  async function tap() {
-    const on = !item.dotted
-    setBusy(true)
-    onPatch({ dotted: on, dots: Math.max(0, item.dots + (on ? 1 : -1)) })
-    const r = await askFeed('dot', { itemId: item.id, on })
-    setBusy(false)
-    if (!r.ok) onPatch({ dotted: !on, dots: item.dots })
-  }
+type Summary = { reactions: ReactionCount[]; myReaction: Reaction | null }
+
+/**
+ * React to a message (D348): shown at once (`withReaction`), then sent; put
+ * back as it was if the server says no, with its words. `next` the same as
+ * yours takes it off.
+ */
+export async function reactTo(itemId: string, now: Summary, next: Reaction, patch: (s: Summary) => void): Promise<string | null> {
+  const after = withReaction(now, next)
+  patch(after)
+  const r = await askFeed('react', { itemId, emoji: after.myReaction })
+  if (r.ok) return null
+  patch({ reactions: [...now.reactions], myReaction: now.myReaction })
+  return r.error
+}
+
+/** The six in a row, yours in the emerald wash (D348) — the long-press bar's and the ⋯ sheet's. */
+export function EmojiRow({ mine, onPick, className = '' }: { mine: Reaction | null; onPick: (e: Reaction) => void; className?: string }) {
   return (
-    <button type="button" disabled={busy} onClick={e => { e.stopPropagation(); void tap() }} aria-pressed={item.dotted}
-      aria-label={item.dotted ? `Take your dot off (${item.dots})` : `Give a dot (${item.dots})`}
-      className="inline-flex items-center gap-1.5 min-h-11 pr-2 press ch-focus rounded-tile">
-      <span aria-hidden="true" className={`dot-give w-3.5 h-3.5 rounded-full border-2 border-accent-deep ${item.dotted ? 'bg-accent-deep is-on' : ''}`} />
-      <span className="t-label text-accent-deep">{item.dots > 0 ? item.dots : 'Dot'}</span>
-    </button>
+    <div role="group" aria-label="React" className={`flex items-center justify-between gap-1 ${className}`}>
+      {REACTIONS.map(e => (
+        <button key={e} type="button" onClick={ev => { ev.stopPropagation(); onPick(e) }} aria-pressed={mine === e}
+          aria-label={mine === e ? `Take your ${e} off` : `React ${e}`}
+          className={`react-emoji w-11 h-11 rounded-full flex items-center justify-center text-[26px] leading-none press ch-focus ${mine === e ? 'bg-accent-tint' : ''}`}>
+          <span aria-hidden="true">{e}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * A message's reactions, as WhatsApp hangs them on the bubble's foot (D348):
+ * up to three emoji and the count, on a small opaque tag. A tap opens who
+ * reacted with what. Changed while you watch, it pops.
+ */
+export function ReactionChip({ itemId, reactions, myReaction, onTake }: Summary & { itemId: string; onTake: () => void }) {
+  const [who, setWho] = useState(false)
+  const chip = useRef<HTMLButtonElement>(null)
+  const sig = reactions.map(r => `${r.emoji}${r.count}`).join('')
+  const was = useRef(sig)
+  useEffect(() => {
+    if (was.current === sig) return
+    was.current = sig
+    if (chip.current?.animate && !reducedMotion()) chip.current.animate([{ transform: 'scale(0.6)' }, { transform: 'scale(1)' }], { duration: 220, easing: PUTT_EASING })
+  }, [sig])
+  if (reactions.length === 0) return null
+  const total = reactions.reduce((n, r) => n + r.count, 0)
+  return (
+    <>
+      <button ref={chip} type="button" onClick={e => { e.stopPropagation(); setWho(true) }}
+        aria-label={`Reactions: ${reactions.map(r => `${r.emoji} ${r.count}`).join(', ')}${myReaction ? `, yours ${myReaction}` : ''}`}
+        className={`react-chip relative z-[2] -mt-2.5 mx-2 inline-flex items-center gap-0.5 h-7 px-1.5 rounded-tag bg-surface border shadow-raised press ch-focus ${myReaction ? 'border-accent' : 'border-line'}`}>
+        <span aria-hidden="true" className="text-[15px] leading-none">{reactions.slice(0, 3).map(r => r.emoji).join('')}</span>
+        {total > 1 && <span className="t-cap text-ink/80 tabular-nums pl-0.5">{total}</span>}
+      </button>
+      {who && <ReactionsSheet itemId={itemId} onClose={() => setWho(false)} onTake={() => { setWho(false); onTake() }} />}
+    </>
+  )
+}
+
+/** Who reacted with what (D348), your own first — tapped, it comes off. */
+function ReactionsSheet({ itemId, onClose, onTake }: { itemId: string; onClose: () => void; onTake: () => void }) {
+  const [people, setPeople] = useState<{ name: string; emoji: Reaction; mine: boolean }[] | null>(null)
+  const [error, setError] = useState('')
+  useEffect(() => {
+    let live = true
+    void askFeed<{ people: { name: string; emoji: Reaction; mine: boolean }[] }>('reactions', { itemId }).then(r => {
+      if (!live) return
+      if (r.ok) setPeople(r.people)
+      else setError(r.error)
+    })
+    return () => { live = false }
+  }, [itemId])
+  return (
+    <Sheet title="Reactions" onClose={onClose}>
+      {!people && !error && <div className="skeleton h-28 rounded-card mt-3" aria-busy="true" />}
+      {error && <p role="alert" className="t-cap text-rust-deep mt-3">{error}</p>}
+      {people && (
+        <ul className="mt-2 divide-y divide-line">
+          {people.map((p, i) => (
+            <li key={i}>
+              {p.mine ? (
+                <button type="button" onClick={onTake} className="w-full flex items-center gap-3 min-h-14 text-left press ch-focus">
+                  <span className="flex-1 min-w-0"><span className="block text-[16px] text-ink">You</span><span className="block t-cap text-ink/65">Tap to take it off</span></span>
+                  <span aria-hidden="true" className="text-[24px]">{p.emoji}</span>
+                </button>
+              ) : (
+                <div className="flex items-center gap-3 min-h-14">
+                  <span className="flex-1 min-w-0 text-[16px] text-ink truncate">{p.name}</span>
+                  <span aria-label={`reacted ${p.emoji}`} className="text-[24px]">{p.emoji}</span>
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Sheet>
   )
 }
 
@@ -36,12 +118,14 @@ export function DotButton({ item, onPatch }: { item: FeedView; onPatch: (p: Part
  * take down for its poster and the club's Officers and Clubhouse. A sheet,
  * never a dropdown: a menu inside the swipe frame would be clipped.
  */
-export function MoreMenu({ item, onPatch, onGone, onReply, className = '' }: {
+export function MoreMenu({ item, onPatch, onGone, onReply, onReact, className = '' }: {
   item: FeedView
   onPatch: (p: Partial<FeedView>) => void
   onGone: () => void
   /** D346: Reply, for anybody who would rather not swipe. */
   onReply?: () => void
+  /** D348: the six at the head of the sheet, for anybody who would rather not hold. */
+  onReact?: (e: Reaction) => void
   className?: string
 }) {
   const [menu, setMenu] = useState(false)
@@ -53,7 +137,7 @@ export function MoreMenu({ item, onPatch, onGone, onReply, className = '' }: {
     ...((item.kind === 'status' || item.kind === 'post') && item.canDelete ? [{ key: 'delete', label: item.kind === 'post' ? 'Take this post down' : 'Delete this status' }] : []),
     ...(item.canReport ? [{ key: 'report', label: 'Report' }] : []),
   ]
-  if (items.length === 0) return null
+  if (items.length === 0 && !onReact) return null
 
   async function pick(key: string) {
     if (key === 'reply') { setMenu(false); onReply?.() }
@@ -75,6 +159,7 @@ export function MoreMenu({ item, onPatch, onGone, onReply, className = '' }: {
       </button>
       {menu && (
         <Sheet title={item.kind === 'card' ? `${item.name}’s card` : item.kind === 'post' ? 'This post' : 'This item'} onClose={() => setMenu(false)}>
+          {onReact && <EmojiRow mine={item.myReaction} onPick={e => { setMenu(false); onReact(e) }} className="mt-3 pb-3 border-b border-line" />}
           <ul className="mt-2 divide-y divide-line">
             {items.map(m => (
               <li key={m.key}>
@@ -96,7 +181,7 @@ export function MoreMenu({ item, onPatch, onGone, onReply, className = '' }: {
  * The ⋯ on a reply in the chat (D346): Reply, Delete (its author, or the
  * owner of what it is on — D301) and Report (never your own).
  */
-export function ReplyMenu({ reply, onReply, onGone }: { reply: ThreadComment; onReply?: () => void; onGone: () => void }) {
+export function ReplyMenu({ reply, onReply, onGone, onReact }: { reply: ThreadComment; onReply?: () => void; onGone: () => void; onReact?: (e: Reaction) => void }) {
   const [menu, setMenu] = useState(false)
   const [report, setReport] = useState(false)
   const [error, setError] = useState('')
@@ -105,7 +190,7 @@ export function ReplyMenu({ reply, onReply, onGone }: { reply: ThreadComment; on
     ...(reply.canDelete ? [{ key: 'delete', label: 'Delete this reply' }] : []),
     ...(reply.canReport ? [{ key: 'report', label: 'Report' }] : []),
   ]
-  if (items.length === 0) return null
+  if (items.length === 0 && !onReact) return null
   async function pick(key: string) {
     if (key === 'reply') { setMenu(false); onReply?.() }
     if (key === 'report') { setMenu(false); setReport(true) }
@@ -125,6 +210,7 @@ export function ReplyMenu({ reply, onReply, onGone }: { reply: ThreadComment; on
       </button>
       {menu && (
         <Sheet title={reply.mine ? 'Your reply' : `${reply.name}’s reply`} onClose={() => setMenu(false)}>
+          {onReact && <EmojiRow mine={reply.myReaction} onPick={e => { setMenu(false); onReact(e) }} className="mt-3 pb-3 border-b border-line" />}
           <ul className="mt-2 divide-y divide-line">
             {items.map(m => (
               <li key={m.key}>

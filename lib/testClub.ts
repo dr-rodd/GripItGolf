@@ -10,6 +10,7 @@
 // store, and `/admin/test-club` is the page. Pure.
 
 import type { CardForm } from './testClubCards'
+import { REACTIONS, type Reaction } from './feed'
 
 /** Pints, the one test club so far — named so the page can say what it is about. */
 export const PINTS_SLUG = 'pints-golf-club'
@@ -382,12 +383,12 @@ export function banterIssue(b: Banter, cast: readonly Character[], players: read
 /** How many of a competition's other cards each comment rate puts a dot on. */
 const DOTS: Record<CommentRate, number> = { 'every card': 99, high: 3, mid: 1, low: 0 }
 
-/** Who dots whose card in a competition, by the characters' comment rates — never their own, the same every time. */
-export function dotPlan(cast: readonly Character[], players: readonly string[], seed: string): { by: string; on: string }[] {
-  const out: { by: string; on: string }[] = []
+/** Who reacts to whose card in a competition, and with which of the six (D348), by the characters' comment rates — never their own, the same every time. */
+export function dotPlan(cast: readonly Character[], players: readonly string[], seed: string): { by: string; on: string; emoji: Reaction }[] {
+  const out: { by: string; on: string; emoji: Reaction }[] = []
   for (const c of cast) {
     const others = seededOrder(players.filter(p => p !== c.key), `${seed}:dot:${c.key}`)
-    for (const on of others.slice(0, DOTS[c.commentRate])) out.push({ by: c.key, on })
+    for (const on of others.slice(0, DOTS[c.commentRate])) out.push({ by: c.key, on, emoji: seededOrder([...REACTIONS], `${seed}:react:${c.key}:${on}`)[0] })
   }
   return out
 }

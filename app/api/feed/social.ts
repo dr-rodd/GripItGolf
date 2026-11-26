@@ -9,9 +9,12 @@
 // a report hides nothing until somebody takes the item down.
 
 import { clubMay, credentialsOf, type StoredCredentials } from '@/lib/clubMay'
-import { REPORT_REASON_MAX, cleanText, commentIssue, COMMENT_MAX, mayView, reportDestination, talksOn } from '@/lib/feed'
+import { REPORT_REASON_MAX, cleanText, commentIssue, COMMENT_MAX, mayView, readReaction, reportDestination, storedReaction, talksOn, type Reaction } from '@/lib/feed'
 import { done, fail, str, type FeedOutcome } from './outcome'
 import { factsOf, threadOf, type Asker, type FeedStore, type ItemRow } from './feed'
+
+/** Thrown by a store before migration 106 for any reaction but a 👍. */
+export class ReactionsNotReady extends Error {}
 
 export interface ReportRow {
   id: string; itemId: string; reason: string | null; createdAt: string
@@ -23,7 +26,8 @@ export interface SocialStore {
   /** `replyTo`: the reply on the same item it answers, and whose that was (D346). */
   insertComment(row: { parentId: string; authorId: string; tripId: string | null; clubId: string | null; name: string; text: string; at: string; replyTo?: { id: string; name: string } | null }): Promise<ItemRow>
   deleteItem(itemId: string): Promise<void>
-  setDot(itemId: string, userId: string, on: boolean): Promise<void>
+  /** One person's reaction on a message, or none (D348). Before 106 only a 👍 can be kept — anything else throws `ReactionsNotReady`. */
+  setReaction(itemId: string, userId: string, emoji: Reaction | null): Promise<void>
   /** A report; a second by the same person on the same item changes nothing. */
   insertReport(row: { itemId: string; reporterId: string; clubId: string | null; reason: string | null }): Promise<void>
   /** This account's place on a club's list, for the Clubhouse's reports — null when not on it. */
@@ -66,8 +70,9 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
   if (action === 'comments') {
     const found = await cardOf(store, str(input.itemId))
     if (!found || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
-    const children = await store.childrenOf([found.card.id])
-    const comments = threadOf(children.filter(c => c.kind === 'comment' && !c.removedAt), found.card.authorId === me, me)
+    const children = (await store.childrenOf([found.card.id])).filter(c => c.kind === 'comment' && !c.removedAt)
+    const reactions = children.length ? await store.reactionsOn(children.map(c => c.id), []) : []
+    const comments = threadOf(children, found.card.authorId === me, me, reactions)
     return done({ comments })
   }
 
@@ -101,11 +106,33 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
     return done()
   }
 
-  if (action === 'dot') {
+  // D348: a reaction on a message — an item, or a reply on one — by anybody who may see it. `dot` is the old 👍.
+  if (action === 'react' || action === 'dot') {
+    const emoji = action === 'dot' ? (input.on === false ? null : '👍') : readReaction(input.emoji)
+    if (emoji === undefined) return fail(400, 'Choose a reaction.')
     const found = await cardOf(store, str(input.itemId))
-    if (!found || found.item.parentId || !talksOn(found.item.kind) || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
-    await store.setDot(found.card.id, me, input.on !== false)
-    return done({ on: input.on !== false })
+    const onReply = !!found?.item.parentId
+    if (!found || (onReply ? found.item.kind !== 'comment' || found.item.removedAt : false) || !talksOn(found.card.kind)
+      || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That isn’t there any more.')
+    try {
+      await store.setReaction(found.item.id, me, emoji)
+    } catch (e) {
+      if (e instanceof ReactionsNotReady) return fail(503, 'Only 👍 works until reactions are set up.')
+      throw e
+    }
+    return done({ emoji, on: emoji !== null })
+  }
+
+  // Who reacted to a message, and with what (D348) — your own first.
+  if (action === 'reactions') {
+    const found = await cardOf(store, str(input.itemId))
+    if (!found || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That isn’t there any more.')
+    const rows = await store.reactionsOn([found.item.id], [])
+    const names = await store.names(rows.map(r => r.userId))
+    const people = rows.map(r => ({ name: names.get(r.userId)?.name ?? 'A member', emoji: storedReaction(r.emoji), mine: r.userId === me }))
+      .filter((r): r is { name: string; emoji: Reaction; mine: boolean } => !!r.emoji)
+      .sort((x, y) => Number(y.mine) - Number(x.mine) || x.name.localeCompare(y.name))
+    return done({ people })
   }
 
   if (action === 'seen') {

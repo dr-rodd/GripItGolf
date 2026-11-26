@@ -9,6 +9,7 @@ import { asUser } from '../account/store'
 import type { ClubRef, FeedStore, ItemRow, Settings, StreamQuery } from './feed'
 import { readMemberHiddenOf } from '../club/notesStore'
 import { readCardDetail } from './cardDetail'
+import { ReactionsNotReady } from './social'
 
 export type Db = ReturnType<typeof createAdminClient>
 
@@ -357,10 +358,24 @@ export function feedStore(db: Db): FeedStore {
       if (error) throw error
       return ((data ?? []) as unknown as ItemDbRow[]).map(asItem)
     },
-    async dotsOn(itemIds) {
-      if (itemIds.length === 0) return []
-      const { data } = await db.from('feed_dots').select('item_id, user_id').in('item_id', itemIds)
-      return ((data ?? []) as { item_id: string; user_id: string }[]).map(d => ({ itemId: d.item_id, userId: d.user_id }))
+    async reactionsOn(itemIds, parentIds) {
+      // D348: the items' own, and their replies' (through the reply's parent). Before 106 there is no emoji: each a 👍.
+      type Row = { item_id: string; user_id: string; emoji?: string | null }
+      const read = async (cols: string) => Promise.all([
+        itemIds.length ? db.from('feed_dots').select(cols).in('item_id', itemIds) : null,
+        parentIds.length ? db.from('feed_dots').select(`${cols}, feed_items!inner(parent_id)`).in('feed_items.parent_id', parentIds) : null,
+      ])
+      let got = await read('item_id, user_id, emoji')
+      if (got.some(r => r?.error && /emoji/.test(r.error.message))) got = await read('item_id, user_id')
+      const seen = new Set<string>()
+      const out: { itemId: string; userId: string; emoji: string | null }[] = []
+      for (const r of got) for (const d of ((r?.data ?? []) as unknown as Row[])) {
+        const k = `${d.item_id}:${d.user_id}`
+        if (seen.has(k)) continue
+        seen.add(k)
+        out.push({ itemId: d.item_id, userId: d.user_id, emoji: d.emoji ?? null })
+      }
+      return out
     },
     async recentComps(userId, clubIds, since, today) {
       const played = await tripsPlayedBy(db, userId)
@@ -425,11 +440,19 @@ export function feedStore(db: Db): FeedStore {
       const { error } = await db.from('feed_items').delete().eq('id', itemId)
       if (error) throw error
     },
-    async setDot(itemId, userId, on) {
-      const { error } = on
-        ? await db.from('feed_dots').upsert({ item_id: itemId, user_id: userId }, { onConflict: 'item_id,user_id', ignoreDuplicates: true })
-        : await db.from('feed_dots').delete().eq('item_id', itemId).eq('user_id', userId)
-      if (error) throw error
+    async setReaction(itemId, userId, emoji) {
+      if (!emoji) {
+        const { error } = await db.from('feed_dots').delete().eq('item_id', itemId).eq('user_id', userId)
+        if (error) throw error
+        return
+      }
+      const { error } = await db.from('feed_dots').upsert({ item_id: itemId, user_id: userId, emoji }, { onConflict: 'item_id,user_id' })
+      if (!error) return
+      // Before 106: a 👍 is a plain dot; anything else waits for the column.
+      if (!/emoji/.test(error.message)) throw error
+      if (emoji !== '👍') throw new ReactionsNotReady()
+      const plain = await db.from('feed_dots').upsert({ item_id: itemId, user_id: userId }, { onConflict: 'item_id,user_id', ignoreDuplicates: true })
+      if (plain.error) throw plain.error
     },
     async insertReport(o) {
       const { error } = await db.from('feed_reports').upsert(

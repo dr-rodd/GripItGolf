@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
-import { COMMENT_MAX, ago } from '@/lib/feed'
+import { COMMENT_MAX, ago, type Reaction, type ReactionCount } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
 import { PUTT_EASING } from '@/lib/popOut'
 import { popClose, popOpen } from '../popOut'
@@ -11,9 +11,9 @@ import { SC_CARD } from '../scorecardStyle'
 import { IconX } from '../icons'
 import { FIELD, buttonClass } from '../ui'
 import type { FeedView } from './FeedItem'
-import { DotButton, MoreMenu, ReportSheet } from './ItemActions'
+import { MoreMenu, ReportSheet, reactTo } from './ItemActions'
 
-type Comment = { id: string; name: string; text: string; at: string; mine: boolean; canDelete: boolean; canReport: boolean; replyTo?: string | null; replyName?: string | null }
+type Comment = { id: string; name: string; text: string; at: string; mine: boolean; canDelete: boolean; canReport: boolean; replyTo?: string | null; replyName?: string | null; reactions?: ReactionCount[]; myReaction?: Reaction | null }
 type Detail = {
   player: { id: string; name: string; handicap: number | null; gender: string }
   round: { id: string; round_number: number; courses: { id: string; name: string } }
@@ -157,7 +157,7 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     onPatch({
       comments: next.length,
       latest: next.length ? { name: next[next.length - 1].name, text: next[next.length - 1].text } : null,
-      thread: next.map(c => ({ ...c, replyTo: c.replyTo ?? null, replyName: c.replyName ?? null })),
+      thread: next.map(c => ({ ...c, replyTo: c.replyTo ?? null, replyName: c.replyName ?? null, reactions: c.reactions ?? [], myReaction: c.myReaction ?? null })),
       commentLine: lead ? {
         count: `${next.length} comment${next.length === 1 ? '' : 's'}`,
         who: `${lead.mine ? 'You' : lead.name}${names.length > 1 ? ` and ${names.length - 1} other${names.length === 2 ? '' : 's'}` : ''}`,
@@ -252,15 +252,15 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
           </div>
           </div>
 
-          {/* The comment box, held above the keyboard (M11), the dot and the ⋯ beside it. */}
+          {/* The comment box, held above the keyboard (M11), the ⋯ beside it (its reactions in it, D348). */}
           <form className="flex-shrink-0 border-t border-line px-3 py-2 flex items-center gap-2 bg-surface"
             onSubmit={e => { e.preventDefault(); void send() }}>
-            <DotButton item={item} onPatch={onPatch} />
             <label htmlFor="sheet-comment" className="sr-only">Add a comment</label>
             <input id="sheet-comment" type="text" value={text} maxLength={COMMENT_MAX} onChange={e => setText(e.target.value)}
               className={`${FIELD} flex-1 min-w-0`} placeholder="Add a comment" autoComplete="off" enterKeyHint="send" />
             <button type="submit" disabled={busy || !text.trim()} className={buttonClass('primary', false, true)}>{busy ? '…' : 'Send'}</button>
-            <MoreMenu item={item} onPatch={onPatch} onGone={() => { onGone(); close() }} />
+            <MoreMenu item={item} onPatch={onPatch} onGone={() => { onGone(); close() }}
+              onReact={e => { void reactTo(item.id, item, e, onPatch).then(err => { if (err) setError(err) }) }} />
           </form>
         </div>
       </div>

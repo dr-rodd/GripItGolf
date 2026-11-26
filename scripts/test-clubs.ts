@@ -1846,13 +1846,16 @@ async function competitionBarTests() {
   ok(['club', 'club-deep', 'on-club', 'club-tint'].every(n => new RegExp(`--color-${n}:\\s*var\\(--gd-${n}\\)`).test(inline))
     && !/--color-club/.test(css.replace(/@theme inline \{[^}]*\}/, '').replace(/\/\*[\s\S]*?\*\//g, '')),
     'the club tokens are inline, so a class reads the wrapper\'s colour, not :root\'s bark')
-  ok(/\.club-bar\[data-set="comp"\] \.club-bar-kid \{[^}]*transition: transform 280ms var\(--gd-ease\) calc\(\(var\(--k\) - 1\) \* 40ms\)/.test(css),
-    'the three slide out on the putt curve, 280ms, 40ms apart')
-  ok(/\.club-bar-kids \{[^}]*overflow: hidden/.test(css) && !/\.club-bar-kid \{[^}]*opacity/.test(css.split('@media (prefers-reduced-motion')[0]),
-    '…from behind Comps, at full opacity (Ross, 16 Nov)')
-  ok(/\.club-bar\[data-set="comp"\] \.club-bar-own \{[^}]*transition: opacity 120ms ease-out/.test(css), 'Board, Stats and Club fade in 120ms')
-  ok(/\.club-bar-kid \{\s*transform: translateX\(calc\(var\(--k\) \* -100%\)\);[^}]*transition: transform 200ms ease-out/.test(css), 'leaving, the reverse in 200ms, no stagger')
-  ok(/prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.club-bar-kid \{\s*transform: none !important;/.test(css), 'Reduce Motion: a cross-fade, no travel')
+  // D347: one solid drawer out of Comps, over the club's own tabs.
+  ok(/\.club-bar\[data-set="comp"\] \.club-bar-drawer \{[^}]*transform: none;[^}]*transition: transform 380ms var\(--gd-ease\)/.test(css),
+    'the three come out of Comps as one drawer, on the putt curve, 380ms (D347)')
+  ok(/\.club-bar-kids \{[^}]*overflow: hidden/.test(css) && /\.club-bar-drawer \{[^}]*background-color: var\(--color-surface\)[^}]*transform: translateX\(-101%\)/.test(css)
+    && !/\.club-bar-drawer \{[^}]*opacity/.test(css.split('@media (prefers-reduced-motion')[0]),
+    '…solid, parked behind Comps, never faded')
+  ok(/\.club-bar\[data-set="comp"\] \.club-bar-own \{[^}]*visibility: hidden;[^}]*transition: visibility 0s linear 380ms/.test(css) && !/\.club-bar-own \{[^}]*opacity/.test(css.split('@media (prefers-reduced-motion')[0]),
+    '…sliding over Stream, Tee times and Stats, which stay put and are hidden only once it has landed')
+  ok(/\.club-bar-drawer \{[^}]*transition: transform 300ms var\(--gd-ease\)/.test(css), 'leaving, it slides back into Comps in 300ms')
+  ok(/prefers-reduced-motion: reduce\) \{\s*\/\*[^*]*\*\/\s*\.club-bar-drawer \{\s*transform: none !important;/.test(css), 'Reduce Motion: a cross-fade, no travel')
   ok(/body:has\(\[data-no-club-bar\]\) \.club-bar \{ display: none; \}/.test(css) && /<NoBar \/>/.test(read('app/club/[slug]/comp/[code]/CompShell.tsx')),
     'the members-only door shows no footer, in the server\'s HTML')
   const summary = read('app/club/[slug]/comp/[code]/(frame)/page.tsx')

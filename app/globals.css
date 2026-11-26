@@ -464,51 +464,64 @@ th:hover > .ch-col-handle::after, .ch-col-handle:focus-visible::after, .ch-col-h
   .ch-bar-rise { animation: gdFade 150ms ease-out both; }
 }
 
-/* ── The club footer and a competition's set (D180 amended, D188) ──
+/* ── The club footer and a competition's set (D180 amended, D188, D347) ──
    One bar, drawn by the club's layout (`ClubTabBar`), so opening a
-   competition from Comps changes its set in place: Board, Stats and Club
-   fade (120ms ease-out) while Tee times, Scoring and Leaderboard slide out
-   from behind Comps at full opacity, 40ms apart on the putt curve, and the
-   tray fades in behind Comps and the three. Leaving is the reverse in 200ms
-   ease-out, all together. A bar that has just arrived changed nothing, so
-   a shared link or a refresh moves nothing. The three's strip begins at
-   Comps' right edge and clips (`overflow: hidden`): parked one, two and
-   three columns left (`--k`, a transform's percentage being its own
-   column), they are out of sight behind Comps. */
+   competition from Comps changes its set in place. **The competition's
+   three come out of Comps as one solid drawer** (Ross, 26 Nov 2026: "slide
+   out of the comp button on menu footer and slide over the other
+   buttons"): an opaque panel — the surface, the club's tint on it — whose
+   strip begins at Comps' right edge and clips, so parked one panel's width
+   left it is out of sight behind Comps; it slides right over Stream, Tee
+   times and Stats (380ms on the putt curve), which stay where they are
+   under it and are hidden only once it has landed. Leaving, it slides back
+   into Comps (300ms) over them. The tray's piece behind Comps fades in to
+   meet it. A bar that has just arrived changed nothing, so a shared link
+   or a refresh moves nothing. */
 .club-bar-tray {
   position: absolute;
-  top: 6px; bottom: 6px; left: calc(20% + 4px); right: 4px;
-  border-radius: 14px;
+  top: 6px; bottom: 6px; left: calc(20% + 4px); width: calc(20% - 4px);
+  border-radius: 14px 0 0 14px;
   opacity: 0;
-  transition: opacity 200ms ease-out;
+  transition: opacity 200ms ease-out 100ms;
 }
-.club-bar[data-set="comp"] .club-bar-tray { opacity: 1; transition: opacity 280ms ease-out; }
+.club-bar[data-set="comp"] .club-bar-tray { opacity: 1; transition: opacity 160ms ease-out; }
 
 .club-bar-kids {
   position: absolute;
   top: 0; bottom: 0; left: 40%; right: 0;
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   overflow: hidden;
   pointer-events: none;
 }
 .club-bar[data-set="comp"] .club-bar-kids { pointer-events: auto; }
-.club-bar-kid {
-  transform: translateX(calc(var(--k) * -100%));
+.club-bar-drawer {
+  position: absolute;
+  inset: 0;
+  background-color: var(--color-surface);
+  transform: translateX(-101%);
   visibility: hidden;
-  transition: transform 200ms ease-out, visibility 0s linear 200ms;
+  transition: transform 300ms var(--gd-ease), visibility 0s linear 300ms;
 }
-.club-bar[data-set="comp"] .club-bar-kid {
+.club-bar[data-set="comp"] .club-bar-drawer {
   transform: none;
   visibility: visible;
-  transition: transform 280ms var(--gd-ease) calc((var(--k) - 1) * 40ms), visibility 0s;
+  transition: transform 380ms var(--gd-ease), visibility 0s;
+}
+.club-bar-drawer-tabs {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.club-bar-drawer-tint {
+  position: absolute;
+  top: 6px; bottom: 6px; left: 0; right: 4px;
+  border-radius: 0 14px 14px 0;
 }
 
-.club-bar-own { transition: opacity 200ms ease-out, visibility 0s; }
+.club-bar-own { transition: visibility 0s; }
 .club-bar[data-set="comp"] .club-bar-own {
-  opacity: 0;
   visibility: hidden;
-  transition: opacity 120ms ease-out, visibility 0s linear 120ms;
+  transition: visibility 0s linear 380ms;
 }
 
 /* Comps' icon becomes the way back while a competition is open. */
@@ -539,14 +552,13 @@ html[data-club-member] .club-wait-pad { padding-bottom: calc(64px + env(safe-are
 @media (prefers-reduced-motion: reduce) {
   /* No travel: the two sets cross-fade in 160ms. Important, because the
      catch-all below would otherwise cut the fade to nothing too. */
-  .club-bar-kid {
+  .club-bar-drawer {
     transform: none !important;
     opacity: 0;
     transition: opacity 160ms ease-out, visibility 0s linear 160ms !important;
   }
-  .club-bar[data-set="comp"] .club-bar-kid { opacity: 1; transition: opacity 160ms ease-out, visibility 0s !important; }
-  .club-bar-own { transition: opacity 160ms ease-out, visibility 0s !important; }
-  .club-bar[data-set="comp"] .club-bar-own { transition: opacity 160ms ease-out, visibility 0s linear 160ms !important; }
+  .club-bar[data-set="comp"] .club-bar-drawer { opacity: 1; transition: opacity 160ms ease-out, visibility 0s !important; }
+  .club-bar[data-set="comp"] .club-bar-own { transition: visibility 0s linear 160ms !important; }
   .club-bar-tray, .club-bar-icon-back, .club-bar-icon-comps,
   .club-bar[data-set="comp"] .club-bar-tray,
   .club-bar[data-set="comp"] .club-bar-icon-back,
@@ -968,7 +980,7 @@ html.dark .only-light { display: none; }
   }
 
   .page-enter, .score-flash, .dot-live, .skeleton, .tab-pending, .sheet-up,
-  .slide-in-right, .slide-in-left, .cross-fade, .stream-arrive, .menu-drop {
+  .slide-in-right, .slide-in-left, .cross-fade, .stream-arrive, .menu-drop, .react-bar-in {
     animation: none !important;
   }
   /* The press keeps its meaning without the movement, the same way the tab
@@ -1311,3 +1323,14 @@ html.keyboard-open .chat-composer { bottom: 0; }
   100% { transform: scale(1); }
 }
 .chat-dot-pop { animation: gdChatDotPop 320ms var(--gd-ease) both; }
+
+/* ── Reactions (D348) ────────────────────────────────────────────
+   Held still, a message opens WhatsApp's six over itself: the bar grows out
+   of the message's edge (200ms on the putt curve, no overshoot), and a
+   reaction's tag on the bubble's foot pops when it changes (app script,
+   220ms). Both are still under Reduce Motion. */
+@keyframes gdReactBarIn {
+  from { opacity: 0; transform: scale(0.9); }
+  to   { opacity: 1; transform: none; }
+}
+.react-bar-in { animation: gdReactBarIn 200ms var(--gd-ease) both; }

@@ -1,10 +1,10 @@
 'use client'
 
-import { ago, ordinal, replyNote, replyQuote } from '@/lib/feed'
+import { ago, ordinal, replyNote, replyQuote, type Reaction, type ReactionCount } from '@/lib/feed'
 import { IconLink, IconReply } from '../icons'
 import Initials from '../Initials'
 import { SC_SF } from '../scorecardStyle'
-import { DotButton, MoreMenu, ReplyMenu } from './ItemActions'
+import { MoreMenu, ReactionChip, ReplyMenu } from './ItemActions'
 import SwipeReply from './SwipeReply'
 
 /** A reply on an item, as the server hands it (app/api/feed/feed.ts `ThreadComment`). */
@@ -18,6 +18,8 @@ export interface ThreadComment {
   replyName: string | null
   canDelete: boolean
   canReport: boolean
+  reactions: ReactionCount[]
+  myReaction: Reaction | null
 }
 
 /** An item as the server hands it to this viewer (app/api/feed/feed.ts `FeedView`). */
@@ -33,8 +35,9 @@ export interface FeedView {
   holes: number | null
   place: number | null
   highlights: string[]
-  dots: number
-  dotted: boolean
+  /** Each emoji with its count, and this viewer's own (D348). */
+  reactions: ReactionCount[]
+  myReaction: Reaction | null
   comments: number
   latest: { name: string; text: string } | null
   /** Every reply, oldest first — each its own message in the chat (D346). */
@@ -46,7 +49,7 @@ export interface FeedView {
   /** A club post's words and link (D325). */
   text: string | null
   link: string | null
-  /** May be commented on and dotted (D329). */
+  /** May be replied to and reacted to (D329, D348). */
   talk: boolean
   mine: boolean
   audience: 'wide' | 'me' | null
@@ -107,13 +110,13 @@ function Face({ name, flash }: { name: string; flash: boolean }) {
  * name; **yours on the right**. A signed card is a **square** (`CardSquare`)
  * with its status as a caption bubble beneath; a status or a club post is a
  * **chat bubble**; a leaderboard move or a cut a line across the middle, as
- * a chat says the time. Under each, the dot, when, how many replies (a tap
+ * a chat says the time. Its reactions hang on its foot (D348: hold it for the six); under it when, how many replies (a tap
  * opens the card with every reply, as before) and the ⋯. Its replies are
  * messages of their own further down the chat (`ChatReply`). **Swipe it
  * right to reply** (`SwipeReply`). Tapping it opens its sheet, sprung out of
  * where it was tapped (the pop-out, D330). Never an animated number (D9).
  */
-export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = false, arriving = false }: {
+export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, onReact, onHold, flash = false, held = false, arriving = false }: {
   item: FeedView
   now: Date
   /** Opens the item's sheet, out of the element tapped (D330). */
@@ -122,8 +125,13 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
   onGone: () => void
   /** Reply to it (D346) — absent where it takes no replies. */
   onReply?: () => void
+  /** React to it (D348); `onHold` opens the long-press bar over it. */
+  onReact?: (e: Reaction) => void
+  onHold?: (el: HTMLElement) => void
   /** Just jumped to: highlighted for a moment. */
   flash?: boolean
+  /** Held, its reactions bar open: ringed while it is. */
+  held?: boolean
   /** New since the stream was last read: it fades in (M13). */
   arriving?: boolean
 }) {
@@ -156,7 +164,7 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
   const mine = item.mine
   const isCard = item.kind === 'card'
   return (
-    <SwipeReply onReply={onReply}>
+    <SwipeReply onReply={onReply} onHold={onHold}>
       <article data-msg={item.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
         {!mine && <Face name={item.name} flash={flash} />}
         <div className={`flex flex-col min-w-0 ${mine ? 'items-end' : 'items-start'} ${isCard ? 'w-[72%]' : 'max-w-[72%]'}`}>
@@ -166,14 +174,14 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
           {isCard ? (
             <>
               <div {...tappable(`${item.name}’s card — open it, with every reply`)}
-                className={`w-full rounded-[22px] ${flash ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
+                className={`w-full rounded-[22px] ${flash || held ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
                 <CardSquare item={item} />
               </div>
               {item.status && <p className={`${bubble(mine)} mt-1 text-[15px] leading-snug break-words max-w-full`}>{item.status}</p>}
             </>
           ) : (
             <div {...tappable(`${item.name}’s ${item.kind === 'post' ? 'post' : 'status'} — open it, with every reply`)}
-              className={`${bubble(mine)} max-w-full ${flash ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
+              className={`${bubble(mine)} max-w-full ${flash || held ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
               {item.kind === 'post' && item.line && <p className="t-label text-ink break-words">{item.line}</p>}
               {item.kind === 'post' && item.text && (
                 <div className={`${item.line ? 'mt-1 ' : ''}space-y-2`}>
@@ -191,9 +199,10 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
             </div>
           )}
 
-          {/* The dot, when, the replies, the ⋯ — small, under the message, as a chat's reactions hang. */}
+          {/* D348: its reactions hang on the foot of the bubble, as WhatsApp's do. */}
+          <ReactionChip itemId={item.id} reactions={item.reactions} myReaction={item.myReaction} onTake={() => item.myReaction && onReact?.(item.myReaction)} />
+          {/* When, the replies, the ⋯ — small, under the message. */}
           <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
-            <DotButton item={item} onPatch={onPatch} />
             <time dateTime={item.at} className="t-cap text-ink/65 px-1">{ago(item.at, now)}</time>
             {item.comments > 0 && opens && (
               <button type="button" data-pop-origin="" onClick={e => onOpen!(e.currentTarget)}
@@ -201,7 +210,7 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
                 {item.comments} {item.comments === 1 ? 'reply' : 'replies'}
               </button>
             )}
-            <MoreMenu item={item} onPatch={onPatch} onGone={onGone} onReply={onReply} className="!w-9 !h-9" />
+            <MoreMenu item={item} onPatch={onPatch} onGone={onGone} onReply={onReply} onReact={onReact} className="!w-9 !h-9" />
           </div>
         </div>
       </article>
@@ -218,7 +227,7 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = 
  * what it answers — a tap going to that message, briefly lit. Swipe it right
  * to reply to it in turn.
  */
-export function ChatReply({ item, reply, now, onJump, onReply, onGone, flash = false, arriving = false }: {
+export function ChatReply({ item, reply, now, onJump, onReply, onGone, onReact, onHold, flash = false, held = false, arriving = false }: {
   item: FeedView
   reply: ThreadComment
   now: Date
@@ -226,7 +235,10 @@ export function ChatReply({ item, reply, now, onJump, onReply, onGone, flash = f
   onJump: (id: string) => void
   onReply?: () => void
   onGone: () => void
+  onReact?: (e: Reaction) => void
+  onHold?: (el: HTMLElement) => void
   flash?: boolean
+  held?: boolean
   arriving?: boolean
 }) {
   const mine = reply.mine
@@ -236,7 +248,7 @@ export function ChatReply({ item, reply, now, onJump, onReply, onGone, flash = f
     ? { to: target?.id ?? item.id, label: replyNote({ name: target?.name ?? reply.replyName ?? 'a member', mine: target?.mine ?? false }), text: target?.text ?? '' }
     : { to: item.id, label: replyNote({ name: item.name, mine: item.mine }), text: item.kind === 'post' ? item.line || item.text || '' : item.status || item.line }
   return (
-    <SwipeReply onReply={onReply}>
+    <SwipeReply onReply={onReply} onHold={onHold}>
       <article data-msg={reply.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
         {!mine && <Face name={reply.name} flash={flash} />}
         <div className={`flex flex-col min-w-0 max-w-[72%] ${mine ? 'items-end' : 'items-start'}`}>
@@ -253,10 +265,11 @@ export function ChatReply({ item, reply, now, onJump, onReply, onGone, flash = f
               {note.text && <span className="block t-cap text-ink/65 truncate">{note.text}</span>}
             </button>
           )}
-          <p className={`${bubble(mine)} relative z-[1] max-w-full text-[16px] leading-snug break-words ${flash ? 'chat-flash' : ''}`}>{reply.text}</p>
+          <p className={`${bubble(mine)} relative z-[1] max-w-full text-[16px] leading-snug break-words ${flash || held ? 'chat-flash' : ''}`}>{reply.text}</p>
+          <ReactionChip itemId={reply.id} reactions={reply.reactions} myReaction={reply.myReaction} onTake={() => reply.myReaction && onReact?.(reply.myReaction)} />
           <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
             <time dateTime={reply.at} className="t-cap text-ink/65 px-1">{ago(reply.at, now)}</time>
-            <ReplyMenu reply={reply} onReply={onReply} onGone={onGone} />
+            <ReplyMenu reply={reply} onReply={onReply} onGone={onGone} onReact={onReact} />
           </div>
         </div>
       </article>

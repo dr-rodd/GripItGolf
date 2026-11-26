@@ -18,6 +18,8 @@ export const REPLY_DETENT = 6
 export const REPLY_SLOP = 10
 /** A touch this close to the screen's left edge is the browser's own back gesture, never a reply. */
 export const REPLY_EDGE = 24
+/** How long a message is held still before its reactions open (D348) — WhatsApp's feel, under half a second. */
+export const HOLD_MS = 420
 /** The spring home: about a third of a second, a touch past rest and back (D346's named exception to D8). */
 export const REPLY_BACK_MS = 360
 const RESPONSE_S = 0.32

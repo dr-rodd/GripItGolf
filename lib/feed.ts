@@ -677,6 +677,56 @@ export function ago(at: string, now: Date): string {
   return new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' }).format(new Date(at))
 }
 
+// ─── Reactions (D348) ───────────────────────────────────────────
+//
+// Ross, 26 Nov 2026: "Get rid of dots. Is it possible for people to react
+// with emojis same as WhatsApp?" Hold a message (or its ⋯) for six emoji,
+// WhatsApp's own; one a person a message — another replaces it, the same
+// again takes it off. A dot given before reads as the first, 👍.
+
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'] as const
+export type Reaction = (typeof REACTIONS)[number]
+
+/** A reaction as handed in: one of the six, null to take it off, undefined for anything else. */
+export function readReaction(v: unknown): Reaction | null | undefined {
+  if (v === null || v === '') return null
+  return typeof v === 'string' && (REACTIONS as readonly string[]).includes(v) ? (v as Reaction) : undefined
+}
+
+/** A stored row's emoji: a dot given before 106 (none) is a 👍; anything unknown is left out. */
+export function storedReaction(v: unknown): Reaction | null {
+  if (v === null || v === undefined || v === '') return REACTIONS[0]
+  return readReaction(v) ?? null
+}
+
+export interface ReactionCount { emoji: Reaction; count: number }
+
+/** A message's reactions for one viewer: each emoji with its count, most first (the six's order breaking a tie), and the viewer's own. */
+export function reactionSummary(rows: readonly { userId: string; emoji: unknown }[], viewerId: string): { reactions: ReactionCount[]; myReaction: Reaction | null } {
+  const counts = new Map<Reaction, number>()
+  let mine: Reaction | null = null
+  for (const r of rows) {
+    const e = storedReaction(r.emoji)
+    if (!e) continue
+    counts.set(e, (counts.get(e) ?? 0) + 1)
+    if (r.userId === viewerId) mine = e
+  }
+  const reactions = [...counts].map(([emoji, count]) => ({ emoji, count }))
+    .sort((a, b) => b.count - a.count || REACTIONS.indexOf(a.emoji) - REACTIONS.indexOf(b.emoji))
+  return { reactions, myReaction: mine }
+}
+
+/** The same summary after this viewer reacts `next` (null takes theirs off) — what a phone shows before the server answers. */
+export function withReaction(s: { reactions: readonly ReactionCount[]; myReaction: Reaction | null }, next: Reaction | null): { reactions: ReactionCount[]; myReaction: Reaction | null } {
+  const counts = new Map(s.reactions.map(r => [r.emoji, r.count]))
+  if (s.myReaction) counts.set(s.myReaction, (counts.get(s.myReaction) ?? 1) - 1)
+  const mine = next === s.myReaction ? null : next
+  if (mine) counts.set(mine, (counts.get(mine) ?? 0) + 1)
+  const reactions = [...counts].filter(([, n]) => n > 0).map(([emoji, count]) => ({ emoji, count }))
+    .sort((a, b) => b.count - a.count || REACTIONS.indexOf(a.emoji) - REACTIONS.indexOf(b.emoji))
+  return { reactions, myReaction: mine }
+}
+
 // ─── The chat (D346) ────────────────────────────────────────────
 //
 // A stream reads as a chat (Ross, 26 Nov 2026: "Default to bottom of chat.

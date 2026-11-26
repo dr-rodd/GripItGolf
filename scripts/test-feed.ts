@@ -10,7 +10,7 @@ import {
   cardFacts, cardHighlights, defaultComp, effectiveAudience, inStream, mayView, mayViewChild, pillsFor, readStreams,
   searchTerm, shownComp, statusIssue, cleanText, counter, friendState, standingWith, pair, reportDestination, moveLine,
   matchLine, contextLine, olderThan, newestFirst, commentLine, compMenu, STREAMS_V2, keptStreams, streamKey, streamWord,
-  withGroups, readStreamKey, leavePlan, addIssue, groupNameIssue, chatTimeline, replyQuote, replyNote,
+  withGroups, readStreamKey, leavePlan, addIssue, groupNameIssue, chatTimeline, replyQuote, replyNote, readReaction, reactionSummary, withReaction,
   type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
 import { runFeed, threadOf, type FeedStore, type ItemRow } from '../app/api/feed/feed'
@@ -158,6 +158,16 @@ function ruleTests() {
       [['c1', null, null, false, false, true], ['c2', 'c1', 'Xa', true, true, false]], 'a thread: oldest first, what each answers, yours to delete, others’ to report')
   }
 
+  section('Reactions (D348): WhatsApp’s six, one a person')
+  {
+    eq([readReaction('👍'), readReaction(null), readReaction('🤡'), readReaction(3)], ['👍', null, undefined, undefined], 'one of the six, null to take it off, nothing else')
+    eq(reactionSummary([{ userId: 'a', emoji: '😂' }, { userId: 'b', emoji: null }, { userId: 'c', emoji: '😂' }, { userId: 'd', emoji: 'x' }], 'b'),
+      { reactions: [{ emoji: '😂', count: 2 }, { emoji: '👍', count: 1 }], myReaction: '👍' }, 'counted, most first; an old dot a 👍; an unknown left out')
+    const s0 = { reactions: [{ emoji: '😂' as const, count: 2 }], myReaction: '😂' as const }
+    eq(withReaction(s0, '❤️'), { reactions: [{ emoji: '❤️', count: 1 }, { emoji: '😂', count: 1 }], myReaction: '❤️' }, 'another replaces yours')
+    eq(withReaction(s0, '😂'), { reactions: [{ emoji: '😂', count: 1 }], myReaction: null }, 'the same again takes it off')
+  }
+
   section('Swipe to reply (D346): a rubber band, a detent, a spring home')
   {
     eq(swipeOffset(0), { x: 0, armed: false }, 'still, it stays')
@@ -186,7 +196,7 @@ export type World = {
   clubs: Map<string, { id: string; slug: string; name: string; members: string[] }>
   friends: { a: string; b: string; by: string; accepted: boolean }[]
   items: ItemRow[]
-  dots: { itemId: string; userId: string }[]
+  dots: { itemId: string; userId: string; emoji?: string | null }[]
   comps: Map<string, CompRef[]>
   ready: boolean
   /** Club list rows: a junior's membership marked, a row taken off, one with no account. */
@@ -324,7 +334,10 @@ export function standIn(w: World): FeedStore {
     },
     async itemsByIds(ids) { return w.items.filter(r => ids.includes(r.id)) },
     async childrenOf(ids) { return w.items.filter(r => r.parentId && ids.includes(r.parentId) && !r.removedAt && !r.held) },
-    async dotsOn(ids) { return w.dots.filter(d => ids.includes(d.itemId)) },
+    async reactionsOn(ids, parents) {
+      const under = new Set(w.items.filter(r => r.parentId && parents.includes(r.parentId)).map(r => r.id))
+      return w.dots.filter(d => ids.includes(d.itemId) || under.has(d.itemId)).map(d => ({ ...d, emoji: d.emoji ?? null }))
+    },
     async recentComps(u) { return w.comps.get(u) ?? [] },
     async friendRows(u) { return w.friends.filter(f => f.a === u || f.b === u).map(f => ({ userA: f.a, userB: f.b, requestedBy: f.by, accepted: f.accepted })) },
     async searchList(clubIds, term, limit) {
@@ -347,9 +360,9 @@ export function standIn(w: World): FeedStore {
       return c
     },
     async deleteItem(id) { w.items = w.items.filter(r => r.id !== id && r.parentId !== id) },
-    async setDot(itemId, userId, on) {
+    async setReaction(itemId, userId, emoji) {
       w.dots = w.dots.filter(d => !(d.itemId === itemId && d.userId === userId))
-      if (on) w.dots.push({ itemId, userId })
+      if (emoji) w.dots.push({ itemId, userId, emoji })
     },
     async insertReport(o) { if (!w.reports.some(r => r.itemId === o.itemId && r.reporterId === o.reporterId)) w.reports.push({ ...o, resolved: null }) },
     async clubCredentials(clubId, userId) { return w.creds.get(`${clubId}:${userId}`) ?? null },
@@ -548,8 +561,8 @@ async function streamsV2Tests() {
   w.items.push(older, newer)
   const xOwn = async () => ((await ask('x', { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string }[] }).items.map(i => i.id).filter(id => id === older.id || id === newer.id)
   eq(await xOwn(), [newer.id, older.id], 'newest first')
-  await ask('z', { action: 'dot', itemId: older.id })
-  eq(await xOwn(), [newer.id, older.id], 'a dot moves nothing')
+  await ask('z', { action: 'react', itemId: older.id, emoji: '😂' })
+  eq(await xOwn(), [newer.id, older.id], 'a reaction moves nothing')
   await ask('z', { action: 'comment', itemId: older.id, text: 'Ha' })
   eq(await xOwn(), [older.id, newer.id], 'a comment moves the whole card to the top')
 
@@ -742,7 +755,7 @@ async function socialTests() {
   w.items.push(ycard)
   w.friends.push({ a: 'x', b: 'y', by: 'x', accepted: true }, { a: 'x', b: 'z', by: 'x', accepted: true })
   eq((await ask('z', { action: 'comment', itemId: ycard.id, text: 'Hi' })).status, 404, 'Z cannot comment on a card Z may not see')
-  eq((await ask('z', { action: 'dot', itemId: ycard.id })).status, 404, '…nor dot it')
+  eq((await ask('z', { action: 'react', itemId: ycard.id, emoji: '👍' })).status, 404, '…nor react to it')
   const made = await ask('x', { action: 'comment', itemId: ycard.id, text: '  Shot!  ' })
   eq(made.status, 200, 'X, Y’s friend, comments on Y’s card')
   const commentId = (made.body as unknown as { comment: { id: string } }).comment.id
@@ -754,13 +767,26 @@ async function socialTests() {
   eq(((await ask('y', { action: 'home' })).body as unknown as { newComments: number }).newComments, 1, 'a comment on your card puts a dot on Home (D307)')
   await ask('y', { action: 'seen' })
   eq(((await ask('y', { action: 'home' })).body as unknown as { newComments: number }).newComments, 0, '…until you have looked')
+  // D348: reactions, WhatsApp's six — one a person a message.
+  eq((await ask('x', { action: 'react', itemId: ycard.id, emoji: '🤡' })).status, 400, 'only the six reactions')
+  await ask('x', { action: 'react', itemId: ycard.id, emoji: '❤️' })
+  await ask('x', { action: 'react', itemId: ycard.id, emoji: '😂' })
+  eq(w.dots.map(d => d.emoji), ['😂'], 'one reaction a person — another replaces it')
+  w.dots.push({ itemId: ycard.id, userId: 'y', emoji: null })
+  type Page = { items: { id: string; reactions: { emoji: string; count: number }[]; myReaction: string | null; comments: number; thread: { id: string; reactions: { emoji: string; count: number }[]; myReaction: string | null }[] }[] }
+  const yPage = ((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as Page).items.find(i => i.id === ycard.id)
+  eq([yPage?.reactions, yPage?.myReaction, yPage?.comments], [[{ emoji: '👍', count: 1 }, { emoji: '😂', count: 1 }], '👍', 1], 'the card shows its reactions, a dot given before as a 👍, and its comment count')
+  eq((await ask('y', { action: 'react', itemId: commentId, emoji: '🙏' })).status, 200, 'a reply takes a reaction too')
+  const yReply = ((await ask('x', { action: 'page', stream: 'friends' })).body as unknown as Page).items.find(i => i.id === ycard.id)?.thread[0]
+  eq([yReply?.reactions, yReply?.myReaction], [[{ emoji: '🙏', count: 1 }], null], '…shown on the reply, to everybody')
+  eq((await ask('z', { action: 'reactions', itemId: ycard.id })).status, 404, 'who reacted is for those who may see it')
+  eq(((await ask('y', { action: 'reactions', itemId: ycard.id })).body as unknown as { people: { name: string; emoji: string; mine: boolean }[] }).people.map(p => [p.emoji, p.mine]),
+    [['👍', true], ['😂', false]], '…your own first')
+  await ask('x', { action: 'react', itemId: ycard.id, emoji: null })
+  eq(w.dots.filter(d => d.userId === 'x' && d.itemId === ycard.id).length, 0, 'taken off')
   await ask('x', { action: 'dot', itemId: ycard.id })
-  await ask('x', { action: 'dot', itemId: ycard.id })
-  eq(w.dots.length, 1, 'a dot is once a person')
-  const yPage = ((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string; dots: number; comments: number }[] }).items.find(i => i.id === ycard.id)
-  eq([yPage?.dots, yPage?.comments], [1, 1], 'the card shows its dot and comment counts')
-  await ask('x', { action: 'dot', itemId: ycard.id, on: false })
-  eq(w.dots.length, 0, 'tapped again, it comes off')
+  eq(w.dots.find(d => d.userId === 'x' && d.itemId === ycard.id)?.emoji, '👍', 'an old phone’s dot is a 👍')
+  w.dots = []
   w.friends.push({ a: 'c', b: 'y', by: 'c', accepted: true })
   eq((await ask('c', { action: 'comment.delete', id: commentId })).status, 403, 'somebody else cannot delete X’s comment')
   eq((await ask('y', { action: 'comment.delete', id: commentId })).status, 200, 'the card’s owner deletes any comment on it')
@@ -847,9 +873,16 @@ function wiringTests() {
       'the stream is a chat: every item and reply a message, oldest at the top, opened at the foot (D346)')
     ok(/anchor: \{ h: document\.documentElement\.scrollHeight, y: window\.scrollY \}/.test(feedUi) && /IntersectionObserver/.test(feedUi),
       '…earlier messages read in as its head comes into view, the screen held still while they land')
-    ok(/<SwipeReply onReply=\{onReply\}>/.test(item) && (item.match(/<SwipeReply /g) ?? []).length === 2 && /touchAction: 'pan-y'/.test(swipe) && /backFrames\(s\.x\)/.test(swipe) && /REPLY_EDGE/.test(swipe),
+    ok(/<SwipeReply onReply=\{onReply\} onHold=\{onHold\}>/.test(item) && (item.match(/<SwipeReply /g) ?? []).length === 2 && /touchAction: 'pan-y'/.test(swipe) && /backFrames\(s\.x\)/.test(swipe) && /REPLY_EDGE/.test(swipe),
       '…any message swiped right replies, on a rubber band that springs home; up and down stay the page’s, the left edge the browser’s')
     ok(/key: 'reply', label: 'Reply'/.test(read('app/components/feed/ItemActions.tsx')), '…and Reply is in every ⋯, for anybody who would rather not swipe')
+    const actions = read('app/components/feed/ItemActions.tsx')
+    ok(!/DotButton/.test(actions + item + read('app/components/feed/ItemSheet.tsx')) && !/'dot'/.test(actions + feedUi), 'no Dot button anywhere — reactions in its place (D348)')
+    ok(/HOLD_MS/.test(swipe) && /onContextMenu/.test(swipe) && /WebkitTouchCallout: 'none'/.test(swipe) && /<ReactBar /.test(feedUi) && /<EmojiRow /.test(feedUi),
+      '…a message held still (or right-clicked) opens the six over itself, with Reply and Copy')
+    ok((item.match(/<ReactionChip /g) ?? []).length === 2 && /onReact=\{onReact\}/.test(item) && /<EmojiRow mine=\{item\.myReaction\}/.test(actions) && /<EmojiRow mine=\{reply\.myReaction\}/.test(actions),
+      '…on items and replies alike, its reactions hung on the bubble, and the six in every ⋯ too')
+    ok(/askFeed\('react', \{ itemId, emoji: after\.myReaction \}\)/.test(actions) && /withReaction\(now, next\)/.test(actions), '…shown at once, put back if the server says no')
     ok(/<MiniCard item=\{item\} onTap=\{\(\) => onJump\(item\.id\)\} \/>/.test(item) && /onClick=\{\(\) => onJump\(note\.to\)\}/.test(item),
       '…a reply to a card quotes it as a small square, any other reply a "Replying to" note — each a way back to it')
     ok(/scrollIntoView\(\{ block: 'center'/.test(feedUi) && /setFlash\(id\)/.test(feedUi) && /chat-dot-pop/.test(item) && /\.chat-dot-pop/.test(css) && /\.chat-flash/.test(css),

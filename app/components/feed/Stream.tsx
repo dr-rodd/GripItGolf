@@ -2,8 +2,9 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
-import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
+import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type Reaction, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
 import { IconCheck, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
@@ -14,6 +15,7 @@ import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
 import { ClubPostComposer, InlineComposer, StatusComposer } from './Composer'
 import { GroupSettingsSheet, NewGroupSheet } from './GroupSheet'
+import { EmojiRow, reactTo } from './ItemActions'
 import { streamSeen } from './useStreamDot'
 
 type StreamView = { key: string; kind: StreamRef['kind']; label: string; empty: string; about?: string }
@@ -92,6 +94,9 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const [reply, setReply] = useState<ReplyTarget | null>(null)
   const [replyKey, setReplyKey] = useState(0)
   const [flash, setFlash] = useState<string | null>(null)
+  // D348: the long-press bar — which message, where it stood on the screen.
+  const [holding, setHolding] = useState<Hold | null>(null)
+  const [notice, setNotice] = useState('')
   const [now, setNow] = useState(() => new Date())
   // Where the chat must be once the next page lands: at its foot, or held still while earlier messages arrive above.
   const placing = useRef<{ foot: boolean; smooth: boolean } | { anchor: { h: number; y: number } } | null>({ foot: true, smooth: false })
@@ -242,6 +247,23 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   }, [activeRef, activePanelKey, load])
 
   const startReply = useCallback((t: ReplyTarget) => { setReply(t); setReplyKey(k => k + 1) }, [])
+
+  /** React to an item or a reply (D348): shown at once, put back with the server's words if it says no. */
+  const react = useCallback((rootId: string, replyId: string | null, emoji: Reaction) => {
+    const root = Object.values(panelsRef.current).flatMap(p => p.items).find(i => i.id === rootId)
+    const now = replyId ? root?.thread.find(c => c.id === replyId) : root
+    if (!now) return
+    const patch = (s: { reactions: FeedView['reactions']; myReaction: Reaction | null }) => replyId
+      ? setPanels(all => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, {
+          ...v, items: v.items.map(i => (i.id === rootId ? { ...i, thread: i.thread.map(c => (c.id === replyId ? { ...c, ...s } : c)) } : i)),
+        }])))
+      : patchItem(rootId, s)
+    void reactTo(replyId ?? rootId, now, emoji, patch).then(err => {
+      if (!err) return
+      setNotice(err)
+      window.setTimeout(() => setNotice(n => (n === err ? '' : n)), 4000)
+    })
+  }, [patchItem])
 
   // D307, D320, D343: the dot on the Stream tab clears once the member has looked at a stream.
   const newComments = home?.newComments ?? 0
@@ -423,7 +445,9 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
             comp={activeRef.kind === 'comp' ? comp : null} settingsPath={settingsPath} settled={settled} flash={flash}
             onMore={() => void load(activeRef, true)} onRetry={() => void load(activeRef)}
             onPatch={patchItem} onDropReply={dropReply} onOpen={(id, el) => setSheet({ id, origin: el })}
-            onReply={startReply} onJump={id => void jumpTo(id)} />
+            onReply={startReply} onJump={id => void jumpTo(id)}
+            onReact={react} onHold={setHolding} held={holding?.id ?? null} />
+          {notice && <p role="status" className="t-cap text-rust-deep text-center my-2">{notice}</p>}
           {(posts || reply) && (
             <div className="chat-composer sticky z-20 -mx-4 px-4 pt-2 pb-2 paper" style={{ '--chat-bottom': TABBAR_SPACE } as React.CSSProperties}>
               {reply && <ReplyBar reply={reply} onJump={() => void jumpTo(reply.commentId ?? reply.rootId)} onCancel={() => setReply(null)} />}
@@ -435,6 +459,11 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
         </>
       )}
 
+      {holding && (
+        <ReactBar hold={holding} onClose={() => setHolding(null)}
+          onPick={e => { react(holding.rootId, holding.replyId, e); setHolding(null) }}
+          onReply={holding.reply ? () => { startReply(holding.reply!); setHolding(null) } : undefined} />
+      )}
       {sheet && sheetItem && (
         <ItemSheet key={sheet.id} item={sheetItem} origin={sheet.origin} onClose={() => setSheet(null)}
           onPatch={p => patchItem(sheetItem.id, p)} onGone={() => patchItem(sheetItem.id, null)} />
@@ -455,6 +484,64 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
           onPosted={() => { setComposer(null); const c = pills.find(p => p.kind === 'club'); if (c) { placing.current = { foot: true, smooth: true }; void load(c) } }} />
       )}
     </section>
+  )
+}
+
+/** A message held for its reactions (D348): which, whose, where it stood, what Copy copies and Reply answers. */
+type Hold = { id: string; rootId: string; replyId: string | null; mine: boolean; myReaction: Reaction | null; text: string; reply: ReplyTarget | null; top: number; bottom: number }
+
+function holdOf(el: HTMLElement, id: string, rootId: string, replyId: string | null, mine: boolean, myReaction: Reaction | null, text: string, reply: ReplyTarget | null): Hold {
+  const r = el.getBoundingClientRect()
+  return { id, rootId, replyId, mine, myReaction, text, reply, top: r.top, bottom: r.bottom }
+}
+
+/** The bar's height, for placing it above or below the message held. */
+const BAR_H = 112
+
+/**
+ * The reactions bar (D348, Ross: "react with emojis same as WhatsApp"): held
+ * still, a message opens the six over itself — above it where there is
+ * room, else under it — at its own side, with Reply and Copy beneath; the
+ * message ringed while it is open. A tap anywhere else, a scroll or Escape
+ * puts it away. It grows out of the message's edge (`.react-bar-in`, 200ms
+ * on the putt curve; still under Reduce Motion).
+ */
+function ReactBar({ hold, onPick, onReply, onClose }: { hold: Hold; onPick: (e: Reaction) => void; onReply?: () => void; onClose: () => void }) {
+  const [copied, setCopied] = useState(false)
+  useEffect(() => {
+    const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const away = () => onClose()
+    window.addEventListener('keydown', esc)
+    window.addEventListener('scroll', away, { passive: true })
+    return () => { window.removeEventListener('keydown', esc); window.removeEventListener('scroll', away) }
+  }, [onClose])
+  const vh = typeof window === 'undefined' ? 800 : window.innerHeight
+  const above = hold.top - BAR_H - 8 > 72
+  const top = Math.max(72, Math.min(vh - BAR_H - 88, above ? hold.top - BAR_H - 8 : hold.bottom + 8))
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(hold.text); setCopied(true); window.setTimeout(onClose, 500) } catch { onClose() }
+  }
+  return createPortal(
+    <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }}>
+      <div role="menu" aria-label="React to this message" onClick={e => e.stopPropagation()}
+        className={`react-bar-in absolute ${hold.mine ? 'right-3' : 'left-3'} ${cardClass('floating')} bg-surface p-1.5 w-[min(320px,calc(100vw-24px))]`}
+        style={{ top, transformOrigin: `${above ? 'bottom' : 'top'} ${hold.mine ? 'right' : 'left'}` }}>
+        <EmojiRow mine={hold.myReaction} onPick={onPick} />
+        <div className="flex border-t border-line mt-1.5 pt-1">
+          {onReply && (
+            <button type="button" role="menuitem" onClick={onReply} className="flex-1 inline-flex items-center justify-center gap-1.5 min-h-11 t-label text-ink press ch-focus rounded-tile">
+              <IconReply size={18} /> Reply
+            </button>
+          )}
+          {hold.text && (
+            <button type="button" role="menuitem" onClick={() => void copy()} className="flex-1 min-h-11 t-label text-ink press ch-focus rounded-tile">
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
   )
 }
 
@@ -497,9 +584,11 @@ function dayLine(at: string, now: Date): { key: string; label: string } {
  * too. Live players on the course are a line at the foot, as a chat says
  * who is typing (D302).
  */
-function ChatPanel({ stream, panel, now, empty, comp, settingsPath, settled, flash, onMore, onRetry, onPatch, onDropReply, onOpen, onReply, onJump }: {
+function ChatPanel({ stream, panel, now, empty, comp, settingsPath, settled, flash, held, onMore, onRetry, onPatch, onDropReply, onOpen, onReply, onJump, onReact, onHold }: {
   stream: StreamRef; panel: Panel | undefined; now: Date; empty: string; comp: CompRef | null; settingsPath: string
-  settled: boolean; flash: string | null
+  settled: boolean; flash: string | null; held: string | null
+  onReact: (rootId: string, replyId: string | null, e: Reaction) => void
+  onHold: (h: Hold) => void
   onMore: () => void; onRetry: () => void
   onPatch: (id: string, p: Partial<FeedView> | null) => void
   onDropReply: (rootId: string, replyId: string) => void
@@ -564,17 +653,21 @@ function ChatPanel({ stream, panel, now, empty, comp, settingsPath, settled, fla
           if (m.kind === 'item') {
             const it = byId.get(m.id)!
             return [sep, (
-              <FeedItem key={it.id} item={it} now={now} arriving={panel.arriving.has(it.id)} flash={flash === it.id}
+              <FeedItem key={it.id} item={it} now={now} arriving={panel.arriving.has(it.id)} flash={flash === it.id} held={held === it.id}
                 onOpen={it.talk ? el => onOpen(it.id, el) : undefined}
                 onReply={it.talk ? () => onReply(replyToItem(it)) : undefined}
+                onReact={it.talk ? e => onReact(it.id, null, e) : undefined}
+                onHold={it.talk ? el => onHold(holdOf(el, it.id, it.id, null, it.mine, it.myReaction, it.kind === 'post' ? it.text ?? it.line : it.status ?? '', replyToItem(it))) : undefined}
                 onPatch={p => onPatch(it.id, p)} onGone={() => onPatch(it.id, null)} />
             )]
           }
           const root = byId.get(m.rootId)!
           const c = root.thread.find(x => x.id === m.id)!
           return [sep, (
-            <ChatReply key={c.id} item={root} reply={c} now={now} arriving={panel.arriving.has(c.id)} flash={flash === c.id}
-              onJump={onJump} onReply={() => onReply(replyToComment(root, c))} onGone={() => onDropReply(root.id, c.id)} />
+            <ChatReply key={c.id} item={root} reply={c} now={now} arriving={panel.arriving.has(c.id)} flash={flash === c.id} held={held === c.id}
+              onJump={onJump} onReply={() => onReply(replyToComment(root, c))} onGone={() => onDropReply(root.id, c.id)}
+              onReact={e => onReact(root.id, c.id, e)}
+              onHold={el => onHold(holdOf(el, c.id, root.id, c.id, c.mine, c.myReaction, c.text, replyToComment(root, c)))} />
           )]
         })}
       </div>

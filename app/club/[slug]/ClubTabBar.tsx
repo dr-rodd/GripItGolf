@@ -28,7 +28,8 @@ const SECTION_ICON: Record<CompSection, typeof IconHome> = { tee: IconClock, sco
  *
  * **Drawn once, by the club's layout, never by a page** — so going from the
  * club's Comps into a competition is this bar changing its set, and the
- * three slide out from behind Comps (the stylesheet's `.club-bar`). A bar
+ * three slide out of Comps as one solid drawer, over the club's own tabs
+ * (D347, the stylesheet's `.club-bar`). A bar
  * that has just arrived — a shared link, a refresh — has changed nothing, so
  * nothing moves. Which set is the address's (`barOf`), so the server draws
  * the competition set for anybody; the club set waits for the page to say
@@ -149,16 +150,19 @@ export default function ClubTabBar({ slug }: { slug: string }) {
           ))}
         </ul>
         {five && (
-          // The competition's three, over Stream, Tee times and Stats. Their strip
-          // starts at Comps' right edge and clips, so at rest in the club set
-          // they wait behind Comps and slide out from there.
-          <ul className="club-bar-kids">
-            {SECTION_ORDER.map((s, i) => {
+          // The competition's three, over Stream, Tee times and Stats: one solid
+          // drawer (D347) whose strip starts at Comps' right edge and clips, so
+          // at rest in the club set it waits behind Comps and slides out over them.
+          <div className="club-bar-kids">
+           <div className="club-bar-drawer">
+            <span aria-hidden="true" className="club-bar-drawer-tint bg-club-tint" />
+            <ul className="club-bar-drawer-tabs">
+            {SECTION_ORDER.map((s) => {
               const code = comp?.code ?? shown
               // D336: a match play's third tab is its bracket, with the bracket's own mark (the event's, IconBracket).
               const Icon = s === 'board' && code && matchPlays.has(code) ? IconBracket : SECTION_ICON[s]
               return (
-                <li key={s} className="club-bar-kid" style={{ '--k': i + 1 } as React.CSSProperties}>
+                <li key={s} className="club-bar-kid relative">
                   {code && (
                     <Tab href={compSectionHref(slug, code, s)} prefetch={!!comp}
                       replace={!!comp && comp.active !== 'summary'}
@@ -169,7 +173,9 @@ export default function ClubTabBar({ slug }: { slug: string }) {
                 </li>
               )
             })}
-          </ul>
+            </ul>
+           </div>
+          </div>
         )}
       </div>
     </nav>

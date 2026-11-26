@@ -19,10 +19,13 @@ import { runOwn } from './own'
 import { runGroups, type GroupsStore } from './groups'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
-  commentLine, isGroupStream, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
+  commentLine, reactionSummary, isGroupStream, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
   STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel, withGroups,
-  type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type StreamRef, type Viewer,
+  type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type Reaction, type ReactionCount, type StreamRef, type Viewer,
 } from '@/lib/feed'
+
+/** One person's reaction on one message (D348). `emoji` null: a dot given before 106, read as 👍. */
+export interface ReactionRow { itemId: string; userId: string; emoji: string | null }
 
 // ─── The store ──────────────────────────────────────────────────
 
@@ -64,7 +67,8 @@ export interface Bundle {
   pulledBy: Map<string, string[]>
   /** Every comment and highlight on the items in `rows`. */
   children: ItemRow[]
-  dots: { itemId: string; userId: string }[]
+  /** Every reaction on the page's items and their replies (D348). */
+  reactions: ReactionRow[]
   /** Each author's audience setting. */
   audiences: Map<string, Audience>
   /** Authors who are juniors now — left out whatever was written before. */
@@ -156,7 +160,8 @@ export interface FeedStore extends FriendsStore, CardsStore, SocialStore, Groups
   cardDetail(roundId: string, playerId: string): Promise<CardDetail | null>
   itemsByIds(ids: string[]): Promise<ItemRow[]>
   childrenOf(parentIds: string[]): Promise<ItemRow[]>
-  dotsOn(itemIds: string[]): Promise<{ itemId: string; userId: string }[]>
+  /** The reactions on these items and on every reply under these parents (D348); before 106 each reads as a 👍. */
+  reactionsOn(itemIds: string[], parentIds: string[]): Promise<ReactionRow[]>
   /** Comps for the picker: the account's own (ongoing or finished since `since`), then its clubs' competitions. */
   recentComps(userId: string, clubIds: string[], since: string, today: string): Promise<CompRef[]>
   /** Comments by others on this account's cards since a moment — the Home dot. */
@@ -194,6 +199,8 @@ export interface ThreadComment {
   /** Its author, or the owner of what it is on (D301). */
   canDelete: boolean
   canReport: boolean
+  reactions: ReactionCount[]
+  myReaction: Reaction | null
 }
 
 /** An item as a phone draws it — only what this viewer may see. */
@@ -210,8 +217,9 @@ export interface FeedView {
   holes: number | null
   place: number | null
   highlights: string[]
-  dots: number
-  dotted: boolean
+  /** Each emoji with its count, and this viewer's own (D348). */
+  reactions: ReactionCount[]
+  myReaction: Reaction | null
   comments: number
   latest: { name: string; text: string } | null
   /** Every reply this viewer may see, oldest first — each its own message in the chat (D346). */
@@ -320,13 +328,13 @@ export async function readBundle(store: FeedStore, q: StreamQuery): Promise<Bund
   const more = own.length > FEED_READ || comments.length >= FEED_READ || all.length > FEED_READ
   const page = all.slice(0, FEED_READ)
   const ids = page.map(r => r.id)
-  const [children, dots] = await Promise.all([
+  const [children, reactions] = await Promise.all([
     ids.length ? store.childrenOf(ids) : Promise.resolve([]),
-    ids.length ? store.dotsOn(ids) : Promise.resolve([]),
+    ids.length ? store.reactionsOn(ids, ids) : Promise.resolve([]),
   ])
   const authors = [...new Set([...page, ...children].map(r => r.authorId).filter((x): x is string => !!x))]
   const [audiences, juniors] = await Promise.all([store.audiences(authors), store.juniors(authors)])
-  return { rows: page, pulledBy, children, dots, audiences, juniors, more }
+  return { rows: page, pulledBy, children, reactions, audiences, juniors, more }
 }
 
 /** Who else the viewer sees as a poster's authority on club posts: the clubs whose posts they may take down (D325). */
@@ -361,7 +369,7 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
     const children = (kids.get(r.id) ?? []).filter(c => mayViewChild(facts(c), f, viewer))
     const comments = children.filter(c => c.kind === 'comment').sort(newestFirst)
     const highlights = children.filter(c => c.kind === 'highlight').sort((x, z) => x.createdAt.localeCompare(z.createdAt))
-    const dots = b.dots.filter(d => d.itemId === r.id)
+    const onItem = (id: string) => b.reactions.filter(x => x.itemId === id)
     const mine = !!r.authorId && r.authorId === viewer.userId
     const friendAuthor = !!r.authorId && viewer.friends.has(r.authorId)
     // D327: say why a card a friend commented on is here, when it is not a friend's own.
@@ -370,10 +378,10 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
     const postAdmin = r.kind === 'post' && !!r.clubId && !!extras.postClubs?.has(r.clubId)
     items.push({
       ...blank(r, viewer),
-      dots: dots.length, dotted: dots.some(d => d.userId === viewer.userId),
+      ...reactionSummary(onItem(r.id), viewer.userId),
       comments: comments.length,
       latest: comments[0] ? { name: str(comments[0].data.name) || 'A member', text: str(comments[0].data.text) } : null,
-      thread: threadOf(comments, mine, viewer.userId),
+      thread: threadOf(comments, mine, viewer.userId, b.reactions),
       commentLine: commentLine(comments.map(c => ({ authorId: c.authorId, name: str(c.data.name) || 'A member' })), viewer),
       why: whyName ? `${whyName} commented` : null,
       highlights: highlights.map(h => str(h.data.line)).filter(Boolean),
@@ -386,7 +394,7 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
 }
 
 /** An item's replies as the chat draws them, oldest first (D346). `ownsItem`: the viewer owns what they are on. */
-export function threadOf(comments: ItemRow[], ownsItem: boolean, viewerId: string): ThreadComment[] {
+export function threadOf(comments: ItemRow[], ownsItem: boolean, viewerId: string, reactions: readonly ReactionRow[] = []): ThreadComment[] {
   return [...comments].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id)).map(c => {
     const mine = !!c.authorId && c.authorId === viewerId
     const to = str(c.data.replyTo)
@@ -395,6 +403,7 @@ export function threadOf(comments: ItemRow[], ownsItem: boolean, viewerId: strin
       replyTo: to || null,
       replyName: to ? str(c.data.replyName) || null : null,
       canDelete: mine || ownsItem, canReport: !mine,
+      ...reactionSummary(reactions.filter(x => x.itemId === c.id), viewerId),
     }
   })
 }
@@ -410,7 +419,7 @@ function blank(r: ItemRow, viewer: Viewer): FeedView {
     id: r.id, kind: r.kind, at: r.createdAt, name: str(d.name) || 'A member', line,
     status: r.kind === 'card' || r.kind === 'status' ? r.status : null,
     gross: num(d.gross), points: num(d.points), holes: num(d.holes), place: num(d.place),
-    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, thread: [], commentLine: null, why: null,
+    highlights: [], reactions: [], myReaction: null, comments: 0, latest: null, thread: [], commentLine: null, why: null,
     text: r.kind === 'post' ? str(d.text) || null : null, link: r.kind === 'post' ? r.link ?? null : null,
     talk: talksOn(r.kind),
     mine, audience: null, parentId: null, on: null, canDelete: false, canReport: !mine,

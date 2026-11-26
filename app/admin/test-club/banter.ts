@@ -100,7 +100,7 @@ export async function postBanter(o: {
   // D329: each card's last activity is its latest comment's, not the moment it was posted.
   await rebump(db, cardIds)
 
-  // ── Dots, by each character's comment rate ──
+  // ── Reactions, by each character's comment rate ──
   for (const d of dotPlan(o.cast, played, spec.key)) {
     if (late()) return { done: false, posted, lines }
     const card = cardOf(d.on)
@@ -108,7 +108,8 @@ export async function postBanter(o: {
     if (!card || !author) continue
     const { data: there } = await db.from('feed_dots').select('item_id').eq('item_id', card.id).eq('user_id', author).limit(1)
     if ((there ?? []).length) continue
-    const r = await callAs(feedRoute, '/api/feed', await tokenOf(d.by), { action: 'dot', itemId: card.id, on: true })
+    // D348: a reaction, one of WhatsApp's six (before 106 the route takes only a 👍 — the rest wait, said once in its answer).
+    const r = await callAs(feedRoute, '/api/feed', await tokenOf(d.by), { action: 'react', itemId: card.id, emoji: d.emoji })
     if (r.status === 200) posted++
   }
   return { done: true, posted, lines }
