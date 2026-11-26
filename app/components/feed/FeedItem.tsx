@@ -261,7 +261,7 @@ export function ChatReply({ item, reply, now, onJump, onReply, onGone, onReact, 
           {kind === 'card' ? (
             <MiniCard item={item} onTap={() => onJump(item.id)} />
           ) : (
-            // The note, stuck to the top of the bubble: square where they meet, the bubble over its foot.
+            // The note, rounded all round and stuck to the top of the bubble, the bubble over its foot (D349).
             <button type="button" onClick={() => onJump(note.to)} aria-label={`${note.label} — go to it`}
               className={`chat-note relative z-0 -mb-3 pb-4 pt-1.5 px-3 max-w-full text-left press ch-focus ${mine ? 'self-end' : 'self-start'}`}>
               <span className="flex items-center gap-1 t-cap text-ink/80 font-semibold min-w-0">

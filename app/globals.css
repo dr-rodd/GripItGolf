@@ -1292,8 +1292,7 @@ html.keyboard-open .hide-with-keyboard { display: none; }
    The box to write in sticks to the foot of the screen above the tab bar
    (`--chat-bottom`, set from TABBAR_SPACE), and to the very foot while the
    keyboard is up and the tab bar has stepped aside. A reply's note is an opaque
-   tab (D349) stuck to the top of its bubble — square where they meet, the bubble over
-   its foot. Swiped right, a message shows the reply arrow behind it, filling
+   tab (D349), rounded all round, stuck to the top of its bubble — the bubble over its foot. Swiped right, a message shows the reply arrow behind it, filling
    in emerald once letting go would reply (lib/swipeReply.ts). A message
    jumped to is lit — an emerald ring round it — and the green dot pops on
    its initial (D346); both still under Reduce Motion, only not moving. */
@@ -1302,8 +1301,7 @@ html.keyboard-open .chat-composer { bottom: 0; }
 .chat-note {
   background: var(--color-surface);
   border: 1px solid var(--color-line);
-  border-bottom: 0;
-  border-radius: 14px 14px 0 0;
+  border-radius: 14px;
 }
 .swipe-reply-hint {
   color: var(--color-accent-deep);
