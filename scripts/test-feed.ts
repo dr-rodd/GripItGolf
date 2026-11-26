@@ -10,10 +10,11 @@ import {
   cardFacts, cardHighlights, defaultComp, effectiveAudience, inStream, mayView, mayViewChild, pillsFor, readStreams,
   searchTerm, shownComp, statusIssue, cleanText, counter, friendState, standingWith, pair, reportDestination, moveLine,
   matchLine, contextLine, olderThan, newestFirst, commentLine, compMenu, STREAMS_V2, keptStreams, streamKey, streamWord,
-  withGroups, readStreamKey, leavePlan, addIssue, groupNameIssue,
+  withGroups, readStreamKey, leavePlan, addIssue, groupNameIssue, chatTimeline, replyQuote, replyNote,
   type Audience, type CompRef, type ItemFacts, type StreamKind, type Viewer,
 } from '../lib/feed'
-import { runFeed, type FeedStore, type ItemRow } from '../app/api/feed/feed'
+import { runFeed, threadOf, type FeedStore, type ItemRow } from '../app/api/feed/feed'
+import { REPLY_AT, REPLY_REACH, backFrames, backOvershoot, swipeOffset, swipeStarts, REPLY_BACK_MS } from '../lib/swipeReply'
 import { announcement, mayAnnounce } from '../lib/clubEvents'
 import { clubMay } from '../lib/clubMay'
 import type { AuthUser } from '../lib/account'
@@ -135,6 +136,40 @@ function ruleTests() {
   const rows = [{ ...pair('me', 'a'), requestedBy: 'a', accepted: false }, { ...pair('me', 'b'), requestedBy: 'me', accepted: false }, { ...pair('me', 'c'), requestedBy: 'c', accepted: true }]
   eq(friendState(rows, 'me'), { friends: ['c'], incoming: ['a'], outgoing: ['b'] }, 'friends, and requests each way')
   eq(['a', 'b', 'c', 'd'].map(o => standingWith(rows, 'me', o)), ['asks_you', 'asked', 'friend', 'none'], 'where each stands')
+
+  section('The chat (D346)')
+  {
+    const roots = [
+      { id: 'a', at: '2026-11-20T10:00:00Z', thread: [{ id: 'a1', at: '2026-11-22T09:00:00Z' }, { id: 'a2', at: '2026-11-24T09:00:00Z' }] },
+      { id: 'b', at: '2026-11-23T10:00:00Z', thread: [] },
+    ]
+    eq(chatTimeline(roots, null).map(m => m.id), ['a', 'a1', 'b', 'a2'], 'every item and every reply a message of its own, oldest first')
+    eq(chatTimeline(roots, '2026-11-22T12:00:00Z').map(m => m.id), ['b', 'a2'], '…only what is at or after the oldest page read — the rest waits for the page before')
+    eq(chatTimeline([...roots, roots[1]], null).filter(m => m.id === 'b').length, 1, '…an item read twice drawn once')
+    eq(chatTimeline(roots, null).find(m => m.id === 'a2'), { kind: 'reply', id: 'a2', at: '2026-11-24T09:00:00Z', rootId: 'a' }, '…a reply knowing its item')
+    eq([replyQuote({ kind: 'card' }, null), replyQuote({ kind: 'status' }, null), replyQuote({ kind: 'card' }, 'c1')], ['card', 'item', 'comment'],
+      'a reply to a card quotes the card; to anything else, a note; to a reply, that reply')
+    eq([replyNote({ name: 'Dave Murphy', mine: false }), replyNote({ name: 'Dave', mine: true })], ['Replying to Dave', 'Replying to you'], '"Replying to Dave", first name only; "you" for your own')
+    const rows = [
+      { id: 'c2', kind: 'comment', authorId: 'y', parentId: 'p', createdAt: '2026-11-24T10:00:00Z', data: { name: 'Yv', text: 'b', replyTo: 'c1', replyName: 'Xa' } },
+      { id: 'c1', kind: 'comment', authorId: 'x', parentId: 'p', createdAt: '2026-11-24T09:00:00Z', data: { name: 'Xa', text: 'a' } },
+    ] as unknown as ItemRow[]
+    eq(threadOf(rows, false, 'y').map(c => [c.id, c.replyTo, c.replyName, c.mine, c.canDelete, c.canReport]),
+      [['c1', null, null, false, false, true], ['c2', 'c1', 'Xa', true, true, false]], 'a thread: oldest first, what each answers, yours to delete, others’ to report')
+  }
+
+  section('Swipe to reply (D346): a rubber band, a detent, a spring home')
+  {
+    eq(swipeOffset(0), { x: 0, armed: false }, 'still, it stays')
+    ok(swipeOffset(30).x < 30 && swipeOffset(30).x > 0, 'it follows the finger less than the finger goes')
+    ok(swipeOffset(1000).x <= REPLY_REACH + 6 && !swipeOffset(40).armed && swipeOffset(200).armed, '…never past its reach; letting go replies only past the reply point')
+    const before = swipeOffset(REPLY_REACH * Math.log(REPLY_REACH / (REPLY_REACH - REPLY_AT)) - 0.5), after = swipeOffset(REPLY_REACH * Math.log(REPLY_REACH / (REPLY_REACH - REPLY_AT)) + 0.5)
+    ok(!before.armed && after.armed && after.x - before.x > 4, '…and clicks on a few pixels as it passes it — the sticky detent')
+    eq([swipeStarts(4, 2), swipeStarts(20, 4), swipeStarts(4, 20), swipeStarts(-20, 2)], [null, 'swipe', 'scroll', null], 'right is a swipe, down a scroll, left nothing')
+    const fr = backFrames(60)
+    ok(fr[fr.length - 1].transform === 'translateX(0px)' && fr[0].transform === 'translateX(60.00px)', 'home from where it was let go, exactly home at the end')
+    ok(backOvershoot() > 0.03 && backOvershoot() < 0.1 && REPLY_BACK_MS <= 400, `…a spring, a touch past home (${Math.round(backOvershoot() * 100)}%), inside 400ms`)
+  }
 
   section('Reports (D303)')
   eq(reportDestination({ clubId: 'c1', kind: 'card' }, null), { clubId: 'c1' }, 'a club card’s report goes to its club')
@@ -307,7 +342,7 @@ export function standIn(w: World): FeedStore {
     async juniorProfile(u) { return w.profiles.has(u) },
     async liveNow() { return w.live },
     async insertComment(o) {
-      const c = itemRow({ kind: 'comment', authorId: o.authorId, parentId: o.parentId, tripId: o.tripId, clubId: o.clubId, data: { name: o.name, text: o.text } })
+      const c = itemRow({ kind: 'comment', authorId: o.authorId, parentId: o.parentId, tripId: o.tripId, clubId: o.clubId, data: { name: o.name, text: o.text, ...(o.replyTo ? { replyTo: o.replyTo.id, replyName: o.replyTo.name } : {}) } })
       w.items.push(c)
       return c
     },
@@ -731,6 +766,25 @@ async function socialTests() {
   eq((await ask('y', { action: 'comment.delete', id: commentId })).status, 200, 'the card’s owner deletes any comment on it')
   eq(w.items.some(r => r.id === commentId), false, '…gone')
 
+  section('Replies in the chat (D346): a reply answers the card, or another reply on it')
+  {
+    const first = (await ask('x', { action: 'comment', itemId: ycard.id, text: 'Some card' })).body as unknown as { comment: { id: string; replyTo: string | null } }
+    eq(first.comment.replyTo, null, 'a reply to the card answers the card')
+    const second = await ask('y', { action: 'comment', itemId: ycard.id, text: 'Cheers', replyTo: first.comment.id })
+    eq(second.status, 200, 'Y replies to X’s reply')
+    const sid = (second.body as unknown as { comment: { id: string; replyTo: string; replyName: string } }).comment
+    eq([sid.replyTo, sid.replyName], [first.comment.id, 'x'], '…stored with whose it answers')
+    const other = itemRow({ kind: 'card', authorId: 'y', tripId: 'TY', data: { name: 'Yvonne' } })
+    w.items.push(other)
+    eq((await ask('x', { action: 'comment', itemId: other.id, text: 'Hm', replyTo: first.comment.id })).status, 404, 'a reply on another card cannot be answered from this one')
+    eq((await ask('x', { action: 'comment', itemId: ycard.id, text: 'Hm', replyTo: ycard.id })).status, 404, '…nor a card taken for a reply')
+    const page = ((await ask('y', { action: 'page', stream: 'friends' })).body as unknown as { items: { id: string; thread: { id: string; replyTo: string | null; mine: boolean; canDelete: boolean }[] }[] }).items.find(i => i.id === ycard.id)
+    eq(page?.thread.map(c => [c.id === first.comment.id, c.replyTo === first.comment.id, c.mine, c.canDelete]), [[true, false, false, true], [false, true, true, true]],
+      'the page carries every reply, oldest first, with what each answers — the card’s owner may delete any')
+    const seen = ((await ask('y', { action: 'comments', itemId: ycard.id })).body as unknown as { comments: { replyTo: string | null }[] }).comments
+    eq(seen.map(c => c.replyTo === first.comment.id), [false, true], 'the sheet’s list says what each answers too')
+  }
+
   section('Reports (D303): a club card to its Clubhouse, anything else to Green Dot')
   const ccard = itemRow({ kind: 'card', authorId: 'y', clubId: C1, tripId: 'TC', data: { name: 'Yvonne' } })
   w.items.push(ccard)
@@ -778,15 +832,31 @@ function wiringTests() {
   }
   const feedUi = read('app/components/feed/Stream.tsx')
   ok(!fs.existsSync('app/components/feed/Feed.tsx'), 'the feed on Home is gone — the Stream tab is its place (M3)')
-  ok(/feed-streams/.test(feedUi) && /scroll-snap-type: x mandatory/.test(read('app/globals.css')), 'streams swipe on the browser’s own scroll snap — no library')
-  ok(/reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and switch instantly under Reduce Motion')
+  ok(!/feed-streams/.test(feedUi) && !/feed-streams/.test(read('app/globals.css')), 'no sideways swipe between streams — sideways is the reply now (D346)')
+  ok(/!reducedMotion\(\) \? 'smooth' : 'auto'/.test(feedUi) && /reducedMotion\(\) \? 'auto' : 'smooth'/.test(feedUi), '…and the chat moves instantly under Reduce Motion')
   ok(/gd\.feed\.stream\.v1/.test(feedUi), 'the last stream chosen is remembered on the phone')
   ok(!/setInterval/.test(feedUi), 'the stream is never polled — read on show and on coming back')
   ok(/titleOf\(activeRef\)/.test(feedUi) && /<StreamName kind=\{s\.kind\} \/>/.test(feedUi) && /compMenu\(comps, home\.today\)/.test(feedUi) && /role="menu"/.test(feedUi),
     'the stream on show is named at the top — a group by its own name — its chevron opening the menu of streams, groups and comps (D321, D323, D343)')
-  ok(/NewGroupSheet/.test(feedUi) && /GroupSettingsSheet/.test(feedUi) && /stream: streamKey\(p\)/.test(feedUi), '…New group in it, a group’s settings beside the title, and the box to post in a group (D343)')
-  ok(/touchstart/.test(feedUi) && /PULL_AT/.test(feedUi) && /stream-arrive/.test(read('app/components/feed/FeedItem.tsx')) && /\.stream-arrive/.test(read('app/globals.css')),
-    'pull to refresh, and what is new fades in at the top (M13)')
+  ok(/NewGroupSheet/.test(feedUi) && /GroupSettingsSheet/.test(feedUi) && /stream: streamKey\(activeRef\)/.test(feedUi), '…New group in it, a group’s settings beside the title, and the box to post in a group (D343)')
+  ok(/stream-arrive/.test(read('app/components/feed/FeedItem.tsx')) && /\.stream-arrive/.test(read('app/globals.css')), 'what is new fades in (M13)')
+  {
+    // D346: the stream as a chat.
+    const item = read('app/components/feed/FeedItem.tsx'), swipe = read('app/components/feed/SwipeReply.tsx'), css = read('app/globals.css')
+    ok(/chatTimeline\(items, next\?\.at \?\? null\)/.test(feedUi) && /toFoot\(/.test(feedUi) && /placing\.current = \{ foot: true, smooth: false \}/.test(feedUi),
+      'the stream is a chat: every item and reply a message, oldest at the top, opened at the foot (D346)')
+    ok(/anchor: \{ h: document\.documentElement\.scrollHeight, y: window\.scrollY \}/.test(feedUi) && /IntersectionObserver/.test(feedUi),
+      '…earlier messages read in as its head comes into view, the screen held still while they land')
+    ok(/<SwipeReply onReply=\{onReply\}>/.test(item) && (item.match(/<SwipeReply /g) ?? []).length === 2 && /touchAction: 'pan-y'/.test(swipe) && /backFrames\(s\.x\)/.test(swipe) && /REPLY_EDGE/.test(swipe),
+      '…any message swiped right replies, on a rubber band that springs home; up and down stay the page’s, the left edge the browser’s')
+    ok(/key: 'reply', label: 'Reply'/.test(read('app/components/feed/ItemActions.tsx')), '…and Reply is in every ⋯, for anybody who would rather not swipe')
+    ok(/<MiniCard item=\{item\} onTap=\{\(\) => onJump\(item\.id\)\} \/>/.test(item) && /onClick=\{\(\) => onJump\(note\.to\)\}/.test(item),
+      '…a reply to a card quotes it as a small square, any other reply a "Replying to" note — each a way back to it')
+    ok(/scrollIntoView\(\{ block: 'center'/.test(feedUi) && /setFlash\(id\)/.test(feedUi) && /chat-dot-pop/.test(item) && /\.chat-dot-pop/.test(css) && /\.chat-flash/.test(css),
+      '…a message gone to is read in if need be, lit, and the green dot pops on its initial')
+    ok(/chat-composer sticky/.test(feedUi) && /html\.keyboard-open \.chat-composer \{ bottom: 0; \}/.test(css) && /<ReplyBar /.test(feedUi),
+      '…the box at the foot, above the tab bar, saying what it answers')
+  }
   {
     const name = read('app/components/feed/StreamName.tsx'), css = read('app/globals.css')
     ok(/sr-only">\{word\} stream/.test(name) && /stream-name-dot/.test(name) && /\.stream-name-dot \{[^}]*background: var\(--color-accent\)/.test(css) && /0\.32em/.test(css),

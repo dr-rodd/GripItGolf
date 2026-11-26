@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { askFeed } from '@/lib/feedClient'
 import { OWN_STATUS_MAX, POST_MAX, counter } from '@/lib/feed'
 import { FIELD, FIELD_LABEL, buttonClass, chipClass } from '../ui'
@@ -106,17 +106,21 @@ export function ClubPostComposer({ clubId, onPosted, onClose }: {
  * error, or null when it went. `extra` sits beside Send: club.stream's way
  * to the full composer, for a heading or a link.
  */
-export function InlineComposer({ placeholder, max, label, onSend, extra }: {
+export function InlineComposer({ placeholder, max, label, onSend, extra, focusKey = 0, className = 'mb-5' }: {
   placeholder: string
   max: number
   label: string
   onSend: (text: string) => Promise<string | null>
   extra?: React.ReactNode
+  /** D346: changed to a new number, the box takes the focus — a reply just started. */
+  focusKey?: number
+  className?: string
 }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const box = useRef<HTMLTextAreaElement>(null)
+  useEffect(() => { if (focusKey) box.current?.focus({ preventScroll: true }) }, [focusKey])
   const length = [...text].length
   const over = length > max
   const grow = () => {
@@ -136,7 +140,7 @@ export function InlineComposer({ placeholder, max, label, onSend, extra }: {
     requestAnimationFrame(grow)
   }
   return (
-    <form onSubmit={send} className="mb-5">
+    <form onSubmit={send} className={className}>
       <div className="flex items-end gap-2 rounded-[24px] bg-surface border border-line shadow-raised pl-4 pr-1.5 py-1.5">
         <label className="sr-only" htmlFor={`compose-${label}`}>{label}</label>
         <textarea id={`compose-${label}`} ref={box} value={text} rows={1} placeholder={placeholder}

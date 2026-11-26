@@ -677,6 +677,47 @@ export function ago(at: string, now: Date): string {
   return new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' }).format(new Date(at))
 }
 
+// ─── The chat (D346) ────────────────────────────────────────────
+//
+// A stream reads as a chat (Ross, 26 Nov 2026: "Default to bottom of chat.
+// New entries on the bottom"): every item and every reply on it is its own
+// message, oldest at the top. A page is read latest activity first (D329),
+// so a page holds every message from its cursor on — an item whose replies
+// lifted it, and the older of those replies, wait until the page before is
+// read, and the chat only ever grows upwards.
+
+export interface ChatRoot { id: string; at: string; thread: { id: string; at: string }[] }
+export type ChatEntry =
+  | { kind: 'item'; id: string; at: string }
+  | { kind: 'reply'; id: string; at: string; rootId: string }
+
+/** The messages to show, oldest first: everything at or after `from` (the oldest page's cursor), or the lot once the stream is read to its start. */
+export function chatTimeline(roots: ChatRoot[], from: string | null): ChatEntry[] {
+  const out: ChatEntry[] = []
+  const seen = new Set<string>()
+  for (const r of roots) {
+    if (seen.has(r.id)) continue
+    seen.add(r.id)
+    if (!from || r.at >= from) out.push({ kind: 'item', id: r.id, at: r.at })
+    for (const c of r.thread) if (!from || c.at >= from) out.push({ kind: 'reply', id: c.id, at: c.at, rootId: r.id })
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id))
+}
+
+/**
+ * What a reply quotes (D346): the reply it answers, when it answers one;
+ * else a card is quoted as a small square of its own, and a status, a post
+ * or a result by a note naming whose it was.
+ */
+export function replyQuote(root: { kind: FeedKind }, replyTo: string | null): 'comment' | 'card' | 'item' {
+  return replyTo ? 'comment' : root.kind === 'card' ? 'card' : 'item'
+}
+
+/** "Replying to Dave" — the first name, or "you" for your own. */
+export function replyNote(target: { name: string; mine: boolean }): string {
+  return target.mine ? 'Replying to you' : `Replying to ${target.name.trim().split(/\s+/)[0] || 'a member'}`
+}
+
 // ─── Reports (D303) ─────────────────────────────────────────────
 
 /** Where a report goes: a club card's to that club's Clubhouse, anything else to Green Dot's /admin. */

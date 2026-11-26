@@ -3,12 +3,13 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { askFeed } from '@/lib/feedClient'
-import { OWN_STATUS_MAX, POST_MAX, compMenu, pillsFor, readStreamKey, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
+import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { IconCheck, IconPlus, IconSettings, IconUsers } from '../icons'
+import { IconCheck, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { popClose, popOpen } from '../popOut'
-import { FeedItem, type FeedView } from './FeedItem'
+import { TABBAR_SPACE } from '../tabbarMetrics'
+import { ChatReply, FeedItem, MiniCard, replyToComment, replyToItem, type FeedView, type ReplyTarget } from './FeedItem'
 import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
 import { ClubPostComposer, InlineComposer, StatusComposer } from './Composer'
@@ -29,13 +30,16 @@ type Home = {
   groupsReady?: boolean
   groups?: { id: string; name: string; admin: boolean; members: number }[]
 }
-type Panel = { items: FeedView[]; next: unknown; loading: boolean; error: string; players: { name: string; thru: number }[] | null; arriving: Set<string> }
+type Cursor = { at: string; id: string }
+type Panel = { items: FeedView[]; next: Cursor | null; loading: boolean; error: string; players: { name: string; thru: number }[] | null; arriving: Set<string> }
 
 const STREAM_KEY = 'gd.feed.stream.v1'
 const COMP_KEY = 'gd.feed.comp.v1'
 const MATCH_KEY = 'gd.feed.match.v1'
-/** How far a pull must go to read the stream again (M13). */
-const PULL_AT = 64
+/** How near the foot of the chat counts as at the foot: a read again then keeps it there. */
+const AT_FOOT = 160
+/** How long a message jumped to stays lit (D346). */
+const FLASH_MS = 1400
 
 function remembered<T>(key: string): T | null {
   try { const v = window.localStorage.getItem(key); return v ? JSON.parse(v) as T : null } catch { return null }
@@ -43,20 +47,29 @@ function remembered<T>(key: string): T | null {
 function remember(key: string, v: unknown) {
   try { window.localStorage.setItem(key, JSON.stringify(v)) } catch { /* a convenience only */ }
 }
+const atFoot = () => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - AT_FOOT
+const toFoot = (smooth = false) => window.scrollTo({ top: document.documentElement.scrollHeight, behavior: smooth && !reducedMotion() ? 'smooth' : 'auto' })
+const frames = () => new Promise<void>(r => requestAnimationFrame(() => requestAnimationFrame(() => r())))
+/** Every message's id on a page, the replies too — what "new" is measured against. */
+const messageIds = (items: FeedView[]) => items.flatMap(i => [i.id, ...i.thread.map(c => c.id)])
 
 /**
- * The Stream tab (Streams v2, D318–D331). The stream on show is named at the
- * top — club•stream, comp•stream, match•stream, friends•stream (D321) — with
- * the page's title on its opaque box (D339). **No pills** (D340, Ross, 25 Nov
- * 2026): the title is the control — its chevron says so, and a tap springs
- * a menu out of it (the pop-out) listing the member's streams, then the
- * choices inside the one on show: comp.stream's competitions by heading
- * (D323), match.stream's followed matches (D326). A sideways swipe still
- * moves between streams (D295, the browser's own scroll snap; instant under
- * Reduce Motion). Pull down to read again;
- * what is new fades in at the top; skeletons while it loads (M13). Tapping
- * an item opens its sheet (D330). Asked when the tab opens and when the
- * phone comes back to it — never polled, nothing on Home (M3).
+ * The Stream tab (Streams v2, D318–D331), **a chat** (D346, Ross, 26 Nov
+ * 2026: "Make it more like a chat. Default to bottom of chat. New entries on
+ * the bottom"). The stream on show is named at the top, its title the
+ * control (D340): a tap springs a menu out of it listing the member's
+ * streams, then the choices inside the one on show (comp.stream's
+ * competitions, D323; match.stream's matches, D326). Under it the chat,
+ * oldest at the top: every item and every reply on it its own message
+ * (`chatTimeline`), opened at the foot, earlier messages read in as the
+ * chat is scrolled up to its head, the screen held still while they land.
+ * **Swipe any message right to reply** (`SwipeReply`): the box at the foot
+ * says what is being answered. A reply quotes a card as a small square, or
+ * notes "Replying to Dave"; tapping either goes to that message, lit for a
+ * moment with a green dot's pop on its initial. Tapping an item opens its
+ * sheet as before, every reply at its foot (D330). The sideways swipe
+ * between streams went (D295 → D346): sideways is the reply now. Read when
+ * the tab opens, on coming back and after sending — never polled (M3).
  *
  * `club` is the club area it sits in — the only place club.stream shows (D294).
  * `settingsPath` is the gear's page, where the streams are chosen (D319).
@@ -66,6 +79,8 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const [homeError, setHomeError] = useState('')
   const [active, setActive] = useState<string | null>(null)
   const [panels, setPanels] = useState<Record<string, Panel>>({})
+  const panelsRef = useRef(panels)
+  panelsRef.current = panels
   const [compPick, setCompPick] = useState<{ code: string; over: string | null } | null>(null)
   const [matchPick, setMatchPick] = useState<string | null>(null)
   const [menu, setMenu] = useState<HTMLElement | null>(null)
@@ -73,12 +88,14 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const [composer, setComposer] = useState<'status' | 'post' | null>(null)
   // D343: making a group, or a group's settings.
   const [groupSheet, setGroupSheet] = useState<{ kind: 'new' } | { kind: 'settings'; id: string } | null>(null)
+  // D346: what the box at the foot is answering, and the message just jumped to.
+  const [reply, setReply] = useState<ReplyTarget | null>(null)
+  const [replyKey, setReplyKey] = useState(0)
+  const [flash, setFlash] = useState<string | null>(null)
   const [now, setNow] = useState(() => new Date())
-  const [pull, setPull] = useState(0)
-  const scroller = useRef<HTMLDivElement>(null)
-  const section = useRef<HTMLElement>(null)
-  const panelRefs = useRef<Record<string, HTMLDivElement | null>>({})
-  const [height, setHeight] = useState<number | null>(null)
+  // Where the chat must be once the next page lands: at its foot, or held still while earlier messages arrive above.
+  const placing = useRef<{ foot: boolean; smooth: boolean } | { anchor: { h: number; y: number } } | null>({ foot: true, smooth: false })
+  const [settled, setSettled] = useState(false)
   const where = club?.slug ?? 'home'
 
   const loadHome = useCallback(async () => {
@@ -119,38 +136,56 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     })
   }, [pills, where])
 
+  /** Read a stream's latest page, or (`more`) the page before the oldest read. */
   const load = useCallback(async (s: StreamRef, more = false) => {
     const key = panelKey(s)
-    const before = more ? panels[key]?.next : undefined
+    const was = panelsRef.current[key]
+    if (more && (!was?.next || was.loading)) return
+    const before = more ? was?.next ?? undefined : undefined
     const blankPanel: Panel = { items: [], next: null, players: null, loading: true, error: '', arriving: new Set() }
     setPanels(p => ({ ...p, [key]: { ...(p[key] ?? blankPanel), loading: true, error: '' } }))
     const body = { stream: streamKey(s), ...(s.kind === 'comp' ? { comp: comp?.code } : {}), ...(s.kind === 'match' ? { match } : {}) }
     const strips = s.kind === 'comp' || s.kind === 'friends' || s.kind === 'group'
     const [page, strip] = await Promise.all([
-      askFeed<{ items: FeedView[]; next: unknown }>('page', { ...body, before }),
+      askFeed<{ items: FeedView[]; next: Cursor | null }>('page', { ...body, before }),
       more || !strips ? Promise.resolve(null) : askFeed<{ players: { name: string; thru: number }[] }>('oncourse', body),
     ])
     setNow(new Date())
+    // Earlier messages land above: the screen is held where it was. A read again at the foot stays at the foot.
+    if (more) placing.current = { anchor: { h: document.documentElement.scrollHeight, y: window.scrollY } }
+    else if (!placing.current && was && was.items.length > 0 && atFoot()) placing.current = { foot: true, smooth: true }
     setPanels(p => {
-      const was = p[key]
-      if (!page.ok) return { ...p, [key]: { ...(was ?? blankPanel), loading: false, error: page.error } }
-      // M13: what was not there before fades in at the top — never on the first read.
-      const seen = new Set((was?.items ?? []).map(i => i.id))
-      const arriving = !more && was && was.items.length > 0 ? new Set(page.items.filter(i => !seen.has(i.id)).map(i => i.id)) : new Set<string>()
+      const cur = p[key]
+      if (!page.ok) return { ...p, [key]: { ...(cur ?? blankPanel), loading: false, error: page.error } }
+      if (more) {
+        const have = new Set((cur?.items ?? []).map(i => i.id))
+        return { ...p, [key]: { ...(cur ?? blankPanel), items: [...(cur?.items ?? []), ...page.items.filter(i => !have.has(i.id))], next: page.next, loading: false, error: '', arriving: new Set() } }
+      }
+      // M13: what was not there before fades in — never on the first read. Earlier pages already read are kept.
+      const seen = new Set(messageIds(cur?.items ?? []))
+      const arriving = cur && cur.items.length > 0 ? new Set(messageIds(page.items).filter(id => !seen.has(id))) : new Set<string>()
+      const fresh = new Set(page.items.map(i => i.id))
+      // Pages already read further back stay read: a read again never shortens the chat.
+      const deeper = !!cur && cur.items.length > 0 && !!page.next && (cur.next === null || cur.next.at < page.next.at)
+      const older = deeper ? cur!.items.filter(i => !fresh.has(i.id)) : []
       return { ...p, [key]: {
-        items: more ? [...(was?.items ?? []), ...page.items] : page.items,
-        next: page.next, loading: false, error: '', arriving,
-        players: strip ? (strip.ok ? strip.players : []) : was?.players ?? null,
+        items: [...page.items, ...older],
+        next: deeper ? cur!.next : page.next, loading: false, error: '', arriving,
+        players: strip ? (strip.ok ? strip.players : []) : cur?.players ?? null,
       } }
     })
-  }, [panelKey, panels, comp, match])
+  }, [panelKey, comp, match])
 
   const activeRef = pills.find(p => streamKey(p) === active) ?? null
   const activePanelKey = activeRef ? panelKey(activeRef) : null
   useEffect(() => {
     if (!activeRef || !activePanelKey) return
     if (activeRef.kind === 'comp' && !comp) return
-    if (!panels[activePanelKey]) void load(activeRef)
+    // A stream opened opens at its foot.
+    placing.current = { foot: true, smooth: false }
+    setSettled(false)
+    setReply(null)
+    if (!panelsRef.current[activePanelKey]) void load(activeRef)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activePanelKey])
   // Read again on coming back to the page, never polled.
@@ -165,86 +200,52 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     return () => document.removeEventListener('visibilitychange', back)
   }, [activeRef, load])
 
-  // The frame follows the stream on show, so a short one never sits over a tall one's gap.
+  // Once a page has landed: to the foot, or held still under earlier messages.
+  const shown = activePanelKey ? panels[activePanelKey] : undefined
   useLayoutEffect(() => {
-    const el = active ? panelRefs.current[active] : null
-    if (!el) return
-    const ro = new ResizeObserver(() => setHeight(el.offsetHeight))
-    ro.observe(el)
-    setHeight(el.offsetHeight)
-    return () => ro.disconnect()
-  }, [active, panels])
+    const want = placing.current
+    if (!want || !shown || shown.loading) return
+    placing.current = null
+    if ('anchor' in want) window.scrollTo({ top: want.anchor.y + (document.documentElement.scrollHeight - want.anchor.h), behavior: 'auto' })
+    else toFoot(want.smooth)
+    if (!settled) requestAnimationFrame(() => setSettled(true))
+  }, [shown, settled])
 
-  // A tapped pill scrolls to its stream; a swipe that settles on one lights its pill.
-  const go = (key: string) => {
-    const i = pills.findIndex(p => streamKey(p) === key)
-    const el = scroller.current
-    if (i < 0 || !el) return
-    setActive(key)
-    remember(`${STREAM_KEY}:${where}`, key)
-    el.scrollTo({ left: i * el.clientWidth, behavior: reducedMotion() ? 'auto' : 'smooth' })
-  }
-  useEffect(() => {
-    const el = scroller.current
-    if (!el) return
-    let t: number | undefined
-    const settle = () => {
-      const i = Math.round(el.scrollLeft / Math.max(1, el.clientWidth))
-      const key = pills[i] ? streamKey(pills[i]) : null
-      if (key && key !== active) { setActive(key); setMenu(null); remember(`${STREAM_KEY}:${where}`, key) }
-    }
-    const onScroll = () => { window.clearTimeout(t); t = window.setTimeout(settle, 120) }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => { el.removeEventListener('scroll', onScroll); window.clearTimeout(t) }
-  }, [pills, active, where])
-  useLayoutEffect(() => {
-    const el = scroller.current
-    const i = pills.findIndex(p => streamKey(p) === active)
-    if (el && i >= 0 && Math.round(el.scrollLeft / Math.max(1, el.clientWidth)) !== i) el.scrollTo({ left: i * el.clientWidth, behavior: 'auto' })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pills.length, active === null])
-
-  // Pull to read again (M13): from the top of the page, a pull down past the line.
-  const refresh = useRef<() => void>(() => undefined)
-  refresh.current = () => { if (activeRef) void load(activeRef) }
-  useEffect(() => {
-    const el = section.current
-    if (!el) return
-    let start: number | null = null
-    let dist = 0
-    const down = (e: TouchEvent) => { start = window.scrollY <= 0 && !(e.target as HTMLElement).closest('[role="menu"]') ? e.touches[0].clientY : null; dist = 0 }
-    const move = (e: TouchEvent) => {
-      if (start === null) return
-      dist = Math.max(0, e.touches[0].clientY - start)
-      setPull(Math.min(96, dist * 0.5))
-    }
-    const up = () => {
-      if (start !== null && dist * 0.5 >= PULL_AT) refresh.current()
-      start = null
-      setPull(0)
-    }
-    el.addEventListener('touchstart', down, { passive: true })
-    el.addEventListener('touchmove', move, { passive: true })
-    el.addEventListener('touchend', up)
-    el.addEventListener('touchcancel', up)
-    return () => {
-      el.removeEventListener('touchstart', down)
-      el.removeEventListener('touchmove', move)
-      el.removeEventListener('touchend', up)
-      el.removeEventListener('touchcancel', up)
-    }
-  }, [])
-
-  // One item changed (a dot, a status, a comment) — the same item wherever it is shown.
+  // One item changed (a dot, a status, a reply) — the same item wherever it is shown.
   const patchItem = useCallback((id: string, p: Partial<FeedView> | null) => {
     setPanels(all => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, {
       ...v, items: p === null ? v.items.filter(i => i.id !== id) : v.items.map(i => (i.id === id ? { ...i, ...p } : i)),
     }])))
   }, [])
+  // A reply deleted: off its item's thread, and its count down.
+  const dropReply = useCallback((rootId: string, replyId: string) => {
+    setPanels(all => Object.fromEntries(Object.entries(all).map(([k, v]) => [k, {
+      ...v, items: v.items.map(i => (i.id === rootId ? { ...i, thread: i.thread.filter(c => c.id !== replyId), comments: Math.max(0, i.comments - 1) } : i)),
+    }])))
+  }, [])
+
+  /** Go to a message (D346): read further back until it is there, then bring it to the middle and light it. */
+  const jumpTo = useCallback(async (id: string) => {
+    for (let i = 0; i < 12; i++) {
+      const el = document.querySelector(`[data-msg="${CSS.escape(id)}"]`)
+      if (el) {
+        el.scrollIntoView({ block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth' })
+        setFlash(id)
+        window.setTimeout(() => setFlash(f => (f === id ? null : f)), FLASH_MS)
+        return
+      }
+      const p = activePanelKey ? panelsRef.current[activePanelKey] : null
+      if (!activeRef || !p?.next) return
+      await load(activeRef, true)
+      await frames()
+    }
+  }, [activeRef, activePanelKey, load])
+
+  const startReply = useCallback((t: ReplyTarget) => { setReply(t); setReplyKey(k => k + 1) }, [])
 
   // D307, D320, D343: the dot on the Stream tab clears once the member has looked at a stream.
   const newComments = home?.newComments ?? 0
-  const streamShown = !!activePanelKey && !!panels[activePanelKey] && !panels[activePanelKey].loading
+  const streamShown = !!shown && !shown.loading
   useEffect(() => {
     if (!streamShown || newComments === 0) return
     const t = window.setTimeout(() => {
@@ -280,6 +281,11 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     )
   }
 
+  const go = (key: string) => {
+    setActive(key)
+    remember(`${STREAM_KEY}:${where}`, key)
+  }
+
   const pickComp = (c: CompRef) => {
     const def = home.today ? shownComp(comps, home.today, null) : null
     const pick = { code: c.code, over: def?.code ?? null }
@@ -299,17 +305,32 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   }
   const shortDate = (d: string) => new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))
 
-  return (
-    <section ref={section} className="mt-4 relative" aria-labelledby="stream-title">
-      {/* Pull to read again: the stream's dot grows with the pull, and breathes while it reads. */}
-      <div aria-hidden={pull === 0} className="stream-pull flex items-center justify-center overflow-hidden" style={{ height: pull }}>
-        {pull > 0 && (
-          reducedMotion()
-            ? <span className="t-cap text-ink/65">{pull >= PULL_AT ? 'Let go to refresh' : 'Pull to refresh'}</span>
-            : <span className="rounded-full bg-accent" style={{ width: 8 + Math.min(1, pull / PULL_AT) * 8, height: 8 + Math.min(1, pull / PULL_AT) * 8 }} />
-        )}
-      </div>
+  // The box at the foot (D342, D346): a group's members and a club's posters write here; anybody replying does.
+  const posts = !!activeRef && !!home.v2 && (activeRef.kind === 'group' || (activeRef.kind === 'club' && !!home.canPost && !!home.here))
+  const send = async (text: string): Promise<string | null> => {
+    if (!activeRef) return 'Choose a stream first.'
+    if (reply) {
+      const r = await askFeed('comment', { itemId: reply.rootId, text, ...(reply.commentId ? { replyTo: reply.commentId } : {}) })
+      if (!r.ok) return r.error
+      setReply(null)
+    } else if (activeRef.kind === 'group') {
+      const r = await askFeed<{ id: string }>('status.post', { text, stream: streamKey(activeRef) })
+      if (!r.ok) return r.error
+    } else if (activeRef.kind === 'club' && home.here) {
+      const r = await askFeed<{ id: string }>('post.club', { clubId: home.here, title: '', text, link: '' })
+      if (!r.ok) return r.error
+    } else return 'This stream takes replies only — swipe a message right to answer it.'
+    // What was sent lands at the foot, and the chat goes down to it.
+    placing.current = { foot: true, smooth: true }
+    void load(activeRef)
+    return null
+  }
+  const placeholder = reply
+    ? (reply.mine ? 'Reply to yourself…' : `Reply to ${reply.name.trim().split(/\s+/)[0]}…`)
+    : activeRef?.kind === 'group' ? `Message ${label(activeRef)?.label ?? 'the group'}…` : 'Post to the club…'
 
+  return (
+    <section className="mt-4 relative" aria-labelledby="stream-title">
       <div className="relative z-30">
         {/* D339, D340: the stream's name is the page's title, on its opaque box; the title is the control. */}
         <PageTitle
@@ -391,48 +412,27 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
         )}
       </div>
 
-      {pills.length === 0 ? (
+      {pills.length === 0 || !activeRef ? (
         <div className={`${cardClass()} px-4 py-6 mt-3 text-center`}>
           <p className="t-body text-ink/80">No streams on.</p>
           <Link href={settingsPath} className={`${buttonClass('quiet', false)} mt-1`}>Choose your streams</Link>
         </div>
       ) : (
-        <div ref={scroller} className="feed-streams relative mt-3 -mx-4 flex overflow-x-auto items-start" style={height ? { height } : undefined}>
-          {pills.map(p => {
-            const key = streamKey(p)
-            const panel = panels[panelKey(p)]
-            const view = label(p)
-            return (
-              <div key={key} id={`stream-${key}`} role="tabpanel" aria-label={`${p.kind} stream`}
-                ref={el => { panelRefs.current[key] = el }} className="feed-stream relative w-full flex-shrink-0 px-4 pb-1">
-                {/* D342, D343: the box to post in this stream, at its head, for whoever may — every member of a group. */}
-                {p.kind === 'group' && home.v2 && (
-                  <InlineComposer label={`group-${p.id}`} placeholder={`Message ${label(p)?.label ?? 'the group'}…`} max={OWN_STATUS_MAX}
-                    onSend={async text => {
-                      const r = await askFeed<{ id: string }>('status.post', { text, stream: streamKey(p) })
-                      if (!r.ok) return r.error
-                      void load(p)
-                      return null
-                    }} />
-                )}
-                {p.kind === 'club' && home.v2 && home.canPost && home.here && (
-                  <InlineComposer label="club" placeholder="Post to the club…" max={POST_MAX}
-                    onSend={async text => {
-                      const r = await askFeed<{ id: string }>('post.club', { clubId: home.here, title: '', text, link: '' })
-                      if (!r.ok) return r.error
-                      void load(p)
-                      return null
-                    }}
-                    extra={<button type="button" onClick={() => setComposer('post')} className="min-h-10 px-2 rounded-[18px] t-cap text-ink/65 press ch-focus">Heading or link</button>} />
-                )}
-                <StreamPanel stream={p} panel={panel} now={now} empty={view?.empty ?? ''}
-                  comp={p.kind === 'comp' ? comp : null} settingsPath={settingsPath}
-                  onMore={() => void load(p, true)} onRetry={() => void load(p)}
-                  onPatch={patchItem} onOpen={(id, el) => setSheet({ id, origin: el })} />
-              </div>
-            )
-          })}
-        </div>
+        <>
+          <ChatPanel key={activePanelKey ?? ''} stream={activeRef} panel={shown} now={now} empty={label(activeRef)?.empty ?? ''}
+            comp={activeRef.kind === 'comp' ? comp : null} settingsPath={settingsPath} settled={settled} flash={flash}
+            onMore={() => void load(activeRef, true)} onRetry={() => void load(activeRef)}
+            onPatch={patchItem} onDropReply={dropReply} onOpen={(id, el) => setSheet({ id, origin: el })}
+            onReply={startReply} onJump={id => void jumpTo(id)} />
+          {(posts || reply) && (
+            <div className="chat-composer sticky z-20 -mx-4 px-4 pt-2 pb-2 paper" style={{ '--chat-bottom': TABBAR_SPACE } as React.CSSProperties}>
+              {reply && <ReplyBar reply={reply} onJump={() => void jumpTo(reply.commentId ?? reply.rootId)} onCancel={() => setReply(null)} />}
+              <InlineComposer label={`stream-${activePanelKey}`} placeholder={placeholder} max={reply ? COMMENT_MAX : activeRef.kind === 'club' ? POST_MAX : OWN_STATUS_MAX}
+                focusKey={reply ? replyKey : 0} onSend={send} className=""
+                extra={!reply && activeRef.kind === 'club' ? <button type="button" onClick={() => setComposer('post')} className="min-h-10 px-2 rounded-[18px] t-cap text-ink/65 press ch-focus">Heading or link</button> : undefined} />
+            </div>
+          )}
+        </>
       )}
 
       {sheet && sheetItem && (
@@ -452,9 +452,139 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
       )}
       {composer === 'post' && home.here && (
         <ClubPostComposer clubId={home.here} onClose={() => setComposer(null)}
-          onPosted={() => { setComposer(null); const c = pills.find(p => p.kind === 'club'); if (c) void load(c) }} />
+          onPosted={() => { setComposer(null); const c = pills.find(p => p.kind === 'club'); if (c) { placing.current = { foot: true, smooth: true }; void load(c) } }} />
       )}
     </section>
+  )
+}
+
+/**
+ * What the box at the foot is answering (D346): the card's square or the
+ * reply arrow, "Replying to Dave" and the first words — a tap goes to it —
+ * and ✕ to write to the stream instead.
+ */
+function ReplyBar({ reply, onJump, onCancel }: { reply: ReplyTarget; onJump: () => void; onCancel: () => void }) {
+  const said = reply.quote === 'card' ? (reply.mine ? 'Replying to your card' : `${replyNote(reply)}’s card`) : replyNote(reply)
+  return (
+    <div className="flex items-center gap-2 mb-2 pl-2 pr-1 py-1.5 rounded-tile bg-surface border border-line">
+      {reply.quote === 'card' && reply.card
+        ? <MiniCard item={reply.card} stuck={false} />
+        : <span className="w-8 h-8 flex items-center justify-center text-accent-deep flex-shrink-0"><IconReply size={18} /></span>}
+      <button type="button" onClick={onJump} className="flex-1 min-w-0 text-left press ch-focus rounded-tile py-1">
+        <span className="block t-cap font-semibold text-accent-deep truncate">{said}</span>
+        {reply.text && <span className="block t-cap text-ink/65 truncate">{reply.text}</span>}
+      </button>
+      <button type="button" onClick={onCancel} aria-label="Stop replying" className={iconButtonClass(true)}><IconX size={18} /></button>
+    </div>
+  )
+}
+
+/** "Today", "Yesterday", else the day — the line a chat puts between days. */
+function dayLine(at: string, now: Date): { key: string; label: string } {
+  const day = (d: Date) => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Dublin' }).format(d)
+  const key = day(new Date(at))
+  const today = day(now)
+  const yesterday = day(new Date(now.getTime() - 86_400_000))
+  const label = key === today ? 'Today' : key === yesterday ? 'Yesterday'
+    : new Intl.DateTimeFormat('en-IE', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Dublin' }).format(new Date(at))
+  return { key, label }
+}
+
+/**
+ * One stream as a chat (D346): oldest at the top, the latest at the foot,
+ * a line between days. Its head reads earlier messages in as it comes into
+ * view — only once the chat has opened at its foot — with a button there
+ * too. Live players on the course are a line at the foot, as a chat says
+ * who is typing (D302).
+ */
+function ChatPanel({ stream, panel, now, empty, comp, settingsPath, settled, flash, onMore, onRetry, onPatch, onDropReply, onOpen, onReply, onJump }: {
+  stream: StreamRef; panel: Panel | undefined; now: Date; empty: string; comp: CompRef | null; settingsPath: string
+  settled: boolean; flash: string | null
+  onMore: () => void; onRetry: () => void
+  onPatch: (id: string, p: Partial<FeedView> | null) => void
+  onDropReply: (rootId: string, replyId: string) => void
+  onOpen: (id: string, el: HTMLElement) => void
+  onReply: (t: ReplyTarget) => void
+  onJump: (id: string) => void
+}) {
+  const head = useRef<HTMLDivElement>(null)
+  const more = useRef(onMore)
+  useEffect(() => { more.current = onMore })
+  const next = panel?.next ?? null
+  // Earlier messages read in as the head comes into view — never before the chat has opened at its foot.
+  useEffect(() => {
+    const el = head.current
+    if (!el || !settled || !next || typeof IntersectionObserver === 'undefined') return
+    const io = new IntersectionObserver(es => { if (es.some(e => e.isIntersecting)) more.current() }, { rootMargin: '240px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [settled, next])
+  const items = useMemo(() => panel?.items ?? [], [panel])
+  const byId = useMemo(() => new Map(items.map(i => [i.id, i])), [items])
+  const timeline = useMemo(() => chatTimeline(items, next?.at ?? null), [items, next])
+
+  if (stream.kind === 'comp' && !comp) {
+    return <div className={`${cardClass()} px-4 py-6 mt-3 text-center`}><p className="t-body text-ink/80">No competitions in the last month.</p></div>
+  }
+  if (!panel || (panel.loading && panel.items.length === 0)) {
+    return (
+      <div className="space-y-3 mt-3" aria-busy="true">
+        <div className="skeleton h-40 rounded-card w-[72%]" />
+        <div className="skeleton h-12 rounded-card w-[60%] ml-auto" />
+        <div className="skeleton h-12 rounded-card w-[50%]" />
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-col justify-end min-h-[55vh] pt-3 pb-3">
+      <div ref={head} className="flex justify-center">
+        {next && (
+          <button type="button" disabled={panel.loading} onClick={onMore} className={buttonClass('quiet', false, true)}>
+            {panel.loading ? 'Loading earlier messages…' : 'Earlier messages'}
+          </button>
+        )}
+      </div>
+      {panel.error && (
+        <div className={`${cardClass()} px-4 py-3 my-2`}>
+          <p role="alert" className="t-cap text-rust-deep">{panel.error}</p>
+          <button type="button" onClick={onRetry} className={buttonClass('quiet', false, true)}>Try again</button>
+        </div>
+      )}
+      {!panel.error && timeline.length === 0 && !next && (
+        <div className={`${cardClass()} px-4 py-6 text-center`}>
+          <p className="t-body text-ink/80">{empty}</p>
+          {stream.kind === 'friends' && <Link href={settingsPath} className={`${buttonClass('quiet', false)} mt-1`}>Find friends</Link>}
+        </div>
+      )}
+      <div className="space-y-4" role="log" aria-label="Messages" aria-live="polite">
+        {timeline.map((m, i) => {
+          const day = dayLine(m.at, now)
+          const sep = i === 0 || dayLine(timeline[i - 1].at, now).key !== day.key
+            ? <p key={`day-${day.key}`} className="t-cap text-ink/65 text-center pt-2">{day.label}</p> : null
+          if (m.kind === 'item') {
+            const it = byId.get(m.id)!
+            return [sep, (
+              <FeedItem key={it.id} item={it} now={now} arriving={panel.arriving.has(it.id)} flash={flash === it.id}
+                onOpen={it.talk ? el => onOpen(it.id, el) : undefined}
+                onReply={it.talk ? () => onReply(replyToItem(it)) : undefined}
+                onPatch={p => onPatch(it.id, p)} onGone={() => onPatch(it.id, null)} />
+            )]
+          }
+          const root = byId.get(m.rootId)!
+          const c = root.thread.find(x => x.id === m.id)!
+          return [sep, (
+            <ChatReply key={c.id} item={root} reply={c} now={now} arriving={panel.arriving.has(c.id)} flash={flash === c.id}
+              onJump={onJump} onReply={() => onReply(replyToComment(root, c))} onGone={() => onDropReply(root.id, c.id)} />
+          )]
+        })}
+      </div>
+      {panel.players && panel.players.length > 0 && (
+        <p className="flex items-center justify-center gap-2 t-cap text-ink/65 text-center mt-4">
+          <LiveDot />
+          <span><span className="sr-only">On the course: </span>{panel.players.map(p => `${p.name.split(/\s+/)[0]} thru ${p.thru}`).join(' · ')}</span>
+        </p>
+      )}
+    </div>
   )
 }
 
@@ -462,7 +592,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
  * The title's menu (D323, D340): under the stream's name, the way a social
  * app lists what it can show — headings, then the choices, the one shown
  * ticked. It springs out of the title and back into it (the pop-out,
- * `app/components/popOut.ts`). Outside the swipe frame, so nothing clips
+ * `app/components/popOut.ts`). Above the chat, so nothing clips
  * it. Escape or a tap elsewhere closes it.
  */
 function StreamMenu({ label, origin, onClose, children }: {
@@ -492,61 +622,6 @@ function StreamMenu({ label, origin, onClose, children }: {
     <div ref={box} role="menu" aria-label={label} onClick={e => { if ((e.target as HTMLElement).closest('[role^="menuitem"]')) close() }}
       className={`${cardClass('floating')} bg-surface absolute left-0 right-0 top-full mt-2 z-30 p-1 max-h-[60vh] overflow-y-auto`}>
       {children}
-    </div>
-  )
-}
-
-function StreamPanel({ stream, panel, now, empty, comp, settingsPath, onMore, onRetry, onPatch, onOpen }: {
-  stream: StreamRef; panel: Panel | undefined; now: Date; empty: string; comp: CompRef | null; settingsPath: string
-  onMore: () => void; onRetry: () => void
-  onPatch: (id: string, p: Partial<FeedView> | null) => void
-  onOpen: (id: string, el: HTMLElement) => void
-}) {
-  if (stream.kind === 'comp' && !comp) {
-    return <div className={`${cardClass()} px-4 py-6 text-center`}><p className="t-body text-ink/80">No competitions in the last month.</p></div>
-  }
-  if (!panel || (panel.loading && panel.items.length === 0)) {
-    return (
-      <div className="space-y-3" aria-busy="true">
-        <div className="skeleton h-12 rounded-card" />
-        <div className="skeleton h-40 rounded-card" />
-        <div className="skeleton h-40 rounded-card" />
-      </div>
-    )
-  }
-  return (
-    <div className="space-y-4">
-      {panel.players && panel.players.length > 0 && (
-        <div className={`${cardClass()} px-4 py-3 flex items-center gap-2`}>
-          <LiveDot />
-          <p className="t-label text-ink min-w-0">
-            <span className="sr-only">On the course: </span>
-            {panel.players.map(p => `${p.name.split(/\s+/)[0]} thru ${p.thru}`).join(' · ')}
-          </p>
-        </div>
-      )}
-      {panel.error && (
-        <div className={`${cardClass()} px-4 py-3`}>
-          <p role="alert" className="t-cap text-rust-deep">{panel.error}</p>
-          <button type="button" onClick={onRetry} className={buttonClass('quiet', false, true)}>Try again</button>
-        </div>
-      )}
-      {!panel.error && panel.items.length === 0 && (
-        <div className={`${cardClass()} px-4 py-6 text-center`}>
-          <p className="t-body text-ink/80">{empty}</p>
-          {stream.kind === 'friends' && <Link href={settingsPath} className={`${buttonClass('quiet', false)} mt-1`}>Find friends</Link>}
-        </div>
-      )}
-      {panel.items.map(it => (
-        <FeedItem key={it.id} item={it} now={now} arriving={panel.arriving.has(it.id)}
-          onOpen={it.talk ? el => onOpen(it.id, el) : undefined}
-          onPatch={p => onPatch(it.id, p)} onGone={() => onPatch(it.id, null)} />
-      ))}
-      {panel.next != null && (
-        <button type="button" disabled={panel.loading} onClick={onMore} className={`${buttonClass('secondary', true, true)}`}>
-          {panel.loading ? 'Loading…' : 'Show more'}
-        </button>
-      )}
     </div>
   )
 }

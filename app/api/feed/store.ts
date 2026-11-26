@@ -416,7 +416,7 @@ export function feedStore(db: Db): FeedStore {
     async insertComment(o) {
       const { data, error } = await db.from('feed_items').insert({
         kind: 'comment', author_id: o.authorId, parent_id: o.parentId, trip_id: o.tripId, club_id: o.clubId,
-        data: { name: o.name, text: o.text },
+        data: { name: o.name, text: o.text, ...(o.replyTo ? { replyTo: o.replyTo.id, replyName: o.replyTo.name } : {}) },
       }).select(ITEM_COLS).single()
       if (error) throw error
       return asItem(data as unknown as ItemDbRow)

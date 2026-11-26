@@ -177,8 +177,24 @@ export interface FeedStore extends FriendsStore, CardsStore, SocialStore, Groups
 
 // ─── Answers ────────────────────────────────────────────────────
 
-/** How many of an item's comments are drawn under it in the stream; the rest are its sheet's (D342). */
-export const RECENT_COMMENTS = 4
+/**
+ * A reply on an item, as the chat draws it (D346): its own message at its own
+ * time, saying what it answers — another reply (`replyTo`, and whose it was),
+ * else the item itself.
+ */
+export interface ThreadComment {
+  id: string
+  name: string
+  text: string
+  at: string
+  mine: boolean
+  /** The reply it answers, when it answers one; its author's name kept beside it, should it go. */
+  replyTo: string | null
+  replyName: string | null
+  /** Its author, or the owner of what it is on (D301). */
+  canDelete: boolean
+  canReport: boolean
+}
 
 /** An item as a phone draws it — only what this viewer may see. */
 export interface FeedView {
@@ -198,8 +214,8 @@ export interface FeedView {
   dotted: boolean
   comments: number
   latest: { name: string; text: string } | null
-  /** The latest four comments, oldest first, drawn under the item as a chat's replies (D342). */
-  recent: { id: string; name: string; text: string; mine: boolean; at: string }[]
+  /** Every reply this viewer may see, oldest first — each its own message in the chat (D346). */
+  thread: ThreadComment[]
   /** "2 comments · John and 1 other" (D329). */
   commentLine: { count: string; who: string } | null
   /** Why a card is in friends.stream when it is not a friend's: "Dave commented" (D327). */
@@ -357,9 +373,7 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
       dots: dots.length, dotted: dots.some(d => d.userId === viewer.userId),
       comments: comments.length,
       latest: comments[0] ? { name: str(comments[0].data.name) || 'A member', text: str(comments[0].data.text) } : null,
-      recent: comments.slice(0, RECENT_COMMENTS).reverse().map(c => ({
-        id: c.id, name: str(c.data.name) || 'A member', text: str(c.data.text), mine: !!c.authorId && c.authorId === viewer.userId, at: c.createdAt,
-      })),
+      thread: threadOf(comments, mine, viewer.userId),
       commentLine: commentLine(comments.map(c => ({ authorId: c.authorId, name: str(c.data.name) || 'A member' })), viewer),
       why: whyName ? `${whyName} commented` : null,
       highlights: highlights.map(h => str(h.data.line)).filter(Boolean),
@@ -369,6 +383,20 @@ export function viewBundle(b: Bundle, viewer: Viewer, stream: { kind: StreamRef[
   }
   const last = b.rows[b.rows.length - 1]
   return { items: items.slice(0, FEED_PAGE * 2), next: b.more && last ? { at: activityOf(last), id: last.id } : null }
+}
+
+/** An item's replies as the chat draws them, oldest first (D346). `ownsItem`: the viewer owns what they are on. */
+export function threadOf(comments: ItemRow[], ownsItem: boolean, viewerId: string): ThreadComment[] {
+  return [...comments].sort((x, y) => x.createdAt.localeCompare(y.createdAt) || x.id.localeCompare(y.id)).map(c => {
+    const mine = !!c.authorId && c.authorId === viewerId
+    const to = str(c.data.replyTo)
+    return {
+      id: c.id, name: str(c.data.name) || 'A member', text: str(c.data.text), at: c.createdAt, mine,
+      replyTo: to || null,
+      replyName: to ? str(c.data.replyName) || null : null,
+      canDelete: mine || ownsItem, canReport: !mine,
+    }
+  })
 }
 
 function blank(r: ItemRow, viewer: Viewer): FeedView {
@@ -382,7 +410,7 @@ function blank(r: ItemRow, viewer: Viewer): FeedView {
     id: r.id, kind: r.kind, at: r.createdAt, name: str(d.name) || 'A member', line,
     status: r.kind === 'card' || r.kind === 'status' ? r.status : null,
     gross: num(d.gross), points: num(d.points), holes: num(d.holes), place: num(d.place),
-    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, recent: [], commentLine: null, why: null,
+    highlights: [], dots: 0, dotted: false, comments: 0, latest: null, thread: [], commentLine: null, why: null,
     text: r.kind === 'post' ? str(d.text) || null : null, link: r.kind === 'post' ? r.link ?? null : null,
     talk: talksOn(r.kind),
     mine, audience: null, parentId: null, on: null, canDelete: false, canReport: !mine,

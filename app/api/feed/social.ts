@@ -11,7 +11,7 @@
 import { clubMay, credentialsOf, type StoredCredentials } from '@/lib/clubMay'
 import { REPORT_REASON_MAX, cleanText, commentIssue, COMMENT_MAX, mayView, reportDestination, talksOn } from '@/lib/feed'
 import { done, fail, str, type FeedOutcome } from './outcome'
-import { factsOf, type Asker, type FeedStore, type ItemRow } from './feed'
+import { factsOf, threadOf, type Asker, type FeedStore, type ItemRow } from './feed'
 
 export interface ReportRow {
   id: string; itemId: string; reason: string | null; createdAt: string
@@ -20,7 +20,8 @@ export interface ReportRow {
 }
 
 export interface SocialStore {
-  insertComment(row: { parentId: string; authorId: string; tripId: string | null; clubId: string | null; name: string; text: string; at: string }): Promise<ItemRow>
+  /** `replyTo`: the reply on the same item it answers, and whose that was (D346). */
+  insertComment(row: { parentId: string; authorId: string; tripId: string | null; clubId: string | null; name: string; text: string; at: string; replyTo?: { id: string; name: string } | null }): Promise<ItemRow>
   deleteItem(itemId: string): Promise<void>
   setDot(itemId: string, userId: string, on: boolean): Promise<void>
   /** A report; a second by the same person on the same item changes nothing. */
@@ -66,12 +67,7 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
     const found = await cardOf(store, str(input.itemId))
     if (!found || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
     const children = await store.childrenOf([found.card.id])
-    const comments = children.filter(c => c.kind === 'comment' && !c.removedAt)
-      .sort((x, y) => x.createdAt.localeCompare(y.createdAt))
-      .map(c => ({
-        id: c.id, name: str(c.data.name) || 'A member', text: str(c.data.text), at: c.createdAt,
-        mine: c.authorId === me, canDelete: c.authorId === me || found.card.authorId === me, canReport: c.authorId !== me,
-      }))
+    const comments = threadOf(children.filter(c => c.kind === 'comment' && !c.removedAt), found.card.authorId === me, me)
     return done({ comments })
   }
 
@@ -81,11 +77,19 @@ export async function runSocial(action: string, input: Record<string, unknown>, 
     if (why) return fail(400, why)
     const found = await cardOf(store, str(input.itemId))
     if (!found || found.item.parentId || !talksOn(found.item.kind) || found.card.removedAt || !(await seeing(a, store, found.card))) return fail(404, 'That card isn’t there any more.')
+    // D346: a reply to a reply — one on the same item, still there.
+    let replyTo: { id: string; name: string } | null = null
+    const toId = str(input.replyTo)
+    if (toId) {
+      const [to] = /^[0-9a-f-]{36}$/i.test(toId) ? await store.itemsByIds([toId]) : []
+      if (!to || to.kind !== 'comment' || to.parentId !== found.card.id || to.removedAt) return fail(404, 'That reply has gone — reply to the card instead.')
+      replyTo = { id: to.id, name: str(to.data.name) || 'A member' }
+    }
     const name = (await store.names([me])).get(me)?.name ?? 'A member'
-    const c = await store.insertComment({ parentId: found.card.id, authorId: me, tripId: found.card.tripId, clubId: found.card.clubId, name, text, at: now.toISOString() })
+    const c = await store.insertComment({ parentId: found.card.id, authorId: me, tripId: found.card.tripId, clubId: found.card.clubId, name, text, at: now.toISOString(), replyTo })
     // D329: a comment lifts its item to the top of every stream it is in; a dot does not.
     if (await store.v2()) await store.bump(found.card.id, c.createdAt)
-    return done({ comment: { id: c.id, name, text, at: c.createdAt, mine: true, canDelete: true, canReport: false } })
+    return done({ comment: { id: c.id, name, text, at: c.createdAt, mine: true, replyTo: replyTo?.id ?? null, replyName: replyTo?.name ?? null, canDelete: true, canReport: false } })
   }
 
   if (action === 'comment.delete') {

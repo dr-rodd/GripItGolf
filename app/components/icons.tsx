@@ -108,6 +108,11 @@ export const IconChevronLeft = (p: IconProps) => (
   <Svg {...p}><path d="M15 6l-6 6l6 6" /></Svg>
 )
 
+/** A reply: the arrow bending back (D346, swipe to reply). */
+export const IconReply = (p: IconProps) => (
+  <Svg {...p}><path d="M9 14l-4 -4l4 -4" /><path d="M5 10h11a4 4 0 1 1 0 8h-1" /></Svg>
+)
+
 export const IconChevronRight = (p: IconProps) => (
   <Svg {...p}><path d="M9 6l6 6l-6 6" /></Svg>
 )

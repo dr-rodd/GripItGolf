@@ -6,7 +6,7 @@ import { askFeed } from '@/lib/feedClient'
 import { OWN_STATUS_MAX, REPORT_REASON_MAX, STATUS_MAX, counter } from '@/lib/feed'
 import { IconDots, IconX } from '../icons'
 import { FIELD, buttonClass } from '../ui'
-import type { FeedView } from './FeedItem'
+import type { FeedView, ThreadComment } from './FeedItem'
 
 
 /** The one-tap dot (D301): a dot, filled once you have given it, and the count in the emerald. */
@@ -36,16 +36,19 @@ export function DotButton({ item, onPatch }: { item: FeedView; onPatch: (p: Part
  * take down for its poster and the club's Officers and Clubhouse. A sheet,
  * never a dropdown: a menu inside the swipe frame would be clipped.
  */
-export function MoreMenu({ item, onPatch, onGone, className = '' }: {
+export function MoreMenu({ item, onPatch, onGone, onReply, className = '' }: {
   item: FeedView
   onPatch: (p: Partial<FeedView>) => void
   onGone: () => void
+  /** D346: Reply, for anybody who would rather not swipe. */
+  onReply?: () => void
   className?: string
 }) {
   const [menu, setMenu] = useState(false)
   const [sheet, setSheet] = useState<'report' | 'status' | null>(null)
   const [error, setError] = useState('')
   const items = [
+    ...(onReply ? [{ key: 'reply', label: 'Reply' }] : []),
     ...((item.kind === 'card' || item.kind === 'status') && item.mine ? [{ key: 'status', label: item.kind === 'status' ? 'Edit your status' : item.status ? 'Edit your status' : 'Add a status' }] : []),
     ...((item.kind === 'status' || item.kind === 'post') && item.canDelete ? [{ key: 'delete', label: item.kind === 'post' ? 'Take this post down' : 'Delete this status' }] : []),
     ...(item.canReport ? [{ key: 'report', label: 'Report' }] : []),
@@ -53,6 +56,7 @@ export function MoreMenu({ item, onPatch, onGone, className = '' }: {
   if (items.length === 0) return null
 
   async function pick(key: string) {
+    if (key === 'reply') { setMenu(false); onReply?.() }
     if (key === 'report') { setMenu(false); setSheet('report') }
     if (key === 'status') { setMenu(false); setSheet('status') }
     if (key === 'delete') {
@@ -88,6 +92,55 @@ export function MoreMenu({ item, onPatch, onGone, className = '' }: {
   )
 }
 
+/**
+ * The ⋯ on a reply in the chat (D346): Reply, Delete (its author, or the
+ * owner of what it is on — D301) and Report (never your own).
+ */
+export function ReplyMenu({ reply, onReply, onGone }: { reply: ThreadComment; onReply?: () => void; onGone: () => void }) {
+  const [menu, setMenu] = useState(false)
+  const [report, setReport] = useState(false)
+  const [error, setError] = useState('')
+  const items = [
+    ...(onReply ? [{ key: 'reply', label: 'Reply' }] : []),
+    ...(reply.canDelete ? [{ key: 'delete', label: 'Delete this reply' }] : []),
+    ...(reply.canReport ? [{ key: 'report', label: 'Report' }] : []),
+  ]
+  if (items.length === 0) return null
+  async function pick(key: string) {
+    if (key === 'reply') { setMenu(false); onReply?.() }
+    if (key === 'report') { setMenu(false); setReport(true) }
+    if (key === 'delete') {
+      setError('')
+      const r = await askFeed('comment.delete', { id: reply.id })
+      if (!r.ok) { setError(r.error); return }
+      setMenu(false)
+      onGone()
+    }
+  }
+  return (
+    <>
+      <button type="button" aria-label="More" aria-haspopup="dialog" onClick={e => { e.stopPropagation(); setMenu(true) }}
+        className="!w-9 !h-9 w-11 h-11 rounded-full flex items-center justify-center text-ink/65 press ch-focus flex-shrink-0">
+        <IconDots size={20} />
+      </button>
+      {menu && (
+        <Sheet title={reply.mine ? 'Your reply' : `${reply.name}’s reply`} onClose={() => setMenu(false)}>
+          <ul className="mt-2 divide-y divide-line">
+            {items.map(m => (
+              <li key={m.key}>
+                <button type="button" onClick={() => void pick(m.key)}
+                  className={`w-full text-left min-h-14 text-[17px] press ch-focus ${m.key === 'report' || m.key === 'delete' ? 'text-rust-deep' : 'text-ink'}`}>{m.label}</button>
+              </li>
+            ))}
+          </ul>
+          {error && <p role="alert" className="t-cap text-rust-deep mt-2">{error}</p>}
+        </Sheet>
+      )}
+      {report && <ReportSheet item={reply} onClose={() => setReport(false)} />}
+    </>
+  )
+}
+
 /** A sheet over the page — the club notes' own pattern, portalled past the footer. */
 export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   useEffect(() => {
@@ -114,7 +167,7 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
 }
 
 /** Report (D303): where it goes said before it is sent; nothing is hidden until somebody takes it down. */
-export function ReportSheet({ item, onClose }: { item: FeedView; onClose: () => void }) {
+export function ReportSheet({ item, onClose }: { item: Pick<FeedView, 'id'>; onClose: () => void }) {
   const [reason, setReason] = useState('')
   const [state, setState] = useState<'idle' | 'busy' | 'sent'>('idle')
   const [error, setError] = useState('')

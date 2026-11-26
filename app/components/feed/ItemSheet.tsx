@@ -13,7 +13,7 @@ import { FIELD, buttonClass } from '../ui'
 import type { FeedView } from './FeedItem'
 import { DotButton, MoreMenu, ReportSheet } from './ItemActions'
 
-type Comment = { id: string; name: string; text: string; at: string; mine: boolean; canDelete: boolean; canReport: boolean }
+type Comment = { id: string; name: string; text: string; at: string; mine: boolean; canDelete: boolean; canReport: boolean; replyTo?: string | null; replyName?: string | null }
 type Detail = {
   player: { id: string; name: string; handicap: number | null; gender: string }
   round: { id: string; round_number: number; courses: { id: string; name: string } }
@@ -157,7 +157,7 @@ export default function ItemSheet({ item, origin, onClose, onPatch, onGone }: {
     onPatch({
       comments: next.length,
       latest: next.length ? { name: next[next.length - 1].name, text: next[next.length - 1].text } : null,
-      recent: next.slice(-4).map(c => ({ id: c.id, name: c.name, text: c.text, mine: c.mine, at: c.at })),
+      thread: next.map(c => ({ ...c, replyTo: c.replyTo ?? null, replyName: c.replyName ?? null })),
       commentLine: lead ? {
         count: `${next.length} comment${next.length === 1 ? '' : 's'}`,
         who: `${lead.mine ? 'You' : lead.name}${names.length > 1 ? ` and ${names.length - 1} other${names.length === 2 ? '' : 's'}` : ''}`,

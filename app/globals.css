@@ -1241,26 +1241,6 @@ input[type="date"] {
    than ride up over the box being typed in (app/components/KeyboardWatch.tsx). */
 html.keyboard-open .hide-with-keyboard { display: none; }
 
-/* ── The feed's streams (D295) ───────────────────────────────────
-   One stream a screen's width, side by side, a sideways swipe moving one
-   at a time — the browser's own scroll snap, no library. The frame takes
-   the height of the stream on show (Feed.tsx), so the others are clipped
-   below it rather than leaving a short stream with a tall one's gap. The
-   pill rows above scroll sideways without a bar. Under Reduce Motion a pill
-   tap jumps (Feed.tsx asks); the swipe itself is the finger's own. */
-.feed-streams {
-  scroll-snap-type: x mandatory;
-  overflow-y: hidden;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-.feed-streams::-webkit-scrollbar { display: none; }
-.feed-stream {
-  scroll-snap-align: start;
-  scroll-snap-stop: always;
-}
-
 /* ── Stream names (D321) ─────────────────────────────────────────
    club•stream: the word, an emerald dot, "stream". The dot is a CSS circle
    in the accent token, sized to the text it sits in (0.32em, on the
@@ -1295,3 +1275,39 @@ html.keyboard-open .hide-with-keyboard { display: none; }
 .menu-drop { animation: gdMenuDrop 160ms var(--gd-ease) both; }
 /* The dot given: a quick fill, no bounce. */
 .dot-give { transition: background-color 160ms ease-out; }
+
+/* ── The stream as a chat (D346) ─────────────────────────────────
+   The box to write in sticks to the foot of the screen above the tab bar
+   (`--chat-bottom`, set from TABBAR_SPACE), and to the very foot while the
+   keyboard is up and the tab bar has stepped aside. A reply's note is a tab
+   stuck to the top of its bubble — square where they meet, the bubble over
+   its foot. Swiped right, a message shows the reply arrow behind it, filling
+   in emerald once letting go would reply (lib/swipeReply.ts). A message
+   jumped to is lit — an emerald ring round it — and the green dot pops on
+   its initial (D346); both still under Reduce Motion, only not moving. */
+.chat-composer { bottom: var(--chat-bottom, 0px); }
+html.keyboard-open .chat-composer { bottom: 0; }
+.chat-note {
+  background: var(--color-tint);
+  border: 1px solid var(--color-line);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+}
+.chat-mini-card { opacity: 0.92; }
+.swipe-reply-hint {
+  color: var(--color-accent-deep);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.swipe-reply-hint.is-armed { background: var(--color-accent); color: #fff; border-color: var(--color-accent); }
+.chat-flash {
+  outline: 3px solid var(--color-accent);
+  outline-offset: 2px;
+}
+@keyframes gdChatDotPop {
+  0%   { transform: scale(0); }
+  60%  { transform: scale(1.25); }
+  100% { transform: scale(1); }
+}
+.chat-dot-pop { animation: gdChatDotPop 320ms var(--gd-ease) both; }

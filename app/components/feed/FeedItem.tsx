@@ -1,10 +1,24 @@
 'use client'
 
-import { ago, ordinal } from '@/lib/feed'
-import { IconLink } from '../icons'
+import { ago, ordinal, replyNote, replyQuote } from '@/lib/feed'
+import { IconLink, IconReply } from '../icons'
 import Initials from '../Initials'
 import { SC_SF } from '../scorecardStyle'
-import { DotButton, MoreMenu } from './ItemActions'
+import { DotButton, MoreMenu, ReplyMenu } from './ItemActions'
+import SwipeReply from './SwipeReply'
+
+/** A reply on an item, as the server hands it (app/api/feed/feed.ts `ThreadComment`). */
+export interface ThreadComment {
+  id: string
+  name: string
+  text: string
+  at: string
+  mine: boolean
+  replyTo: string | null
+  replyName: string | null
+  canDelete: boolean
+  canReport: boolean
+}
 
 /** An item as the server hands it to this viewer (app/api/feed/feed.ts `FeedView`). */
 export interface FeedView {
@@ -23,8 +37,8 @@ export interface FeedView {
   dotted: boolean
   comments: number
   latest: { name: string; text: string } | null
-  /** The latest four comments, oldest first (D342). */
-  recent: { id: string; name: string; text: string; mine: boolean; at: string }[]
+  /** Every reply, oldest first — each its own message in the chat (D346). */
+  thread: ThreadComment[]
   /** "2 comments · John and 1 other" (D329). */
   commentLine: { count: string; who: string } | null
   /** Why a card is in friends.stream when it is not a friend's own (D327). */
@@ -43,7 +57,32 @@ export interface FeedView {
   code: string | null
 }
 
-/** A link's host, for the line under a post — the whole address is the link itself. */
+/** Who a reply being written answers (D346): the item, or one of its replies. */
+export interface ReplyTarget {
+  rootId: string
+  commentId: string | null
+  name: string
+  mine: boolean
+  quote: 'card' | 'comment' | 'item'
+  text: string
+  card: Pick<FeedView, 'name' | 'points' | 'gross'> | null
+}
+
+/** Replying to an item itself — the card quoted as its square, anything else named. */
+export function replyToItem(item: FeedView): ReplyTarget {
+  return {
+    rootId: item.id, commentId: null, name: item.name, mine: item.mine, quote: replyQuote(item, null),
+    text: item.kind === 'post' ? item.line || item.text || '' : item.status || item.line || '',
+    card: item.kind === 'card' ? { name: item.name, points: item.points, gross: item.gross } : null,
+  }
+}
+
+/** Replying to one of an item's replies. */
+export function replyToComment(item: FeedView, c: ThreadComment): ReplyTarget {
+  return { rootId: item.id, commentId: c.id, name: c.name, mine: c.mine, quote: 'comment', text: c.text, card: null }
+}
+
+/** A host for the line under a post — the whole address is the link itself. */
 function hostOf(link: string): string {
   try { return new URL(link).hostname.replace(/^www\./, '') } catch { return link }
 }
@@ -52,29 +91,40 @@ function hostOf(link: string): string {
 const bubble = (mine: boolean) =>
   `rounded-[22px] px-4 py-2.5 ${mine ? 'bg-accent-tint text-ink' : 'bg-surface text-ink border border-line'}`
 
+/** Their initial beside the message; a found message's gets the green dot's pop (D346). */
+function Face({ name, flash }: { name: string; flash: boolean }) {
+  return (
+    <span className="relative flex-shrink-0 mt-5">
+      <Initials name={name} size={28} />
+      {flash && <span aria-hidden="true" className="chat-dot-pop absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-accent border-2 border-surface" />}
+    </span>
+  )
+}
+
 /**
- * One item of a stream, laid out like a group chat (D342, Ross, 25 Nov 2026:
- * "Instagram chat format is the design inspiration"): everybody else's on
+ * One item of a stream as a chat message (D342, D346): everybody else's on
  * the left at about seven tenths of the width, under their initial and
- * name; **yours on the right**, no initial. A signed card is a **square**
- * (`CardSquare`) — the event and course, the points and the strokes large in
- * the scorecard's own bold serif (`SC_SF`), the place and the first
- * highlight — with its status as a caption bubble beneath, as a shared post
- * carries its caption. A status or a club post is a **chat bubble**. A
- * leaderboard move or a cut is a line across the middle, as a chat says
- * the time. Under each, the dot, when, the ⋯, and **the latest four
- * comments** as small replies; "View all" — or a tap on any of them —
- * springs the item's sheet out of where it was tapped (the pop-out, D330).
- * Never an animated number (D9).
+ * name; **yours on the right**. A signed card is a **square** (`CardSquare`)
+ * with its status as a caption bubble beneath; a status or a club post is a
+ * **chat bubble**; a leaderboard move or a cut a line across the middle, as
+ * a chat says the time. Under each, the dot, when, how many replies (a tap
+ * opens the card with every reply, as before) and the ⋯. Its replies are
+ * messages of their own further down the chat (`ChatReply`). **Swipe it
+ * right to reply** (`SwipeReply`). Tapping it opens its sheet, sprung out of
+ * where it was tapped (the pop-out, D330). Never an animated number (D9).
  */
-export function FeedItem({ item, now, onOpen, onPatch, onGone, arriving = false }: {
+export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, flash = false, arriving = false }: {
   item: FeedView
   now: Date
   /** Opens the item's sheet, out of the element tapped (D330). */
   onOpen?: (el: HTMLElement) => void
   onPatch: (p: Partial<FeedView>) => void
   onGone: () => void
-  /** New since the stream was last read: it fades in at the top (M13). */
+  /** Reply to it (D346) — absent where it takes no replies. */
+  onReply?: () => void
+  /** Just jumped to: highlighted for a moment. */
+  flash?: boolean
+  /** New since the stream was last read: it fades in (M13). */
   arriving?: boolean
 }) {
   const opens = !!onOpen && item.talk
@@ -94,8 +144,8 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, arriving = false 
   // A leaderboard move, a cut: one line across the middle, as a chat says the time.
   if (!item.talk) {
     return (
-      <article data-item-id={item.id} className={`flex items-center justify-center gap-1 py-1 ${arriving ? 'stream-arrive' : ''}`}>
-        <p className="t-cap text-ink/65 text-center break-words min-w-0">
+      <article data-msg={item.id} className={`flex items-center justify-center gap-1 py-1 ${arriving ? 'stream-arrive' : ''}`}>
+        <p className={`t-cap text-ink/65 text-center break-words min-w-0 rounded-tile px-2 ${flash ? 'chat-flash' : ''}`}>
           {item.line} · <time dateTime={item.at}>{ago(item.at, now)}</time>
         </p>
         <MoreMenu item={item} onPatch={onPatch} onGone={onGone} className="!w-9 !h-9 -my-2" />
@@ -106,64 +156,144 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, arriving = false 
   const mine = item.mine
   const isCard = item.kind === 'card'
   return (
-    <article data-item-id={item.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
-      {/* Their initial beside the bubble, under their name's line. */}
-      {!mine && <span className="flex-shrink-0 mt-5"><Initials name={item.name} size={28} /></span>}
-      <div className={`flex flex-col min-w-0 ${mine ? 'items-end' : 'items-start'} ${isCard ? 'w-[72%]' : 'max-w-[72%]'}`}>
-        {!mine && <p className="t-cap text-ink/65 px-3 mb-1 truncate max-w-full">{item.name}</p>}
-        {item.why && <p className="t-cap text-ink/65 px-3 mb-1">{item.why}</p>}
+    <SwipeReply onReply={onReply}>
+      <article data-msg={item.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
+        {!mine && <Face name={item.name} flash={flash} />}
+        <div className={`flex flex-col min-w-0 ${mine ? 'items-end' : 'items-start'} ${isCard ? 'w-[72%]' : 'max-w-[72%]'}`}>
+          {!mine && <p className="t-cap text-ink/65 px-3 mb-1 truncate max-w-full">{item.name}</p>}
+          {item.why && <p className="t-cap text-ink/65 px-3 mb-1">{item.why}</p>}
 
-        {isCard ? (
-          <>
-            <div {...tappable(`${item.name}’s card — open it, with its comments`)} className={`w-full ${opens ? 'cursor-pointer press ch-focus rounded-[22px]' : ''}`}>
-              <CardSquare item={item} />
-            </div>
-            {item.status && <p className={`${bubble(mine)} mt-1 text-[15px] leading-snug break-words max-w-full`}>{item.status}</p>}
-          </>
-        ) : (
-          <div {...tappable(`${item.name}’s ${item.kind === 'post' ? 'post' : 'status'} — open it, with its comments`)}
-            className={`${bubble(mine)} max-w-full ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
-            {item.kind === 'post' && item.line && <p className="t-label text-ink break-words">{item.line}</p>}
-            {item.kind === 'post' && item.text && (
-              <div className={`${item.line ? 'mt-1 ' : ''}space-y-2`}>
-                {item.text.split(/\n{2,}/).map((para, i) => <p key={i} className="text-[16px] leading-snug break-words whitespace-pre-line">{para}</p>)}
+          {isCard ? (
+            <>
+              <div {...tappable(`${item.name}’s card — open it, with every reply`)}
+                className={`w-full rounded-[22px] ${flash ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
+                <CardSquare item={item} />
               </div>
-            )}
-            {item.kind === 'post' && item.link && (
-              <a href={item.link} target="_blank" rel="noopener noreferrer"
-                className="mt-1 inline-flex items-center gap-1.5 min-h-11 t-label text-accent-deep press ch-focus rounded-tile break-all">
-                <IconLink size={16} className="flex-shrink-0" /> {hostOf(item.link)}
-              </a>
-            )}
-            {item.kind === 'status' && item.status && <p className="text-[16px] leading-snug break-words">{item.status}</p>}
-            {item.kind === 'match_result' && <p className="text-[16px] leading-snug break-words">{item.line}</p>}
-          </div>
-        )}
+              {item.status && <p className={`${bubble(mine)} mt-1 text-[15px] leading-snug break-words max-w-full`}>{item.status}</p>}
+            </>
+          ) : (
+            <div {...tappable(`${item.name}’s ${item.kind === 'post' ? 'post' : 'status'} — open it, with every reply`)}
+              className={`${bubble(mine)} max-w-full ${flash ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
+              {item.kind === 'post' && item.line && <p className="t-label text-ink break-words">{item.line}</p>}
+              {item.kind === 'post' && item.text && (
+                <div className={`${item.line ? 'mt-1 ' : ''}space-y-2`}>
+                  {item.text.split(/\n{2,}/).map((para, i) => <p key={i} className="text-[16px] leading-snug break-words whitespace-pre-line">{para}</p>)}
+                </div>
+              )}
+              {item.kind === 'post' && item.link && (
+                <a href={item.link} target="_blank" rel="noopener noreferrer"
+                  className="mt-1 inline-flex items-center gap-1.5 min-h-11 t-label text-accent-deep press ch-focus rounded-tile break-all">
+                  <IconLink size={16} className="flex-shrink-0" /> {hostOf(item.link)}
+                </a>
+              )}
+              {item.kind === 'status' && item.status && <p className="text-[16px] leading-snug break-words">{item.status}</p>}
+              {item.kind === 'match_result' && <p className="text-[16px] leading-snug break-words">{item.line}</p>}
+            </div>
+          )}
 
-        {/* The dot, when, the ⋯ — small, under the bubble, as a chat's reactions hang. */}
-        <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
-          <DotButton item={item} onPatch={onPatch} />
-          <time dateTime={item.at} className="t-cap text-ink/65 px-1">{ago(item.at, now)}</time>
-          <MoreMenu item={item} onPatch={onPatch} onGone={onGone} className="!w-9 !h-9" />
+          {/* The dot, when, the replies, the ⋯ — small, under the message, as a chat's reactions hang. */}
+          <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
+            <DotButton item={item} onPatch={onPatch} />
+            <time dateTime={item.at} className="t-cap text-ink/65 px-1">{ago(item.at, now)}</time>
+            {item.comments > 0 && opens && (
+              <button type="button" data-pop-origin="" onClick={e => onOpen!(e.currentTarget)}
+                className="min-h-11 px-1.5 t-cap text-accent-deep font-semibold press ch-focus rounded-tile">
+                {item.comments} {item.comments === 1 ? 'reply' : 'replies'}
+              </button>
+            )}
+            <MoreMenu item={item} onPatch={onPatch} onGone={onGone} onReply={onReply} className="!w-9 !h-9" />
+          </div>
         </div>
-
-        {/* The latest four comments as small replies; all of them in the sheet (D342). */}
-        {item.recent.length > 0 && (
-          <div {...tappable(`${item.commentLine?.count ?? 'Comments'} — open them all`)}
-            className={`flex flex-col gap-1 ${mine ? 'items-end' : 'items-start'} max-w-full ${opens ? 'cursor-pointer rounded-[18px] ch-focus' : ''}`}>
-            {item.comments > item.recent.length && (
-              <p className="t-label text-accent-deep px-3 min-h-8 flex items-center">View all {item.comments} comments</p>
-            )}
-            {item.recent.map(c => (
-              <p key={c.id} className={`rounded-[18px] px-3 py-1.5 text-[14px] leading-snug break-words max-w-full ${c.mine ? 'bg-accent-tint' : 'bg-surface border border-line'}`}>
-                <span className="font-semibold">{c.mine ? 'You' : c.name}</span> {c.text}
-              </p>
-            ))}
-          </div>
-        )}
-      </div>
-    </article>
+      </article>
+    </SwipeReply>
   )
+}
+
+/**
+ * A reply as its own message in the chat (D346, Ross, 26 Nov 2026): at its
+ * own time, left or right as any message. Stuck to the top of it, what it
+ * answers — **a reply to a card quotes the card** as a small square (whose
+ * initial and score; a tap goes back up to the card in the chat), **any
+ * other reply carries a note** — "Replying to Dave" and the first words of
+ * what it answers — a tap going to that message, briefly lit. Swipe it right
+ * to reply to it in turn.
+ */
+export function ChatReply({ item, reply, now, onJump, onReply, onGone, flash = false, arriving = false }: {
+  item: FeedView
+  reply: ThreadComment
+  now: Date
+  /** Go to a message in the chat: the item, or another reply. */
+  onJump: (id: string) => void
+  onReply?: () => void
+  onGone: () => void
+  flash?: boolean
+  arriving?: boolean
+}) {
+  const mine = reply.mine
+  const kind = replyQuote(item, reply.replyTo)
+  const target = reply.replyTo ? item.thread.find(c => c.id === reply.replyTo) ?? null : null
+  const note = kind === 'comment'
+    ? { to: target?.id ?? item.id, label: replyNote({ name: target?.name ?? reply.replyName ?? 'a member', mine: target?.mine ?? false }), text: target?.text ?? '' }
+    : { to: item.id, label: replyNote({ name: item.name, mine: item.mine }), text: item.kind === 'post' ? item.line || item.text || '' : item.status || item.line }
+  return (
+    <SwipeReply onReply={onReply}>
+      <article data-msg={reply.id} className={`flex items-start gap-2 ${mine ? 'flex-row-reverse' : ''} ${arriving ? 'stream-arrive' : ''}`}>
+        {!mine && <Face name={reply.name} flash={flash} />}
+        <div className={`flex flex-col min-w-0 max-w-[72%] ${mine ? 'items-end' : 'items-start'}`}>
+          {!mine && <p className="t-cap text-ink/65 px-3 mb-1 truncate max-w-full">{reply.name}</p>}
+          {kind === 'card' ? (
+            <MiniCard item={item} onTap={() => onJump(item.id)} />
+          ) : (
+            // The note, stuck to the top of the bubble: square where they meet, the bubble over its foot.
+            <button type="button" onClick={() => onJump(note.to)} aria-label={`${note.label} — go to it`}
+              className={`chat-note relative z-0 -mb-3 pb-4 pt-1.5 px-3 max-w-full text-left press ch-focus ${mine ? 'self-end' : 'self-start'}`}>
+              <span className="flex items-center gap-1 t-cap text-ink/80 font-semibold min-w-0">
+                <IconReply size={13} className="flex-shrink-0" /><span className="truncate">{note.label}</span>
+              </span>
+              {note.text && <span className="block t-cap text-ink/65 truncate">{note.text}</span>}
+            </button>
+          )}
+          <p className={`${bubble(mine)} relative z-[1] max-w-full text-[16px] leading-snug break-words ${flash ? 'chat-flash' : ''}`}>{reply.text}</p>
+          <div className={`flex items-center gap-1 ${mine ? 'flex-row-reverse' : ''}`}>
+            <time dateTime={reply.at} className="t-cap text-ink/65 px-1">{ago(reply.at, now)}</time>
+            <ReplyMenu reply={reply} onReply={onReply} onGone={onGone} />
+          </div>
+        </div>
+      </article>
+    </SwipeReply>
+  )
+}
+
+/** The score a card is quoted by: its points, else its strokes. */
+function cardScore(item: Pick<FeedView, 'points' | 'gross'>): { v: number; l: string } | null {
+  return item.points != null ? { v: item.points, l: 'pts' } : item.gross != null ? { v: item.gross, l: 'strokes' } : null
+}
+
+/**
+ * A card quoted on a reply (D346, Ross: "a small card square shows on the
+ * comment … the initials and score visible"): the card's own square in
+ * small, faded a little — whose initial and the score in the scorecard's
+ * serif. Stuck to the top of the reply; a tap goes back up to the card.
+ */
+export function MiniCard({ item, onTap, stuck = true }: { item: Pick<FeedView, 'name' | 'points' | 'gross'>; onTap?: () => void; stuck?: boolean }) {
+  const score = cardScore(item)
+  // Whose initial and the number side by side, what the number is under them.
+  const inner = (
+    <>
+      <span className="flex items-center gap-1.5">
+        {stuck && <Initials name={item.name} size={24} />}
+        <span className="font-bold text-ink text-[20px] leading-none tabular-nums" style={SC_SF}>{score ? score.v : '–'}</span>
+      </span>
+      <span className="text-[13px] leading-none text-ink/65">{score ? (score.l === 'pts' ? 'pts' : 'gross') : 'card'}</span>
+    </>
+  )
+  // Stuck: tucked under the top of the reply's bubble. Loose: the reply bar's, smaller and on its own.
+  const box = stuck
+    ? 'chat-mini-card relative z-0 -mb-3 w-[76px] h-[76px] pb-3 rounded-[14px] bg-surface border border-line flex flex-col items-center justify-center gap-1.5'
+    : 'w-12 h-12 rounded-[10px] bg-surface border border-line flex flex-col items-center justify-center gap-1 flex-shrink-0'
+  return onTap
+    ? <button type="button" onClick={onTap} aria-label={`${item.name}’s card${score ? `, ${score.v} ${score.l === 'pts' ? 'points' : 'strokes'}` : ''} — go to it`} className={`${box} press ch-focus`}>{inner}</button>
+    : <div className={box}>{inner}</div>
 }
 
 /**
