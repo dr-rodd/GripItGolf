@@ -90,9 +90,14 @@ function hostOf(link: string): string {
   try { return new URL(link).hostname.replace(/^www\./, '') } catch { return link }
 }
 
-/** A chat bubble's shape (D342): rounded, opaque; yours in the emerald wash, everybody else's white. */
+/**
+ * A chat bubble's shape (D342, D349): rounded and opaque — yours solid in the
+ * system's green with white words (Ross, 26 Nov 2026: "shouldn't be
+ * transparent, use system green"; `accent-deep`, the primary button's fill,
+ * the green white words read on), everybody else's white.
+ */
 const bubble = (mine: boolean) =>
-  `rounded-[22px] px-4 py-2.5 ${mine ? 'bg-accent-tint text-ink' : 'bg-surface text-ink border border-line'}`
+  `rounded-[22px] px-4 py-2.5 ${mine ? 'bg-accent-deep text-white' : 'bg-surface text-ink border border-line'}`
 
 /** Their initial beside the message; a found message's gets the green dot's pop (D346). */
 function Face({ name, flash }: { name: string; flash: boolean }) {
@@ -182,7 +187,7 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, onReact,
           ) : (
             <div {...tappable(`${item.name}’s ${item.kind === 'post' ? 'post' : 'status'} — open it, with every reply`)}
               className={`${bubble(mine)} max-w-full ${flash || held ? 'chat-flash' : ''} ${opens ? 'cursor-pointer press ch-focus' : ''}`}>
-              {item.kind === 'post' && item.line && <p className="t-label text-ink break-words">{item.line}</p>}
+              {item.kind === 'post' && item.line && <p className={`t-label break-words ${mine ? 'text-white' : 'text-ink'}`}>{item.line}</p>}
               {item.kind === 'post' && item.text && (
                 <div className={`${item.line ? 'mt-1 ' : ''}space-y-2`}>
                   {item.text.split(/\n{2,}/).map((para, i) => <p key={i} className="text-[16px] leading-snug break-words whitespace-pre-line">{para}</p>)}
@@ -190,7 +195,7 @@ export function FeedItem({ item, now, onOpen, onPatch, onGone, onReply, onReact,
               )}
               {item.kind === 'post' && item.link && (
                 <a href={item.link} target="_blank" rel="noopener noreferrer"
-                  className="mt-1 inline-flex items-center gap-1.5 min-h-11 t-label text-accent-deep press ch-focus rounded-tile break-all">
+                  className={`mt-1 inline-flex items-center gap-1.5 min-h-11 t-label press ch-focus rounded-tile break-all ${mine ? 'text-white underline' : 'text-accent-deep'}`}>
                   <IconLink size={16} className="flex-shrink-0" /> {hostOf(item.link)}
                 </a>
               )}
@@ -256,7 +261,7 @@ export function ChatReply({ item, reply, now, onJump, onReply, onGone, onReact, 
           {kind === 'card' ? (
             <MiniCard item={item} onTap={() => onJump(item.id)} />
           ) : (
-            // The note, stuck to the top of the bubble: square where they meet, the bubble over its foot.
+            // The note, rounded all round and stuck to the top of the bubble, the bubble over its foot (D349).
             <button type="button" onClick={() => onJump(note.to)} aria-label={`${note.label} — go to it`}
               className={`chat-note relative z-0 -mb-3 pb-4 pt-1.5 px-3 max-w-full text-left press ch-focus ${mine ? 'self-end' : 'self-start'}`}>
               <span className="flex items-center gap-1 t-cap text-ink/80 font-semibold min-w-0">
@@ -285,25 +290,25 @@ function cardScore(item: Pick<FeedView, 'points' | 'gross'>): { v: number; l: st
 /**
  * A card quoted on a reply (D346, Ross: "a small card square shows on the
  * comment … the initials and score visible"): the card's own square in
- * small, faded a little — whose initial and the score in the scorecard's
- * serif. Stuck to the top of the reply; a tap goes back up to the card.
+ * small — whose initial and the score in the scorecard's serif — rounded
+ * all round, just above the reply (D349). A tap goes back up to the card.
  */
 export function MiniCard({ item, onTap, stuck = true }: { item: Pick<FeedView, 'name' | 'points' | 'gross'>; onTap?: () => void; stuck?: boolean }) {
   const score = cardScore(item)
   // Whose initial and the number side by side, what the number is under them.
   const inner = (
     <>
-      <span className="flex items-center gap-1.5">
-        {stuck && <Initials name={item.name} size={24} />}
-        <span className="font-bold text-ink text-[20px] leading-none tabular-nums" style={SC_SF}>{score ? score.v : '–'}</span>
+      <span className="flex items-center gap-1">
+        {stuck && <Initials name={item.name} size={20} />}
+        <span className="font-bold text-ink text-[17px] leading-none tabular-nums" style={SC_SF}>{score ? score.v : '–'}</span>
       </span>
       <span className="text-[13px] leading-none text-ink/65">{score ? (score.l === 'pts' ? 'pts' : 'gross') : 'card'}</span>
     </>
   )
-  // Stuck: tucked under the top of the reply's bubble. Loose: the reply bar's, smaller and on its own.
+  // D349: small, opaque and rounded all round, sitting just above the reply's bubble (Ross: "too big and should be rounded").
   const box = stuck
-    ? 'chat-mini-card relative z-0 -mb-3 w-[76px] h-[76px] pb-3 rounded-[14px] bg-surface border border-line flex flex-col items-center justify-center gap-1.5'
-    : 'w-12 h-12 rounded-[10px] bg-surface border border-line flex flex-col items-center justify-center gap-1 flex-shrink-0'
+    ? 'mb-1 w-[60px] h-[52px] rounded-[16px] bg-surface border border-line shadow-raised flex flex-col items-center justify-center gap-1'
+    : 'w-12 h-12 rounded-[14px] bg-surface border border-line flex flex-col items-center justify-center gap-1 flex-shrink-0'
   return onTap
     ? <button type="button" onClick={onTap} aria-label={`${item.name}’s card${score ? `, ${score.v} ${score.l === 'pts' ? 'points' : 'strokes'}` : ''} — go to it`} className={`${box} press ch-focus`}>{inner}</button>
     : <div className={box}>{inner}</div>
