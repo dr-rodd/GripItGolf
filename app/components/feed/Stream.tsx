@@ -508,6 +508,8 @@ const BAR_H = 112
  */
 function ReactBar({ hold, onPick, onReply, onClose }: { hold: Hold; onPick: (e: Reaction) => void; onReply?: () => void; onClose: () => void }) {
   const [copied, setCopied] = useState(false)
+  // The finger that held the message lets go over the bar's backdrop: that release is not a tap away.
+  const touched = useRef(false)
   useEffect(() => {
     const esc = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     const away = () => onClose()
@@ -522,7 +524,8 @@ function ReactBar({ hold, onPick, onReply, onClose }: { hold: Hold; onPick: (e: 
     try { await navigator.clipboard.writeText(hold.text); setCopied(true); window.setTimeout(onClose, 500) } catch { onClose() }
   }
   return createPortal(
-    <div className="fixed inset-0 z-50" onClick={onClose} onContextMenu={e => { e.preventDefault(); onClose() }}>
+    <div className="fixed inset-0 z-50" onPointerDown={() => { touched.current = true }}
+      onClick={() => { if (touched.current) onClose() }} onContextMenu={e => e.preventDefault()}>
       <div role="menu" aria-label="React to this message" onClick={e => e.stopPropagation()}
         className={`react-bar-in absolute ${hold.mine ? 'right-3' : 'left-3'} ${cardClass('floating')} bg-surface p-1.5 w-[min(320px,calc(100vw-24px))]`}
         style={{ top, transformOrigin: `${above ? 'bottom' : 'top'} ${hold.mine ? 'right' : 'left'}` }}>
