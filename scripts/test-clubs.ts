@@ -946,12 +946,13 @@ function wiringTests() {
     const view = read('app/club/[slug]/ClubView.tsx')
     ok(/g\.upcoming\.filter\(e => soon\(e\.startDate\)\)/.test(view) && /href=\{`\/club\/\$\{slug\}\/comps`\}/.test(view) && /results: pastPlain\.slice\(0, resultsShown\)/.test(view),
       'Comps’ Upcoming is the next two weeks with See all; Results ten at a time')
-    ok(/value: 'matchplay' as const, label: 'Match play'/.test(view) && /view === 'matchplay' && <MatchPlayTab/.test(view),
-      'Comps has a Match play menu beside Results (D344)')
+    ok(/value: 'matchplay' as const, label: 'Knockout'/.test(view) && /view === 'matchplay' && <MatchPlayTab/.test(view)
+      && view.indexOf("label: 'Results'") < view.indexOf("label: 'Knockout'"),
+      'Comps has a Knockout menu, fourth, after Results (D344, D345)')
     ok(/upcoming: plain\(\[\.\.\.g\.now/.test(view) && /mine: plain\(/.test(view) && /!isMatchPlay\(e\)\), got\.notes/.test(view),
       '…and no match play is in Upcoming, Entries, Results or See all — an ongoing one you are out of is not listed there (D344)')
-    ok(/section\('Yours'/.test(view) && /section\('Open for entry'/.test(view) && /section\('Ongoing'/.test(view) && /`Results \$\{year\}`/.test(view),
-      '…in sections: yours, open for entry, ongoing that you are not in, then results by year')
+    ok(/section\('Yours'/.test(view) && /section\('Open for entry'/.test(view) && /section\('Ongoing'/.test(view) && /section\('Results', null, recent/.test(view) && />\s*Previous years\s*</.test(view),
+      '…in sections: yours, open for entry, ongoing that you are not in, this year’s Results, earlier years behind Previous years (D345)')
     ok(/input\.whole !== true/.test(read('app/api/club/club.ts')) && /whole: true/.test(view), 'the home carries the next two weeks; the whole season only when asked')
     const frame = read('app/club/[slug]/comp/[code]/(frame)/layout.tsx'), shell = read('app/club/[slug]/comp/[code]/CompShell.tsx')
     ok(/<TripHeader backTo/.test(frame) && /<Art face=\{clubFace\}/.test(frame) && !/<main/.test(shell) && !/TripHeader/.test(read('app/club/[slug]/comp/[code]/(frame)/loading.tsx')),

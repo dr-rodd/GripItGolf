@@ -709,9 +709,9 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
       <PageTitle sub="The club’s events — tap one to open it."
         below={<Segmented className="mt-3" dense label="Which competitions" value={view} onChange={setView}
           options={[{ value: 'upcoming', label: 'Upcoming' }, { value: 'mine', label: 'Entries' },
-            // D344: every match play, in its own menu beside Results.
-            ...(hasMatchPlay ? [{ value: 'matchplay' as const, label: 'Match play' }] : []),
-            { value: 'results', label: 'Results' }]} />}>Competitions</PageTitle>
+            { value: 'results', label: 'Results' },
+            // D344/D345: every club knockout, in its own menu, fourth (the view key stays 'matchplay').
+            ...(hasMatchPlay ? [{ value: 'matchplay' as const, label: 'Knockout' }] : [])]} />}>Competitions</PageTitle>
       {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
         <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`} style={labelEdge(liveHere.colour)}>
@@ -861,11 +861,16 @@ function MatchPlayTab({ m, slug }: { m: Members; slug: string }) {
   const yours = all.filter(e => !finished(e) && entered(e) && !out(e)).sort((a, b) => due(a).localeCompare(due(b)) || byStart(a, b))
   const open = all.filter(e => e.competition?.phase === 'entries' && !entered(e)).sort(byStart)
   const ongoing = all.filter(e => !finished(e) && !yours.includes(e) && !open.includes(e)).sort(byStart)
+  // D345: this year's finished ones are plain "Results"; every earlier year waits behind "Previous years".
+  const [showPrev, setShowPrev] = useState(false)
+  const thisYear = irishToday(new Date()).slice(0, 4)
   const years = new Map<string, ClubEvent[]>()
   for (const e of all.filter(finished).sort((a, b) => (b.endDate ?? b.startDate ?? '').localeCompare(a.endDate ?? a.startDate ?? ''))) {
-    const y = (e.endDate ?? e.startDate ?? '').slice(0, 4) || 'Undated'
+    const y = (e.endDate ?? e.startDate ?? '').slice(0, 4) || thisYear
     years.set(y, [...(years.get(y) ?? []), e])
   }
+  const recent = years.get(thisYear) ?? []
+  const earlier = [...years].filter(([y]) => y !== thisYear)
   const section = (title: string, hint: string | null, list: ClubEvent[], row: (e: ClubEvent) => React.ReactNode) => list.length === 0 ? null : (
     <section className="mt-6" aria-label={title}>
       <h2 className="t-h2 text-ink">{title}</h2>
@@ -874,7 +879,7 @@ function MatchPlayTab({ m, slug }: { m: Members; slug: string }) {
     </section>
   )
   const plain = (e: ClubEvent) => <EventRow key={e.code} e={e} slug={slug} entries={m.entries} tops={{}} partners={m.partners} />
-  if (all.length === 0) return <p className="text-ink/65 text-[15px] mt-6">No match play at this club yet.</p>
+  if (all.length === 0) return <p className="text-ink/65 text-[15px] mt-6">No knockouts at this club yet.</p>
   return (
     <>
       {section('Yours', 'The ones you’re in.', yours, e => {
@@ -894,7 +899,15 @@ function MatchPlayTab({ m, slug }: { m: Members; slug: string }) {
               hint={`Out in the ${x.roundName}${x.opponent ? ` to ${x.opponent}` : ''}${x.result ? `, ${x.result}` : ''}`} />
           : plain(e)
       })}
-      {[...years].map(([year, list]) => section(year === 'Undated' ? 'Results' : `Results ${year}`, null, list, plain))}
+      {section('Results', null, recent, plain)}
+      {earlier.length > 0 && (
+        <div className="mt-6">
+          <button type="button" onClick={() => setShowPrev(v => !v)} aria-expanded={showPrev} className={buttonClass('quiet', false)}>
+            Previous years
+          </button>
+          {showPrev && earlier.map(([year, list]) => section(year, null, list, plain))}
+        </div>
+      )}
       {yours.length + open.length + ongoing.length === 0 && years.size > 0 && (
         <p className="text-ink/65 text-[15px] mt-6">Nothing under way — the finished ones are below.</p>
       )}
