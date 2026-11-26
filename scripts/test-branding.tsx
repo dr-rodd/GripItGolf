@@ -31,6 +31,7 @@ import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 import CountUp from '../app/components/CountUp'
 import { POP_OPEN_MS, POP_CLOSE_MS, POP_SETTLE, POP_BLUR_PX, POP_SHARP_MS, openKeyframes, springAt, springOvershoot } from '../lib/popOut'
+import { REPLY_BACK_MS, backOvershoot } from '../lib/swipeReply'
 
 let passed = 0, failed = 0
 const failures: string[] = []
@@ -1745,6 +1746,15 @@ section('One count-up, one celebration, and never on a board')
   ok(!/cubic-bezier\([^)]*1\.\d/.test(db), '  …and never overshoots')
   ok(/100% \{ transform: scale\(1\); +background-color: color-mix\(in srgb, var\(--color-accent\) 20%/.test(db),
     '  …settling on the quiet tinted disc that is its Reduce Motion version')
+}
+
+section('Swipe to reply (D346): the message’s spring home, the second named spring')
+{
+  ok(REPLY_BACK_MS <= 400, `home inside the 400ms ceiling (${REPLY_BACK_MS}ms) — it answers a finger let go`)
+  ok(backOvershoot() <= 0.08, `a touch past home, never a bounce (${(backOvershoot() * 100).toFixed(1)}%)`)
+  const swipe = read('app/components/feed/SwipeReply.tsx')
+  ok(/reducedMotion\(\)/.test(swipe) && /easing: 'linear'/.test(swipe), '…played linearly from sampled keyframes, and not at all under Reduce Motion')
+  ok(uiFiles().filter(f => /from '@\/lib\/swipeReply'/.test(read(f))).every(f => f === 'app/components/feed/SwipeReply.tsx'), '…and only the stream’s messages swipe this way')
 }
 
 section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out alike')
