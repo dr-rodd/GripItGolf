@@ -12,8 +12,8 @@ import { indexLabel, readIndex } from '@/lib/handicapIndex'
 import { listRowIssue, cleanRow, irishToday } from '@/lib/clubs'
 import { GENDER_WORDS, NOT_GIVEN, birthDateLabel, readBirthDate, type Category, type Gender } from '@/lib/clubMembership'
 
-export const GRANT_FOR: Record<CredentialKey, 'grant_plays_here' | 'grant_officer' | 'grant_clubhouse' | 'grant_owner'> = {
-  playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner',
+export const GRANT_FOR: Record<CredentialKey, 'grant_plays_here' | 'grant_officer' | 'grant_clubhouse' | 'grant_owner' | 'grant_team_captain'> = {
+  playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner', teamCaptain: 'grant_team_captain',
 }
 
 /** A typed index as the server will store it (a plus index negative), or what was there. */

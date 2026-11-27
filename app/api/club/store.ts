@@ -29,7 +29,7 @@ import { SORT_COLUMN, type ListCounts, type SeasonEvent } from '@/lib/clubhouse'
 import { readAllRows } from '@/lib/allRows'
 import { NO_YOURS, type YoursFacts } from '@/lib/clubOverview'
 import { LEGACY_RUNNING_ROLES } from '@/lib/clubMay'
-import { TicksNotReady, asRow, isMissingColumn, missingSet, peopleMissing, peopleOn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
+import { TicksNotReady, asRow, captainMissing, captainOn, isMissingColumn, missingSet, peopleMissing, peopleOn, rowCols, ticksMissing, ticksOn, withTicks, type RowRow } from './rows'
 import { birthRange, cleanDays, entryLine, readEntryRules, type Category, type RowExtras } from '@/lib/clubMembership'
 
 export { asRow, rowCols, withTicks, isMissingColumn, TicksNotReady, type RowRow }
@@ -232,12 +232,13 @@ export async function readListPage(db: Db, clubId: string, o: ListQuery): Promis
     }
     return q.order(SORT_COLUMN[o.sort], { ascending: !o.desc, nullsFirst: false }).order('id').range(o.page * o.size, o.page * o.size + o.size - 1)
   }
-  // Three sets may be missing (092's ticks, 093's invited_at, 094's people): the error says which.
+  // Four sets may be missing (092's ticks, 093's invited_at, 094's people, 108's team captain): the error says which.
   let ticks = ticksOn(), invited = invitedOn(), people = peopleOn()
   let r = await run(ticks, invited, people)
-  for (let i = 0; i < 3 && r.error && isMissingColumn(r.error); i++) {
+  for (let i = 0; i < 4 && r.error && isMissingColumn(r.error); i++) {
     const msg = (r.error as { message?: string }).message ?? ''
     if (invited && /invited_at/.test(msg)) { invited = false; invitedMissingAt = Date.now() }
+    else if (/team_captain/.test(msg) && captainOn()) captainMissing()
     else if (people && missingSet(r.error as { message?: string }) === 'people') { people = false; peopleMissing() }
     else if (ticks) { ticks = false; ticksMissing() }
     else break
@@ -536,7 +537,7 @@ export function clubStore(db: Db): ClubStore {
     async updateRow(id, patch) {
       const { error } = await db.from('club_members').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id)
       if (error?.code === '23505') return 'clash'
-      if (isMissingColumn(error) && ['officer', 'clubhouse', 'category_id', 'gender', 'birth_date'].some(k => k in patch)) throw new TicksNotReady()
+      if (isMissingColumn(error) && ['officer', 'clubhouse', 'team_captain', 'category_id', 'gender', 'birth_date'].some(k => k in patch)) throw new TicksNotReady()
       if (error) throw error
       return 'ok'
     },

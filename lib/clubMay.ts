@@ -18,6 +18,11 @@
 // * **Clubhouse** — admin access to the Clubhouse, the desktop office: the
 //   list, the club's look, and granting Officer. Held with or
 //   without Officer.
+// * **Team captain** (D358, Ross, 27 Nov 2026) — sets up and runs the
+//   club's interclub ties (docs/interclub.md): a tie's event, its players,
+//   the playoff, settling. Its own tick, given by Clubhouse; never implied by
+//   Officer, Clubhouse or Owner. Stored as `club_members.team_captain`
+//   (migration 108), read in its own fail-soft set (`app/api/club/rows.ts`).
 // * **Owner** — whoever set the club up on the platform (Green Dot, or the
 //   club itself until then). Holds Officer and Clubhouse always — never
 //   Plays here by force, an owner may not play — and alone gives Clubhouse
@@ -52,6 +57,8 @@ export interface Credentials {
   playsHere: boolean
   officer: boolean
   clubhouse: boolean
+  /** D358: runs the club's interclub ties. */
+  teamCaptain: boolean
 }
 
 export type CredentialKey = keyof Credentials
@@ -62,6 +69,8 @@ export interface StoredCredentials {
   playsHere?: boolean | null
   officer?: boolean | null
   clubhouse?: boolean | null
+  /** Migration 108 — absent before it, and then nobody is a team captain. */
+  teamCaptain?: boolean | null
 }
 
 /** The roles that meant Officer and Clubhouse before 092 — the stores' fallback read, and nothing else. */
@@ -76,6 +85,7 @@ export function credentialsOf(r: StoredCredentials): Credentials {
     playsHere: r.playsHere ?? true,
     officer: owner || (r.officer ?? legacy),
     clubhouse: owner || (r.clubhouse ?? legacy),
+    teamCaptain: !!r.teamCaptain,
   }
 }
 
@@ -134,6 +144,9 @@ export type ClubAct =
   | 'grant_officer'
   | 'grant_clubhouse'
   | 'grant_owner'
+  /** D358: a team captain — the club's interclub ties. */
+  | 'run_interclub'
+  | 'grant_team_captain'
 
 /** The one answer to "may this account do this, at this club". */
 export function clubMay(act: ClubAct, a: Asker): boolean {
@@ -143,6 +156,8 @@ export function clubMay(act: ClubAct, a: Asker): boolean {
     case 'see_members_home': return !!r
     case 'play': return !!r?.playsHere
     case 'run_events': return !!r?.officer
+    // A team captain's own work, never staff's — as an Officer's on-the-day work is not.
+    case 'run_interclub': return !!r?.teamCaptain
     case 'post_club_stream': return staff || !!r?.officer || !!r?.clubhouse
     case 'open_clubhouse':
     case 'keep_calendar':
@@ -151,6 +166,7 @@ export function clubMay(act: ClubAct, a: Asker): boolean {
     case 'set_look':
     case 'grant_plays_here':
     case 'grant_officer':
+    case 'grant_team_captain':
       return staff || !!r?.clubhouse
     case 'grant_clubhouse':
     case 'grant_owner':
@@ -163,6 +179,7 @@ const GRANT: Record<CredentialKey, ClubAct> = {
   officer: 'grant_officer',
   clubhouse: 'grant_clubhouse',
   owner: 'grant_owner',
+  teamCaptain: 'grant_team_captain',
 }
 
 export const LAST_OWNER = 'A club always has an owner. Make somebody else an owner first.'
@@ -208,13 +225,17 @@ export function removeIssue(asker: Asker, target: { credentials: Credentials; re
 /** The ticks as a screen names and explains them, in their order. */
 export const CREDENTIAL_WORDS: { key: CredentialKey; label: string; line: string }[] = [
   { key: 'officer', label: 'Officer', line: 'Runs competitions on the phone: tee times, cards, results.' },
+  { key: 'teamCaptain', label: 'Team captain', line: 'Sets up and runs the club’s interclub matches.' },
   { key: 'clubhouse', label: 'Clubhouse', line: 'Admin access to the Clubhouse: the list, the look, and giving Officer.' },
   { key: 'owner', label: 'Owner', line: 'Holds Officer and Clubhouse. Only an owner gives Clubhouse or makes owners.' },
 ]
 
 /** What a row holds, said short — never a bare "member" (D133). */
 export function credentialLine(c: Credentials, clubName: string): string {
-  const held = c.owner ? ['Owner'] : [c.clubhouse ? 'Clubhouse' : null, c.officer ? 'Officer' : null].filter((x): x is string => !!x)
+  const held = [
+    ...(c.owner ? ['Owner'] : [c.clubhouse ? 'Clubhouse' : null, c.officer ? 'Officer' : null]),
+    c.teamCaptain ? 'Team captain' : null,
+  ].filter((x): x is string => !!x)
   const base = held.length ? held.join(' · ') : `${clubName} member`
   return c.playsHere ? base : `${base} · Doesn’t play here`
 }

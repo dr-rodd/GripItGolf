@@ -92,7 +92,7 @@ export async function runSeed(db: Db, club: { id: string; slug: string; name: st
     for (const s of steps) if (s.error) throw new Error(`${c.name}: ${s.error.message}`)
     await setIndex(handicapStore(db), { userId }, c.handicap, userId, 'me')
 
-    const credentials = { owner: false, playsHere: true, officer: !!c.officer, clubhouse: !!c.clubhouse }
+    const credentials = { owner: false, playsHere: true, officer: !!c.officer, clubhouse: !!c.clubhouse, teamCaptain: false }
     const row = {
       club_id: club.id, name: c.name, email, user_id: userId, member_number: memberNumber(i),
       category_id: cats.get(c.membership) ?? null, gender: c.gender, birth_date: c.birthDate,

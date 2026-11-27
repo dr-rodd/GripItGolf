@@ -104,7 +104,7 @@ export interface ClubhouseStore {
 
 type Store = ClubStore & ClubhouseStore
 
-const NONE: Credentials = { owner: false, playsHere: false, officer: false, clubhouse: false }
+const NONE: Credentials = { owner: false, playsHere: false, officer: false, clubhouse: false, teamCaptain: false }
 const fail = (status: 400 | 401 | 403 | 404 | 409 | 429 | 503, error: string): ClubOutcome => ({ status, body: { ok: false, error } })
 const str = (v: unknown): string => (typeof v === 'string' ? v : '')
 
@@ -527,13 +527,15 @@ export async function runClubhouse(
         if (op === 'tick') {
           const key = str(input.key) as CredentialKey
           if (key === 'playsHere') return fail(409, PLAYS_FOLLOWS_MEMBERSHIP)
-          if (!['officer', 'clubhouse'].includes(key) || typeof input.value !== 'boolean') return fail(400, 'Which tick?')
+          if (!['officer', 'clubhouse', 'teamCaptain'].includes(key) || typeof input.value !== 'boolean') return fail(400, 'Which tick?')
           const change = { [key]: input.value } as Partial<Credentials>
           const why = credentialChangeIssue(asker, { credentials: before, removed: !!target.removedAt }, change, owners)
           if (why) { failed.push({ name: target.name, why }); continue }
           const next = withChange(before, change)
           if (next[key] === before[key]) { done++; continue }
-          await store.updateRow(target.id, { officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
+          await store.updateRow(target.id, key === 'teamCaptain'
+            ? { team_captain: next.teamCaptain }
+            : { officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
           lines.push(line('credentials', target, { [key]: [before[key], next[key]] }, batchId))
           done++
         } else if (op === 'remove') {

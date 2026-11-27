@@ -26,7 +26,7 @@ const blankRow = { name: '', memberNumber: '', guiNumber: '', email: '' }
 
 /** Which grant each tick needs (lib/clubMay.ts), for drawing it greyed with why. */
 const GRANT_FOR: Record<CredentialKey, ClubAct> = {
-  playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner',
+  playsHere: 'grant_plays_here', officer: 'grant_officer', clubhouse: 'grant_clubhouse', owner: 'grant_owner', teamCaptain: 'grant_team_captain',
 }
 
 /**

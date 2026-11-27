@@ -120,10 +120,20 @@ function ruleTests() {
   eq(nextSlug('lahinch', ['lahinch', 'lahinch-2']), 'lahinch-3', 'a name already taken gets a number')
 
   section('Credentials as ticks: lib/clubMay.ts (D208, D219, D220)')
-  const C = (o: Partial<Credentials> = {}): Credentials => ({ owner: false, playsHere: true, officer: false, clubhouse: false, ...o })
+  const C = (o: Partial<Credentials> = {}): Credentials => ({ owner: false, playsHere: true, officer: false, clubhouse: false, teamCaptain: false, ...o })
   const owner = C({ owner: true, officer: true, clubhouse: true }), office = C({ clubhouse: true, playsHere: false })
   const officer = C({ officer: true }), both = C({ officer: true, clubhouse: true }), plain0 = C()
   eq(credentialsOf({ role: 'owner' }), owner, 'before 092: an owner holds everything but is never forced to play… (plays here by default)')
+  // D358: the team captain — its own tick, given by Clubhouse, never implied.
+  const captain = C({ teamCaptain: true })
+  ok(clubMay('run_interclub', { row: captain }) && !clubMay('run_interclub', { row: owner }) && !clubMay('run_interclub', { row: both })
+    && !clubMay('run_interclub', { row: null, staff: true }), 'only a team captain runs interclub — not an owner, an Officer with Clubhouse, or staff')
+  ok(clubMay('grant_team_captain', { row: office }) && clubMay('grant_team_captain', { row: null, staff: true }) && !clubMay('grant_team_captain', { row: officer }),
+    'Clubhouse and staff give it; an Officer does not')
+  eq([credentialsOf({ role: 'member' }).teamCaptain, credentialsOf({ role: 'admin', teamCaptain: true }).teamCaptain], [false, true], 'read off its own column, nobody before 108')
+  eq(credentialChangeIssue({ row: officer }, { credentials: plain0, removed: false }, { teamCaptain: true }, 1), 'Only someone with Clubhouse changes these ticks.', 'an Officer cannot make a captain')
+  eq(credentialChangeIssue({ row: office }, { credentials: plain0, removed: false }, { teamCaptain: true }, 1), null, 'Clubhouse can')
+  eq(credentialLine(C({ officer: true, teamCaptain: true }), 'Pints'), 'Officer · Team captain', 'said beside the others')
   eq(credentialsOf({ role: 'admin' }), both, '…today’s admins are Officer and Clubhouse')
   eq(credentialsOf({ role: 'member' }), plain0, '…and members Plays here alone')
   eq(credentialsOf({ role: 'owner', officer: false, clubhouse: false, playsHere: false }), C({ owner: true, officer: true, clubhouse: true, playsHere: false }),
@@ -2148,7 +2158,7 @@ async function clubhouseTests() {
   eq([clubhouseHref('pints'), clubhouseHref('pints', 'members'), sectionAt('/clubhouse/pints/members', 'pints'), sectionAt('/clubhouse/pints', 'pints')],
     ['/clubhouse/pints', '/clubhouse/pints/members', 'members', 'overview'], 'the sections’ addresses')
   const csv = listCsv([{ id: '1', name: '=HYPERLINK("x")', email: 'a@b.ie', memberNumber: '12', guiNumber: '3110002', handicapIndex: -1.5,
-    credentials: { owner: false, playsHere: true, officer: true, clubhouse: false }, linked: true, removed: false, invitedAt: null, onBoards: true, gender: 'M', birthDate: '1980-04-03', categoryId: null }])
+    credentials: { owner: false, playsHere: true, officer: true, clubhouse: false, teamCaptain: false }, linked: true, removed: false, invitedAt: null, onBoards: true, gender: 'M', birthDate: '1980-04-03', categoryId: null }])
   ok(csv.startsWith('Name,Email,Member number,GUI number,Gender,Date of birth,Category,Handicap index,Standing,Officer,Clubhouse\r\n') && csv.includes(`"'=HYPERLINK(""x"")"`) && csv.includes('3110002') && csv.includes(',+1.5,'),
     'the download: headed for pasting back, numbers whole, a plus index as +, a formula defused')
   const pasted = parseMemberList(csv)

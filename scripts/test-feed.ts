@@ -922,8 +922,8 @@ function wiringTests() {
     eq(announcement({ title: 'AGM', startTime: '19:30', endTime: null, notes: 'Bring your card.' }, 'Fri 5 Dec', 'Clubhouse bar'),
       { title: 'AGM', text: 'Fri 5 Dec, From 7:30 pm · Clubhouse bar\n\nBring your card.' }, 'an event’s post: when and where on a line, then its notes')
     ok(!mayAnnounce({ visibility: 'office' }) && mayAnnounce({ visibility: 'members' }), 'an Office only event is never broadcast')
-    ok(clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: true, clubhouse: false } }) && clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: true } })
-      && !clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: false } }), 'Officers and Clubhouse holders post; a member does not')
+    ok(clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: true, clubhouse: false, teamCaptain: false } }) && clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: true, teamCaptain: false } })
+      && !clubMay('post_club_stream', { row: { owner: false, playsHere: true, officer: false, clubhouse: false, teamCaptain: false } }), 'Officers and Clubhouse holders post; a member does not')
   }
 
   section('Wiring: comments, the dot, reports (D301, D303, D307)')

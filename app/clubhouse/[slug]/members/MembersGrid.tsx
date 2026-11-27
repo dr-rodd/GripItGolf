@@ -27,6 +27,8 @@ const FIELDS: Field[] = ['name', 'email', 'memberNumber', 'guiNumber', 'handicap
 const TAB_ORDER: Field[] = [...FIELDS, 'birthDate']
 const TICKS: { key: CredentialKey; label: string }[] = [
   { key: 'officer', label: 'Officer' }, { key: 'clubhouse', label: 'Clubhouse' },
+  // D358: runs the club's interclub ties.
+  { key: 'teamCaptain', label: 'Captain' },
 ]
 const SORTABLE: Partial<Record<Field, ListSort>> = { name: 'name', email: 'email', memberNumber: 'memberNumber', guiNumber: 'guiNumber' }
 const HEAD: Record<Field, string> = { name: 'Name', email: 'Email', memberNumber: 'Member no.', guiNumber: 'GUI no.', handicapIndex: 'Index', birthDate: 'Born' }
@@ -591,6 +593,8 @@ export default function MembersGrid() {
               <>
                 <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'officer', value: true }, 'Made Officers.')} className={`${buttonClass('secondary', false)} ch-focus`}>Make Officer</button>
                 <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'officer', value: false }, 'Officer taken away.')} className={`${buttonClass('quiet', false)} ch-focus`}>Not Officer</button>
+                <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'teamCaptain', value: true }, 'Made team captains.')} className={`${buttonClass('secondary', false)} ch-focus`}>Make team captain</button>
+                <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'teamCaptain', value: false }, 'Team captain taken away.')} className={`${buttonClass('quiet', false)} ch-focus`}>Not team captain</button>
                 {may('grant_clubhouse') && <button type="button" disabled={busy} onClick={() => void bulk('tick', { key: 'clubhouse', value: true }, 'Given Clubhouse.')} className={`${buttonClass('quiet', false)} ch-focus`}>Give Clubhouse</button>}
                 <button type="button" disabled={busy} onClick={() => void bulk('invite', {}, 'Codes sent.')} className={`${buttonClass('quiet', false)} ch-focus`}>Email codes</button>
                 {filter === 'off'

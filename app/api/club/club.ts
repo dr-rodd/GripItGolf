@@ -78,6 +78,8 @@ export interface MemberRecord {
   playsHere?: boolean
   officer?: boolean
   clubhouse?: boolean
+  /** Migration 108's team captain tick (D358) — absent before it, and nobody is one. */
+  teamCaptain?: boolean
   /** Migration 094: the row's membership, and the person's gender and date of birth (the account's, copied; or the row's own). */
   categoryId?: string | null
   gender?: Gender | null
@@ -87,7 +89,7 @@ export interface MemberRecord {
 export type RowPatch = Partial<{
   name: string; member_number: string | null; gui_number: string | null; email: string | null
   role: ClubRole; user_id: string | null; linked_at: string | null; removed_at: string | null; on_boards: boolean
-  officer: boolean; clubhouse: boolean
+  officer: boolean; clubhouse: boolean; team_captain: boolean
   category_id: string | null; gender: Gender | null; birth_date: string | null
 }>
 
@@ -319,6 +321,7 @@ const TOO_MANY = 'Too many tries — wait a few minutes and try again.'
 const NOT_ON = 'Only someone with Clubhouse keeps the club’s list.'
 const NOT_LOOK = 'Only someone with Clubhouse changes the club’s look.'
 const TICKS_LATER = 'The ticks aren’t set up yet — try again later.'
+const CAPTAIN_LATER = 'Team captain isn’t set up yet — try again later.'
 const PEOPLE_LATER = 'Memberships, genders and dates of birth aren’t set up yet — try again later.'
 
 /**
@@ -387,7 +390,7 @@ function askerOf(row: MemberRecord | null | undefined): Asker {
 }
 
 /** What somebody holds who is on no row here — Green Dot staff, at a club not theirs. */
-const NO_CREDENTIALS: Credentials = { owner: false, playsHere: false, officer: false, clubhouse: false }
+const NO_CREDENTIALS: Credentials = { owner: false, playsHere: false, officer: false, clubhouse: false, teamCaptain: false }
 
 const may = (act: ClubAct, row: MemberRecord | null | undefined) => clubMay(act, askerOf(row))
 
@@ -402,7 +405,7 @@ function loggable(r: MemberRecord): Record<string, unknown> {
   const c = credentialsOf(r)
   return {
     name: r.name, memberNumber: maskNumber(r.memberNumber), guiNumber: maskNumber(r.guiNumber), email: r.email,
-    onBoards: r.onBoards, playsHere: c.playsHere, officer: c.officer, clubhouse: c.clubhouse, owner: c.owner,
+    onBoards: r.onBoards, playsHere: c.playsHere, officer: c.officer, clubhouse: c.clubhouse, owner: c.owner, teamCaptain: c.teamCaptain,
     // Stage (m): the log keeps that the gender or date of birth changed, never what it was.
     gender: r.gender ? 'set' : null, birthDate: r.birthDate ? 'set' : null, categoryId: r.categoryId ?? null,
   }
@@ -755,7 +758,7 @@ export async function runClub(
     // The ticks (D219, D220): each one given or taken by whoever clubMay says.
     const change: Partial<Credentials> = {}
     if (input.playsHere !== undefined) return fail(409, PLAYS_FOLLOWS_MEMBERSHIP)
-    for (const k of ['officer', 'clubhouse', 'owner'] as CredentialKey[]) {
+    for (const k of ['officer', 'clubhouse', 'owner', 'teamCaptain'] as CredentialKey[]) {
       if (input[k] === undefined) continue
       if (typeof input[k] !== 'boolean') return fail(400, 'A tick is on or off.')
       change[k] = input[k] as boolean
@@ -768,6 +771,8 @@ export async function runClub(
       if (next.officer !== before.officer || next.clubhouse !== before.clubhouse || next.owner !== before.owner) {
         Object.assign(patch, { officer: next.officer, clubhouse: next.clubhouse, role: storedRole(next) })
       }
+      // D358: the team captain tick stands apart from the role the code before 092 reads.
+      if (next.teamCaptain !== before.teamCaptain) patch.team_captain = next.teamCaptain
     }
     if (typeof input.onBoards === 'boolean') patch.on_boards = input.onBoards
     // Stage (m): the row's membership, and the person's gender and date of
@@ -816,7 +821,7 @@ export async function runClub(
       try {
         if ((await store.updateRow(target.id, patch)) === 'clash') return fail(409, 'That number is already another person’s on the list.')
       } catch (e) {
-        if ((e as Error)?.name === 'TicksNotReady') return fail(503, patch.category_id !== undefined ? PEOPLE_LATER : TICKS_LATER)
+        if ((e as Error)?.name === 'TicksNotReady') return fail(503, patch.category_id !== undefined ? PEOPLE_LATER : patch.team_captain !== undefined ? CAPTAIN_LATER : TICKS_LATER)
         throw e
       }
     }
@@ -828,12 +833,13 @@ export async function runClub(
       ...(patch.email !== undefined ? { email: patch.email } : {}),
       ...(patch.on_boards !== undefined ? { onBoards: patch.on_boards } : {}),
       ...(patch.role !== undefined ? { role: patch.role, officer: patch.officer, clubhouse: patch.clubhouse } : {}),
+      ...(patch.team_captain !== undefined ? { teamCaptain: patch.team_captain } : {}),
       ...(patch.category_id !== undefined ? { categoryId: patch.category_id } : {}),
       ...(details.gender !== undefined ? { gender: details.gender } : {}),
       ...(details.birthDate !== undefined ? { birthDate: details.birthDate } : {}),
     }
     const changes = diff(loggable(target), loggable(after))
-    if (Object.keys(changes).length) await logged(store, [line(patch.role !== undefined ? 'credentials' : 'row.update', target, changes)])
+    if (Object.keys(changes).length) await logged(store, [line(patch.role !== undefined || patch.team_captain !== undefined ? 'credentials' : 'row.update', target, changes)])
     if (slim) return { status: 200, body: { ok: true, club: me } }
     return await fresh()
   }

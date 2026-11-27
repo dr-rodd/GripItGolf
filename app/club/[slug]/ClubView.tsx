@@ -52,7 +52,7 @@ export interface ClubFace {
 type Members = ClubMembers
 
 /** A home kept before credentials were (stage (k0)): read as holding nothing. */
-const NOTHING_HELD: Credentials = { owner: false, playsHere: true, officer: false, clubhouse: false }
+const NOTHING_HELD: Credentials = { owner: false, playsHere: true, officer: false, clubhouse: false, teamCaptain: false }
 
 const KIND: Record<ClubEvent['kind'], string> = { trip: 'Trip', tournament: 'Event', run: 'Challenge' }
 

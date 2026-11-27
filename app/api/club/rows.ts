@@ -14,12 +14,18 @@ const BASE_ROW_COLS = 'id, club_id, name, member_number, gui_number, email, role
 // dropped without a deploy reading it.
 const TICK_COLS = 'officer, clubhouse'
 const PEOPLE_COLS = 'category_id, gender, birth_date, category:club_categories(days)'
+// D358: the team captain tick (migration 108), its own set — named only beside
+// 092's ticks, and dropped on its own while 108 is not in, so a deploy before
+// the paste never reads anybody's Officer tick off their role.
+const CAPTAIN_COLS = 'team_captain'
 
 export type RowRow = {
   id: string; club_id: string; name: string; member_number: string | null; gui_number: string | null
   email: string | null; role: ClubRole; user_id: string | null; removed_at: string | null; on_boards: boolean
   /** Migration 092's ticks — absent before it. */
   plays_here?: boolean; officer?: boolean; clubhouse?: boolean
+  /** Migration 108's team captain tick — absent before it. */
+  team_captain?: boolean
   /** Migration 094's membership and the person's gender and date of birth — absent before it. */
   category_id?: string | null; gender?: 'M' | 'F' | null; birth_date?: string | null
   /** The row's membership's playing days, read beside it (D275). */
@@ -37,6 +43,7 @@ export type RowRow = {
  */
 let ticksMissingAt = 0
 let peopleMissingAt = 0
+let captainMissingAt = 0
 export function isMissingColumn(e: { code?: string } | null | undefined): boolean {
   // PGRST200: an embed whose table is not there yet (094's club_categories).
   return !!e && (e.code === '42703' || e.code === 'PGRST204' || e.code === 'PGRST200')
@@ -45,8 +52,16 @@ export function isMissingColumn(e: { code?: string } | null | undefined): boolea
 export function peopleOn(): boolean {
   return Date.now() - peopleMissingAt > 60_000
 }
-export function rowCols(ticks: boolean, people = peopleOn()): string {
-  return `${BASE_ROW_COLS}${ticks ? `, ${TICK_COLS}` : ''}${people ? `, ${PEOPLE_COLS}` : ''}`
+export function rowCols(ticks: boolean, people = peopleOn(), captain = captainOn()): string {
+  return `${BASE_ROW_COLS}${ticks ? `, ${TICK_COLS}${captain ? `, ${CAPTAIN_COLS}` : ''}` : ''}${people ? `, ${PEOPLE_COLS}` : ''}`
+}
+/** Whether to name 108's team captain column now. */
+export function captainOn(): boolean {
+  return Date.now() - captainMissingAt > 60_000
+}
+/** 108's column was found missing: nobody is a team captain for a minute. */
+export function captainMissing() {
+  captainMissingAt = Date.now()
 }
 /** Whether to name the tick columns now. */
 export function ticksOn(): boolean {
@@ -60,16 +75,19 @@ export function ticksMissing() {
 export function peopleMissing() {
   peopleMissingAt = Date.now()
 }
-/** Which set a missing-column error names: 094's, or else 092's. */
-export function missingSet(e: { message?: string } | null | undefined): 'people' | 'ticks' {
-  return /category_id|gender|birth_date|club_categories/.test(e?.message ?? '') ? 'people' : 'ticks'
+/** Which set a missing-column error names: 108's, 094's, or else 092's. */
+export function missingSet(e: { message?: string } | null | undefined): 'captain' | 'people' | 'ticks' {
+  const m = e?.message ?? ''
+  return /team_captain/.test(m) ? 'captain' : /category_id|gender|birth_date|club_categories/.test(m) ? 'people' : 'ticks'
 }
 
 export async function withTicks<R extends { error: { code?: string; message?: string } | null }>(run: (ticks: boolean) => PromiseLike<R>): Promise<R> {
   let ticks = ticksOn()
   let r = await run(ticks)
-  for (let i = 0; i < 2 && isMissingColumn(r.error); i++) {
-    if (missingSet(r.error) === 'people' && peopleOn()) peopleMissing()
+  for (let i = 0; i < 3 && isMissingColumn(r.error); i++) {
+    const set = missingSet(r.error)
+    if (set === 'captain' && captainOn()) captainMissing()
+    else if (set === 'people' && peopleOn()) peopleMissing()
     else if (ticks) { ticksMissing(); ticks = false }
     else break
     r = await run(ticks)
@@ -86,6 +104,7 @@ export const asRow = (r: RowRow): MemberRecord => ({
   id: r.id, clubId: r.club_id, name: r.name, memberNumber: r.member_number, guiNumber: r.gui_number,
   email: r.email, role: r.role, userId: r.user_id, removedAt: r.removed_at, onBoards: r.on_boards,
   ...(typeof r.officer === 'boolean' ? { officer: r.officer, clubhouse: !!r.clubhouse } : {}),
+  ...(typeof r.team_captain === 'boolean' ? { teamCaptain: r.team_captain } : {}),
   ...('category_id' in r ? { categoryId: r.category_id ?? null, gender: r.gender ?? null, birthDate: r.birth_date ?? null } : {}),
   playsHere: playsOf(r),
 })
