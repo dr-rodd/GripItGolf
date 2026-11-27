@@ -39,6 +39,15 @@ export type BracketMatchRow = {
   result: string | null
   next_match_id: string | null
   next_slot: 'A' | 'B' | null
+  /**
+   * A draw read from elsewhere (an interclub draw, lib/interclub.ts): each
+   * side's score as the draw wrote it — "2½", "6 holes", "W/O" — shown in
+   * place of the handicap, and which side was at home. Absent on every
+   * Green Dot draw, which reads exactly as before.
+   */
+  score_a?: string | null
+  score_b?: string | null
+  home?: 'A' | 'B' | null
 }
 
 /**
@@ -91,8 +100,14 @@ function bracketHeight(rounds: (BracketMatchRow | null)[][], position: number): 
 
 export default function MatchplayBracket({
   matches: initialMatches, entrants, readings = [], deadlines = [], today = '', lock = null, details = {},
-  scoring = null,
+  scoring = null, readOnly = false,
 }: {
+  /**
+   * Nothing to change: a draw read from elsewhere (an interclub draw). No
+   * tap or hold on a tile does anything and the bracket writes nothing —
+   * it is only swiped.
+   */
+  readOnly?: boolean
   /**
    * Who goes straight to a match's card to score it (Ross, 10 Nov 2026: "in
    * the bracket, anyone who can edit the match, incl. admin, should go
@@ -189,7 +204,7 @@ export default function MatchplayBracket({
    */
   const applied = useRef(false)
   useEffect(() => {
-    if (applied.current || readings.length === 0) return
+    if (readOnly || applied.current || readings.length === 0) return
     const pending = pendingResults(matches as never, readingFor)
     if (pending.length === 0) return
     applied.current = true
@@ -205,7 +220,7 @@ export default function MatchplayBracket({
       }
     })()
     return () => { live = false }
-  }, [matches, readingFor, readings.length])
+  }, [matches, readingFor, readings.length, readOnly])
 
   const playerById = useMemo(
     () => new Map(entrants.map(e => [e.id, e])),
@@ -656,6 +671,7 @@ export default function MatchplayBracket({
               x={x}
               y={tileTop(j, slot, PITCH) + lift}
               faded={slot < -0.05 || slot > 1.05}
+              readOnly={readOnly}
               onOpen={correcting => setSheet({ match, correcting })}
               onView={details[match.id] ? () => setViewing(match) : undefined}
               onScore={(() => { const href = scoreHref(match); return href ? () => setGoing(href) : undefined })()}
@@ -680,9 +696,11 @@ export default function MatchplayBracket({
       </div>
 
       <p className="text-ink/50 text-[13px] text-center mt-4">
-        {scoring && (organiser || scoring.anyoneScores || scoring.mine.length > 0)
-          ? 'Tap a match to score it · hold one to record or change its result'
-          : 'Swipe to move between rounds · hold a finished match to change it'}
+        {readOnly
+          ? 'Swipe to move between rounds'
+          : scoring && (organiser || scoring.anyoneScores || scoring.mine.length > 0)
+            ? 'Tap a match to score it · hold one to record or change its result'
+            : 'Swipe to move between rounds · hold a finished match to change it'}
       </p>
 
       {going && <Navigate href={going} onGone={() => setGoing(null)} />}
@@ -774,8 +792,9 @@ function TileNote({ reading, decided }: { reading: MatchReading | null; decided:
 }
 
 function MatchTile({
-  match, reading, playerById, x, y, faded, onOpen, onView, onScore,
+  match, reading, playerById, x, y, faded, onOpen, onView, onScore, readOnly = false,
 }: {
+  readOnly?: boolean
   /** This phone may score the match: a tap goes straight to its card. */
   onScore?: () => void
   /** The match has a card: a tap opens it to read. */
@@ -803,7 +822,7 @@ function MatchTile({
   const winnerColour = match.winner_player_id === match.player_a_id ? colours.A : colours.B
   // Byes are genuinely inert: there is no decision to make, so no handler is
   // attached at all rather than a handler that declines to act.
-  const interactive = isDecidable(match)
+  const interactive = !readOnly && isDecidable(match)
 
   const press = useRef<{ x: number; y: number; at: number; moved: boolean; fired: boolean } | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -959,6 +978,8 @@ function MatchTile({
           isLoser={decided && !!match.player_a_id && match.winner_player_id !== match.player_a_id}
           isChampion={isChampion && match.winner_player_id === match.player_a_id}
           result={match.result}
+          score={match.score_a}
+          home={match.home === 'A'}
           playerById={playerById}
           colour={colours.A}
           onChampion={isChampion ? winnerColour : null}
@@ -972,6 +993,8 @@ function MatchTile({
           isLoser={decided && !!match.player_b_id && match.winner_player_id !== match.player_b_id}
           isChampion={isChampion && match.winner_player_id === match.player_b_id}
           result={match.result}
+          score={match.score_b}
+          home={match.home === 'B'}
           playerById={playerById}
           colour={colours.B}
           onChampion={isChampion ? winnerColour : null}
@@ -1006,8 +1029,12 @@ function MatchTile({
 }
 
 function Side({
-  playerId, isBye, seed, isWinner, isLoser, isChampion, result, playerById, colour, onChampion,
+  playerId, isBye, seed, isWinner, isLoser, isChampion, result, playerById, colour, onChampion, score, home = false,
 }: {
+  /** A draw read from elsewhere: this side's score as written, in the handicap's place. Undefined on a Green Dot draw. */
+  score?: string | null
+  /** At home in this match — a small H after the name. */
+  home?: boolean
   playerId: string | null
   isBye: boolean
   seed: number | null
@@ -1061,9 +1088,17 @@ function Side({
             {shortName}
           </span>
 
+          {home && (
+            <span className="flex-shrink-0 text-[11px] font-semibold text-ink/50" style={ink} title="At home">H</span>
+          )}
+
           {/* The margin replaces the handicap once a match is won — by then
               the score is the thing worth knowing */}
-          {isWinner && result ? (
+          {score !== undefined ? (
+            <span className={`flex-shrink-0 text-[12px] tabular-nums ${isWinner || isChampion ? 'font-semibold text-ink' : 'text-ink/65'}`} style={ink}>
+              {score ?? ''}
+            </span>
+          ) : isWinner && result ? (
             <span className="flex-shrink-0 text-[12px] font-semibold tabular-nums text-ink" style={ink}>
               {result}
             </span>

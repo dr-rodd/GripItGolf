@@ -432,6 +432,10 @@ the account's index (players' `handicap` today).
 
 ## Interclub match play (Ross, 18 Nov 2026) — named, not built
 
+**Taken up 27 Nov 2026 as `docs/interclub.md`** — Golf Ireland's inter-club
+competitions; stage 1, the public national draws, is built. The note below
+is kept as it was written.
+
 A club's match play keeps every match on its own home course. A match play
 between clubs — a team from one club against a team from another, home and
 away legs, or a pennant-style league of clubs — is a different competition

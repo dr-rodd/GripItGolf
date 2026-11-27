@@ -1225,7 +1225,8 @@ section('The privacy notice and the terms — one for the whole site — say wha
   const links = draw(<LegalLinks />)
   ok(links.includes('href="/privacy"') && links.includes('href="/terms"'), 'the links line points at both')
   for (const door of ['app/Landing.tsx', 'app/join/JoinForm.tsx', 'app/golf/page.tsx', 'app/create/page.tsx',
-    'app/golf/[root]/[tripCode]/page.tsx', 'app/run/[tripCode]/page.tsx']) {
+    'app/golf/[root]/[tripCode]/page.tsx', 'app/run/[tripCode]/page.tsx',
+    'app/interclub/page.tsx', 'app/interclub/[province]/[slug]/page.tsx']) {
     const src = stripComments(read(door))
     ok(src.includes("import LegalLinks from '@/app/components/LegalLinks'") && src.includes('<LegalLinks'),
       `  …carried by ${door}`)
