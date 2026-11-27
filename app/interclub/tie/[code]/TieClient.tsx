@@ -78,7 +78,7 @@ export default function TieClient({ code }: { code: string }) {
       </PageTitle>
 
       <section className={`${cardClass()} p-5`}>
-        <p className="font-serif t-data text-ink text-[22px]">{tie.outcome.line}</p>
+        <p className="font-serif font-bold text-ink text-[22px] leading-snug">{tie.outcome.line}</p>
         {tie.settled?.note && <p className="t-cap text-ink/65 mt-1">{tie.settled.note} — {tie.settled.byName}</p>}
         <div className="mt-4 flex flex-wrap gap-2">
           <a href={`/${tie.code}`} className={buttonClass('primary', false)}>Open the match</a>
@@ -171,13 +171,13 @@ function SidePlayers({ side, tie, busy, act }: { side: Side; tie: TieView; busy:
             <div key={p.id} className="flex items-center gap-3 px-4 min-h-14">
               <span className="flex-1 min-w-0 truncate t-label text-ink">{p.name}</span>
               {may ? (
-                <input
+                <div className="w-24 flex-shrink-0"><input
                   aria-label={`${p.name}’s index`}
-                  className={`${FIELD} w-24 text-right`}
+                  className={`${FIELD} text-right`}
                   defaultValue={p.index === null ? '' : indexText(p.index)}
                   placeholder="Index"
                   onBlur={e => { const v = e.target.value.trim(); if (v !== (p.index === null ? '' : indexText(p.index))) void act({ action: 'player.update', playerId: p.id, index: v || null }) }}
-                />
+                /></div>
               ) : (
                 <span className="font-serif t-data text-ink/80">{indexText(p.index)}</span>
               )}

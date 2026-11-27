@@ -90,7 +90,7 @@ play-by date and notes under it. Read through Next's fetch cache and the
 pages regenerated every 15 minutes (`app/interclub/source.ts`). Nothing
 stored, no migration.
 
-**Stage 2 — a tie as an event** (as agreed 27 Nov 2026, D358–D362). A
+**Stage 2 — a tie as an event** (as agreed 27 Nov 2026, D358–D362; **built with stage 3's settling, playoff and holes beside**, migration 108 — `lib/interclubTie.ts`, `/api/interclub`, `/interclub/tie/<code>`; not yet: the holes beside on the event's own leaderboard, which shows matches only). A
 team captain whose club is in a match on the draw taps **Set up this match**
 (the club matched to the draw's spelling — `sameClub`, or the name the club
 gives itself for the draws). That makes an event which is the Ryder Cup
@@ -120,7 +120,7 @@ role), so no row-level security changes; scorers write the match cards as
 any member of an event already does. One migration: the credential, the
 club's name in the draws, and the table linking a draw match to its event.
 
-**Stage 3 — the club's side.** A Green Dot club matched to the names in the
+**Stage 3 — the club's side** (the team captain's credential, the club's name in the draws and a captain's ties on `/interclub` built with stage 2; the members app's view still to come). A Green Dot club matched to the names in the
 draws (a club's own setting, since the draws spell names a dozen ways); its
 teams, next tie and results in the members app (D357); the tie's event one
 tap away. The match stream (D326, D332) comes alive with the club's ties.
