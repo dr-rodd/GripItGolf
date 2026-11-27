@@ -428,3 +428,44 @@ export function readMargin(v: unknown): string | null | undefined {
   const t = v.trim().toLowerCase().replace(/\s*&\s*/, '&').replace(/\s+/g, ' ')
   return MARGINS.find(m => m === t)
 }
+
+// ─── A tie as the stream reads it (D363) — the shapes /api/interclub `live` answers ───
+
+/** A hole as the match sheet draws it: who won it, and whether by a mark. */
+export type LiveHole = { n: number; w: 'a' | 'b' | 'h' | null; marked: boolean }
+
+/** One match of a live tie. */
+export type LiveMatch = {
+  slot: number
+  playoff: boolean
+  /** Its session's round — the card's address. */
+  roundId: string
+  a: string | null
+  b: string | null
+  result: 'a' | 'b' | 'halved' | null
+  margin: string | null
+  line: string
+  leader: 'a' | 'b' | null
+  live: boolean
+  holes: LiveHole[]
+  /** The next hole to mark, or null once it is settled or every hole is in. */
+  next: number | null
+  /** Who won it, as the holes stand, ready to be finalised — null until they settle it. */
+  settled: { result: 'a' | 'b' | 'halved'; margin: string } | null
+}
+
+export type LiveTie = {
+  id: string; code: string; competition: string
+  names: { a: string; b: string }
+  colours: { a: string; b: string }
+  /** The viewer's club's side, where they are on one. */
+  mine: 'a' | 'b' | null
+  score: { a: string; b: string }
+  line: string
+  state: string
+  live: boolean
+  date: string | null
+  /** Whether this account may mark holes and give results — on either club's list. */
+  may: boolean
+  matches: LiveMatch[]
+}

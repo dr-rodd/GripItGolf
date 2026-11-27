@@ -99,7 +99,7 @@ function ruleTests() {
   eq(pillsFor(all, { here: null, compLive: false }).map(s => s.kind), ['comp', 'match'], 'a club’s stream shows only inside that club’s area (D294)')
   eq(pillsFor(all, { here: 'c1', compLive: false }).map(s => s.kind), ['club', 'comp', 'match'], '…where it leads')
   eq(pillsFor(all, { here: 'c1', compLive: true }).map(s => s.kind), ['comp', 'club', 'match'], 'a live comp leads (D295)')
-  eq(['club', 'comp', 'match', 'friends'].map(k => streamWord(k as StreamKind)), ['club', 'comp', 'match', 'friends'], 'the four names’ words (D321)')
+  eq(['club', 'comp', 'match', 'friends'].map(k => streamWord(k as StreamKind)), ['club', 'comp', 'interclub', 'friends'], 'the four names’ words (D321) — match.stream is interclub.stream (D363)')
 
   section('The Comp picker (D300): the latest comp played, a pick kept until a newer one')
   const comp = (code: string, date: string, playing: boolean): CompRef => ({ tripId: code, code, name: code, date, endDate: null, playing, live: false, clubId: null, clubName: null })
@@ -210,8 +210,10 @@ export type World = {
   /** 104 in (Streams v2). */
   v2: boolean
   follows: { userId: string; stream: string }[]
-  /** Match streams that exist to be followed — none on the live site until interclub teams (D332). */
+  /** Match streams that exist to be followed — an interclub tie's (D363). */
   followable: Set<string>
+  /** Interclub ties and the clubs in them (D363). */
+  ties: { key: string; clubs: string[]; label: string; date: string | null }[]
   hidden: Map<string, string[]>
   /** Stream groups (D343). */
   groupsReady: boolean
@@ -240,6 +242,7 @@ export function world(): World {
     v2: true,
     follows: [],
     followable: new Set(),
+    ties: [],
     hidden: new Map(),
     groupsReady: true,
     groups: [],
@@ -271,6 +274,7 @@ export function standIn(w: World): FeedStore {
         .filter(r => !q.clubId || r.clubId === q.clubId)
         .filter(r => !q.tripId || r.tripId === q.tripId)
         .filter(r => !q.stream || r.stream === q.stream)
+        .filter(r => !q.streams || q.streams.includes(r.stream ?? ''))
         .filter(r => !q.kinds || q.kinds.includes(r.kind))
         .filter(r => !q.notKinds || !q.notKinds.includes(r.kind))
         .filter(r => !c || activity(r) < c.at || (activity(r) === c.at && r.id < c.id))
@@ -312,6 +316,9 @@ export function standIn(w: World): FeedStore {
     },
     async follows(u) { return w.follows.filter(f => f.userId === u).map(f => f.stream) },
     async followable(stream) { return w.followable.has(stream) },
+    async clubTies(ids, today) {
+      return w.ties.filter(t => t.clubs.some(c => ids.includes(c))).map(t => ({ key: t.key, code: 'TIE001', label: t.label, competition: 'Senior Cup', date: t.date, live: t.date === today }))
+    },
     async setFollow(u, stream, on) {
       w.follows = w.follows.filter(f => !(f.userId === u && f.stream === stream))
       if (on) w.follows.push({ userId: u, stream })
@@ -612,6 +619,26 @@ async function streamsV2Tests() {
     '…and a match stream’s status never shows in friends.stream, even to a friend')
   await ask('x', { action: 'follow', stream: M, on: false })
   eq((await mPage('x')).status, 403, 'unfollowed, gone')
+
+  section('interclub.stream (D363): a club’s ties followed by its people, together and one at a time')
+  const T1 = 'match:00000000-0000-0000-0000-0000000000a1'
+  const T2 = 'match:00000000-0000-0000-0000-0000000000a2'
+  w.ties.push(
+    { key: T1, clubs: [C1], label: 'Pints v Lahinch', date: '2026-08-01' },
+    { key: T2, clubs: ['00000000-0000-0000-0000-0000000000c9'], label: 'Elsewhere v Nowhere', date: '2026-08-01' },
+  )
+  const tPage = async (who: string, match?: string) => ask(who, { action: 'page', stream: 'match', ...(match ? { match } : {}) })
+  eq((await tPage('y', T1)).status, 200, 'a club member opens their club’s tie without following it')
+  w.users.set('tok-q', { id: 'q', isAnonymous: false, email: 'q@x.ie', emailConfirmed: true })
+  eq((await tPage('q', T1)).status, 403, 'somebody off both clubs’ lists does not')
+  eq((await tPage('y', T2)).status, 403, 'nor another club’s tie')
+  eq((await ask('y', { action: 'status.post', text: 'Come on the Pints', stream: T1 })).status, 200, 'a member talks in the tie’s stream')
+  eq((await ask('y', { action: 'status.post', text: 'Nosy', stream: T2 })).status, 403, '…never in another club’s')
+  w.items.push({ ...w.items[w.items.length - 1], id: '00000000-0000-0000-0000-0000000000e2', kind: 'match_result', authorId: null, status: null, stream: T2, data: { name: 'Elsewhere', line: 'Match 1 · Elsewhere won 2&1' } } as never)
+  const general = ((await tPage('y')).body as unknown as { items: { status: string | null }[] }).items
+  eq(general.map(i => i.status), ['Come on the Pints'], 'interclub.stream on its own: every tie of theirs together, nobody else’s')
+  const home = (await ask('y', { action: 'home' })).body as unknown as { follows: { key: string; label: string }[] }
+  eq(home.follows.map(f => [f.key, f.label]), [[T1, 'Pints v Lahinch']], 'the menu lists their club’s ties')
 
   section('club.stream: the club’s own posts (D325, M5)')
   eq((await ask('y', { action: 'post.club', clubId: C1, text: 'Course closed Monday' })).status, 403, 'a member does not post to club.stream')

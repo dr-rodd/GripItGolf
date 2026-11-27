@@ -24,6 +24,7 @@ Competitions Handbook.
 | D360 | **A level tie goes to extra holes**, the player or pair picked from a list of those who played in the tie — sudden death, the winner taking the tie. |
 | D361 | **Settle match** — for anything complicated (a concession, a ruling, an abandoned tie, a dispute), a team captain records the result by hand and it stands over the cards, said as settled on the board. The rules are not all modelled; settling is the escape hatch. It also settles a match against a vacant side (D354). |
 | D362 | **The Barton Shield counts matches won, with holes up beside** them. |
+| D363 | **interclub.stream** (Ross, 27 Nov 2026) — the old match.stream, given its interclub name: a general stream of every tie the member's clubs are in, and a sub-stream a tie (`match:<tie id>`), picked from the title's menu, **live ties first**. Everybody on either club's list follows a tie without asking. In the general stream a **live ticker** shows the club's live ties; a tap pops out their matches (`InterclubLive`), and a match opens to be scored: **who won each hole — or halved — with no scores at all** ("rather than score entry as it's not always clear"), any marked hole amended, Finalise once the holes decide it, or **just the result** (a margin optional). Results go into the tie's stream naming **the clubs, never the players** (D304). |
 | D357 | **A club sees interclub from its own side** in the members app — its teams, its next tie, its results — and taps through to the tie as an event. |
 
 ## What Golf Genius holds
@@ -124,6 +125,8 @@ club's name in the draws, and the table linking a draw match to its event.
 draws (a club's own setting, since the draws spell names a dozen ways); its
 teams, next tie and results in the members app (D357); the tie's event one
 tap away. The match stream (D326, D332) comes alive with the club's ties.
+
+**The stream (built 27 Nov 2026, D363, migration 109).** `session_matches.hole_marks` holds holes marked by hand (`readHoleMarks`, `withHoleMark`, `markIssue` in lib/matchCard.ts): a hole both sides have scores on is decided by its scores; a hole without them takes its mark — on the card, the leaderboard, the ticker and the board alike, since `playSessionCard` reads them. Marks go in order, any marked hole may be amended, and come off from the last hole back. `/api/interclub` `live` (a club's live ties, or one by code), `match.mark` and `match.result`, for anybody on either club's list; a match with its result is a captain's to change. Reading or writing a tie writes its results into its stream (`writeInterclubResults`, idempotent on `interclub:<tie>:<slot>`). The event's own card shows a marked hole as marked; marking from the card itself is still to come — anybody without a club account scores there with scores.
 
 **Stage 4 — results back.** A finished tie's result in the form the
 convenor wants it (W/T/L and the match scores), ready to send, and a copy

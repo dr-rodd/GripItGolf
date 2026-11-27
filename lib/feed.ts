@@ -160,9 +160,9 @@ export function readStreamKey(v: unknown): StreamRef | null {
   return m ? { kind: 'club', id: m[1].toLowerCase() } : null
 }
 
-/** The word before the dot (D321). */
+/** The word before the dot (D321). match.stream is interclub.stream on screen (D363); its key stays 'match'. */
 export function streamWord(kind: StreamKind): string {
-  return kind
+  return kind === 'match' ? 'interclub' : kind
 }
 
 /** The most streams a member keeps. */
@@ -312,7 +312,8 @@ export function inStream(
       return !!o.pulled || (!!item.authorId && (item.authorId === viewer.userId || viewer.friends.has(item.authorId)))
     case 'club': return kind === 'post' && !!stream.id && item.clubId === stream.id
     case 'comp': return kind !== 'post' && kind !== 'status' && !!stream.id && item.tripId === stream.id
-    case 'match': return !!stream.id && item.stream === `match:${stream.id}`
+    // D363: one tie's stream, or — with no id — every tie the viewer follows (mayView is the guard).
+    case 'match': return stream.id ? item.stream === `match:${stream.id}` : isMatchStream(item.stream)
     case 'group':
       if (!stream.id) return false
       if (kind === 'status') return item.stream === `group:${stream.id}`
@@ -349,6 +350,30 @@ export function commentLine(newestFirst: readonly CommenterFacts[], viewer: Pick
     count: `${newestFirst.length} comment${newestFirst.length === 1 ? '' : 's'}`,
     who: others === 0 ? name : `${name} and ${others} other${others === 1 ? '' : 's'}`,
   }
+}
+
+// ─── Interclub ties for the picker (D363) ────────────────────────
+
+/** A tie offered in interclub.stream's menu — 'match:<tie id>'. */
+export interface TieRef {
+  key: string
+  /** The tie's event code — what /api/interclub reads it by. */
+  code: string
+  /** "Galway v Athenry". */
+  label: string
+  competition: string
+  date: string | null
+  live: boolean
+}
+
+/**
+ * interclub.stream's menu (D363, Ross, 27 Nov 2026: "live matches at the
+ * top"): the live ties first, then the rest newest first. `live` is the
+ * set the ticker read just now, where it has; else the tie's own guess.
+ */
+export function orderTies(ties: readonly TieRef[], live?: ReadonlySet<string>): TieRef[] {
+  const isLive = (t: TieRef) => (live ? live.has(t.key) : t.live)
+  return [...ties].sort((a, b) => Number(isLive(b)) - Number(isLive(a)) || (b.date ?? '').localeCompare(a.date ?? '') || a.label.localeCompare(b.label))
 }
 
 // ─── Comps for the picker (D300) ────────────────────────────────
@@ -783,7 +808,7 @@ export function emptyLine(kind: StreamKind): string {
     case 'friends': return 'Your friends’ rounds and statuses land here.'
     case 'club': return 'The club’s notices and news land here.'
     case 'comp': return 'Cards and results land here as they come in.'
-    case 'match': return 'Interclub matches land here once your club lists its teams.'
+    case 'match': return 'Your club’s inter-club matches land here — results as they come in, and the talk around them.'
     case 'group': return 'Nothing here yet — post to get it going. Members’ signed cards land here too.'
   }
 }
@@ -794,7 +819,7 @@ export function streamAbout(kind: StreamKind): string {
     case 'friends': return 'Your friends’ cards, statuses and comments'
     case 'club': return 'The club’s own posts — shown only in its area'
     case 'comp': return 'Competitions and club match plays, one at a time'
-    case 'match': return 'Interclub matches you follow'
+    case 'match': return 'Your clubs’ inter-club matches, live and as they finish'
     case 'group': return 'A group you’re in: its posts and its members’ cards'
   }
 }

@@ -313,7 +313,7 @@ section('A session match: eighteen holes, and a half is a result (D44)')
   eq(sessionBoard({ kind: 'matches', match: 'singles', tie: 'half' }, 'r1', 'day:r1').matchTie, undefined, 'a half writes nothing — every older board reads the same')
   const finish = read('app/golf/[root]/[tripCode]/match/[matchId]/card/MatchFinish.tsx')
   ok(finish.includes('disabled={saving || (!!decide && !decide.pick)}'), 'the finish sheet waits for a pick when the tie is decided by hand')
-  ok(read('app/golf/[root]/[tripCode]/session/sessionMatches.ts').includes("playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half')"),
+  ok(read('app/golf/[root]/[tripCode]/session/sessionMatches.ts').includes("playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half', marks)"),
     'the server reads a card by the same answer')
   ok(read('supabase/migrations/20260101000083_session_extra_holes.sql').includes('CHECK (hole_number BETWEEN 1 AND 36)'),
     'migration 083 lets a session card take the 19th')

@@ -10,7 +10,7 @@ import {
   OWN_STATUS_MAX, cleanPost, cleanText, isGroupStream, isMatchStream, mayView, ownStatusIssue, postIssue, readLink, talksOn,
 } from '@/lib/feed'
 import { done, fail, str, type FeedOutcome } from './outcome'
-import { factsOf, viewerOf, type Asker, type FeedStore } from './feed'
+import { factsOf, matchStreamsOf, viewerOf, type Asker, type FeedStore } from './feed'
 import { groupToPostIn } from './groups'
 
 /** Said while 104 is not in: the new kinds have nowhere to be kept. */
@@ -31,10 +31,10 @@ export async function runOwn(action: string, input: Record<string, unknown>, a: 
       if (why) return fail(why.includes('members') ? 403 : 503, why)
     } else if (stream !== 'friends') {
       if (!isMatchStream(stream)) return fail(400, 'A post goes to a group you’re in or a match stream you follow.')
-      if (!(await store.follows(me)).includes(stream)) return fail(403, 'Follow that match stream first.')
+      if (!(await matchStreamsOf(store, me)).includes(stream.toLowerCase())) return fail(403, 'That match’s stream is for its clubs’ members.')
     }
     const name = (await store.names([me])).get(me)?.name ?? 'A member'
-    const row = await store.insertOwn({ kind: 'status', authorId: me, clubId: null, stream: isGroupStream(stream) ? stream.toLowerCase() : stream, text, link: null, data: { name }, at: now.toISOString() })
+    const row = await store.insertOwn({ kind: 'status', authorId: me, clubId: null, stream: isGroupStream(stream) || isMatchStream(stream) ? stream.toLowerCase() : stream, text, link: null, data: { name }, at: now.toISOString() })
     return done({ id: row.id })
   }
 

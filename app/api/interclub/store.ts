@@ -7,11 +7,8 @@ import { clubStore } from '../club/store'
 import { findCompetition, readCompetitionDraw } from '@/app/interclub/source'
 import type { InterclubStore, TieRecord, TieMatchRow } from './interclub'
 import type { ProvinceKey } from '@/lib/interclub'
-import { makeEventReader } from '@/lib/eventReader'
-import { parseLeaderboards } from '@/lib/leaderboards'
-import { fetchMemberships } from '@/lib/teamMembers'
 import { withHoleMark } from '@/lib/matchCard'
-import { readSessionCards, readSessionMatchRows } from '@/app/golf/[root]/[tripCode]/session/sessionMatches'
+import { readTieCards } from './tieCards'
 import { writeInterclubResults } from '../feed/write'
 
 // The service role's store behind /api/interclub. Every interclub table
@@ -191,23 +188,7 @@ export function interclubStore(db: Db): InterclubStore {
       return ((data ?? []) as { id: string; slot: number; side_a: string[]; side_b: string[]; result: TieMatchRow['result']; margin: string | null }[])
         .map(m => ({ id: m.id, slot: m.slot, sideA: m.side_a ?? [], sideB: m.side_b ?? [], result: m.result, margin: m.margin }))
     },
-    async tieCards(tie) {
-      // The event's own reader (lib/eventReader.ts) and its own session reader,
-      // so the stream reads a match exactly as the leaderboard does.
-      const r = makeEventReader(tie.code, db)
-      const [trip, playersRes, teamsRes, memberships, rows] = await Promise.all([
-        r.from('trips').select('id, leaderboards').eq('trip_code', tie.code).maybeSingle(),
-        r.from('players').select('id, name, handicap, gender').eq('trip_id', tie.tripId).eq('is_composite', false),
-        r.from('teams').select('id, name').eq('trip_id', tie.tripId),
-        fetchMemberships(tie.tripId, r),
-        readSessionMatchRows(r, tie.tripId),
-      ])
-      if (trip.error) throw trip.error
-      const boards = parseLeaderboards((trip.data as { leaderboards: unknown } | null)?.leaderboards)
-      const players = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
-      const teams = (teamsRes.data ?? []) as { id: string; name: string }[]
-      return (await readSessionCards(r, { id: tie.tripId }, boards, players, { teams, memberships }, rows)).results
-    },
+    tieCards: tie => readTieCards(tie.code, tie.tripId, db),
     async markHole(tripId, matchId, hole, winner) {
       // Read, merge and write back only while nobody else has written the row
       // since — a mark another phone just made is never overwritten.

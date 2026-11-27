@@ -19,7 +19,7 @@ import { runOwn } from './own'
 import { runGroups, type GroupsStore } from './groups'
 import {
   AUDIENCES, COMP_RECENT_DAYS, FEED_PAGE, FEED_READ, contextLine, effectiveAudience, emptyLine, inStream,
-  commentLine, reactionSummary, isGroupStream, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, talksOn, readAudience, readCursor, readStreamKey, readStreams,
+  commentLine, reactionSummary, isGroupStream, isMatchStream, mayView, mayViewChild, newestFirst, olderThan, orderComps, orderTies, type TieRef, talksOn, readAudience, readCursor, readStreamKey, readStreams,
   STREAMS_V2, keptStreams, offeredStreams, streamAbout, streamKey, streamLabel, withGroups,
   type Audience, type CompRef, type Cursor, type FeedKind, type ItemFacts, type Reaction, type ReactionCount, type StreamRef, type Viewer,
 } from '@/lib/feed'
@@ -85,6 +85,8 @@ export interface StreamQuery {
   tripId?: string
   /** A match stream's key (D326). */
   stream?: string
+  /** Several match streams — interclub.stream's general view, every tie followed (D363). */
+  streams?: string[]
   /** A stream group (D343): what was posted in it, or signed and won by these members. */
   group?: { stream: string; authors: string[] }
   /** Only these kinds (club.stream: posts). */
@@ -147,6 +149,8 @@ export interface FeedStore extends FriendsStore, CardsStore, SocialStore, Groups
   commentsBy(authors: string[], before: Cursor | null, limit: number): Promise<CommentRef[]>
   /** Match streams this account follows (D326), as 'match:<id>'. */
   follows(userId: string): Promise<string[]>
+  /** The interclub ties these clubs are in (D363), followed by everybody on their lists — none before 108. */
+  clubTies(clubIds: string[], today: string): Promise<TieRef[]>
   /** Whether a match stream exists to be followed — none until interclub teams exist (D332). */
   followable(stream: string): Promise<boolean>
   setFollow(userId: string, stream: string, on: boolean): Promise<void>
@@ -269,7 +273,7 @@ export function isOutcome(v: unknown): v is FeedOutcome {
 
 export async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: string | null } = {}): Promise<{ viewer: Viewer; clubs: ClubRef[] }> {
   const [friends, clubs, follows, groups, mates] = await Promise.all([
-    store.friendIds(asker.user.id), store.myClubs(asker.user.id), store.follows(asker.user.id),
+    store.friendIds(asker.user.id), store.myClubs(asker.user.id), matchStreamsOf(store, asker.user.id),
     store.groupsOf(asker.user.id).catch(() => []), store.groupmates(asker.user.id).catch(() => []),
   ])
   return {
@@ -283,6 +287,23 @@ export async function viewerOf(asker: Asker, store: FeedStore, o: { tripId?: str
       groupmates: new Set(mates.filter(id => id !== asker.user.id)),
     },
   }
+}
+
+/**
+ * The match streams an account follows (D326, D363): those it chose, and
+ * every interclub tie its clubs are in — a club's own people follow its
+ * matches without asking. `today` only shapes each tie's live guess.
+ */
+export async function matchStreamsOf(store: FeedStore, userId: string, today = '0000-00-00'): Promise<string[]> {
+  const ties = await myTies(store, userId, today)
+  const chosen = await store.follows(userId)
+  return [...new Set([...chosen, ...ties.map(t => t.key)])]
+}
+
+/** The interclub ties of an account's clubs (D363). */
+async function myTies(store: FeedStore, userId: string, today: string): Promise<TieRef[]> {
+  const clubs = await store.myClubs(userId)
+  return clubs.length ? store.clubTies(clubs.map(c => c.id), today).catch(() => []) : []
 }
 
 export function factsOf(r: ItemRow, audiences: Map<string, Audience>, juniors: ReadonlySet<string>): ItemFacts {
@@ -496,6 +517,7 @@ export async function runFeed(
 async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, now: Date): Promise<FeedOutcome> {
   const today = irishDay(now)
   const [settings, clubs, follows, v2, groupsReady] = await Promise.all([store.settings(a.user.id), store.myClubs(a.user.id), store.follows(a.user.id), store.v2(), store.groupsReady()])
+  const ties = clubs.length ? await store.clubTies(clubs.map(c => c.id), today).catch(() => [] as TieRef[]) : []
   const groups = groupsReady ? await store.groupsOf(a.user.id) : []
   const [comps, newComments] = await Promise.all([
     store.recentComps(a.user.id, clubs.map(c => c.id), sinceDay(today), today),
@@ -522,8 +544,11 @@ async function home(input: Record<string, unknown>, a: Asker, store: FeedStore, 
     here,
     // D325: whether this member may post to the club's stream here.
     canPost: !!here && posts.has(here),
-    // D326, D332: the match streams followed — none until interclub teams exist.
-    follows: follows.map(key => ({ key, label: 'Match' })),
+    // D326, D363: the interclub ties followed — the clubs' own, live first — and any other chosen.
+    follows: orderTies([
+      ...ties,
+      ...follows.filter(k => !ties.some(t => t.key === k)).map(key => ({ key, code: '', label: 'Match', competition: '', date: null, live: false })),
+    ]),
     comps: orderComps(comps).filter(c => (c.date ?? '') <= today),
     // D343: the member's stream groups, and whether they can be made yet (105).
     groupsReady,
@@ -568,7 +593,12 @@ async function page(input: Record<string, unknown>, a: Asker, store: FeedStore, 
     // D326, D332: a match stream the member follows — none until interclub teams exist.
     const { viewer } = await viewerOf(a, store)
     const key = str(input.match)
-    if (!key) return done({ items: [], next: null })
+    if (!key) {
+      // D363: interclub.stream on its own — every tie followed, together.
+      const streams = [...(viewer.follows ?? [])]
+      const b = await readBundle(store, { streams, before, limit: FEED_READ })
+      return done(viewBundle(b, viewer, { kind: 'match', id: null }))
+    }
     if (!isMatchStream(key) || !viewer.follows?.has(key)) return fail(403, 'Follow that match stream first.')
     const read = () => readBundle(store, { stream: key, before: null, limit: FEED_READ })
     const b = before ? await readBundle(store, { stream: key, before, limit: FEED_READ })

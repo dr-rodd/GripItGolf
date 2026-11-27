@@ -213,7 +213,7 @@ export function feedStore(db: Db): FeedStore {
     async items(q: StreamQuery) {
       // D329: items standing on their own, by their latest activity — before 104, when each was made.
       const v2 = await feedV2(db)
-      if ((q.stream || q.group) && !v2) return []
+      if ((q.stream || q.streams || q.group) && !v2) return []
       const at = v2 ? 'bumped_at' : 'created_at'
       // D343: a group's page is two reads — what was posted in it, and its members' cards and results — merged.
       if (q.group) {
@@ -233,6 +233,7 @@ export function feedStore(db: Db): FeedStore {
       if (q.clubId) r = r.eq('club_id', q.clubId)
       if (q.tripId) r = r.eq('trip_id', q.tripId)
       if (q.stream) r = r.eq('stream', q.stream)
+      if (q.streams) r = r.in('stream', q.streams.length ? q.streams : ['none'])
       if (q.kinds) r = r.in('kind', q.kinds)
       if (q.notKinds?.length) r = r.not('kind', 'in', `(${q.notKinds.join(',')})`)
       if (q.before) r = r.or(`${at}.lt."${q.before.at}",and(${at}.eq."${q.before.at}",id.lt.${q.before.id})`)
@@ -320,9 +321,29 @@ export function feedStore(db: Db): FeedStore {
       if (error) return []
       return ((data ?? []) as { stream: string }[]).map(r => r.stream)
     },
-    // D332: nothing to follow until the Clubhouse lists interclub teams. The day it
-    // does, this asks whether the team behind the key exists.
-    async followable() { return false },
+    // D332: a match stream is an interclub tie's (D363) — followable while the tie exists.
+    async followable(stream) {
+      const id = /^match:([0-9a-f-]{36})$/i.exec(stream)?.[1]
+      if (!id) return false
+      const { data, error } = await db.from('interclub_ties').select('id').eq('id', id.toLowerCase()).maybeSingle()
+      return !error && !!data
+    },
+    async clubTies(clubIds, today) {
+      const list = clubIds.filter(id => /^[0-9a-f-]{36}$/i.test(id)).join(',')
+      if (!list) return []
+      // Fail-soft: before 108 there are no ties to follow.
+      const { data, error } = await db.from('interclub_ties')
+        .select('id, name_a, name_b, competition_name, settled, trips!inner(trip_code, start_date)')
+        .or(`club_a.in.(${list}),club_b.in.(${list})`).order('created_at', { ascending: false }).limit(40)
+      if (error) return []
+      type Trip = { trip_code: string; start_date: string | null }
+      type Row = { id: string; name_a: string; name_b: string; competition_name: string; settled: unknown; trips: Trip | Trip[] }
+      return ((data ?? []) as unknown as Row[]).map(r => {
+        const trip = Array.isArray(r.trips) ? r.trips[0] : r.trips
+        const date = trip?.start_date ?? null
+        return { key: `match:${r.id}`, code: trip?.trip_code ?? '', label: `${r.name_a} v ${r.name_b}`, competition: r.competition_name, date, live: date === today && !r.settled }
+      })
+    },
     async setFollow(userId, stream, on) {
       const { error } = on
         ? await db.from('feed_follows').upsert({ user_id: userId, stream }, { onConflict: 'user_id,stream', ignoreDuplicates: true })

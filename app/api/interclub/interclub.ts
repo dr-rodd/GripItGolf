@@ -23,7 +23,7 @@ import {
   TIE_COLOURS, TIE_PERMISSIONS, MAX_SIDE_PLAYERS, clubOf, clubSide, drawNameIssue, drawNameOf, formatIssue,
   maySide, mayRun, playerIssue, playoffIssue, readFormat, settleIssue, sideIssue, takeableSide, tieBoards,
   tieName, tieOutcome, tieScore, withPlayoff, type Settled, type Side, type TieFormat, type TieMatch,
-  LIVE_TIE_DAYS, mayFollowTie, points, readMargin, sideOfClubs, tieLive,
+  LIVE_TIE_DAYS, mayFollowTie, type LiveMatch, type LiveTie, points, readMargin, sideOfClubs, tieLive,
 } from '@/lib/interclubTie'
 import { runCreate, type CreateStore } from '../trip/create/create'
 import { cardState, markIssue, plainHoles, type CardSideKey, type HoleOutcome } from '@/lib/matchCard'
@@ -575,43 +575,6 @@ async function view(store: InterclubStore, tie: TieRecord, captainOf: string[]) 
 
 // ─── A tie as the stream reads it (D363) ────────────────────────
 
-/** A hole as the match sheet draws it: who won it, and whether by a mark. */
-export type LiveHole = { n: number; w: 'a' | 'b' | 'h' | null; marked: boolean }
-
-/** One match of a live tie. */
-export type LiveMatch = {
-  slot: number
-  playoff: boolean
-  a: string | null
-  b: string | null
-  result: 'a' | 'b' | 'halved' | null
-  margin: string | null
-  line: string
-  leader: 'a' | 'b' | null
-  live: boolean
-  holes: LiveHole[]
-  /** The next hole to mark, or null once it is settled or every hole is in. */
-  next: number | null
-  /** Who won it, as the holes stand, ready to be finalised — null until they settle it. */
-  settled: { result: 'a' | 'b' | 'halved'; margin: string } | null
-}
-
-export type LiveTie = {
-  id: string; code: string; competition: string
-  names: { a: string; b: string }
-  colours: { a: string; b: string }
-  /** The viewer's club's side, where they are on one. */
-  mine: 'a' | 'b' | null
-  score: { a: string; b: string }
-  line: string
-  state: string
-  live: boolean
-  date: string | null
-  /** Whether this account may mark holes and give results — on either club's list. */
-  may: boolean
-  matches: LiveMatch[]
-}
-
 const BLANK_OUTCOMES: HoleOutcome[] = plainHoles().map(h => ({
   holeNumber: h.holeNumber, winner: null, conceded: false, nettA: null, nettB: null, nrA: false, nrB: false,
 }))
@@ -640,7 +603,7 @@ async function liveTie(store: InterclubStore, tie: TieRecord, clubIds: string[],
     const done = !!c?.result
     const settled = done ? null : c?.final ?? null
     return {
-      slot, playoff,
+      slot, playoff, roundId: playoff ? tie.playoffRoundId ?? tie.roundId : tie.roundId,
       a: names(c?.sideA ?? []), b: names(c?.sideB ?? []),
       result: c?.result ?? null, margin: c?.margin ?? null,
       line: c ? matchLine(c, club) : 'To be set',

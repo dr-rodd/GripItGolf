@@ -4,7 +4,10 @@ import Link from 'next/link'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
-import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type Reaction, type StreamRef } from '@/lib/feed'
+import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, orderTies, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type Reaction, type StreamRef, type TieRef } from '@/lib/feed'
+import { askInterclub } from '@/lib/interclubClient'
+import type { LiveTie } from '@/lib/interclubTie'
+import InterclubLive from './InterclubLive'
 import { reducedMotion } from '@/lib/motion'
 import { IconCheck, IconChevronDown, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
@@ -26,7 +29,8 @@ type Home = {
   streams?: StreamView[]; offered?: StreamView[]
   here?: string | null
   canPost?: boolean
-  follows?: { key: string; label: string }[]
+  /** interclub.stream's ties (D363) — the clubs' own, live first. */
+  follows?: TieRef[]
   comps?: CompRef[]
   newComments?: number
   today?: string
@@ -87,6 +91,9 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   panelsRef.current = panels
   const [compPick, setCompPick] = useState<{ code: string; over: string | null } | null>(null)
   const [matchPick, setMatchPick] = useState<string | null>(null)
+  // D363: interclub.stream's live ties — the ticker — and the pop-up of them, out of the ticker.
+  const [liveTies, setLiveTies] = useState<LiveTie[] | null>(null)
+  const [livePop, setLivePop] = useState<HTMLElement | null>(null)
   const [menu, setMenu] = useState<HTMLElement | null>(null)
   const [sheet, setSheet] = useState<{ id: string; origin: HTMLElement | null } | null>(null)
   const [composer, setComposer] = useState<'status' | 'post' | null>(null)
@@ -126,11 +133,15 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const comps = useMemo(() => home?.comps ?? [], [home])
   const follows = useMemo(() => home?.follows ?? [], [home])
   const comp = home?.today ? shownComp(comps, home.today, compPick) : null
-  const match = follows.find(f => f.key === matchPick)?.key ?? follows[0]?.key ?? null
+  // D363: interclub.stream opens on every tie together; a tie picked from the menu is its own stream.
+  const match = follows.find(f => f.key === matchPick)?.key ?? null
+  const matchTie = follows.find(f => f.key === match) ?? null
+  const liveKeys = useMemo(() => (liveTies ? new Set(liveTies.filter(t => t.live).map(t => `match:${t.id}`)) : undefined), [liveTies])
+  const tiesMenu = useMemo(() => orderTies(follows, liveKeys), [follows, liveKeys])
   const refs = useMemo(() => (home?.streams ?? []).map(s => readStreamKey(s.key)).filter((s): s is StreamRef => !!s), [home])
   const pills = useMemo(() => pillsFor(refs, { here: home?.here ?? null, compLive: comps.some(c => c.playing && c.live) }), [refs, home, comps])
   const panelKey = useCallback((s: StreamRef) => (
-    s.kind === 'comp' ? `comp:${comp?.code ?? ''}` : s.kind === 'match' ? `match:${match ?? ''}` : streamKey(s)
+    s.kind === 'comp' ? `comp:${comp?.code ?? ''}` : s.kind === 'match' ? `match:${match ?? 'all'}` : streamKey(s)
   ), [comp, match])
 
   // The stream to open on: the one last looked at here, else the first (D295).
@@ -151,7 +162,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     const before = more ? was?.next ?? undefined : undefined
     const blankPanel: Panel = { items: [], next: null, players: null, loading: true, error: '', arriving: new Set() }
     setPanels(p => ({ ...p, [key]: { ...(p[key] ?? blankPanel), loading: true, error: '' } }))
-    const body = { stream: streamKey(s), ...(s.kind === 'comp' ? { comp: comp?.code } : {}), ...(s.kind === 'match' ? { match } : {}) }
+    const body = { stream: streamKey(s), ...(s.kind === 'comp' ? { comp: comp?.code } : {}), ...(s.kind === 'match' && match ? { match } : {}) }
     const strips = s.kind === 'comp' || s.kind === 'friends' || s.kind === 'group'
     const [page, strip] = await Promise.all([
       askFeed<{ items: FeedView[]; next: Cursor | null }>('page', { ...body, before }),
@@ -206,6 +217,26 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     document.addEventListener('visibilitychange', back)
     return () => document.removeEventListener('visibilitychange', back)
   }, [activeRef, load])
+
+  // D363: interclub.stream's live ties — read when it opens, on coming back and after a write; never polled.
+  const onInterclub = activeRef?.kind === 'match'
+  const tieCode = matchTie?.code || null
+  const readLive = useCallback(async () => {
+    const r = await askInterclub(tieCode ? { action: 'live', code: tieCode } : { action: 'live', ...(club ? { slug: club.slug } : {}) })
+    if (!r.ok) { setLiveTies([]); return }
+    setLiveTies((r.ties as LiveTie[]) ?? [])
+    // Reading the ties writes their results into the stream: a stream already open reads again.
+    if (Number(r.wrote) > 0 && activeRef) void load(activeRef)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tieCode, club, activePanelKey])
+  useEffect(() => {
+    if (!onInterclub) return
+    setLiveTies(null)
+    void readLive()
+    const back = () => { if (document.visibilityState === 'visible') void readLive() }
+    document.addEventListener('visibilitychange', back)
+    return () => document.removeEventListener('visibilitychange', back)
+  }, [onInterclub, readLive])
 
   // Once a page has landed: to the foot, or held still under earlier messages.
   const shown = activePanelKey ? panels[activePanelKey] : undefined
@@ -317,7 +348,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
     remember(COMP_KEY, pick)
   }
   const label = (s: StreamRef) => home.streams?.find(v => v.key === streamKey(s))
-  const chooser = activeRef?.kind === 'comp' ? comps.length > 0 : activeRef?.kind === 'match' ? follows.length > 1 : false
+  const chooser = activeRef?.kind === 'comp' ? comps.length > 0 : activeRef?.kind === 'match' ? follows.length > 0 : false
   // The title opens the menu whenever there is anything to choose: another stream, a choice inside this one, or a group to make.
   const hasMenu = pills.length > 1 || chooser || !!home.groupsReady
   const group = activeRef?.kind === 'group' ? (home.groups ?? []).find(g => g.id === activeRef.id) ?? null : null
@@ -330,7 +361,8 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   const shortDate = (d: string) => new Intl.DateTimeFormat('en-IE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(`${d}T12:00:00Z`))
 
   // The box at the foot (D342, D346): a group's members and a club's posters write here; anybody replying does.
-  const posts = !!activeRef && !!home.v2 && (activeRef.kind === 'group' || (activeRef.kind === 'club' && !!home.canPost && !!home.here))
+  // D363: a tie's own stream takes its clubs' talk; interclub.stream on its own, replies only.
+  const posts = !!activeRef && !!home.v2 && (activeRef.kind === 'group' || (activeRef.kind === 'match' && !!match) || (activeRef.kind === 'club' && !!home.canPost && !!home.here))
   const send = async (text: string): Promise<string | null> => {
     if (!activeRef) return 'Choose a stream first.'
     if (reply) {
@@ -339,6 +371,9 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
       setReply(null)
     } else if (activeRef.kind === 'group') {
       const r = await askFeed<{ id: string }>('status.post', { text, stream: streamKey(activeRef) })
+      if (!r.ok) return r.error
+    } else if (activeRef.kind === 'match' && match) {
+      const r = await askFeed<{ id: string }>('status.post', { text, stream: match })
       if (!r.ok) return r.error
     } else if (activeRef.kind === 'club' && home.here) {
       const r = await askFeed<{ id: string }>('post.club', { clubId: home.here, title: '', text, link: '' })
@@ -351,7 +386,8 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
   }
   const placeholder = reply
     ? (reply.mine ? 'Reply to yourself…' : `Reply to ${reply.name.trim().split(/\s+/)[0]}…`)
-    : activeRef?.kind === 'group' ? `Message ${label(activeRef)?.label ?? 'the group'}…` : 'Post to the club…'
+    : activeRef?.kind === 'group' ? `Message ${label(activeRef)?.label ?? 'the group'}…`
+      : activeRef?.kind === 'match' ? `Message ${matchTie?.label ?? 'the match'}…` : 'Post to the club…'
 
   return (
     <section className="mt-4 relative" aria-labelledby="stream-title">
@@ -365,6 +401,7 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
           {(() => {
             const subLine = activeRef?.kind === 'comp' && comp
               ? <span className="flex items-center justify-center gap-1.5 min-w-0">{comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span></span>
+              : activeRef?.kind === 'match' ? (matchTie ? <span className="flex items-center justify-center gap-1.5 min-w-0">{liveKeys?.has(matchTie.key) && <LiveDot />}<span className="truncate">{matchTie.label}</span></span> : follows.length ? 'Every match' : undefined)
               : activeRef?.kind === 'club' ? label(activeRef)?.label
               : group ? `Group · ${group.members} ${group.members === 1 ? 'person' : 'people'}` : undefined
             const inner = (
@@ -393,6 +430,19 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
             <Link href={settingsPath} aria-label="Choose your streams" className={iconButtonClass(true)}><IconSettings size={20} /></Link>
           </div>
         </div>
+        {/* D363: the live ticker — interclub.stream's live ties, or a tie's own
+            standing in its stream; a tap pops their matches out of it. */}
+        {onInterclub && liveTies && liveTies.length > 0 && !menu && (
+          <button type="button" onClick={e => { const el = e.currentTarget; void readLive(); setLivePop(el) }}
+            className="stream-float shadow-floating rounded-card w-full mt-2 px-3 min-h-11 flex items-center gap-2 text-left press ch-focus">
+            {liveTies.some(t => t.live) && <LiveDot />}
+            <span className="t-label text-ink flex-shrink-0">{liveTies.some(t => t.live) ? 'Live' : 'The match'}</span>
+            <span className="flex-1 min-w-0 truncate t-cap text-ink/80 tabular-nums">
+              {liveTies.map(t => `${t.names.a} ${t.score.a}–${t.score.b} ${t.names.b}`).join(' · ')}
+            </span>
+            <span className="t-cap text-accent-deep flex-shrink-0">Matches</span>
+          </button>
+        )}
         {menu && (
           <StreamMenu origin={menu} onClose={() => setMenu(null)} label="What the stream shows">
               <>
@@ -437,17 +487,24 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
                     ))}
                   </div>
                 ))}
-                {activeRef?.kind === 'match' && follows.length > 1 && (
+                {activeRef?.kind === 'match' && follows.length > 0 && (
                   <div role="group" aria-label="Matches" className={pills.length > 1 ? 'border-t border-line mt-1' : ''}>
                     <p className="t-label text-ink/65 px-3 pt-3 pb-1">Matches</p>
-                    {follows.map(f => (
-                      <button key={f.key} type="button" role="menuitemradio" aria-checked={f.key === match}
-                        onClick={() => { setMatchPick(f.key); remember(MATCH_KEY, f.key) }}
-                        className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
-                        <span className="flex-1 min-w-0 text-[16px] text-ink truncate">{f.label}</span>
-                        {f.key === match && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
-                      </button>
-                    ))}
+                    {[null, ...tiesMenu].map(f => {
+                      const key = f?.key ?? null
+                      const pickIt = () => { setMatchPick(key); remember(MATCH_KEY, key) }
+                      return (
+                        <button key={key ?? 'all'} type="button" role="menuitemradio" aria-checked={key === match} onClick={pickIt}
+                          className="w-full flex items-center gap-2 px-3 min-h-12 text-left rounded-tile press ch-focus">
+                          {f && liveKeys?.has(f.key) && <LiveDot />}
+                          <span className="flex-1 min-w-0">
+                            <span className="block text-[16px] text-ink truncate">{f ? f.label : 'Every match'}</span>
+                            <span className="block t-cap text-ink/65 truncate">{f ? [f.competition, f.date && shortDate(f.date)].filter(Boolean).join(' · ') : 'All your clubs’ inter-club matches together'}</span>
+                          </span>
+                          {key === match && <IconCheck size={18} className="text-accent-deep flex-shrink-0" />}
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
               </>
@@ -480,6 +537,13 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
         </>
       )}
 
+      {livePop && liveTies && (
+        <InterclubLive ties={liveTies} origin={livePop} focus={tieCode} onClose={() => setLivePop(null)}
+          onChanged={t => {
+            setLiveTies(all => (all ?? []).map(x => (x.code === t.code ? t : x)))
+            if (activeRef) void load(activeRef)
+          }} />
+      )}
       {holding && (
         <ReactBar hold={holding} onClose={() => setHolding(null)}
           onPick={e => { react(holding.rootId, holding.replyId, e); setHolding(null) }}
