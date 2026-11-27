@@ -6,10 +6,11 @@ import { createPortal } from 'react-dom'
 import { askFeed } from '@/lib/feedClient'
 import { COMMENT_MAX, OWN_STATUS_MAX, POST_MAX, chatTimeline, compMenu, pillsFor, readStreamKey, replyNote, shownComp, streamKey, type CompRef, type Reaction, type StreamRef } from '@/lib/feed'
 import { reducedMotion } from '@/lib/motion'
-import { IconCheck, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
+import { IconCheck, IconChevronDown, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { popClose, popOpen } from '../popOut'
 import { TABBAR_SPACE } from '../tabbarMetrics'
+import { HEADER_H } from '../headerMetrics'
 import { ChatReply, FeedItem, MiniCard, replyToComment, replyToItem, type FeedView, type ReplyTarget } from './FeedItem'
 import ItemSheet, { warmCard } from './ItemSheet'
 import StreamName from './StreamName'
@@ -353,25 +354,44 @@ export default function Stream({ club = null, settingsPath }: { club?: { slug: s
 
   return (
     <section className="mt-4 relative" aria-labelledby="stream-title">
-      <div className="relative z-30">
-        {/* D339, D340: the stream's name is the page's title, on its opaque box; the title is the control. */}
-        <PageTitle
-          menu={hasMenu ? { open: !!menu, label: 'Choose what the stream shows', onToggle: el => setMenu(m => m ?? el) } : undefined}
-          action={<>
+      {/* D350 (Ross, 27 Nov 2026): the stream's name floats — a frosted pill
+          held under the site's header while the chat scrolls beneath it, like
+          a chat app's. A tap on it springs the streams out of it (the pop-out),
+          their rows following in one after another; a second tap, or one
+          anywhere else, puts them back into it. Its actions in a pill beside it. */}
+      <div className="sticky z-30 pt-2 pb-1" style={{ top: HEADER_H }}>
+        <div className="flex items-stretch gap-2">
+          {(() => {
+            const subLine = activeRef?.kind === 'comp' && comp
+              ? <span className="flex items-center justify-center gap-1.5 min-w-0">{comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span></span>
+              : activeRef?.kind === 'club' ? label(activeRef)?.label
+              : group ? `Group · ${group.members} ${group.members === 1 ? 'person' : 'people'}` : undefined
+            const inner = (
+              <>
+                <span className="flex items-center justify-center gap-1 max-w-full">
+                  <span id="stream-title" className="t-card text-ink truncate">{activeRef ? titleOf(activeRef) : 'Stream'}</span>
+                  {hasMenu && <IconChevronDown size={16} className={`flex-shrink-0 text-ink/65 transition-transform duration-200 ease-out ${menu ? 'rotate-180' : ''}`} />}
+                </span>
+                {subLine && <span className="block t-cap text-ink/65 truncate max-w-full leading-tight">{subLine}</span>}
+              </>
+            )
+            const pill = 'stream-float shadow-floating flex-1 min-w-0 rounded-card px-4 py-1.5 min-h-14 flex flex-col items-center justify-center text-center'
+            return hasMenu ? (
+              <button type="button" aria-haspopup="menu" aria-expanded={!!menu}
+                onClick={e => { const el = e.currentTarget; setMenu(m => m ?? el) }}
+                className={`${pill} press ch-focus ${menu ? 'is-open' : ''}`}>
+                <span className="sr-only">Choose what the stream shows: </span>{inner}
+              </button>
+            ) : <div className={pill}>{inner}</div>
+          })()}
+          <div className="stream-float shadow-floating rounded-card flex items-center px-1 flex-shrink-0">
             {group && (
               <button type="button" onClick={() => setGroupSheet({ kind: 'settings', id: group.id })} aria-label={`${group.name}: who’s in it${group.admin ? ', and its settings' : ''}`}
                 className={iconButtonClass(true)}><IconUsers size={20} /></button>
             )}
             <Link href={settingsPath} aria-label="Choose your streams" className={iconButtonClass(true)}><IconSettings size={20} /></Link>
-          </>}
-          sub={activeRef?.kind === 'comp' && comp
-            ? <span className="flex items-center gap-1.5 min-w-0">{comp.live && <LiveDot />}<span className="truncate">{comp.name}{comp.clubName ? ` · ${comp.clubName}` : ''}</span></span>
-            : activeRef?.kind === 'club' ? label(activeRef)?.label
-            : group ? `Group · ${group.members} ${group.members === 1 ? 'person' : 'people'}` : undefined}>
-          <span id="stream-title" className="inline-flex items-center gap-2">
-            {activeRef ? titleOf(activeRef) : 'Stream'}
-          </span>
-        </PageTitle>
+          </div>
+        </div>
         {menu && (
           <StreamMenu origin={menu} onClose={() => setMenu(null)} label="What the stream shows">
               <>
@@ -685,7 +705,7 @@ function ChatPanel({ stream, panel, now, empty, comp, settingsPath, settled, fla
 }
 
 /**
- * The title's menu (D323, D340): under the stream's name, the way a social
+ * The title's menu (D323, D340, D350): under the floating title, the way a social
  * app lists what it can show — headings, then the choices, the one shown
  * ticked. It springs out of the title and back into it (the pop-out,
  * `app/components/popOut.ts`). Above the chat, so nothing clips
@@ -698,13 +718,21 @@ function StreamMenu({ label, origin, onClose, children }: {
   children: React.ReactNode
 }) {
   const box = useRef<HTMLDivElement>(null)
+  const shade = useRef<HTMLDivElement>(null)
   const closing = useRef(false)
   const close = useCallback(() => {
     if (closing.current) return
     closing.current = true
-    void popClose(box.current, origin).then(onClose)
+    void popClose(box.current, origin, shade.current).then(onClose)
   }, [origin, onClose])
-  useLayoutEffect(() => { popOpen(box.current, origin) }, [origin])
+  useLayoutEffect(() => {
+    // D350: each row and heading follows the one above it in (`--row`, read by `.stream-menu-row`).
+    box.current?.querySelectorAll<HTMLElement>('[role^="menuitem"], [role="group"] > p').forEach((el, i) => {
+      el.classList.add('stream-menu-row')
+      el.style.setProperty('--row', String(Math.min(i, 10)))
+    })
+    popOpen(box.current, origin, shade.current)
+  }, [origin])
   useEffect(() => {
     // A tap on the title too: it closes the menu it opened (the title only ever opens one).
     const away = (e: PointerEvent) => { if (!box.current?.contains(e.target as Node)) close() }
@@ -714,10 +742,14 @@ function StreamMenu({ label, origin, onClose, children }: {
     return () => { document.removeEventListener('pointerdown', away); document.removeEventListener('keydown', esc) }
   }, [close, origin])
   return (
-    // A choice made closes it, back into the title.
-    <div ref={box} role="menu" aria-label={label} onClick={e => { if ((e.target as HTMLElement).closest('[role^="menuitem"]')) close() }}
-      className={`${cardClass('floating')} bg-surface absolute left-0 right-0 top-full mt-2 z-30 p-1 max-h-[60vh] overflow-y-auto`}>
-      {children}
-    </div>
+    <>
+      {/* The chat dims behind the open list; a tap on it closes the list. */}
+      <div ref={shade} className="fixed inset-0 -z-10 bg-ink/30" aria-hidden="true" />
+      {/* A choice made closes it, back into the title. */}
+      <div ref={box} role="menu" aria-label={label} onClick={e => { if ((e.target as HTMLElement).closest('[role^="menuitem"]')) close() }}
+        className="stream-float shadow-floating stream-menu rounded-card absolute left-0 right-0 top-full mt-1 z-30 p-1 max-h-[65dvh] overflow-y-auto overscroll-contain">
+        {children}
+      </div>
+    </>
   )
 }

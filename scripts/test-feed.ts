@@ -864,6 +864,10 @@ function wiringTests() {
   ok(!/setInterval/.test(feedUi), 'the stream is never polled — read on show and on coming back')
   ok(/titleOf\(activeRef\)/.test(feedUi) && /<StreamName kind=\{s\.kind\} \/>/.test(feedUi) && /compMenu\(comps, home\.today\)/.test(feedUi) && /role="menu"/.test(feedUi),
     'the stream on show is named at the top — a group by its own name — its chevron opening the menu of streams, groups and comps (D321, D323, D343)')
+  ok(/stream-float shadow-floating flex-1/.test(feedUi) && /sticky z-30/.test(feedUi) && /top: HEADER_H/.test(feedUi) && /aria-haspopup="menu"/.test(feedUi)
+    && /popOpen\(box\.current, origin, shade\.current\)/.test(feedUi) && /stream-menu-row/.test(feedUi)
+    && /\.stream-menu-row \{ animation: gdMenuRowIn/.test(read('app/globals.css')) && /\.react-bar-in, \.stream-menu-row \{/.test(read('app/globals.css')),
+    'the stream’s name floats in a frosted pill under the site’s header, its streams springing out of it row by row, still under Reduce Motion (D350)')
   ok(/NewGroupSheet/.test(feedUi) && /GroupSettingsSheet/.test(feedUi) && /stream: streamKey\(activeRef\)/.test(feedUi), '…New group in it, a group’s settings beside the title, and the box to post in a group (D343)')
   ok(/stream-arrive/.test(read('app/components/feed/FeedItem.tsx')) && /\.stream-arrive/.test(read('app/globals.css')), 'what is new fades in (M13)')
   {
