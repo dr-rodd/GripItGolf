@@ -8,11 +8,14 @@
  */
 
 import {
-  MAX_TIE_MATCHES, clubSide, competitionFormat, drawNameIssue, drawNameOf, formatIssue, formatLine, holesUp,
+  MARGINS, MAX_TIE_MATCHES, clubSide, competitionFormat, mayFollowTie, readMargin, tieLive, drawNameIssue, drawNameOf, formatIssue, formatLine, holesUp,
   interclubAllowance, mayRun, maySide, playerIssue, playoffIssue, points, readFormat, sideIssue, takeableSide,
   tieBoards, tieOutcome, tieScore, withPlayoff, type TieMatch,
 } from '../lib/interclubTie'
-import { playSessionCard, type CardHole } from '../lib/matchCard'
+import {
+  cardState, markIssue, plainHoles, playSessionCard, readHoleMarks, sessionResult, withHoleMark, type CardHole,
+} from '../lib/matchCard'
+import type { SessionMatchResult } from '../lib/sessions'
 import { parseLeaderboards } from '../lib/leaderboards'
 import { runInterclub, womensCompetition, type InterclubStore, type TieRecord, type TiePlayer, type TieMatchRow } from '../app/api/interclub/interclub'
 import type { CreateStore } from '../app/api/trip/create/create'
@@ -155,6 +158,50 @@ section('The result: points, holes up beside, a playoff, a captain’s word')
   eq(playoffIssue({ level: true, started: true, format: 'singles', a: ['a0'], b: ['b0'], matches }), 'The playoff has started already.', 'one playoff')
 }
 
+section('Holes marked by hand: who won it, no scores (D363)')
+{
+  const A = { id: 'A', players: [{ id: 'pa', gender: 'M', receives: 0 }] }
+  const B = { id: 'B', players: [{ id: 'pb', gender: 'M', receives: 0 }] }
+  const holes18 = plainHoles()
+  eq(withHoleMark(null, 1, 'A'), { 1: 'a' }, 'a mark stored as a side')
+  eq(withHoleMark({ 1: 'a', 2: 'halved' }, 2, null), { 1: 'a' }, 'and taken off')
+  eq([...readHoleMarks({ 1: 'b', 2: 'halved', 40: 'a', x: 'a', 3: 'nobody' })], [[1, 'B'], [2, 'halved']], 'only holes 1–36 and the three answers read back')
+  const marked = playSessionCard(holes18, A, B, new Map(), 'half', readHoleMarks({ 1: 'a', 2: 'a', 3: 'halved' }))
+  eq([marked.state.progress, marked.state.leader, marked.outcomes[2].marked], ['2 up thru 3', 'A', true], 'marks make the standing')
+  const scored = new Map([['pa', new Map([[1, 5]])], ['pb', new Map([[1, 4]])]])
+  const both = playSessionCard(holes18, A, B, scored, 'half', readHoleMarks({ 1: 'a', 2: 'b' }))
+  eq([both.outcomes[0].winner, both.outcomes[0].marked, both.outcomes[1].winner], ['B', undefined, 'B'], 'a hole’s scores decide it over its mark; a hole without them takes its mark')
+  const s3 = cardState(marked.outcomes)
+  eq(markIssue(marked.outcomes, s3, 4, 'B'), null, 'the next hole')
+  eq(markIssue(marked.outcomes, s3, 2, 'B'), null, 'or one before it, to amend')
+  eq(markIssue(marked.outcomes, s3, 6, 'B'), 'Mark the 4th first.', 'never ahead of the next')
+  eq(markIssue(marked.outcomes, s3, 2, null), 'Take marks off from the last hole back.', 'taken off from the last hole back')
+  eq(markIssue(marked.outcomes, s3, 3, null), null, 'the last one comes off')
+  eq(markIssue(both.outcomes, cardState(both.outcomes), 1, 'A'), 'That hole has scores on the card — change them there.', 'a hole its scores decide is the card’s')
+  const all: Record<string, 'a'> = {}
+  for (let h = 1; h <= 10; h++) all[h] = 'a'
+  const won = playSessionCard(holes18, A, B, new Map(), 'half', readHoleMarks(all))
+  eq([won.state.settled, won.state.result, sessionResult(won.state)], [true, '10&8', { result: 'a', margin: '10&8' }], 'ten up with eight to play: settled')
+  eq(markIssue(won.outcomes, cardState(won.outcomes), 11, 'B'), 'The match is already decided.', 'nothing marked past the hole that settled it')
+  const level: Record<string, 'halved'> = {}
+  for (let h = 1; h <= 18; h++) level[h] = 'halved'
+  eq(sessionResult(playSessionCard(holes18, A, B, new Map(), 'half', readHoleMarks(level)).state), { result: 'halved', margin: 'A/S' }, 'all square after 18 a half')
+  const extra = playSessionCard(holes18, A, B, new Map(), 'extra', readHoleMarks({ ...level, 19: 'b' }))
+  eq(sessionResult(extra.state), { result: 'b', margin: 'at 19th' }, 'played on: won at the 19th')
+  eq(playSessionCard(holes18, A, B, new Map(), 'sudden', readHoleMarks({ 1: 'halved', 2: 'a' })).state.result, 'at 2nd', 'a playoff marked: the first hole won')
+}
+
+section('Following a tie, live, and a result without its holes (D363)')
+{
+  eq([mayFollowTie({ clubA: 'x', clubB: null }, ['x']), mayFollowTie({ clubA: 'x', clubB: 'y' }, ['z']), mayFollowTie({ clubA: null, clubB: 'y' }, ['y'])],
+    [true, false, true], 'either club’s list follows it')
+  eq([tieLive({ state: 'to_play', anyLive: false, date: '2026-08-10', today: '2026-08-10' }), tieLive({ state: 'to_play', anyLive: false, date: '2026-08-09', today: '2026-08-10' }),
+    tieLive({ state: 'to_play', anyLive: true, date: '2026-08-09', today: '2026-08-10' }), tieLive({ state: 'level', anyLive: false, date: null, today: '2026-08-10' }),
+    tieLive({ state: 'won', anyLive: true, date: '2026-08-10', today: '2026-08-10' })], [true, false, true, true, false], 'live: on the day, on the course, or waiting on a playoff — never once won')
+  eq([readMargin('3 & 2'), readMargin('1 UP'), readMargin(''), readMargin('9&10'), readMargin('at 19th')], ['3&2', '1 up', null, undefined, 'at 19th'], 'a margin read, left out, or refused')
+  ok(MARGINS.includes('10&8') && !MARGINS.includes('11&8') && MARGINS[0] === '1 up', 'the margins run 1 up to 10&8')
+}
+
 // ─── The route, on a store in memory ───────────────────────────
 
 const user = (id: string) => ({ id, isAnonymous: false, email: `${id}@example.invalid`, emailConfirmed: true })
@@ -169,6 +216,8 @@ function memoryStore(o: { draw?: { a: string; b: string } } = {}) {
   const players: (TiePlayer & { tripId: string })[] = []
   const matches: (TieMatchRow & { tripId: string; roundId: string })[] = []
   const boards = new Map<string, unknown>()
+  const marks = new Map<string, unknown>()
+  const feed: { key: string; line: string; club: string | null }[][] = []
   let n = 0
   const id = () => `id${++n}`
   const memberships: Record<string, { club: ReturnType<typeof club>; row: ReturnType<typeof row> }[]> = {
@@ -242,8 +291,28 @@ function memoryStore(o: { draw?: { a: string; b: string } } = {}) {
     insertPlayoffRound: async () => undefined,
     roundCourse: async () => 'course',
     searchMembers: async () => [{ id: 'm1', name: 'Seán Kelly', index: 8.2, gender: 'M' }],
+    // A tie's cards as sessionMatches.ts reads them: holes marked by hand, nobody's scores.
+    tieCards: async t => matches.filter(m => m.tripId === t.tripId).map(m => {
+      const r: SessionMatchResult = { id: m.id, roundId: m.roundId, slot: m.slot, sideA: [...m.sideA], sideB: [...m.sideB], result: m.result, margin: m.margin }
+      const mk = readHoleMarks(marks.get(m.id))
+      if (mk.size === 0) return r
+      const side = (key: string, ids: string[]) => ({ id: key, name: key, players: ids.map(pid => ({ id: pid, name: pid, gender: 'M', receives: 0 })) })
+      const [A, B] = [side('A', [...m.sideA]), side('B', [...m.sideB])]
+      const played = playSessionCard(plainHoles(), A, B, new Map(), m.roundId === t.playoffRoundId ? 'sudden' : t.format.tie, mk)
+      if (!m.result) {
+        Object.assign(r, {
+          live: true, leader: played.state.leader === 'A' ? 'a' : played.state.leader === 'B' ? 'b' : null,
+          progress: played.state.progress, up: played.state.up, thru: played.state.thru,
+          decided: played.state.settled, final: sessionResult(played.state),
+        })
+      }
+      r.detail = { holes: played.holes, outcomes: played.outcomes, a: A, b: B, scores: {} }
+      return r
+    }),
+    async markHole(trip, mid, hole, w) { marks.set(mid, withHoleMark(marks.get(mid), hole, w)); return 'ok' },
+    async noteFeed(t, results) { feed.push(results); return results.length },
   }
-  return { store, ties, players, matches, boards, made: () => made }
+  return { store, ties, players, matches, boards, marks, feed, made: () => made }
 }
 
 async function main() {
@@ -318,6 +387,54 @@ async function main() {
       'a member who is no captain sees the club’s tie, from its own side')
     ok(String((seen.body.ties as { line: string }[])[0].line).includes('2–2'), 'with where it stands')
     eq((await ask(store, 'dave', { action: 'club', slug: 'strand' })).body.captain, true, 'the other club’s captain sees it as theirs too')
+  }
+
+  section('The stream: live ties, holes marked, a result without its holes (D363)')
+  {
+    const { store, ties, feed } = memoryStore()
+    await ask(store, 'ross', setupBody)
+    const tie = (b: Record<string, unknown>, who = 'ross') => ask(store, who, { ...b, code: 'ABC123' })
+    await tie({ action: 'take', clubId: 'strand' }, 'dave')
+    for (const [who, side, name] of [['ross', 'a', 'Ross'], ['ross', 'a', 'Mary'], ['ross', 'a', 'Pat'], ['ross', 'a', 'Joe'], ['dave', 'b', 'Dave'], ['dave', 'b', 'Tom'], ['dave', 'b', 'Ann'], ['dave', 'b', 'Bob']] as const) {
+      await tie({ action: 'player.add', side, name, index: '10' }, who)
+    }
+    const v = (await tie({ action: 'tie' })).body.tie as { players: { id: string; name: string }[] }
+    const idOf = (nm: string) => v.players.find(p => p.name === nm)!.id
+    await tie({ action: 'match.side', slot: 0, side: 'a', playerIds: [idOf('Ross'), idOf('Mary')] })
+    await tie({ action: 'match.side', slot: 0, side: 'b', playerIds: [idOf('Dave'), idOf('Tom')] }, 'dave')
+    await tie({ action: 'match.side', slot: 1, side: 'a', playerIds: [idOf('Pat'), idOf('Joe')] })
+    await tie({ action: 'match.side', slot: 1, side: 'b', playerIds: [idOf('Ann'), idOf('Bob')] }, 'dave')
+    ties[0].date = '2026-08-01'
+
+    eq((await ask(store, null, { action: 'live' })).status, 401, 'signed out: nothing')
+    const live = await ask(store, 'mary', { action: 'live', slug: 'sligo' })
+    const lt = (live.body.ties as { code: string; mine: string; live: boolean; matches: { next: number | null; line: string }[] }[])
+    eq([live.status, lt.map(t => [t.code, t.mine, t.live])], [200, [['ABC123', 'a', true]]], 'a member sees their club’s tie live on its day, from their side')
+    eq([lt[0].matches[0].next, lt[0].matches[2].line], [1, 'To be set'], 'a match from the 1st; one with nobody in it to be set')
+    eq((await ask(store, 'mary', { action: 'live', slug: 'strand' })).status, 403, 'never another club’s')
+    eq((await ask(store, 'mary', { action: 'live', code: 'ABC123' })).status, 200, 'one tie by its code for its own stream')
+
+    eq((await tie({ action: 'match.mark', slot: 0, hole: 1, winner: 'a' }, 'nobody')).status, 403, 'somebody on neither club’s list marks nothing from the stream')
+    eq((await tie({ action: 'match.mark', slot: 2, hole: 1, winner: 'a' }, 'mary')).status, 409, 'a match with nobody in it takes no mark')
+    eq((await tie({ action: 'match.mark', slot: 0, hole: 2, winner: 'a' }, 'mary')).status, 409, 'holes in order')
+    let after = await tie({ action: 'match.mark', slot: 0, hole: 1, winner: 'a' }, 'mary')
+    eq((after.body.tie as { matches: { line: string; next: number }[] }).matches[0].line, 'Co. Sligo 1 up thru 1', 'a member marks the 1st: 1 up thru 1')
+    after = await tie({ action: 'match.mark', slot: 0, hole: 2, winner: 'halved' }, 'dave')
+    eq((after.body.tie as { matches: { next: number }[] }).matches[0].next, 3, 'the other club’s member marks the 2nd halved — the 3rd next')
+    after = await tie({ action: 'match.mark', slot: 0, hole: 1, winner: 'b' }, 'dave')
+    eq((after.body.tie as { matches: { line: string }[] }).matches[0].line, 'Strandhill 1 up thru 2', 'an earlier hole amended')
+    eq((await tie({ action: 'match.result', slot: 1, result: 'a', margin: '12&9' }, 'mary')).status, 400, 'a margin that cannot be is refused')
+    const res = await tie({ action: 'match.result', slot: 1, result: 'a', margin: '3&2' }, 'mary')
+    const rt = res.body.tie as { matches: { result: string; margin: string }[]; score: unknown }
+    eq([rt.matches[1].result, rt.matches[1].margin, rt.score], ['a', '3&2', { a: '1', b: '0' }], 'the result alone, when the holes are not known')
+    eq((await tie({ action: 'match.result', slot: 1, result: 'b' }, 'dave')).status, 409, 'a match with its result is a captain’s to change')
+    const last = feed[feed.length - 1]
+    eq(last.map(f => [f.key, f.line, f.club]), [['interclub:tie1:1', 'Match 2 · Co. Sligo won 3&2 — Co. Sligo 1–0 Strandhill', 'Co. Sligo']], 'the result into the stream, the clubs named, never the players')
+    for (const [slot, result] of [[0, 'b'], [2, 'b'], [3, 'b']] as const) await tie({ action: 'match.settle', slot, result })
+    const won = feed[feed.length - 1]
+    ok(won.some(f => f.key === 'interclub:tie1:tie' && f.line.startsWith('Strandhill win 3–1')), 'the tie once won, into the stream')
+    const gone = await ask(store, 'mary', { action: 'live', slug: 'sligo' })
+    eq((gone.body.ties as unknown[]).length, 0, 'a tie won is no longer live')
   }
 
   console.log(`\n${passed} passed, ${failed} failed`)

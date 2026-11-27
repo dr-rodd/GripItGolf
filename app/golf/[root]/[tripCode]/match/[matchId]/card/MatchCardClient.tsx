@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { createPortal } from 'react-dom'
 import { supabase } from '@/lib/supabase'
 import {
-  type MatchTie, REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, reopenBlocked,
+  type MatchTie, REGULATION_HOLES, extraCourseHole, mayScoreCard, openingHole, ordinal, parseExtraPlan, playCard, playSessionCard, readHoleMarks, reopenBlocked,
   sessionResult, shotsOn, shouldWrite,
   withExtraHole, type CardHole, type CardSideKey, type CardSideView, type ExtraHolePlan,
 } from '@/lib/matchCard'
@@ -115,6 +115,8 @@ export default function MatchCardClient({
   const [scores, setScores] = useState<Scores>({})
   const [conceded, setConceded] = useState<Conceded>({})
   const [plan, setPlan] = useState<ExtraHolePlan>(planInitial)
+  // A session match's holes marked by hand (D363), as stored.
+  const [marks, setMarks] = useState<unknown>(null)
   const [loaded, setLoaded] = useState(false)
   const [unavailable, setUnavailable] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -168,7 +170,8 @@ export default function MatchCardClient({
       ? await Promise.all([
         supabase.from('session_match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
         Promise.resolve({ data: [], error: null }),
-        Promise.resolve({ data: null, error: null }),
+        // The holes marked by hand (D363) — its own read, fail-soft: before migration 109 there is no column.
+        supabase.from('session_matches').select('hole_marks').eq('trip_id', tripId).eq('id', matchId).maybeSingle(),
       ])
       : await Promise.all([
         supabase.from('match_scores').select('player_id, hole_number, gross').eq('trip_id', tripId).eq('match_id', matchId),
@@ -200,7 +203,10 @@ export default function MatchCardClient({
     }
     setScores(nextScores)
     setConceded(nextConceded)
-    if (!x.error && x.data) setPlan(parseExtraPlan((x.data as { extra_holes?: unknown }).extra_holes))
+    if (!x.error && x.data) {
+      if (session) setMarks((x.data as { hole_marks?: unknown }).hole_marks ?? null)
+      else setPlan(parseExtraPlan((x.data as { extra_holes?: unknown }).extra_holes))
+    }
     setLoaded(true)
     setUnavailable(false)
   }, [tripId, matchId, loaded, session, outbox, mine])
@@ -214,10 +220,10 @@ export default function MatchCardClient({
   const { holes, outcomes, state } = useMemo(() => {
     const byPlayer = new Map(Object.entries(scores).map(([pid, hs]) => [pid, new Map(Object.entries(hs).map(([h, g]) => [Number(h), g]))]))
     return session
-      ? playSessionCard(baseHoles, sides.A, sides.B, byPlayer, tie)
+      ? playSessionCard(baseHoles, sides.A, sides.B, byPlayer, tie, readHoleMarks(marks))
       : playCard(baseHoles, sides.A, sides.B, byPlayer,
         new Map(Object.entries(conceded).map(([h, side]) => [Number(h), side])), plan)
-  }, [baseHoles, sides, scores, conceded, plan, session, tie])
+  }, [baseHoles, sides, scores, conceded, plan, session, tie, marks])
   // All square after 18 on a session whose tie is picked by hand: the side
   // chosen in the finish sheet, written as "won by decision".
   const decide = session && 'decide' in state && (state as { decide?: boolean }).decide === true
@@ -654,6 +660,13 @@ export default function MatchCardClient({
             ))}
           </select>
         </label>
+      )}
+
+      {/* A hole marked by hand (D363): who won it was said with no scores. */}
+      {outcome?.marked && (
+        <p className="t-cap text-ink/65 -mt-1">
+          Marked without scores: {outcome.winner === 'halved' ? 'halved' : `${outcome.winner === 'A' ? a.name : b.name} won the hole`}.
+        </p>
       )}
 
       {/* Top of the draw on the left, bottom on the right */}

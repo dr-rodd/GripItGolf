@@ -7,6 +7,12 @@ import { clubStore } from '../club/store'
 import { findCompetition, readCompetitionDraw } from '@/app/interclub/source'
 import type { InterclubStore, TieRecord, TieMatchRow } from './interclub'
 import type { ProvinceKey } from '@/lib/interclub'
+import { makeEventReader } from '@/lib/eventReader'
+import { parseLeaderboards } from '@/lib/leaderboards'
+import { fetchMemberships } from '@/lib/teamMembers'
+import { withHoleMark } from '@/lib/matchCard'
+import { readSessionCards, readSessionMatchRows } from '@/app/golf/[root]/[tripCode]/session/sessionMatches'
+import { writeInterclubResults } from '../feed/write'
 
 // The service role's store behind /api/interclub. Every interclub table
 // (migration 108) is read fail-soft: before the paste the draw pages offer
@@ -185,6 +191,43 @@ export function interclubStore(db: Db): InterclubStore {
       return ((data ?? []) as { id: string; slot: number; side_a: string[]; side_b: string[]; result: TieMatchRow['result']; margin: string | null }[])
         .map(m => ({ id: m.id, slot: m.slot, sideA: m.side_a ?? [], sideB: m.side_b ?? [], result: m.result, margin: m.margin }))
     },
+    async tieCards(tie) {
+      // The event's own reader (lib/eventReader.ts) and its own session reader,
+      // so the stream reads a match exactly as the leaderboard does.
+      const r = makeEventReader(tie.code, db)
+      const [trip, playersRes, teamsRes, memberships, rows] = await Promise.all([
+        r.from('trips').select('id, leaderboards').eq('trip_code', tie.code).maybeSingle(),
+        r.from('players').select('id, name, handicap, gender').eq('trip_id', tie.tripId).eq('is_composite', false),
+        r.from('teams').select('id, name').eq('trip_id', tie.tripId),
+        fetchMemberships(tie.tripId, r),
+        readSessionMatchRows(r, tie.tripId),
+      ])
+      if (trip.error) throw trip.error
+      const boards = parseLeaderboards((trip.data as { leaderboards: unknown } | null)?.leaderboards)
+      const players = (playersRes.data ?? []) as { id: string; name: string; handicap: number | null; gender: string }[]
+      const teams = (teamsRes.data ?? []) as { id: string; name: string }[]
+      return (await readSessionCards(r, { id: tie.tripId }, boards, players, { teams, memberships }, rows)).results
+    },
+    async markHole(tripId, matchId, hole, winner) {
+      // Read, merge and write back only while nobody else has written the row
+      // since — a mark another phone just made is never overwritten.
+      for (let attempt = 0; attempt < 4; attempt++) {
+        const { data, error } = await db.from('session_matches').select('hole_marks, updated_at').eq('trip_id', tripId).eq('id', matchId).maybeSingle()
+        if (notThere(error)) return 'not_ready'
+        if (error) throw error
+        if (!data) return 'gone'
+        const row = data as { hole_marks: unknown; updated_at: string | null }
+        let q = db.from('session_matches')
+          .update({ hole_marks: withHoleMark(row.hole_marks, hole, winner), updated_at: new Date().toISOString() })
+          .eq('id', matchId)
+        q = row.updated_at ? q.eq('updated_at', row.updated_at) : q.is('updated_at', null)
+        const { data: hit, error: e } = await q.select('id')
+        if (e) throw e
+        if ((hit ?? []).length > 0) return 'ok'
+      }
+      return 'busy'
+    },
+    noteFeed: (tie, results) => writeInterclubResults(db, { id: tie.id, tripId: tie.tripId, code: tie.code, competition: tie.competitionName }, results),
     async matchScored(tripId, matchId) {
       const { count, error } = await db.from('session_match_scores').select('hole_number', { count: 'exact', head: true }).eq('trip_id', tripId).eq('match_id', matchId)
       // Unknown is treated as scored: the safer refusal.

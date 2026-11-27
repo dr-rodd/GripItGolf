@@ -23,8 +23,12 @@ import {
   TIE_COLOURS, TIE_PERMISSIONS, MAX_SIDE_PLAYERS, clubOf, clubSide, drawNameIssue, drawNameOf, formatIssue,
   maySide, mayRun, playerIssue, playoffIssue, readFormat, settleIssue, sideIssue, takeableSide, tieBoards,
   tieName, tieOutcome, tieScore, withPlayoff, type Settled, type Side, type TieFormat, type TieMatch,
+  LIVE_TIE_DAYS, mayFollowTie, points, readMargin, sideOfClubs, tieLive,
 } from '@/lib/interclubTie'
 import { runCreate, type CreateStore } from '../trip/create/create'
+import { cardState, markIssue, plainHoles, type CardSideKey, type HoleOutcome } from '@/lib/matchCard'
+import { matchLine, type SessionMatchResult } from '@/lib/sessions'
+import { addDays } from '@/lib/leagueSetup'
 import type { ClubRecord, MemberRecord } from '../club/club'
 
 // ─── The store ─────────────────────────────────────────────────
@@ -100,6 +104,12 @@ export interface InterclubStore {
   writeBoards(tripId: string, boards: unknown): Promise<void>
   insertPlayoffRound(tripId: string, round: { id: string; courseId: string; date: string | null; itemRow: ReturnType<typeof toItemRow> }): Promise<void>
   roundCourse(roundId: string): Promise<string | null>
+  /** The tie's session matches with where each stands — marks and all (D363), as the leaderboard reads them. */
+  tieCards(tie: TieRecord): Promise<SessionMatchResult[]>
+  /** A hole marked won, halved or taken off (D363, migration 109). */
+  markHole(tripId: string, matchId: string, hole: number, winner: CardSideKey | 'halved' | null): Promise<'ok' | 'not_ready' | 'gone' | 'busy'>
+  /** The tie's results into its stream (D363) — answers how many items changed. */
+  noteFeed(tie: TieRecord, results: { key: string; line: string; club: string | null }[]): Promise<number>
   /** A club's list, searched by name, for picking a side's players. */
   searchMembers(clubId: string, q: string): Promise<{ id: string; name: string; index: number | null; gender: 'M' | 'F' | null }[]>
 }
@@ -190,6 +200,33 @@ export async function runInterclub(
       }
     }))
     return { status: 200, body: { ok: true, ready: true, captain, clubId: mine.club.id, ties: rows } }
+  }
+
+  // D363: the live ties for the interclub stream's ticker — a club's (`slug`),
+  // else every club this account is on the list of — or one tie (`code`)
+  // for its own stream. Reading them writes their results into the stream.
+  if (action === 'live') {
+    const clubIds = verified.map(r => r.club.id)
+    const today = irishToday(now)
+    let list: TieRecord[]
+    if (b.code !== undefined) {
+      const one = await store.tieByCode(str(b.code).toUpperCase())
+      if (one === 'not_ready') return { status: 200, body: { ok: true, ready: false, ties: [] } }
+      if (!one || !mayFollowTie(one, clubIds)) return fail(403, 'That match is for its clubs’ members.')
+      list = [one]
+    } else {
+      const slug = str(b.slug)
+      const here = slug ? verified.filter(r => r.club.slug === slug) : verified
+      if (slug && here.length === 0) return fail(403, 'Only the club’s members see its interclub matches.')
+      const got = await store.tiesOfClubs(here.map(r => r.club.id))
+      if (got === 'not_ready') return { status: 200, body: { ok: true, ready: false, ties: [] } }
+      const from = addDays(today, -LIVE_TIE_DAYS)
+      list = got.filter(t => !t.settled && !!t.date && t.date <= today && t.date >= from).slice(0, 8)
+    }
+    const views = await Promise.all(list.map(t => liveTie(store, t, clubIds, today)))
+    const wrote = (await Promise.all(views.map(v => store.noteFeed(v.tie, v.feed)))).reduce((x, y) => x + y, 0)
+    const shown = b.code !== undefined ? views : views.filter(v => v.view.live)
+    return { status: 200, body: { ok: true, ready: true, ties: shown.map(v => v.view), wrote } }
   }
 
   // A club's name in the draws: its Clubhouse or its team captains (D358).
@@ -305,6 +342,43 @@ export async function runInterclub(
     return { status: 200, body: { ok: true, tie: await view(store, tie, captainOf) } }
   }
 
+  // D363: a hole marked won or halved — or taken off — by anybody on either
+  // club's list, from the stream. A hole its scores decide is the card's.
+  if (action === 'match.mark' || action === 'match.result') {
+    if (!mayFollowTie(tie, verified.map(r => r.club.id))) return fail(403, 'Only the clubs’ members score this from the stream — anybody with the match’s link can score it there.')
+    const playoff = b.playoff === true
+    const roundId = playoff ? tie.playoffRoundId : tie.roundId
+    if (!roundId) return fail(409, 'There is no playoff yet.')
+    const slot = Number(b.slot)
+    if (!Number.isInteger(slot) || slot < 0 || slot >= (playoff ? 1 : tie.format.matches)) return fail(400, 'Which match?')
+    const cards = await store.tieCards(tie)
+    const m = cards.find(c => c.roundId === roundId && c.slot === slot)
+    if (!m || m.sideA.length === 0 || m.sideB.length === 0) return fail(409, 'Both clubs need their players in this match first.')
+    if (m.result) return fail(409, 'This match has its result — a team captain changes it from the match’s page.')
+    if (action === 'match.mark') {
+      const hole = Number(b.hole)
+      const winner = b.winner === 'a' ? 'A' : b.winner === 'b' ? 'B' : b.winner === 'halved' ? 'halved' : b.winner === null ? null : undefined
+      if (!Number.isInteger(hole) || winner === undefined) return fail(400, 'Who won the hole?')
+      const outcomes = outcomesOf(m)
+      const issue = markIssue(outcomes, cardState(outcomes), hole, winner)
+      if (issue) return fail(409, issue)
+      const out = await store.markHole(tie.tripId, m.id, hole, winner)
+      if (out === 'not_ready') return fail(503, 'Marking holes isn’t set up yet — score it on the card for now.')
+      if (out === 'gone') return fail(404, 'That match isn’t there any more.')
+      if (out === 'busy') return fail(409, 'Somebody else is scoring this match — try again.')
+    } else {
+      const result = b.result === 'a' || b.result === 'b' || b.result === 'halved' ? b.result : undefined
+      if (!result) return fail(400, 'Who won the match?')
+      if (playoff && result === 'halved') return fail(400, 'A playoff has a winner.')
+      const margin = result === 'halved' ? 'A/S' : readMargin(b.margin)
+      if (margin === undefined) return fail(400, 'That margin doesn’t read — pick one from the list, or leave it out.')
+      await store.setMatchResult(tie.tripId, roundId, slot, result, margin)
+    }
+    const fresh = await liveTie(store, tie, verified.map(r => r.club.id), irishToday(now))
+    await store.noteFeed(tie, fresh.feed)
+    return { status: 200, body: { ok: true, tie: fresh.view } }
+  }
+
   // D361, a match: a captain's result by hand — a walkover against a vacant side (D354), a concession, a ruling.
   if (action === 'match.settle') {
     if (!mayRun(tie, captainOf)) return fail(403, 'Only the clubs’ team captains settle a match.')
@@ -320,6 +394,7 @@ export async function runInterclub(
     const m = matches.find(x => x.slot === slot)
     const vacant = !m || (result === 'a' ? m.sideB.length === 0 : result === 'b' ? m.sideA.length === 0 : false)
     await store.setMatchResult(tie.tripId, roundId, slot, result, result === null ? null : margin ?? (vacant ? 'W/O' : 'Settled'))
+    await noteTie(store, tie, verified.map(r => r.club.id), now)
     return { status: 200, body: { ok: true, tie: await view(store, tie, captainOf) } }
   }
 
@@ -328,6 +403,7 @@ export async function runInterclub(
     if (!mayRun(tie, captainOf)) return fail(403, 'Only the clubs’ team captains settle the match.')
     if (b.winner === null) {
       await store.updateTie(tie.id, { settled: null })
+      await noteTie(store, { ...tie, settled: null }, verified.map(r => r.club.id), now)
       return { status: 200, body: { ok: true, tie: await view(store, { ...tie, settled: null }, captainOf) } }
     }
     const issue = settleIssue(b.winner, b.note)
@@ -335,6 +411,7 @@ export async function runInterclub(
     const ownClub = [tie.clubA, tie.clubB].find(c => c && captainOf.includes(c)) ?? null
     const settled: Settled = { winner: b.winner as Side, note: str(b.note) || null, byName: byName(ownClub), at: now.toISOString() }
     await store.updateTie(tie.id, { settled })
+    await noteTie(store, { ...tie, settled }, verified.map(r => r.club.id), now)
     return { status: 200, body: { ok: true, tie: await view(store, { ...tie, settled }, captainOf) } }
   }
 
@@ -494,4 +571,121 @@ async function view(store: InterclubStore, tie: TieRecord, captainOf: string[]) 
     outcome,
     settled: tie.settled,
   }
+}
+
+// ─── A tie as the stream reads it (D363) ────────────────────────
+
+/** A hole as the match sheet draws it: who won it, and whether by a mark. */
+export type LiveHole = { n: number; w: 'a' | 'b' | 'h' | null; marked: boolean }
+
+/** One match of a live tie. */
+export type LiveMatch = {
+  slot: number
+  playoff: boolean
+  a: string | null
+  b: string | null
+  result: 'a' | 'b' | 'halved' | null
+  margin: string | null
+  line: string
+  leader: 'a' | 'b' | null
+  live: boolean
+  holes: LiveHole[]
+  /** The next hole to mark, or null once it is settled or every hole is in. */
+  next: number | null
+  /** Who won it, as the holes stand, ready to be finalised — null until they settle it. */
+  settled: { result: 'a' | 'b' | 'halved'; margin: string } | null
+}
+
+export type LiveTie = {
+  id: string; code: string; competition: string
+  names: { a: string; b: string }
+  colours: { a: string; b: string }
+  /** The viewer's club's side, where they are on one. */
+  mine: 'a' | 'b' | null
+  score: { a: string; b: string }
+  line: string
+  state: string
+  live: boolean
+  date: string | null
+  /** Whether this account may mark holes and give results — on either club's list. */
+  may: boolean
+  matches: LiveMatch[]
+}
+
+const BLANK_OUTCOMES: HoleOutcome[] = plainHoles().map(h => ({
+  holeNumber: h.holeNumber, winner: null, conceded: false, nettA: null, nettB: null, nrA: false, nrB: false,
+}))
+
+/** A match's holes as its card stands — eighteen untouched ones where nothing is on it yet. */
+function outcomesOf(m: SessionMatchResult): HoleOutcome[] {
+  return m.detail?.outcomes ?? BLANK_OUTCOMES
+}
+
+/** A tie's live view, and its results as the stream's items. */
+async function liveTie(store: InterclubStore, tie: TieRecord, clubIds: string[], today: string): Promise<{ tie: TieRecord; view: LiveTie; feed: { key: string; line: string; club: string | null }[] }> {
+  const [cards, players] = await Promise.all([store.tieCards(tie), store.players(tie.tripId)])
+  const nameOf = new Map(players.map(p => [p.id, p.name]))
+  const names = (ids: readonly string[]) => (ids.length ? ids.map(id => nameOf.get(id) ?? 'A player').join(' & ') : null)
+  const main = cards.filter(c => c.roundId === tie.roundId)
+  const off = tie.playoffRoundId ? cards.find(c => c.roundId === tie.playoffRoundId && c.slot === 0) : undefined
+  const score = tieScore(main.map(c => ({ slot: c.slot, sideA: c.sideA, sideB: c.sideB, result: c.result, margin: c.margin ?? null })))
+  const outcome = tieOutcome({
+    names: { a: tie.nameA, b: tie.nameB }, score, matches: tie.format.matches, settled: tie.settled,
+    playoff: !tie.playoffRoundId ? null : off?.result === 'a' || off?.result === 'b' ? off.result : 'open', holes: tie.format.holes,
+  })
+  const club = { a: tie.nameA, b: tie.nameB }
+  const asLive = (slot: number, playoff: boolean, c: SessionMatchResult | undefined): LiveMatch => {
+    const outcomes = c ? outcomesOf(c) : BLANK_OUTCOMES
+    const firstOpen = outcomes.find(o => o.winner === null)?.holeNumber ?? null
+    const done = !!c?.result
+    const settled = done ? null : c?.final ?? null
+    return {
+      slot, playoff,
+      a: names(c?.sideA ?? []), b: names(c?.sideB ?? []),
+      result: c?.result ?? null, margin: c?.margin ?? null,
+      line: c ? matchLine(c, club) : 'To be set',
+      leader: c?.leader ?? null,
+      live: !!c?.live,
+      holes: outcomes.map(o => ({ n: o.holeNumber, w: o.winner === 'A' ? 'a' : o.winner === 'B' ? 'b' : o.winner === 'halved' ? 'h' : null, marked: !!o.marked })),
+      next: done || c?.decided ? null : firstOpen,
+      settled,
+    }
+  }
+  const matches = Array.from({ length: tie.format.matches }, (_, slot) => asLive(slot, false, main.find(c => c.slot === slot)))
+  if (tie.playoffRoundId) matches.push(asLive(0, true, off))
+  const view: LiveTie = {
+    id: tie.id, code: tie.code, competition: tie.competitionName,
+    names: club, colours: { a: TIE_COLOURS[0], b: TIE_COLOURS[1] },
+    mine: sideOfClubs(tie, clubIds),
+    score: { a: points(score.a), b: points(score.b) },
+    line: outcome.line, state: outcome.state,
+    live: tieLive({ state: outcome.state, anyLive: main.some(c => c.live) || !!off?.live, date: tie.date, today }),
+    date: tie.date,
+    may: mayFollowTie(tie, clubIds),
+    matches,
+  }
+  // The stream's items (D363): each match decided, and the tie once decided — the clubs named, never the players.
+  const feed: { key: string; line: string; club: string | null }[] = []
+  for (const m of matches) {
+    if (!m.result) continue
+    const who = m.result === 'halved' ? null : club[m.result]
+    const label = m.playoff ? 'The playoff' : `Match ${m.slot + 1}`
+    feed.push({
+      key: `interclub:${tie.id}:${m.playoff ? 'playoff' : m.slot}`,
+      line: `${label} · ${m.result === 'halved' ? 'Halved' : `${who} won${m.margin && m.margin !== 'Settled' ? ` ${m.margin}` : ''}`} — ${tie.nameA} ${points(score.a)}–${points(score.b)} ${tie.nameB}`,
+      club: who,
+    })
+  }
+  if (outcome.state === 'won' || outcome.state === 'settled') {
+    feed.push({ key: `interclub:${tie.id}:tie`, line: `${outcome.line} · ${tie.competitionName}`, club: outcome.winner ? club[outcome.winner] : null })
+  }
+  return { tie, view, feed }
+}
+
+/** After a captain's write: the tie's results into its stream, never in the way. */
+async function noteTie(store: InterclubStore, tie: TieRecord, clubIds: string[], now: Date) {
+  try {
+    const { feed } = await liveTie(store, tie, clubIds, irishToday(now))
+    await store.noteFeed(tie, feed)
+  } catch (e) { console.error('interclub feed note failed:', e) }
 }

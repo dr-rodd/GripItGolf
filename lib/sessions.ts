@@ -487,6 +487,9 @@ export type SessionMatchResult = {
   /** While live: holes up (0 all square) and the furthest hole with a result. */
   up?: number
   thru?: number
+  /** While live: the card has decided it (D363) — and what Finalise would write, where that needs nobody to pick. */
+  decided?: boolean
+  final?: { result: 'a' | 'b' | 'halved'; margin: string } | null
   /**
    * The match hole by hole, once anything is on its card — what the
    * leaderboard opens beneath the row (Ross, 10 Nov 2026: the leaderboard is

@@ -65,6 +65,8 @@ export type HoleOutcome = {
   /** The side picked up — every player in it an NR. */
   nrA: boolean
   nrB: boolean
+  /** Decided by a mark — who won it, said by hand with no scores (D363). */
+  marked?: boolean
 }
 
 /** The stroke index this player plays the hole off — the ladies' where a woman has one. */
@@ -93,10 +95,77 @@ function sideNett(h: CardHole, side: CardSide, scores: CardScores): number | 'NR
   return netts.length > 0 ? Math.min(...netts) : 'NR'
 }
 
-/** Every hole of the card, in order, with who won it so far. */
+// ─── Holes marked by hand (D363) ────────────────────────────────
+//
+// Ross, 27 Nov 2026: "allow for a w/l/halve rather than score entry as it's
+// not always clear". Somebody following a match often knows who won a hole
+// and not what anybody scored. A mark says who won it — a side, or halved —
+// and decides a hole its scores do not: once both sides have scores on a
+// hole, the scores decide it and its mark is ignored.
+
+/** Hole number → who won it, said by hand. */
+export type HoleMarks = ReadonlyMap<number, CardSideKey | 'halved'>
+export const NO_MARKS: HoleMarks = new Map()
+
+/** The stored object (`session_matches.hole_marks`, migration 109) read back: whole hole numbers 1–36, 'a', 'b' or 'halved'. Never null. */
+export function readHoleMarks(raw: unknown): HoleMarks {
+  const out = new Map<number, CardSideKey | 'halved'>()
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    const n = Number(k)
+    if (!Number.isInteger(n) || n < 1 || n > MAX_CARD_HOLES) continue
+    if (v === 'a') out.set(n, 'A')
+    else if (v === 'b') out.set(n, 'B')
+    else if (v === 'halved') out.set(n, 'halved')
+  }
+  return out
+}
+
+/** The stored object with one hole marked — or, with null, its mark taken off. */
+export function withHoleMark(raw: unknown, hole: number, winner: CardSideKey | 'halved' | null): Record<string, 'a' | 'b' | 'halved'> {
+  const out: Record<string, 'a' | 'b' | 'halved'> = {}
+  for (const [n, w] of readHoleMarks(raw)) out[String(n)] = w === 'A' ? 'a' : w === 'B' ? 'b' : 'halved'
+  if (winner === null) delete out[String(hole)]
+  else out[String(hole)] = winner === 'A' ? 'a' : winner === 'B' ? 'b' : 'halved'
+  return out
+}
+
+/**
+ * Eighteen plain holes, for a match marked by hand whose course has no card
+ * yet (or whose players have no handicaps): who won a hole needs no par.
+ */
+export function plainHoles(n = REGULATION_HOLES): CardHole[] {
+  return Array.from({ length: n }, (_, i) => ({ holeNumber: i + 1, par: 4, strokeIndex: i + 1 }))
+}
+
+/**
+ * Why this hole cannot be marked — or null (D363). Holes go in order: the
+ * next hole without a result, or any before it to amend. A hole its scores
+ * decide is changed on the card; a match already settled takes no mark
+ * past the hole that settled it; a mark is taken off only from the last
+ * hole with a result, so no gap opens behind it.
+ */
+export function markIssue(
+  outcomes: readonly HoleOutcome[], state: Pick<CardState, 'settled' | 'thru'>,
+  hole: number, winner: CardSideKey | 'halved' | null,
+): string | null {
+  const o = outcomes.find(x => x.holeNumber === hole)
+  if (!o) return 'That hole isn’t on this match’s card.'
+  if (o.winner !== null && !o.marked) return 'That hole has scores on the card — change them there.'
+  if (winner === null) {
+    if (!o.marked) return 'That hole has nothing to take off.'
+    return hole === state.thru ? null : 'Take marks off from the last hole back.'
+  }
+  const firstOpen = outcomes.find(x => x.winner === null)?.holeNumber
+  if (firstOpen !== undefined && hole > firstOpen) return `Mark the ${ordinal(firstOpen)} first.`
+  if (state.settled && o.winner === null) return 'The match is already decided.'
+  return null
+}
+
+/** Every hole of the card, in order, with who won it so far. A hole its scores do not decide takes its mark (D363). */
 export function holeOutcomes(
   holes: readonly CardHole[], a: CardSide, b: CardSide,
-  scores: CardScores, concessions: CardConcessions,
+  scores: CardScores, concessions: CardConcessions, marks: HoleMarks = NO_MARKS,
 ): HoleOutcome[] {
   return [...holes].sort((x, y) => x.holeNumber - y.holeNumber).map(h => {
     const figA = sideNett(h, a, scores)
@@ -109,9 +178,12 @@ export function holeOutcomes(
         : figA === 'NR' ? 'B' : figB === 'NR' ? 'A'
           : figA === figB ? 'halved' : figA < figB ? 'A' : 'B'
     }
+    const mark = winner === null ? marks.get(h.holeNumber) ?? null : null
+    if (mark) winner = mark
     return {
       holeNumber: h.holeNumber,
       winner,
+      ...(mark ? { marked: true } : {}),
       conceded: !!gave,
       nettA: typeof figA === 'number' ? figA : null,
       nettB: typeof figB === 'number' ? figB : null,
@@ -265,12 +337,12 @@ export function withExtraHole(plan: ExtraHolePlan, n: number, courseHole: number
 export function playCard(
   holes: readonly CardHole[], a: CardSide, b: CardSide,
   scores: CardScores, concessions: CardConcessions,
-  plan: ExtraHolePlan = {},
+  plan: ExtraHolePlan = {}, marks: HoleMarks = NO_MARKS,
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: CardState } {
   const base = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
   const list = [...base]
   for (;;) {
-    const outcomes = holeOutcomes(list, a, b, scores, concessions)
+    const outcomes = holeOutcomes(list, a, b, scores, concessions, marks)
     const state = cardState(outcomes)
     const allIn = outcomes.every(o => o.winner !== null)
     if (!state.extra || state.settled || !allIn || list.length >= MAX_CARD_HOLES || base.length < REGULATION_HOLES) {
@@ -344,15 +416,16 @@ export type MatchTie = 'half' | 'extra' | 'manual' | 'sudden'
 /** A session match's card: the eighteen (more on extra holes), its outcomes, and where it stands. */
 export function playSessionCard(
   holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores, tie: MatchTie = 'half',
+  marks: HoleMarks = NO_MARKS,
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
-  if (tie === 'sudden') return playSuddenDeath(holes, a, b, scores)
+  if (tie === 'sudden') return playSuddenDeath(holes, a, b, scores, marks)
   if (tie === 'extra') {
     // The knockout's own card: down the 19th off the 1st, until one is won.
-    const played = playCard(holes, a, b, scores, new Map())
+    const played = playCard(holes, a, b, scores, new Map(), {}, marks)
     return { ...played, state: { ...played.state, halved: false } }
   }
   const list = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
-  const outcomes = holeOutcomes(list, a, b, scores, new Map())
+  const outcomes = holeOutcomes(list, a, b, scores, new Map(), marks)
   const state = cardState(outcomes)
   if (state.extra) {
     return tie === 'manual'
@@ -377,12 +450,12 @@ export function playSessionCard(
  * session board carries it (lib/interclubTie.ts).
  */
 export function playSuddenDeath(
-  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores,
+  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores, marks: HoleMarks = NO_MARKS,
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
   const base = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
   const list: CardHole[] = base.length ? [{ ...base[0], holeNumber: 1 }] : []
   for (;;) {
-    const outcomes = holeOutcomes(list, a, b, scores, new Map())
+    const outcomes = holeOutcomes(list, a, b, scores, new Map(), marks)
     const last = outcomes[outcomes.length - 1]
     if (last?.winner === 'halved' && list.length < MAX_CARD_HOLES) {
       const n = list.length + 1

@@ -111,6 +111,8 @@ type ItemWrite = {
   key: string; kind: string; author_id: string | null; parent_id?: string | null
   trip_id: string | null; round_id?: string | null; player_id?: string | null; club_id: string | null
   data: Record<string, unknown>; held?: boolean
+  /** A stream it belongs to — an interclub tie's, 'match:<id>' (D363). */
+  stream?: string | null
 }
 
 /** Upserted on its key; a status or audience already on the row is never touched. Answers the row's id. */
@@ -368,6 +370,40 @@ export async function writeMatchResult(db: Db, matchId: string): Promise<void> {
     })
     if (!m.next_match_id) await writeWinsFor(db, { id: m.trip_id, name: trip.name }, won)
   } catch (e) { quiet('match result')(e) }
+}
+
+/**
+ * An interclub tie's results into its stream (D363): each match decided,
+ * and the tie once it is won or settled. **The clubs are named, never the
+ * players** — most of a tie's players have no account and some are juniors
+ * (D304: nothing is written about either). Idempotent on its keys: a line
+ * unchanged is left alone, a result taken off takes its item. Answers how
+ * many items it wrote or changed, so a stream already open can read again.
+ */
+export async function writeInterclubResults(
+  db: Db,
+  tie: { id: string; tripId: string; code: string; competition: string },
+  results: { key: string; line: string; club: string | null }[],
+): Promise<number> {
+  try {
+    if (!(await feedReady(db))) return 0
+    const stream = `match:${tie.id}`
+    const { data, error } = await db.from('feed_items').select('key, data').eq('trip_id', tie.tripId).like('key', 'interclub%')
+    if (error) throw error
+    const had = new Map(((data ?? []) as { key: string; data: { line?: string } | null }[]).map(r => [r.key, r.data?.line ?? null]))
+    let wrote = 0
+    for (const r of results) {
+      if (had.get(r.key) === r.line) continue
+      await put(db, {
+        key: r.key, kind: 'match_result', author_id: null, trip_id: tie.tripId, club_id: null, stream,
+        data: { name: r.club ?? tie.competition, line: r.line, event: tie.competition, code: tie.code },
+      })
+      wrote++
+    }
+    const gone = [...had.keys()].filter(k => !results.some(r => r.key === k))
+    await dropKeys(db, gone)
+    return wrote + gone.length
+  } catch (e) { quiet('interclub results')(e); return 0 }
 }
 
 /** The nightly tidy (D305): items past FEED_KEEP_DAYS, held statuses whose card never came, resolved reports. */

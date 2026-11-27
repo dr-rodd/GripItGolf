@@ -6,7 +6,7 @@ import type { Leaderboard } from '@/lib/leaderboards'
 import { allowanceOf } from '@/lib/handicapAllowance'
 import { teesForPlayer } from '@/lib/courseHandicap'
 import { matchStrokes, foursomesStrokes, parseMatchTees } from '@/lib/matchArrangements'
-import { playSessionCard, type CardHole, type CardSideView } from '@/lib/matchCard'
+import { plainHoles, playSessionCard, readHoleMarks, sessionResult, type CardHole, type CardSideView } from '@/lib/matchCard'
 import { sessionBoardFor, defaultTeeIndex, type SessionMatchResult, type MatchFormat } from '@/lib/sessions'
 import { tagOfTeam } from '@/lib/tagBoards'
 import type { Membership } from '@/lib/teamSets'
@@ -33,6 +33,8 @@ export type SessionMatchRow = {
   result: 'a' | 'b' | 'halved' | null
   margin: string | null
   tees: unknown
+  /** The holes marked by hand (D363, migration 109) — read in its own query, absent before it. */
+  hole_marks?: unknown
 }
 
 export type SessionCardSetup = {
@@ -52,13 +54,17 @@ export type SessionCardSetup = {
 
 /** Every session match on the event, rows only. */
 export async function readSessionMatchRows(db: Reads, tripId: string): Promise<SessionMatchRow[]> {
-  const { data, error } = await db
-    .from('session_matches')
-    .select('id, round_id, slot, side_a, side_b, result, margin, tees')
-    .eq('trip_id', tripId)
-    .order('slot')
+  const [{ data, error }, marks] = await Promise.all([
+    db.from('session_matches')
+      .select('id, round_id, slot, side_a, side_b, result, margin, tees')
+      .eq('trip_id', tripId)
+      .order('slot'),
+    // Its own query, fail-soft: before migration 109 there is no column, and no hole is marked.
+    db.from('session_matches').select('id, hole_marks').eq('trip_id', tripId),
+  ])
   if (error) return []
-  return (data ?? []) as SessionMatchRow[]
+  const markOf = new Map(marks.error ? [] : ((marks.data ?? []) as { id: string; hole_marks: unknown }[]).map(r => [r.id, r.hole_marks]))
+  return ((data ?? []) as SessionMatchRow[]).map(r => (markOf.get(r.id) ? { ...r, hole_marks: markOf.get(r.id) } : r))
 }
 
 /** A side's name: its tag where every player shares one, else its players. */
@@ -148,13 +154,26 @@ export async function readSessionCards(
       id: row.id, roundId: row.round_id, slot: row.slot, sideA: row.side_a, sideB: row.side_b,
       result: row.result, margin: row.margin,
     }
-    if (!row.side_a.length || !row.side_b.length) {
-      setups.set(row.id, { ...base, blocked: 'sides' }); results.push(result); continue
+    const marks = readHoleMarks(row.hole_marks)
+    // A match marked by hand where its card cannot be drawn (D363): who won
+    // each hole needs no course card, no handicaps and no players.
+    const byMarks = (blocked: SessionCardSetup['blocked']) => {
+      setups.set(row.id, { ...base, blocked })
+      if (marks.size > 0) {
+        const holes = round ? (holesOf.get(round.course_id) ?? []).slice(0, 18) : []
+        const empty = (key: 'A' | 'B'): CardSideView => ({ id: `${row.id}:${key}`, name: sideName(key === 'A' ? row.side_a : row.side_b, players, ctx.teams, ctx.memberships), players: [] })
+        const [ca, cb] = [empty('A'), empty('B')]
+        const played = playSessionCard(holes.length === 18 ? holes : plainHoles(), ca, cb, new Map(), board?.matchTie ?? 'half', marks)
+        markResult(result, played, row.result)
+        result.detail = { holes: played.holes, outcomes: played.outcomes, a: ca, b: cb, scores: {} }
+      }
+      results.push(result)
     }
+    if (!row.side_a.length || !row.side_b.length) { byMarks('sides'); continue }
     // The one scorecard gate (D68), ahead of the handicaps: with no rated tee
     // nobody's shots can be worked out, and the gate says why.
     const gate = round ? cardBlocker((holesOf.get(round.course_id) ?? []).length, ratedTeeCount(courseTees)) : null
-    if (gate) { setups.set(row.id, { ...base, blocked: gate === 'none' ? 'scorecard' : 'unrated' }); results.push(result); continue }
+    if (gate) { byMarks(gate === 'none' ? 'scorecard' : 'unrated'); continue }
     const allowance = board ? allowanceOf(board) : 100
     const asPlayer = (pid: string) => {
       const t = tees.find(x => x.id === teeOf[pid])
@@ -173,7 +192,7 @@ export async function readSessionCards(
         ], allowance)
       : null
     const strokes = format === 'foursomes' ? null : matchStrokes(ids.map(asPlayer), allowance)
-    if (format === 'foursomes' ? !foursomes : !strokes) { setups.set(row.id, { ...base, blocked: 'handicaps' }); results.push(result); continue }
+    if (format === 'foursomes' ? !foursomes : !strokes) { byMarks('handicaps'); continue }
     const receives = new Map((strokes ?? []).map(s => [s.playerId, s.receives]))
     const side = (key: 'A' | 'B', sideIds: string[]): CardSideView => {
       const name = sideName(sideIds, players, ctx.teams, ctx.memberships)
@@ -202,18 +221,11 @@ export async function readSessionCards(
     }
     const card = { a: side('A', row.side_a), b: side('B', row.side_b), holes }
     setups.set(row.id, { ...base, card })
-    const scores = scoresOf.get(row.id)
-    if (scores && scores.size > 0) {
+    const scores = scoresOf.get(row.id) ?? new Map<string, Map<number, number | null>>()
+    if (scores.size > 0 || marks.size > 0) {
       // A tie decided on extra holes plays on past 18 (the session's own answer).
-      const played = playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half')
-      if (!row.result) {
-        const { state } = played
-        result.live = true
-        result.leader = state.leader === 'A' ? 'a' : state.leader === 'B' ? 'b' : null
-        result.progress = state.progress
-        result.up = state.up
-        result.thru = state.thru
-      }
+      const played = playSessionCard(holes, card.a, card.b, scores, board?.matchTie ?? 'half', marks)
+      markResult(result, played, row.result)
       // The card hole by hole, for the leaderboard to open beneath the row.
       result.detail = {
         holes: played.holes,
@@ -226,6 +238,19 @@ export async function readSessionCards(
     results.push(result)
   }
   return { setups, results }
+}
+
+/** Where a card being played stands, onto its result — only while no result is written. */
+function markResult(result: SessionMatchResult, played: ReturnType<typeof playSessionCard>, written: SessionMatchRow['result']) {
+  if (written) return
+  const { state } = played
+  result.live = true
+  result.leader = state.leader === 'A' ? 'a' : state.leader === 'B' ? 'b' : null
+  result.progress = state.progress
+  result.up = state.up
+  result.thru = state.thru
+  result.decided = state.settled
+  result.final = sessionResult(state)
 }
 
 /** The event's session matches with where each stands — what the leaderboard and the hub read. */

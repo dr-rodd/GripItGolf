@@ -375,3 +375,56 @@ export function playoffIssue(o: {
   }
   return null
 }
+
+// ─── Following and scoring from the stream (D363) ──────────────
+
+/**
+ * Whether this account may follow a tie in its interclub stream and mark
+ * its holes — on the list of either club in it (D363, Ross, 27 Nov 2026:
+ * the club's own people follow their matches). Anybody else with the link
+ * scores on the event's own pages, as ever (D356).
+ */
+export function mayFollowTie(tie: { clubA: string | null; clubB: string | null }, clubIds: readonly string[]): boolean {
+  return (!!tie.clubA && clubIds.includes(tie.clubA)) || (!!tie.clubB && clubIds.includes(tie.clubB))
+}
+
+/** Which side of a tie these clubs are — the first they are on, else null. */
+export function sideOfClubs(tie: { clubA: string | null; clubB: string | null }, clubIds: readonly string[]): Side | null {
+  return tie.clubA && clubIds.includes(tie.clubA) ? 'a' : tie.clubB && clubIds.includes(tie.clubB) ? 'b' : null
+}
+
+/** How far back a tie still unfinished is looked at for live matches — a tie is usually played in a day. */
+export const LIVE_TIE_DAYS = 2
+
+/**
+ * Whether a tie is live (D363): matches on the course or decided with the
+ * tie not yet won, a level tie waiting on its playoff, or its day today with
+ * nothing in yet. A tie settled by hand, or won, is not.
+ */
+export function tieLive(o: { state: TieOutcome['state']; anyLive: boolean; date: string | null; today: string }): boolean {
+  if (o.state === 'won' || o.state === 'settled') return false
+  if (o.state === 'in_play' || o.state === 'level' || o.state === 'playoff' || o.anyLive) return true
+  return o.date === o.today
+}
+
+/**
+ * The margins a match can be won by when only its result is known (D363):
+ * "1 up" and "2 up" after 18, "2&1" to "10&8", and on extra holes "at 19th"
+ * to "at 22nd". The margin is optional — a win with none is just a win.
+ */
+export const MARGINS: readonly string[] = (() => {
+  const out = ['1 up', '2 up']
+  for (let up = 2; up <= 10; up++) {
+    for (let left = 1; left < up && up + left <= 18; left++) out.push(`${up}&${left}`)
+  }
+  out.sort((x, y) => holesUp(x) - holesUp(y) || x.localeCompare(y))
+  return [...out, 'at 19th', 'at 20th', 'at 21st', 'at 22nd']
+})()
+
+/** A margin as typed or picked: one of `MARGINS`, null when none was given, undefined when it reads as neither. */
+export function readMargin(v: unknown): string | null | undefined {
+  if (v === null || v === undefined || v === '') return null
+  if (typeof v !== 'string') return undefined
+  const t = v.trim().toLowerCase().replace(/\s*&\s*/, '&').replace(/\s+/g, ' ')
+  return MARGINS.find(m => m === t)
+}
