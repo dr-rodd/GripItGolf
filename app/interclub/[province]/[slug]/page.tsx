@@ -23,6 +23,11 @@ export const revalidate = 900
 
 type Params = { params: Promise<{ province: string; slug: string }> }
 
+/** None made ahead: each competition's page is made on its first visit and kept for `revalidate`. */
+export function generateStaticParams(): { province: string; slug: string }[] {
+  return []
+}
+
 async function lookUp(province: string, slug: string) {
   const p = provinceOf(province)
   if (!p) return null
