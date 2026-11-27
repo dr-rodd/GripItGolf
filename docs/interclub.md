@@ -19,6 +19,11 @@ Competitions Handbook.
 | D354 | **A side nobody fills in can still be beaten**: the match is scored against a vacant opposition and the club that turned up goes through. |
 | D355 | **Handicaps are typed in and changeable**: the interclub eligibility index is a box, not a lookup. Green Dot cannot read Golf Ireland's handicap records. |
 | D356 | **A tie is an event with a public link and a QR code**, the same as any Green Dot event, so anybody — spectators included — can open it and score. Usually it is spectators who keep a tie's scores up to date, so scoring must be easy for whoever holds the link. Good advertising: the people watching see what the platform does. |
+| D358 | **Team captain is a club credential of its own** (Ross, 27 Nov 2026) — a fourth tick on the club's list beside Officer and Clubhouse, given in the Clubhouse. A team captain sets up and runs all of the club's interclub activity: ties, their players, settling. Officers and Clubhouse do not, unless also ticked. |
+| D359 | **Home and away are not modelled** (Ross: "unimportant"). A tie is played where its matches are played; the venue is picked when the tie is set up, and a tie split over two clubs is two sessions, each on its own course. Nothing about who is at home changes a score. |
+| D360 | **A level tie goes to extra holes**, the player or pair picked from a list of those who played in the tie — sudden death, the winner taking the tie. |
+| D361 | **Settle match** — for anything complicated (a concession, a ruling, an abandoned tie, a dispute), a team captain records the result by hand and it stands over the cards, said as settled on the board. The rules are not all modelled; settling is the escape hatch. It also settles a match against a vacant side (D354). |
+| D362 | **The Barton Shield counts matches won, with holes up beside** them. |
 | D357 | **A club sees interclub from its own side** in the members app — its teams, its next tie, its results — and taps through to the tie as an event. |
 
 ## What Golf Genius holds
@@ -85,28 +90,35 @@ play-by date and notes under it. Read through Next's fetch cache and the
 pages regenerated every 15 minutes (`app/interclub/source.ts`). Nothing
 stored, no migration.
 
-**Stage 2 — a tie as an event.** "Set up this tie" from a match in the
-draw makes an event that is the Ryder Cup model already built:
+**Stage 2 — a tie as an event** (as agreed 27 Nov 2026, D358–D362). A
+team captain whose club is in a match on the draw taps **Set up this match**
+(the club matched to the draw's spelling — `sameClub`, or the name the club
+gives itself for the draws). That makes an event which is the Ryder Cup
+model already built:
 
 - the two clubs are the event's two **tags**, each in its colour;
-- the home and away venues are two **sessions** (or one, unsplit), each on
-  its club's home course (`clubs.home_course_id`);
-- each match is a **Matches** slot (`session_matches`), its count from the
-  competition's team size, its format from the competition;
-- the **Overall** adds the points up and the two-tag ticker reads "3 to
-  win";
-- a tied match is half a point (`matchTie: 'half'`) or played on (`'extra'`)
-  by the competition's "finish on 18" answer;
-- **anyone with the link scores** (`score_session_matches` on, no PIN asked
-  of a scorer), and the event carries its QR code and short link.
+- one **Matches** session at the venue chosen (a second session only where
+  the tie is split over two clubs, D359), its count and format from the
+  competition — five singles for a Senior Cup, four fourballs for a Jimmy
+  Bruen, two foursomes for a Barton Shield — changeable;
+- the **Overall** adds the points, the two-tag ticker reads "3 to win"; a
+  Barton Shield shows holes up beside the matches won (D362);
+- a tied match is half a point or played on, by the competition's "finish
+  on 18" answer;
+- **anyone with the link scores** (`score_session_matches` on, the event's
+  short link and QR shared), with no PIN asked of a scorer;
+- each club's team captain fills **their own side** — typed or picked from
+  the club's list — with each player's interclub index typed in (D355); a
+  side nobody fills is vacant and its matches settled to whoever turned up
+  (D354);
+- **a level tie**: the captain picks the player or pair from those who
+  played, and the playoff is a match on extra holes (D360);
+- **Settle match**: a team captain's result by hand, over the cards (D361).
 
-New in stage 2: the link from a draw match to its event (a migration — one
-row a tie, the draw's competition and position); each club's members adding
-their side's players (D353, the field's own `add_players` door narrowed to
-a tag); the **vacant side** (D354 — a match with nobody on one side is
-scored against nobody and won by the side that played); a player's
-**interclub index**, typed and changeable (D355); and the **playoff** when
-the overall is level (a nominated pair, sudden death, at the home venue).
+Captains' writes go through the server (a route of its own on the service
+role), so no row-level security changes; scorers write the match cards as
+any member of an event already does. One migration: the credential, the
+club's name in the draws, and the table linking a draw match to its event.
 
 **Stage 3 — the club's side.** A Green Dot club matched to the names in the
 draws (a club's own setting, since the draws spell names a dozen ways); its
@@ -119,12 +131,6 @@ for the club's handicap secretary.
 
 ## Open questions for later stages
 
-- Who may set up a tie's event — any member of either club, or the club's
-  Officers?
-- A split tie's playoff is at the home venue with a pair from the home team
-  sheet: is it a third session, or a match added to the home session?
-- Does the Barton Shield's holes-up count need its own board, or is it the
-  Overall counting holes rather than points?
 - Golf Ireland's branding: the competition names are shown as published,
   with the source credited and "Green Dot is independent of Golf Ireland"
   under every page. No Golf Ireland logo is used (CLAUDE.md, Golf Ireland).
