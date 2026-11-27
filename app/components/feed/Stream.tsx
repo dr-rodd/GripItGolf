@@ -9,6 +9,7 @@ import { reducedMotion } from '@/lib/motion'
 import { IconCheck, IconChevronDown, IconPlus, IconReply, IconSettings, IconUsers, IconX } from '../icons'
 import { LiveDot, PageTitle, buttonClass, cardClass, iconButtonClass } from '../ui'
 import { popClose, popOpen } from '../popOut'
+import { POP_MENU } from '@/lib/popOut'
 import { TABBAR_SPACE } from '../tabbarMetrics'
 import { HEADER_H } from '../headerMetrics'
 import { ChatReply, FeedItem, MiniCard, replyToComment, replyToItem, type FeedView, type ReplyTarget } from './FeedItem'
@@ -723,7 +724,7 @@ function StreamMenu({ label, origin, onClose, children }: {
   const close = useCallback(() => {
     if (closing.current) return
     closing.current = true
-    void popClose(box.current, origin, shade.current).then(onClose)
+    void popClose(box.current, origin, shade.current, POP_MENU).then(onClose)
   }, [origin, onClose])
   useLayoutEffect(() => {
     // D350: each row and heading follows the one above it in (`--row`, read by `.stream-menu-row`).
@@ -731,7 +732,7 @@ function StreamMenu({ label, origin, onClose, children }: {
       el.classList.add('stream-menu-row')
       el.style.setProperty('--row', String(Math.min(i, 10)))
     })
-    popOpen(box.current, origin, shade.current)
+    popOpen(box.current, origin, shade.current, POP_MENU)
   }, [origin])
   useEffect(() => {
     // A tap on the title too: it closes the menu it opened (the title only ever opens one).

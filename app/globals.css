@@ -1288,13 +1288,16 @@ html.keyboard-open .hide-with-keyboard { display: none; }
 /* The dot given: a quick fill, no bounce. */
 .dot-give { transition: background-color 160ms ease-out; }
 
-/* ── The Stream's floating header (D350) ─────────────────────────
+/* ── The Stream's floating header (D350, D351) ───────────────────
    The stream's name is a frosted pill held under the site's header, the
    chat scrolling beneath it (a chat app's floating header, Ross, 27 Nov
-   2026); its actions sit in a pill beside it, and its list of streams is
-   the same frost. The list springs out of the pill (the pop-out) and its
-   rows follow one another in — 220ms each on the putt curve, 30ms apart,
-   eleven at most staggered. Under Reduce Motion the rows are simply there. */
+   2026); its actions sit in a pill beside it. Its list of streams springs
+   out of the pill at the menu's pace (POP_MENU, lib/popOut.ts — D351:
+   quicker) and is opaque, never frosted: a backdrop blur under a moving,
+   blurring card is redrawn every frame, which is what made it stutter. Its
+   rows follow one another in — 180ms each on the putt curve, 20ms apart
+   after 30ms, eleven at most staggered. Under Reduce Motion they are simply
+   there. */
 .stream-float {
   background-color: color-mix(in srgb, var(--color-surface) 82%, transparent);
   -webkit-backdrop-filter: blur(16px) saturate(1.2);
@@ -1302,11 +1305,16 @@ html.keyboard-open .hide-with-keyboard { display: none; }
   border: 1px solid var(--color-line);
 }
 .stream-float.is-open { background-color: var(--color-surface); }
+.stream-float.stream-menu {
+  background-color: var(--color-surface);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 @keyframes gdMenuRowIn {
   from { transform: translateY(-6px); opacity: 0; }
   to   { transform: none; opacity: 1; }
 }
-.stream-menu-row { animation: gdMenuRowIn 220ms var(--gd-ease) both; animation-delay: calc(var(--row, 0) * 30ms + 60ms); }
+.stream-menu-row { animation: gdMenuRowIn 180ms var(--gd-ease) both; animation-delay: calc(var(--row, 0) * 20ms + 30ms); }
 
 /* ── The stream as a chat (D346) ─────────────────────────────────
    The box to write in sticks to the foot of the screen above the tab bar

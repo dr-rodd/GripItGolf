@@ -10,7 +10,7 @@
 // card mounts). Neither on screen: it fades and scales a touch instead.
 
 import { reducedMotion } from '@/lib/motion'
-import { POP_CLOSE_MS, POP_FADE_MS, POP_OPEN_MS, PUTT_EASING, closeKeyframes, openKeyframes } from '@/lib/popOut'
+import { POP_CARD, PUTT_EASING, closeKeyframes, openKeyframes, type PopPace } from '@/lib/popOut'
 
 let lastTap: { el: Element; at: number } | null = null
 let watching = false
@@ -38,14 +38,30 @@ function onScreen(el: Element | null): DOMRect | null {
   return r.width && r.height && r.bottom > 0 && r.top < window.innerHeight ? r : null
 }
 
-/** The card opening: out of its tile on the spring, soft to sharp, the one settle; a fade under Reduce Motion. */
-export function popOpen(card: HTMLElement | null, origin?: Element | null, backdrop?: HTMLElement | null): void {
+/**
+ * While it moves, the browser is told what will change (`will-change`), so the
+ * card is drawn once onto its own layer and only moved — never repainted a
+ * frame at a time — and told again when it rests, so the layer is let go.
+ */
+function onLayer(card: HTMLElement, anim: Animation): void {
+  card.style.willChange = 'transform, opacity, filter'
+  const done = () => { card.style.willChange = '' }
+  anim.addEventListener('finish', done)
+  anim.addEventListener('cancel', done)
+}
+
+/**
+ * The card opening: out of its tile on the spring, soft to sharp, the one
+ * settle; a fade under Reduce Motion. `pace` is the card's unless a menu asks
+ * for its own (`POP_MENU`, D351).
+ */
+export function popOpen(card: HTMLElement | null, origin?: Element | null, backdrop?: HTMLElement | null, pace: PopPace = POP_CARD): void {
   if (!card?.animate) return
   // Measured at rest: an opening already running (a second call, React's
   // development double run) would hand back the shrunken card as its place.
   card.getAnimations?.().forEach(a => a.cancel())
   backdrop?.getAnimations?.().forEach(a => a.cancel())
-  backdrop?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: POP_FADE_MS, easing: 'ease-out' })
+  backdrop?.animate?.([{ opacity: 0 }, { opacity: 1 }], { duration: pace.fadeMs, easing: 'ease-out' })
   const from = reducedMotion() ? null : onScreen(origin ?? null)
   const to = card.getBoundingClientRect()
   if (!from || !to.width || !to.height) {
@@ -54,20 +70,22 @@ export function popOpen(card: HTMLElement | null, origin?: Element | null, backd
   }
   card.style.transformOrigin = 'top left'
   // The spring is in the keyframes, sampled a frame apart, so they play linearly (D337).
-  card.animate(openKeyframes(from, to), { duration: POP_OPEN_MS, easing: 'linear' })
+  onLayer(card, card.animate(openKeyframes(from, to, pace), { duration: pace.openMs, easing: 'linear' }))
 }
 
 /** The card closing: back into its tile where it is still on screen; a fade under Reduce Motion. Resolves when done. */
-export function popClose(card: HTMLElement | null, origin?: Element | null, backdrop?: HTMLElement | null): Promise<void> {
+export function popClose(card: HTMLElement | null, origin?: Element | null, backdrop?: HTMLElement | null, pace: PopPace = POP_CARD): Promise<void> {
   if (!card?.animate) return Promise.resolve()
   card.getAnimations?.().forEach(a => a.cancel())
-  backdrop?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: POP_CLOSE_MS, easing: 'ease-out', fill: 'forwards' })
+  backdrop?.animate?.([{ opacity: 1 }, { opacity: 0 }], { duration: pace.closeMs, easing: 'ease-out', fill: 'forwards' })
   const anim = reducedMotion()
     ? card.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 150, easing: 'ease-out', fill: 'forwards' })
     : (() => {
         card.style.transform = ''
         card.style.transformOrigin = 'top left'
-        return card.animate(closeKeyframes(onScreen(origin ?? null), card.getBoundingClientRect()), { duration: POP_CLOSE_MS, easing: PUTT_EASING, fill: 'forwards' })
+        const a = card.animate(closeKeyframes(onScreen(origin ?? null), card.getBoundingClientRect(), pace), { duration: pace.closeMs, easing: PUTT_EASING, fill: 'forwards' })
+        onLayer(card, a)
+        return a
       })()
   return new Promise(resolve => { anim.onfinish = () => resolve(); anim.oncancel = () => resolve() })
 }

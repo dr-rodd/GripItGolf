@@ -30,7 +30,7 @@ import {
 import { SITE } from '../config/site'
 import WizardShell, { STEP_SLIDE_MS } from '../app/components/WizardShell'
 import CountUp from '../app/components/CountUp'
-import { POP_OPEN_MS, POP_CLOSE_MS, POP_SETTLE, POP_BLUR_PX, POP_SHARP_MS, openKeyframes, springAt, springOvershoot } from '../lib/popOut'
+import { POP_OPEN_MS, POP_CLOSE_MS, POP_SETTLE, POP_BLUR_PX, POP_SHARP_MS, POP_CARD, POP_MENU, openKeyframes, springAt, springOvershoot } from '../lib/popOut'
 import { REPLY_BACK_MS, backOvershoot } from '../lib/swipeReply'
 
 let passed = 0, failed = 0
@@ -1793,7 +1793,14 @@ section('The pop-out (D331, D335, D337): the one spring, every expanding pop-out
   const play = read('app/components/popOut.ts')
   ok(/reducedMotion\(\) \? null/.test(play) && /\{ opacity: 0 \}, \{ opacity: 1 \}/.test(play), '  …and under Reduce Motion it is a plain fade')
   ok(/closeKeyframes\(onScreen\(origin/.test(play), '  …and it goes back into the tile it came out of')
-  ok(/openKeyframes\(from, to\), \{ duration: POP_OPEN_MS, easing: 'linear' \}/.test(play), '  …the spring played as sampled, never through a second curve')
+  ok(/openKeyframes\(from, to, pace\), \{ duration: pace\.openMs, easing: 'linear' \}/.test(play), '  …the spring played as sampled, never through a second curve')
+  ok(/willChange = 'transform, opacity, filter'/.test(play) && /willChange = ''/.test(play), '  …on its own layer while it moves, let go at rest')
+  // D351: the menu's pace — the same spring and settle, a shorter swing, sampled twice a frame.
+  ok(POP_MENU.damping === POP_CARD.damping && springOvershoot(POP_MENU) <= POP_SETTLE, 'the menu’s pace settles as the card’s does, at most 2% past its place')
+  ok(springAt(150, POP_MENU) > 0.8 && POP_MENU.openMs < POP_CARD.openMs && POP_MENU.closeMs <= 200, `  …quicker: most of the way by 150ms (${springAt(150, POP_MENU).toFixed(2)}), at rest by ${POP_MENU.openMs}ms`)
+  ok(POP_MENU.stepMs <= 8 && openKeyframes(from, to, POP_MENU).length >= POP_MENU.openMs / 8, '  …sampled for a 120Hz screen')
+  ok(/popOpen\(box\.current, origin, shade\.current, POP_MENU\)/.test(read('app/components/feed/Stream.tsx')) && /\.stream-float\.stream-menu \{[^}]*backdrop-filter: none/.test(css),
+    '  …the Stream title’s list at that pace, opaque so nothing behind it is redrawn as it moves')
   const settlers = uiFiles().filter(f => /openKeyframes|closeKeyframes|springAt|POP_SETTLE/.test(read(f)))
   eq(settlers, ['app/components/popOut.ts'], 'the pop-out is played in one place')
   const users = uiFiles().filter(f => /from ['"](\.\.?\/)+popOut['"]|from '@\/app\/components\/popOut'/.test(read(f))).sort()

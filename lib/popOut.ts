@@ -53,6 +53,36 @@ export const POP_SEEN_MS = 200
 /** How often the spring is sampled into a keyframe — about one a frame. */
 export const POP_STEP_MS = 16
 
+/**
+ * A pace for the pop-out: the spring, the timings, the blur. **The card**
+ * (`POP_CARD`, the figures above) is a tile opening into a card over the
+ * page. **The menu** (`POP_MENU`, D351 — Ross, 27 Nov 2026: "a bit quicker,
+ * possibly better frame rate to sell the expansion") is a list springing out
+ * of a small control — the Stream's floating title: the same spring with the
+ * same damping, so the same hair past its place, on a shorter swing (most of
+ * the way there by 150ms, at rest by 440ms), a lighter blur, and sampled
+ * twice a frame so a 120Hz screen gets a keyframe for every frame it draws.
+ */
+export interface PopPace {
+  responseS: number
+  damping: number
+  openMs: number
+  closeMs: number
+  fadeMs: number
+  blurPx: number
+  sharpMs: number
+  seenMs: number
+  stepMs: number
+}
+export const POP_CARD: PopPace = {
+  responseS: SPRING_RESPONSE_S, damping: SPRING_DAMPING, openMs: POP_OPEN_MS, closeMs: POP_CLOSE_MS,
+  fadeMs: POP_FADE_MS, blurPx: POP_BLUR_PX, sharpMs: POP_SHARP_MS, seenMs: POP_SEEN_MS, stepMs: POP_STEP_MS,
+}
+export const POP_MENU: PopPace = {
+  responseS: 0.36, damping: SPRING_DAMPING, openMs: 440, closeMs: 180,
+  fadeMs: 180, blurPx: 4, sharpMs: 220, seenMs: 90, stepMs: 8,
+}
+
 /** The putt curve as the Web Animations API takes it — `--gd-ease`, which a script cannot read. */
 export const PUTT_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
 
@@ -60,17 +90,17 @@ export const PUTT_EASING = 'cubic-bezier(0.16, 1, 0.3, 1)'
  * Where an underdamped spring released from rest stands `ms` after release:
  * 0 at the tile, 1 at its place, a little over 1 as it drifts past.
  */
-export function springAt(ms: number): number {
+export function springAt(ms: number, pace: PopPace = POP_CARD): number {
   const t = Math.max(0, ms) / 1000
-  const w = (2 * Math.PI) / SPRING_RESPONSE_S
-  const z = SPRING_DAMPING
+  const w = (2 * Math.PI) / pace.responseS
+  const z = pace.damping
   const wd = w * Math.sqrt(1 - z * z)
   return 1 - Math.exp(-z * w * t) * (Math.cos(wd * t) + ((z * w) / wd) * Math.sin(wd * t))
 }
 
 /** How far past its place the spring goes, as a share of the travel. */
-export function springOvershoot(): number {
-  const z = SPRING_DAMPING
+export function springOvershoot(pace: PopPace = POP_CARD): number {
+  const z = pace.damping
   return Math.exp((-Math.PI * z) / Math.sqrt(1 - z * z))
 }
 
@@ -91,36 +121,37 @@ const r3 = (n: number) => Math.round(n * 1000) / 1000
  * so nothing is laid out again while it moves (`transform-origin: top left`
  * on the card). The last keyframe is the card exactly, sharp.
  */
-export function openKeyframes(from: Box, to: Box): Keyframe[] {
+export function openKeyframes(from: Box, to: Box, pace: PopPace = POP_CARD): Keyframe[] {
   const { sx, sy, dx, dy } = fromTile(from, to)
   const frames: Keyframe[] = []
-  const steps = Math.ceil(POP_OPEN_MS / POP_STEP_MS)
+  const steps = Math.ceil(pace.openMs / pace.stepMs)
   for (let i = 0; i <= steps; i++) {
-    const ms = Math.min(POP_OPEN_MS, i * POP_STEP_MS)
+    const ms = Math.min(pace.openMs, i * pace.stepMs)
     const last = i === steps
     // The drift past its place eased out over the last part, so it comes
     // to rest on the last frame rather than stepping onto it.
-    const tail = Math.min(1, (POP_OPEN_MS - ms) / (POP_OPEN_MS * 0.35))
-    const p = last ? 1 : 1 + (springAt(ms) - 1) * (springAt(ms) > 1 ? tail : 1)
-    const soft = Math.max(0, 1 - ms / POP_SHARP_MS)
+    const tail = Math.min(1, (pace.openMs - ms) / (pace.openMs * 0.35))
+    const at = springAt(ms, pace)
+    const p = last ? 1 : 1 + (at - 1) * (at > 1 ? tail : 1)
+    const soft = Math.max(0, 1 - ms / pace.sharpMs)
     frames.push({
-      offset: r3(ms / POP_OPEN_MS),
+      offset: r3(ms / pace.openMs),
       transform: last
         ? 'translate(0px, 0px) scale(1, 1)'
         : `translate(${r3((1 - p) * dx)}px, ${r3((1 - p) * dy)}px) scale(${r3(sx + (1 - sx) * p)}, ${r3(sy + (1 - sy) * p)})`,
-      opacity: r3(Math.min(1, 0.5 + (0.5 * ms) / POP_SEEN_MS)),
-      filter: `blur(${r3(POP_BLUR_PX * soft * soft)}px)`,
+      opacity: r3(Math.min(1, 0.5 + (0.5 * ms) / pace.seenMs)),
+      filter: `blur(${r3(pace.blurPx * soft * soft)}px)`,
     })
   }
   return frames
 }
 
 /** Closing: back into the tile, softening as it goes — no settle on the way out. */
-export function closeKeyframes(to: Box | null, card: Box): Keyframe[] {
-  if (!to) return [{ transform: 'scale(1)', opacity: 1, filter: 'blur(0px)' }, { transform: 'scale(0.96)', opacity: 0, filter: `blur(${POP_BLUR_PX}px)` }]
+export function closeKeyframes(to: Box | null, card: Box, pace: PopPace = POP_CARD): Keyframe[] {
+  if (!to) return [{ transform: 'scale(1)', opacity: 1, filter: 'blur(0px)' }, { transform: 'scale(0.96)', opacity: 0, filter: `blur(${pace.blurPx}px)` }]
   const { sx, sy, dx, dy } = fromTile(to, card)
   return [
     { transform: 'translate(0px, 0px) scale(1, 1)', opacity: 1, filter: 'blur(0px)' },
-    { transform: `translate(${r3(dx)}px, ${r3(dy)}px) scale(${r3(sx)}, ${r3(sy)})`, opacity: 0, filter: `blur(${POP_BLUR_PX}px)` },
+    { transform: `translate(${r3(dx)}px, ${r3(dy)}px) scale(${r3(sx)}, ${r3(sy)})`, opacity: 0, filter: `blur(${pace.blurPx}px)` },
   ]
 }
