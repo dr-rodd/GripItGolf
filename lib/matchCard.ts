@@ -339,12 +339,13 @@ export type SessionCardState = CardState & {
  * holes from the 1st until one is won, as a knockout does, or a winner
  * picked by hand when the card is finalised.
  */
-export type MatchTie = 'half' | 'extra' | 'manual'
+export type MatchTie = 'half' | 'extra' | 'manual' | 'sudden'
 
 /** A session match's card: the eighteen (more on extra holes), its outcomes, and where it stands. */
 export function playSessionCard(
   holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores, tie: MatchTie = 'half',
 ): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
+  if (tie === 'sudden') return playSuddenDeath(holes, a, b, scores)
   if (tie === 'extra') {
     // The knockout's own card: down the 19th off the 1st, until one is won.
     const played = playCard(holes, a, b, scores, new Map())
@@ -365,6 +366,48 @@ export function playSessionCard(
         }
   }
   return { holes: list, outcomes, state: { ...state, halved: false } }
+}
+
+/**
+ * A playoff (D360, Ross, 27 Nov 2026: an interclub tie level at the end goes
+ * to extra holes, the player or pair picked from those who played): sudden
+ * death from the 1st — the first hole won settles it, a halved hole brings
+ * the next, off the course's holes in order and round again. Never a
+ * session's own answer to a level match: only an interclub playoff's
+ * session board carries it (lib/interclubTie.ts).
+ */
+export function playSuddenDeath(
+  holes: readonly CardHole[], a: CardSide, b: CardSide, scores: CardScores,
+): { holes: CardHole[]; outcomes: HoleOutcome[]; state: SessionCardState } {
+  const base = [...holes].sort((x, y) => x.holeNumber - y.holeNumber).slice(0, REGULATION_HOLES)
+  const list: CardHole[] = base.length ? [{ ...base[0], holeNumber: 1 }] : []
+  for (;;) {
+    const outcomes = holeOutcomes(list, a, b, scores, new Map())
+    const last = outcomes[outcomes.length - 1]
+    if (last?.winner === 'halved' && list.length < MAX_CARD_HOLES) {
+      const n = list.length + 1
+      list.push({ ...base[(n - 1) % base.length], holeNumber: n })
+      continue
+    }
+    const won = last?.winner === 'A' || last?.winner === 'B'
+    const thru = !last ? 0 : last.winner === null ? list.length - 1 : list.length
+    return {
+      holes: list,
+      outcomes,
+      state: {
+        leader: won ? (last!.winner as CardSideKey) : null,
+        up: won ? 1 : 0,
+        played: thru,
+        thru,
+        unfinished: [],
+        settled: won,
+        extra: false,
+        halved: false,
+        result: won ? `at ${ordinal(list.length)}` : null,
+        progress: won ? `Won at the ${ordinal(list.length)}` : thru === 0 ? 'Not started' : `All square thru ${thru}`,
+      },
+    }
+  }
 }
 
 /** The margin a tie decided by hand is written with — "Europe won by decision". */

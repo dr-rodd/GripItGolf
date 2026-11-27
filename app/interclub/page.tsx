@@ -4,6 +4,7 @@ import LegalLinks from '@/app/components/LegalLinks'
 import { PageTitle } from '@/app/components/ui'
 import { INTERCLUB_HUB } from '@/lib/interclub'
 import Finder from './Finder'
+import MyTies from './MyTies'
 import { readProvinces } from './source'
 
 /**
@@ -31,6 +32,7 @@ export default async function InterclubPage() {
       <div className="px-4 pt-4 pb-12 page-enter">
         <div className="w-full max-w-lg mx-auto">
           <PageTitle sub="Every inter-club draw in Ireland, as it stands.">Interclub</PageTitle>
+          <MyTies />
 
           <div className="mt-5">
             <Finder provinces={provinces} />

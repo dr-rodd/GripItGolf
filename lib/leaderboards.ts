@@ -267,9 +267,10 @@ export type Leaderboard = {
   /**
    * `competition: 'matches'` only — how a match level after 18 is finished
    * (Ross, 13 Nov 2026): extra holes, or a winner picked by hand. Absent is
-   * a half, which is what every session did before the question.
+   * a half, which is what every session did before the question. `sudden`
+   * is an interclub playoff's alone (D360): sudden death from the 1st.
    */
-  matchTie?: 'extra' | 'manual'
+  matchTie?: 'extra' | 'manual' | 'sudden'
 
   /** `competition: 'overall'` only — what it ranks and how each session feeds it. */
   overall?: OverallRules
@@ -1092,7 +1093,7 @@ export function parseLeaderboards(raw: unknown): Leaderboard[] {
       if (allowance !== FULL_ALLOWANCE) lb.handicapAllowance = allowance
       lb.roundIds = scope
       lb.session = true
-      if (r.matchTie === 'extra' || r.matchTie === 'manual') lb.matchTie = r.matchTie
+      if (r.matchTie === 'extra' || r.matchTie === 'manual' || r.matchTie === 'sudden') lb.matchTie = r.matchTie
       if (!isSlotFree(out, lb)) continue
       out.push(lb)
       continue

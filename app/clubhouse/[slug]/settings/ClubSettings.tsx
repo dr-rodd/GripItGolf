@@ -6,6 +6,7 @@ import { cardClass } from '@/app/components/ui'
 import { useShell } from '../ShellContext'
 import ShowToMembers from './ShowToMembers'
 import ClubLocations from './ClubLocations'
+import DrawNameField from '@/app/interclub/DrawNameField'
 
 /**
  * Club settings (stage (k1)): the club's look — crest, art, colour — its
@@ -30,6 +31,11 @@ export default function ClubSettings() {
         {club.status === 'verified' && (
           <section className={`${cardClass()} p-5`}>
             <ClubLocations clubId={club.id} />
+          </section>
+        )}
+        {club.status === 'verified' && (
+          <section className={`${cardClass()} p-5`}>
+            <DrawNameField clubId={club.id} />
           </section>
         )}
         {club.status === 'verified' && may('keep_calendar') && (

@@ -8,6 +8,7 @@ import { describeShortDate } from '@/lib/itinerary'
 import { IRISH_TIME_ZONE } from '@/lib/irishTime'
 import { drawStatus, drawToBracket, provinceOf } from '@/lib/interclub'
 import { findCompetition, readCompetitionDraw, type CompetitionDraw } from '../../source'
+import CaptainPanel, { type DrawPair } from './CaptainPanel'
 
 /**
  * One inter-club competition's draw (docs/interclub.md, stage 1): the
@@ -67,6 +68,10 @@ export default async function CompetitionPage({ params }: Params) {
   const draw = read?.state === 'read' ? read.draw : null
   const bracket = draw ? drawToBracket(draw) : null
   const source = read?.source ?? null
+  // Every match with both clubs known — what a team captain may set up (stage 2).
+  const pairs: DrawPair[] = draw ? draw.matches.flatMap(m => (m.a && m.b && !m.a.bye && !m.b.bye && !m.winner
+    ? [{ round: m.round, slot: m.slot, roundName: draw.rounds[m.round].name, a: m.a.name, b: m.b.name, by: draw.rounds[m.round].by }]
+    : [])) : []
 
   return (
     <main className="min-h-dvh paper">
@@ -111,6 +116,10 @@ export default async function CompetitionPage({ params }: Params) {
                 />
               ))}
             </ListGroup>
+          )}
+
+          {c !== 'unreachable' && draw && (
+            <CaptainPanel competitionId={c.id} province={found.province.key} slug={c.slug} competitionName={c.name} pairs={pairs} />
           )}
 
           <p className="t-cap text-ink/65 text-center mt-8">
