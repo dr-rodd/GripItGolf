@@ -310,6 +310,14 @@ async function main() {
     const ok2 = await tie({ action: 'settle', winner: 'b', note: 'Conceded on the 18th green' }, 'dave')
     eq((ok2.body.tie as { outcome: { line: string } }).outcome.line, 'Settled: Strandhill go through', 'either captain settles the tie (D361)')
     eq((await tie({ action: 'settle', winner: null })).status, 200, 'and it can be taken off')
+
+    section('The members app: a club’s ties for its members (D357)')
+    eq((await ask(store, 'mary', { action: 'club', slug: 'nowhere' })).status, 403, 'a club this account is not on: refused')
+    const seen = await ask(store, 'mary', { action: 'club', slug: 'sligo' })
+    eq([seen.status, seen.body.captain, (seen.body.ties as { code: string; side: string }[]).map(t => [t.code, t.side])], [200, false, [['ABC123', 'a']]],
+      'a member who is no captain sees the club’s tie, from its own side')
+    ok(String((seen.body.ties as { line: string }[])[0].line).includes('2–2'), 'with where it stands')
+    eq((await ask(store, 'dave', { action: 'club', slug: 'strand' })).body.captain, true, 'the other club’s captain sees it as theirs too')
   }
 
   console.log(`\n${passed} passed, ${failed} failed`)

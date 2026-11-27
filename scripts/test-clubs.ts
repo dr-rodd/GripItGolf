@@ -1793,6 +1793,7 @@ async function competitionBarTests() {
   section('The competition bar and the Summary (D180 amended, D186–D190)')
   eq(barOf('/club/lahinch', 'lahinch'), { set: 'club' }, 'the club page wears the club set')
   eq(barOf('/club/lahinch/', 'lahinch'), { set: 'club' }, '…a trailing slash too')
+  eq(barOf('/club/lahinch/interclub', 'lahinch'), { set: 'club' }, 'Interclub, opened from Comps, keeps the club footer (D357)')
   eq(barOf('/club/lahinch/comp/ab12cd', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'summary' }, 'a competition\'s own address is its Summary (D186)')
   eq(barOf('/club/lahinch/comp/AB12CD/tee-times', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'tee' }, '…tee-times lights Tee times')
   eq(barOf('/club/lahinch/comp/AB12CD/scoring', 'lahinch'), { set: 'comp', code: 'AB12CD', active: 'scoring' }, '…scoring lights Scoring')

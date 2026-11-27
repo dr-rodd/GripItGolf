@@ -167,6 +167,31 @@ export async function runInterclub(
     }
   }
 
+  // The members app's Interclub page (stage 3, D357): a club's ties for anybody on its list, each with where it stands.
+  if (action === 'club') {
+    const mine = verified.find(r => r.club.slug === str(b.slug))
+    if (!mine) return fail(403, 'Only the club’s members see its interclub matches.')
+    const captain = captainOf.includes(mine.club.id)
+    const ties = await store.tiesOfClubs([mine.club.id])
+    if (ties === 'not_ready') return { status: 200, body: { ok: true, ready: false, captain, clubId: mine.club.id, ties: [] } }
+    const rows = await Promise.all(ties.slice(0, 20).map(async t => {
+      const [matches, playoff] = await Promise.all([
+        store.matches(t.tripId, t.roundId),
+        t.playoffRoundId ? store.matches(t.tripId, t.playoffRoundId) : Promise.resolve([] as TieMatchRow[]),
+      ])
+      const off = playoff[0]
+      const outcome = tieOutcome({
+        names: { a: t.nameA, b: t.nameB }, score: tieScore(matches), matches: t.format.matches, settled: t.settled,
+        playoff: !t.playoffRoundId ? null : off?.result === 'a' || off?.result === 'b' ? off.result : 'open', holes: t.format.holes,
+      })
+      return {
+        code: t.code, competitionName: t.competitionName, nameA: t.nameA, nameB: t.nameB, date: t.date,
+        line: outcome.line, state: outcome.state, side: t.clubA === mine.club.id ? 'a' : 'b',
+      }
+    }))
+    return { status: 200, body: { ok: true, ready: true, captain, clubId: mine.club.id, ties: rows } }
+  }
+
   // A club's name in the draws: its Clubhouse or its team captains (D358).
   if (action === 'name.get' || action === 'name.set') {
     const mine = verified.find(r => r.club.id === str(b.clubId))

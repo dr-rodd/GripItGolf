@@ -713,6 +713,10 @@ function Comps({ m, slug }: { m: Members; slug: string }) {
             { value: 'results', label: 'Results' },
             // D344/D345: every club knockout, in its own menu, fourth (the view key stays 'matchplay').
             ...(hasMatchPlay ? [{ value: 'matchplay' as const, label: 'Knockout' }] : [])]} />}>Competitions</PageTitle>
+      {/* The interclub portal (D357, Ross, 27 Nov 2026: "a portal button via comps"): the club's inter-club matches and the national draws. */}
+      <ListGroup className="mt-4">
+        <ListRow label="Interclub" hint="The club’s inter-club matches, and every draw." href={`/club/${slug}/interclub`} />
+      </ListGroup>
       {liveHere && (
         // Board's job, here since Tee times took its tab (Ross, 17 Nov 2026): the event in play, straight to its leaderboard.
         <Link href={boardHref(liveHere, slug)} className={`${cardClass('floating', true)} block p-4 mt-4`} style={labelEdge(liveHere.colour)}>

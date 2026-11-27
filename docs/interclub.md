@@ -120,7 +120,7 @@ role), so no row-level security changes; scorers write the match cards as
 any member of an event already does. One migration: the credential, the
 club's name in the draws, and the table linking a draw match to its event.
 
-**Stage 3 — the club's side** (the team captain's credential, the club's name in the draws and a captain's ties on `/interclub` built with stage 2; the members app's view still to come). A Green Dot club matched to the names in the
+**Stage 3 — the club's side** (the team captain's credential, the club's name in the draws and a captain's ties on `/interclub` built with stage 2; **the members app's view built 27 Nov 2026** — an Interclub row at the head of Comps opening `/club/<slug>/interclub`: the club's ties for every member, each opening the match to watch or score, a captain's to the tie's own page, the captain's card and every draw. Still to come: the match stream, D332). A Green Dot club matched to the names in the
 draws (a club's own setting, since the draws spell names a dozen ways); its
 teams, next tie and results in the members app (D357); the tie's event one
 tap away. The match stream (D326, D332) comes alive with the club's ties.
